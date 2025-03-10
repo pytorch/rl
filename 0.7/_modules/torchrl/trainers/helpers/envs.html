@@ -468,7 +468,7 @@
 <div class="viewcode-block" id="correct_for_frame_skip"><a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.correct_for_frame_skip.html#torchrl.trainers.helpers.correct_for_frame_skip">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">correct_for_frame_skip</span><span class="p">(</span><span class="n">cfg</span><span class="p">:</span> <span class="s2">&quot;DictConfig&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;DictConfig&quot;</span><span class="p">:</span>  <span class="c1"># noqa: F821</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Correct the arguments for the input frame_skip, by dividing all the arguments that reflect a count of frames by the frame_skip.</span>
 
-<span class="sd">    This is aimed at avoiding unknowingly over-sampling from the environment, i.e. targetting a total number of frames</span>
+<span class="sd">    This is aimed at avoiding unknowingly over-sampling from the environment, i.e. targeting a total number of frames</span>
 <span class="sd">    of 1M but actually collecting frame_skip * 1M frames.</span>
 
 <span class="sd">    Args:</span>
@@ -652,7 +652,7 @@
 <span class="sd">        stats (dict, optional): a dictionary containing the :obj:`loc` and :obj:`scale` for the `ObservationNorm` transform</span>
 <span class="sd">        norm_obs_only (bool, optional): If `True` and `VecNorm` is used, the reward won&#39;t be normalized online.</span>
 <span class="sd">            Default is `False`.</span>
-<span class="sd">        use_env_creator (bool, optional): wheter the `EnvCreator` class should be used. By using `EnvCreator`,</span>
+<span class="sd">        use_env_creator (bool, optional): whether the `EnvCreator` class should be used. By using `EnvCreator`,</span>
 <span class="sd">            one can make sure that running statistics will be put in shared memory and accessible for all workers</span>
 <span class="sd">            when using a `VecNorm` transform. Default is `True`.</span>
 <span class="sd">        custom_env_maker (callable, optional): if your env maker is not part</span>
@@ -716,7 +716,7 @@
         <span class="k">elif</span> <span class="n">custom_env_maker</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">custom_env</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">env</span> <span class="o">=</span> <span class="n">custom_env</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;cannot provive both custom_env and custom_env_maker&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;cannot provide both custom_env and custom_env_maker&quot;</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">noops</span> <span class="ow">and</span> <span class="n">custom_env</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># this is a bit hacky: if custom_env is not None, it is probably a ParallelEnv</span>
@@ -882,7 +882,7 @@
 
 <span class="sd">    Args:</span>
 <span class="sd">        proof_environment (EnvBase instance, optional): if provided, this env will</span>
-<span class="sd">            be used ot execute the rollouts. If not, it will be created using</span>
+<span class="sd">            be used to execute the rollouts. If not, it will be created using</span>
 <span class="sd">            the cfg object.</span>
 <span class="sd">        num_iter (int): Number of iterations used for initializing the :obj:`ObservationNorms`</span>
 <span class="sd">        key (str, optional): if provided, the stats of this key will be gathered.</span>

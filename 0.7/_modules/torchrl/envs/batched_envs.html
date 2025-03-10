@@ -795,6 +795,14 @@
 
     <span class="n">is_spec_locked</span> <span class="o">=</span> <span class="n">EnvBase</span><span class="o">.</span><span class="n">is_spec_locked</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">select_and_clone</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">tensor</span><span class="p">,</span> <span class="n">selected_keys</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">selected_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">selected_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_selected_step_keys</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">selected_keys</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">tensor</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">tensor</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">non_blocking</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">tensor</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">non_blocking</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">nb</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_non_blocking</span>
@@ -1483,12 +1491,10 @@
         <span class="n">selected_output_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_selected_reset_keys_filt</span>
 
         <span class="c1"># select + clone creates 2 tds, but we can create one only</span>
-        <span class="k">def</span><span class="w"> </span><span class="nf">select_and_clone</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">tensor</span><span class="p">):</span>
-            <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">selected_output_keys</span><span class="p">:</span>
-                <span class="k">return</span> <span class="n">tensor</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
-
         <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared_tensordict_parent</span><span class="o">.</span><span class="n">named_apply</span><span class="p">(</span>
-            <span class="n">select_and_clone</span><span class="p">,</span>
+            <span class="k">lambda</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">select_and_clone</span><span class="p">(</span>
+                <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">selected_keys</span><span class="o">=</span><span class="n">selected_output_keys</span>
+            <span class="p">),</span>
             <span class="n">nested_keys</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
             <span class="n">filter_empty</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="p">)</span>
@@ -1556,14 +1562,14 @@
             <span class="c1"># will be modified in-place at further steps</span>
             <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
 
-            <span class="k">def</span><span class="w"> </span><span class="nf">select_and_clone</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">tensor</span><span class="p">):</span>
-                <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_selected_step_keys</span><span class="p">:</span>
-                    <span class="k">return</span> <span class="n">tensor</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+            <span class="n">selected_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_selected_step_keys</span>
 
             <span class="k">if</span> <span class="n">partial_steps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">next_td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">lazy_stack</span><span class="p">([</span><span class="n">next_td</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">workers_range</span><span class="p">])</span>
             <span class="n">out</span> <span class="o">=</span> <span class="n">next_td</span><span class="o">.</span><span class="n">named_apply</span><span class="p">(</span>
-                <span class="n">select_and_clone</span><span class="p">,</span> <span class="n">nested_keys</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">filter_empty</span><span class="o">=</span><span class="kc">True</span>
+                <span class="k">lambda</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">select_and_clone</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">selected_keys</span><span class="p">),</span>
+                <span class="n">nested_keys</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">filter_empty</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="k">if</span> <span class="n">out_tds</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">out</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
@@ -1934,15 +1940,10 @@
 
         <span class="n">results</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">workers_range</span><span class="p">)</span>
 
-        <span class="n">consumed_indices</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="n">events</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">workers_range</span><span class="p">)</span>
-        <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">consumed_indices</span><span class="p">)</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">workers_range</span><span class="p">):</span>
-            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">events</span><span class="p">):</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_events</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
-                    <span class="n">results</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent_channels</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_events</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
-                    <span class="n">consumed_indices</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
-                    <span class="n">events</span><span class="o">.</span><span class="n">discard</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_workers</span><span class="p">(</span><span class="n">workers_range</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">w</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">workers_range</span><span class="p">):</span>
+            <span class="n">results</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent_channels</span><span class="p">[</span><span class="n">w</span><span class="p">]</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
 
         <span class="n">out_next</span><span class="p">,</span> <span class="n">out_root</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="p">(</span><span class="n">future</span> <span class="k">for</span> <span class="n">future</span> <span class="ow">in</span> <span class="n">results</span><span class="p">))</span>
         <span class="n">out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">maybe_dense_stack</span><span class="p">(</span><span class="n">out_next</span><span class="p">),</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">maybe_dense_stack</span><span class="p">(</span>
@@ -2267,20 +2268,8 @@
         <span class="n">next_td</span> <span class="o">=</span> <span class="n">shared_tensordict_parent</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">)</span>
         <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
 
-        <span class="k">if</span> <span class="n">next_td</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">device</span> <span class="ow">and</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-
-            <span class="k">def</span><span class="w"> </span><span class="nf">select_and_clone</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">tensor</span><span class="p">):</span>
-                <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_selected_step_keys</span><span class="p">:</span>
-                    <span class="k">return</span> <span class="n">tensor</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">non_blocking</span><span class="p">)</span>
-
-        <span class="k">else</span><span class="p">:</span>
-
-            <span class="k">def</span><span class="w"> </span><span class="nf">select_and_clone</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">tensor</span><span class="p">):</span>
-                <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_selected_step_keys</span><span class="p">:</span>
-                    <span class="k">return</span> <span class="n">tensor</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
-
         <span class="n">out</span> <span class="o">=</span> <span class="n">next_td</span><span class="o">.</span><span class="n">named_apply</span><span class="p">(</span>
-            <span class="n">select_and_clone</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">select_and_clone</span><span class="p">,</span>
             <span class="n">nested_keys</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
             <span class="n">filter_empty</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
             <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
@@ -2431,20 +2420,10 @@
         <span class="n">selected_output_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_selected_reset_keys_filt</span>
         <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared_tensordict_parent</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">device</span> <span class="ow">and</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-
-            <span class="k">def</span><span class="w"> </span><span class="nf">select_and_clone</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">tensor</span><span class="p">):</span>
-                <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">selected_output_keys</span><span class="p">:</span>
-                    <span class="k">return</span> <span class="n">tensor</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">non_blocking</span><span class="p">)</span>
-
-        <span class="k">else</span><span class="p">:</span>
-
-            <span class="k">def</span><span class="w"> </span><span class="nf">select_and_clone</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">tensor</span><span class="p">):</span>
-                <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">selected_output_keys</span><span class="p">:</span>
-                    <span class="k">return</span> <span class="n">tensor</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
-
         <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared_tensordict_parent</span><span class="o">.</span><span class="n">named_apply</span><span class="p">(</span>
-            <span class="n">select_and_clone</span><span class="p">,</span>
+            <span class="k">lambda</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">select_and_clone</span><span class="p">(</span>
+                <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">selected_keys</span><span class="o">=</span><span class="n">selected_output_keys</span>
+            <span class="p">),</span>
             <span class="n">nested_keys</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
             <span class="n">filter_empty</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
             <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
@@ -2628,7 +2607,7 @@
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">TimeoutError</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;Worker timed out after </span><span class="si">{</span><span class="n">_timeout</span><span class="si">}</span><span class="s2">s, &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;increase timeout if needed throught the BATCHED_PIPE_TIMEOUT environment variable.&quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.&quot;</span>
                 <span class="p">)</span>
         <span class="k">except</span> <span class="ne">EOFError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">EOFError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;proc </span><span class="si">{</span><span class="n">pid</span><span class="si">}</span><span class="s2"> failed, last command: </span><span class="si">{</span><span class="n">cmd</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
@@ -2868,7 +2847,7 @@
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">TimeoutError</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;Worker timed out after </span><span class="si">{</span><span class="n">_timeout</span><span class="si">}</span><span class="s2">s, &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;increase timeout if needed throught the BATCHED_PIPE_TIMEOUT environment variable.&quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable.&quot;</span>
                 <span class="p">)</span>
         <span class="k">except</span> <span class="ne">EOFError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">EOFError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;proc </span><span class="si">{</span><span class="n">pid</span><span class="si">}</span><span class="s2"> failed, last command: </span><span class="si">{</span><span class="n">cmd</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>

@@ -590,6 +590,145 @@ used in the environment’s output to signal the end of an episode.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.MCTSForest.extend">
+<span class="sig-name descname"><span class="pre">extend</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rollout</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_node</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/map/tree.html#MCTSForest.extend"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.MCTSForest.extend" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add a rollout to the forest.</p>
+<p>Nodes are only added to a tree at points where rollouts diverge from
+each other and at the endpoints of rollouts.</p>
+<p>If there is no existing tree that matches the first steps of the
+rollout, a new tree is added. Only one node is created, for the final
+step.</p>
+<p>If there is an existing tree that matches, the rollout is added to that
+tree. If the rollout diverges from all other rollouts in the tree at
+some step, a new node is created before the step where the rollouts
+diverge, and a leaf node is created for the final step of the rollout.
+If all of the rollout’s steps match with a previously added rollout,
+nothing changes.  If the rollout matches up to a leaf node of a tree but
+continues beyond it, that node is extended to the end of the rollout,
+and no new nodes are created.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>rollout</strong> (<em>TensorDict</em>) – The rollout to add to the forest.</p></li>
+<li><p><strong>return_node</strong> (<em>bool</em><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the method returns the
+added node. Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>The node that was added to the forest. This is only</dt><dd><p>returned if <code class="docutils literal notranslate"><span class="pre">return_node</span></code> is True.</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="torchrl.data.Tree.html#torchrl.data.Tree" title="torchrl.data.Tree">Tree</a></p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">MCTSForest</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">forest</span> <span class="o">=</span> <span class="n">MCTSForest</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">r0</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span>
+<span class="gp">... </span>    <span class="s1">&#39;action&#39;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="s1">&#39;next&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;observation&#39;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">123</span><span class="p">,</span> <span class="mi">392</span><span class="p">,</span> <span class="mi">989</span><span class="p">,</span> <span class="mi">809</span><span class="p">,</span> <span class="mi">847</span><span class="p">])},</span>
+<span class="gp">... </span>    <span class="s1">&#39;observation&#39;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span>  <span class="mi">0</span><span class="p">,</span> <span class="mi">123</span><span class="p">,</span> <span class="mi">392</span><span class="p">,</span> <span class="mi">989</span><span class="p">,</span> <span class="mi">809</span><span class="p">])</span>
+<span class="gp">... </span><span class="p">},</span> <span class="p">[</span><span class="mi">5</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">r1</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span>
+<span class="gp">... </span>    <span class="s1">&#39;action&#39;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="s1">&#39;next&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;observation&#39;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">123</span><span class="p">,</span> <span class="mi">392</span><span class="p">,</span> <span class="mi">235</span><span class="p">,</span>  <span class="mi">38</span><span class="p">])},</span>
+<span class="gp">... </span>    <span class="s1">&#39;observation&#39;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span>  <span class="mi">0</span><span class="p">,</span> <span class="mi">123</span><span class="p">,</span> <span class="mi">392</span><span class="p">,</span> <span class="mi">235</span><span class="p">])</span>
+<span class="gp">... </span><span class="p">},</span> <span class="p">[</span><span class="mi">4</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_root</span> <span class="o">=</span> <span class="n">r0</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">forest</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">r0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">forest</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">r1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tree</span> <span class="o">=</span> <span class="n">forest</span><span class="o">.</span><span class="n">get_tree</span><span class="p">(</span><span class="n">td_root</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">tree</span><span class="p">)</span>
+<span class="go">Tree(</span>
+<span class="go">    count=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int32, is_shared=False),</span>
+<span class="go">    index=Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="go">    node_data=TensorDict(</span>
+<span class="go">        fields={</span>
+<span class="go">            observation: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
+<span class="go">        batch_size=torch.Size([]),</span>
+<span class="go">        device=cpu,</span>
+<span class="go">        is_shared=False),</span>
+<span class="go">    node_id=NonTensorData(data=0, batch_size=torch.Size([]), device=None),</span>
+<span class="go">    rollout=TensorDict(</span>
+<span class="go">        fields={</span>
+<span class="go">            action: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="go">            next: TensorDict(</span>
+<span class="go">                fields={</span>
+<span class="go">                    observation: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
+<span class="go">                batch_size=torch.Size([2]),</span>
+<span class="go">                device=cpu,</span>
+<span class="go">                is_shared=False),</span>
+<span class="go">            observation: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
+<span class="go">        batch_size=torch.Size([2]),</span>
+<span class="go">        device=cpu,</span>
+<span class="go">        is_shared=False),</span>
+<span class="go">    subtree=Tree(</span>
+<span class="go">        _parent=NonTensorStack(</span>
+<span class="go">            [&lt;weakref at 0x716eeb78fbf0; to &#39;TensorDict&#39; at 0x...,</span>
+<span class="go">            batch_size=torch.Size([2]),</span>
+<span class="go">            device=None),</span>
+<span class="go">        count=Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int32, is_shared=False),</span>
+<span class="go">        hash=NonTensorStack(</span>
+<span class="go">            [4341220243998689835, 6745467818783115365],</span>
+<span class="go">            batch_size=torch.Size([2]),</span>
+<span class="go">            device=None),</span>
+<span class="go">        node_data=LazyStackedTensorDict(</span>
+<span class="go">            fields={</span>
+<span class="go">                observation: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
+<span class="go">            exclusive_fields={</span>
+<span class="go">            },</span>
+<span class="go">            batch_size=torch.Size([2]),</span>
+<span class="go">            device=cpu,</span>
+<span class="go">            is_shared=False,</span>
+<span class="go">            stack_dim=0),</span>
+<span class="go">        node_id=NonTensorStack(</span>
+<span class="go">            [1, 2],</span>
+<span class="go">            batch_size=torch.Size([2]),</span>
+<span class="go">            device=None),</span>
+<span class="go">        rollout=LazyStackedTensorDict(</span>
+<span class="go">            fields={</span>
+<span class="go">                action: Tensor(shape=torch.Size([2, -1]), device=cpu, dtype=torch.int64, is_shared=False),</span>
+<span class="go">                next: LazyStackedTensorDict(</span>
+<span class="go">                    fields={</span>
+<span class="go">                        observation: Tensor(shape=torch.Size([2, -1]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
+<span class="go">                    exclusive_fields={</span>
+<span class="go">                    },</span>
+<span class="go">                    batch_size=torch.Size([2, -1]),</span>
+<span class="go">                    device=cpu,</span>
+<span class="go">                    is_shared=False,</span>
+<span class="go">                    stack_dim=0),</span>
+<span class="go">                observation: Tensor(shape=torch.Size([2, -1]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
+<span class="go">            exclusive_fields={</span>
+<span class="go">            },</span>
+<span class="go">            batch_size=torch.Size([2, -1]),</span>
+<span class="go">            device=cpu,</span>
+<span class="go">            is_shared=False,</span>
+<span class="go">            stack_dim=0),</span>
+<span class="go">        wins=Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        index=None,</span>
+<span class="go">        subtree=None,</span>
+<span class="go">        specs=None,</span>
+<span class="go">        batch_size=torch.Size([2]),</span>
+<span class="go">        device=None,</span>
+<span class="go">        is_shared=False),</span>
+<span class="go">    wins=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">    hash=None,</span>
+<span class="go">    _parent=None,</span>
+<span class="go">    specs=None,</span>
+<span class="go">    batch_size=torch.Size([]),</span>
+<span class="go">    device=None,</span>
+<span class="go">    is_shared=False)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrl.data.MCTSForest.get_keys_from_env">
 <span class="sig-name descname"><span class="pre">get_keys_from_env</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.common.EnvBase"><span class="pre">EnvBase</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/map/tree.html#MCTSForest.get_keys_from_env"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.MCTSForest.get_keys_from_env" title="Permalink to this definition">¶</a></dt>
 <dd><p>Writes missing done, action and reward keys to the Forest given an environment.</p>

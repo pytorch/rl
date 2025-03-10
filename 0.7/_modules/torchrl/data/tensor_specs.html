@@ -2548,11 +2548,11 @@
         <span class="k">if</span> <span class="n">dtype</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">high</span><span class="o">.</span><span class="n">dtype</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">dtype</span><span class="p">:</span>
             <span class="n">high</span> <span class="o">=</span> <span class="n">high</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span>
         <span class="n">err_msg</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="s2">&quot;Bounded requires the shape to be explicitely (via &quot;</span>
-            <span class="s2">&quot;the shape argument) or implicitely defined (via either the &quot;</span>
+            <span class="s2">&quot;Bounded requires the shape to be explicitly (via &quot;</span>
+            <span class="s2">&quot;the shape argument) or implicitly defined (via either the &quot;</span>
             <span class="s2">&quot;minimum or the maximum or both). If the maximum and/or the &quot;</span>
             <span class="s2">&quot;minimum have a non-singleton shape, they must match the &quot;</span>
-            <span class="s2">&quot;provided shape if this one is set explicitely.&quot;</span>
+            <span class="s2">&quot;provided shape if this one is set explicitly.&quot;</span>
         <span class="p">)</span>
         <span class="k">if</span> <span class="n">shape</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">):</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
@@ -3823,7 +3823,7 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A discrete tensor spec.</span>
 
 <span class="sd">    An alternative to :class:`OneHot` for categorical variables in TorchRL.</span>
-<span class="sd">    Categorical variables perform indexing insted of masking, which can speed-up</span>
+<span class="sd">    Categorical variables perform indexing instead of masking, which can speed-up</span>
 <span class="sd">    computation and reduce memory cost for large categorical variables.</span>
 
 <span class="sd">    The spec will have the shape defined by the ``shape`` argument: if a singleton dimension is</span>
@@ -4410,7 +4410,7 @@
 <span class="sd">            If not provided, ``shape`` must be passed.</span>
 
 <span class="sd">            .. warning:: the ``n`` argument from ``Binary`` must not be confused with the ``n`` argument from :class:`Categorical`</span>
-<span class="sd">                or :class:`OneHot` which denotes the maximum nmber of elements that can be sampled.</span>
+<span class="sd">                or :class:`OneHot` which denotes the maximum number of elements that can be sampled.</span>
 <span class="sd">                For clarity, use ``shape`` instead.</span>
 
 <span class="sd">        shape (torch.Size, optional): total shape of the sampled tensors.</span>

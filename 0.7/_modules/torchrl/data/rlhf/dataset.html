@@ -652,13 +652,13 @@
         <span class="n">batch_dims</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
         <span class="n">valid_mask_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convers a dataset to a memory-mapped TensorDict.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Converts a dataset to a memory-mapped TensorDict.</span>
 
 <span class="sd">        If the dataset is already a :class:`TensorDict` instance, it is simply converted</span>
 <span class="sd">        to a memory-mapped TensorDict.</span>
 <span class="sd">        Otherwise, the dataset is expected to have a ``features`` attribute</span>
 <span class="sd">        which is a sequence of strings indicating the features that can be found</span>
-<span class="sd">        in the dataset. If it does not, the ``features`` must be passed explicitely</span>
+<span class="sd">        in the dataset. If it does not, the ``features`` must be passed explicitly</span>
 <span class="sd">        to this function.</span>
 
 <span class="sd">        Args:</span>
@@ -835,7 +835,7 @@
 <span class="sd">        padding (str, optional): type of padding. Defaults to ``&quot;max_length&quot;``.</span>
 <span class="sd">        truncation (bool, optional): whether the sequences should be truncated to max_length.</span>
 <span class="sd">        return_tensordict (bool, optional): if ``True``, a TensoDict is returned.</span>
-<span class="sd">            Otherwise, a the orignal data will be returned.</span>
+<span class="sd">            Otherwise, a the original data will be returned.</span>
 <span class="sd">        device (torch.device, optional): the device where to store the data.</span>
 <span class="sd">            This option is ignored if ``return_tensordict=False``.</span>
 

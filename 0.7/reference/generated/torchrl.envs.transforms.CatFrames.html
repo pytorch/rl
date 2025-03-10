@@ -478,7 +478,7 @@ done indicator. Must be unique. If not provided, defaults to <code class="docuti
 </div>
 <p>The <a class="reference internal" href="#torchrl.envs.transforms.CatFrames" title="torchrl.envs.transforms.CatFrames"><code class="xref py py-class docutils literal notranslate"><span class="pre">CatFrames</span></code></a> transform can also be used offline to reproduce the
 effect of the online frame concatenation at a different scale (or for the
-purpose of limiting the memory consumption). The followin example
+purpose of limiting the memory consumption). The following example
 gives the complete picture, together with the usage of a <a class="reference internal" href="torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer" title="torchrl.data.ReplayBuffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl.data.ReplayBuffer</span></code></a>:</p>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">RandomPolicy</span>        <span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">UnsqueezeTransform</span><span class="p">,</span> <span class="n">CatFrames</span>

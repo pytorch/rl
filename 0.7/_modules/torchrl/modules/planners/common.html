@@ -452,7 +452,7 @@
         <span class="c1"># Check if env is stateless</span>
         <span class="k">if</span> <span class="n">env</span><span class="o">.</span><span class="n">batch_locked</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;Environment is batch_locked. MPCPlanners need an environnement that accepts batched inputs with any batch size&quot;</span>
+                <span class="s2">&quot;Environment is batch_locked. MPCPlanners need an environment that accepts batched inputs with any batch size&quot;</span>
             <span class="p">)</span>
         <span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span><span class="n">action_key</span><span class="p">]</span>
         <span class="n">in_keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>

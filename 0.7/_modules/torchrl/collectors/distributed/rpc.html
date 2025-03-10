@@ -741,7 +741,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">max_weight_update_interval</span> <span class="o">=</span> <span class="n">max_weight_update_interval</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">update_after_each_batch</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_weight_update_interval</span> <span class="o">&gt;</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                <span class="s2">&quot;Got conflicting udpate instructions: `update_after_each_batch` &quot;</span>
+                <span class="s2">&quot;Got conflicting update instructions: `update_after_each_batch` &quot;</span>
                 <span class="s2">&quot;`max_weight_update_interval` are incompatible.&quot;</span>
             <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">launcher</span> <span class="o">=</span> <span class="n">launcher</span>

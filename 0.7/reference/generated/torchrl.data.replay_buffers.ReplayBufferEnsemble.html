@@ -470,17 +470,17 @@ if not provided.</p></li>
 <li><p><strong>p</strong> (<em>list of float</em><em> or </em><em>Tensor</em><em>, </em><em>optional</em>) – a list of floating numbers
 indicating the relative weight of each replay buffer. Can also
 be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`
-if the buffer is built explicitely.</p></li>
+if the buffer is built explicitly.</p></li>
 <li><p><strong>sample_from_all</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, each dataset will be sampled
 from. This is not compatible with the <code class="docutils literal notranslate"><span class="pre">p</span></code> argument. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.
 Can also be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`
-if the buffer is built explicitely.</p></li>
+if the buffer is built explicitly.</p></li>
 <li><p><strong>num_buffer_sampled</strong> (<em>int</em><em>, </em><em>optional</em>) – the number of buffers to sample.
 if <code class="docutils literal notranslate"><span class="pre">sample_from_all=True</span></code>, this has no effect, as it defaults to the
 number of buffers. If <code class="docutils literal notranslate"><span class="pre">sample_from_all=False</span></code>, buffers will be
 sampled according to the probabilities <code class="docutils literal notranslate"><span class="pre">p</span></code>. Can also
 be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`
-if the buffer is built explicitely.</p></li>
+if the buffer is built explicitly.</p></li>
 <li><p><strong>generator</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.6)"><em>torch.Generator</em></a><em>, </em><em>optional</em>) – <p>a generator to use for sampling.
 Using a dedicated generator for the replay buffer can allow a fine-grained control
 over seeding, for instance keeping the global seed different but the RB seed identical

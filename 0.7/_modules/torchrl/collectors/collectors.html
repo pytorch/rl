@@ -1084,7 +1084,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">closed</span> <span class="o">=</span> <span class="kc">False</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="n">reset_when_done</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;reset_when_done is deprectated.&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;reset_when_done is deprecated.&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">reset_when_done</span> <span class="o">=</span> <span class="n">reset_when_done</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">n_env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">batch_size</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
 
@@ -1189,8 +1189,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">set_truncated</span> <span class="o">=</span> <span class="n">set_truncated</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_make_shuttle</span><span class="p">()</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_make_final_rollout</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_make_final_rollout</span><span class="p">(</span><span class="n">make_rollout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_set_truncated_keys</span><span class="p">()</span>
 
         <span class="k">if</span> <span class="n">split_trajs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -1227,28 +1226,30 @@
             <span class="n">traj_ids</span><span class="p">,</span>
         <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_make_final_rollout</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">fake_tensordict</span><span class="p">()</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_make_final_rollout</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">make_rollout</span><span class="p">:</span> <span class="nb">bool</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">make_rollout</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">fake_tensordict</span><span class="p">()</span>
 
-        <span class="c1"># If storing device is not None, we use this to cast the storage.</span>
-        <span class="c1"># If it is None and the env and policy are on the same device,</span>
-        <span class="c1"># the storing device is already the same as those, so we don&#39;t need</span>
-        <span class="c1"># to consider this use case.</span>
-        <span class="c1"># In all other cases, we can&#39;t really put a device on the storage,</span>
-        <span class="c1"># since at least one data source has a device that is not clear.</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span>
-            <span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="c1"># erase all devices</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">clear_device_</span><span class="p">()</span>
+            <span class="c1"># If storing device is not None, we use this to cast the storage.</span>
+            <span class="c1"># If it is None and the env and policy are on the same device,</span>
+            <span class="c1"># the storing device is already the same as those, so we don&#39;t need</span>
+            <span class="c1"># to consider this use case.</span>
+            <span class="c1"># In all other cases, we can&#39;t really put a device on the storage,</span>
+            <span class="c1"># since at least one data source has a device that is not clear.</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># erase all devices</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">clear_device_</span><span class="p">()</span>
 
         <span class="c1"># If the policy has a valid spec, we use it</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_policy_output_keys</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
         <span class="k">if</span> <span class="p">(</span>
-            <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="s2">&quot;spec&quot;</span><span class="p">)</span>
+            <span class="n">make_rollout</span>
+            <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="s2">&quot;spec&quot;</span><span class="p">)</span>
             <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="o">.</span><span class="n">spec</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
             <span class="ow">and</span> <span class="nb">all</span><span class="p">(</span><span class="n">v</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="o">.</span><span class="n">spec</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
         <span class="p">):</span>
@@ -1267,14 +1268,20 @@
                     <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">):</span>
                         <span class="k">continue</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">spec</span><span class="o">.</span><span class="n">zero</span><span class="p">())</span>
-
+        <span class="k">elif</span> <span class="p">(</span>
+            <span class="ow">not</span> <span class="n">make_rollout</span>
+            <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="s2">&quot;out_keys&quot;</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="o">.</span><span class="n">out_keys</span>
+        <span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_policy_output_keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="o">.</span><span class="n">out_keys</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="c1"># otherwise, we perform a small number of steps with the policy to</span>
-            <span class="c1"># determine the relevant keys with which to pre-populate _final_rollout.</span>
-            <span class="c1"># This is the safest thing to do if the spec has None fields or if there is</span>
-            <span class="c1"># no spec at all.</span>
-            <span class="c1"># See #505 for additional context.</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+            <span class="k">if</span> <span class="n">make_rollout</span><span class="p">:</span>
+                <span class="c1"># otherwise, we perform a small number of steps with the policy to</span>
+                <span class="c1"># determine the relevant keys with which to pre-populate _final_rollout.</span>
+                <span class="c1"># This is the safest thing to do if the spec has None fields or if there is</span>
+                <span class="c1"># no spec at all.</span>
+                <span class="c1"># See #505 for additional context.</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
             <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
                 <span class="n">policy_input</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span><span class="p">:</span>
@@ -1332,33 +1339,35 @@
                         <span class="nb">set</span><span class="p">(</span><span class="n">filtered_policy_output</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
                     <span class="p">)</span>
                 <span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
-                    <span class="n">policy_output</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_policy_output_keys</span><span class="p">)</span>
-                <span class="p">)</span>
+                <span class="k">if</span> <span class="n">make_rollout</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+                        <span class="n">policy_output</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_policy_output_keys</span><span class="p">)</span>
+                    <span class="p">)</span>
                 <span class="k">del</span> <span class="n">filtered_policy_output</span><span class="p">,</span> <span class="n">policy_output</span><span class="p">,</span> <span class="n">policy_input</span>
 
         <span class="n">_env_output_keys</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;full_observation_spec&quot;</span><span class="p">,</span> <span class="s2">&quot;full_done_spec&quot;</span><span class="p">,</span> <span class="s2">&quot;full_reward_spec&quot;</span><span class="p">]:</span>
             <span class="n">_env_output_keys</span> <span class="o">+=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">output_spec</span><span class="p">[</span><span class="n">spec</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_env_output_keys</span> <span class="o">=</span> <span class="n">_env_output_keys</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-            <span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch</span><span class="p">)</span>
-            <span class="o">.</span><span class="n">clone</span><span class="p">()</span>
-            <span class="o">.</span><span class="n">zero_</span><span class="p">()</span>
-        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">make_rollout</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+                <span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch</span><span class="p">)</span>
+                <span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+                <span class="o">.</span><span class="n">zero_</span><span class="p">()</span>
+            <span class="p">)</span>
 
-        <span class="c1"># in addition to outputs of the policy, we add traj_ids to</span>
-        <span class="c1"># _final_rollout which will be collected during rollout</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
-            <span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;traj_ids&quot;</span><span class="p">),</span>
-            <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
-                <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
-                <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span>
-                <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span><span class="p">,</span>
-            <span class="p">),</span>
-        <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">refine_names</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="s2">&quot;time&quot;</span><span class="p">)</span>
+            <span class="c1"># in addition to outputs of the policy, we add traj_ids to</span>
+            <span class="c1"># _final_rollout which will be collected during rollout</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                <span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;traj_ids&quot;</span><span class="p">),</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                    <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+                    <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span>
+                    <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span><span class="p">,</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">refine_names</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="s2">&quot;time&quot;</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_set_truncated_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_truncated_keys</span> <span class="o">=</span> <span class="p">[]</span>
@@ -2953,7 +2962,7 @@
 
 <span class="sd">    Environment types can be identical or different.</span>
 
-<span class="sd">    The collection keeps on occuring on all processes even between the time</span>
+<span class="sd">    The collection keeps on occurring on all processes even between the time</span>
 <span class="sd">    the batch of rollouts is collected and the next call to the iterator.</span>
 <span class="sd">    This class can be safely used with offline RL sota-implementations.</span>
 
@@ -3542,7 +3551,7 @@
                         <span class="s2">&quot;the shared device (aka storing_device) is set to CPU.&quot;</span>
                     <span class="p">)</span>
                     <span class="k">if</span> <span class="n">collected_tensordict</span><span class="o">.</span><span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                        <span class="c1"># placehoder in case we need different behaviors</span>
+                        <span class="c1"># placeholder in case we need different behaviors</span>
                         <span class="k">if</span> <span class="n">collected_tensordict</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">,):</span>
                             <span class="n">collected_tensordict</span><span class="o">.</span><span class="n">share_memory_</span><span class="p">()</span>
                         <span class="k">elif</span> <span class="n">collected_tensordict</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;mps&quot;</span><span class="p">,):</span>

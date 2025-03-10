@@ -588,7 +588,7 @@
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="c1"># we save a complete list of setters as well as whether they should be set.</span>
-        <span class="c1"># we want the full list becasue we want to be able to nest the calls to set_gym_backend.</span>
+        <span class="c1"># we want the full list because we want to be able to nest the calls to set_gym_backend.</span>
         <span class="c1"># we also want to keep track of which ones are set to reproduce what was set before.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_setters_saved</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">implement_for</span><span class="o">.</span><span class="n">_implementations</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_call</span><span class="p">()</span>
@@ -1246,7 +1246,7 @@
 <div class="viewcode-block" id="GymWrapper"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.GymWrapper.html#torchrl.envs.GymWrapper">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">GymWrapper</span><span class="p">(</span><span class="n">GymLikeEnv</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_GymAsyncMeta</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;OpenAI Gym environment wrapper.</span>
 
-<span class="sd">    Works accross `gymnasium &lt;https://gymnasium.farama.org/&gt;`_ and `OpenAI/gym &lt;https://github.com/openai/gym&gt;`_.</span>
+<span class="sd">    Works across `gymnasium &lt;https://gymnasium.farama.org/&gt;`_ and `OpenAI/gym &lt;https://github.com/openai/gym&gt;`_.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        env (gym.Env): the environment to wrap. Batched environments (:class:`~stable_baselines3.common.vec_env.base_vec_env.VecEnv`</span>
@@ -1907,7 +1907,7 @@
 <div class="viewcode-block" id="GymEnv"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.GymEnv.html#torchrl.envs.GymEnv">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">GymEnv</span><span class="p">(</span><span class="n">GymWrapper</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;OpenAI Gym environment wrapper constructed by environment ID directly.</span>
 
-<span class="sd">    Works accross `gymnasium &lt;https://gymnasium.farama.org/&gt;`_ and `OpenAI/gym &lt;https://github.com/openai/gym&gt;`_.</span>
+<span class="sd">    Works across `gymnasium &lt;https://gymnasium.farama.org/&gt;`_ and `OpenAI/gym &lt;https://github.com/openai/gym&gt;`_.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        env_name (str): the environment id registered in `gym.registry`.</span>

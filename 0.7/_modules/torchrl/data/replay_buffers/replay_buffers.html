@@ -711,7 +711,7 @@
             <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">drop_last</span>
         <span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;Samplers with drop_last=True must work with a predictible batch-size. &quot;</span>
+                <span class="s2">&quot;Samplers with drop_last=True must work with a predictable batch-size. &quot;</span>
                 <span class="s2">&quot;Please pass the batch-size to the ReplayBuffer constructor.&quot;</span>
             <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_batch_size</span> <span class="o">=</span> <span class="n">batch_size</span>
@@ -1675,7 +1675,7 @@
 
         <span class="c1"># TODO: to be usable directly, the indices should be flipped but the issue</span>
         <span class="c1">#  is that just doing this results in indices that are not sorted like the original data</span>
-        <span class="c1">#  so the actualy indices will have to be used on the _storage directly (not on the buffer)</span>
+        <span class="c1">#  so the actually indices will have to be used on the _storage directly (not on the buffer)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_set_index_in_td</span><span class="p">(</span><span class="n">tensordicts</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
         <span class="c1"># TODO: in principle this is a good idea but currently it doesn&#39;t work + it re-writes a priority that has just been written</span>
         <span class="c1"># self.update_tensordict_priority(tensordicts)</span>
@@ -1762,7 +1762,7 @@
                 <span class="k">except</span> <span class="ne">RuntimeError</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                         <span class="s2">&quot;Failed to set the metadata (e.g., indices or weights) in the sampled tensordict within TensorDictReplayBuffer.sample. &quot;</span>
-                        <span class="s2">&quot;This is probably caused by a shape mismatch (one of the transforms has proably modified &quot;</span>
+                        <span class="s2">&quot;This is probably caused by a shape mismatch (one of the transforms has probably modified &quot;</span>
                         <span class="s2">&quot;the shape of the output tensordict). &quot;</span>
                         <span class="s2">&quot;You can always recover these items from the `sample` method from a regular ReplayBuffer &quot;</span>
                         <span class="s2">&quot;instance with the &#39;return_info&#39; flag set to True.&quot;</span>
@@ -2083,17 +2083,17 @@
 <span class="sd">        p (list of float or Tensor, optional): a list of floating numbers</span>
 <span class="sd">            indicating the relative weight of each replay buffer. Can also</span>
 <span class="sd">            be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`</span>
-<span class="sd">            if the buffer is built explicitely.</span>
+<span class="sd">            if the buffer is built explicitly.</span>
 <span class="sd">        sample_from_all (bool, optional): if ``True``, each dataset will be sampled</span>
 <span class="sd">            from. This is not compatible with the ``p`` argument. Defaults to ``False``.</span>
 <span class="sd">            Can also be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`</span>
-<span class="sd">            if the buffer is built explicitely.</span>
+<span class="sd">            if the buffer is built explicitly.</span>
 <span class="sd">        num_buffer_sampled (int, optional): the number of buffers to sample.</span>
 <span class="sd">            if ``sample_from_all=True``, this has no effect, as it defaults to the</span>
 <span class="sd">            number of buffers. If ``sample_from_all=False``, buffers will be</span>
 <span class="sd">            sampled according to the probabilities ``p``. Can also</span>
 <span class="sd">            be passed to torchrl.data.replay_buffers.samplers.SamplerEnsemble`</span>
-<span class="sd">            if the buffer is built explicitely.</span>
+<span class="sd">            if the buffer is built explicitly.</span>
 <span class="sd">        generator (torch.Generator, optional): a generator to use for sampling.</span>
 <span class="sd">            Using a dedicated generator for the replay buffer can allow a fine-grained control</span>
 <span class="sd">            over seeding, for instance keeping the global seed different but the RB seed identical</span>
@@ -2303,7 +2303,7 @@
                 <span class="p">)</span>
             <span class="k">if</span> <span class="n">index</span><span class="o">.</span><span class="n">is_floating_point</span><span class="p">():</span>
                 <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
-                    <span class="s2">&quot;A floating point index was recieved when an integer dtype was expected.&quot;</span>
+                    <span class="s2">&quot;A floating point index was received when an integer dtype was expected.&quot;</span>
                 <span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rbs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span>
             <span class="nb">isinstance</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="nb">slice</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">index</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>

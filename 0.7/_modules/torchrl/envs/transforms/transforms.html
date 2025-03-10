@@ -1879,7 +1879,7 @@
 <span class="sd">        in_keys (list of NestedKeys): keys to process.</span>
 <span class="sd">        out_keys (list of NestedKeys): keys to write.</span>
 <span class="sd">        shape_tolerant (bool, optional): if ``True``, the shape of the input</span>
-<span class="sd">            images will be check. If the last channel is not `3`, the permuation</span>
+<span class="sd">            images will be check. If the last channel is not `3`, the permutation</span>
 <span class="sd">            will be ignored. Defaults to ``False``.</span>
 
 <span class="sd">    Examples:</span>
@@ -2036,7 +2036,7 @@
         <span class="n">low</span><span class="p">,</span> <span class="n">low_eps</span><span class="p">,</span> <span class="n">low_min</span> <span class="o">=</span> <span class="n">check_val</span><span class="p">(</span><span class="n">low</span><span class="p">)</span>
         <span class="n">high</span><span class="p">,</span> <span class="n">high_eps</span><span class="p">,</span> <span class="n">high_max</span> <span class="o">=</span> <span class="n">check_val</span><span class="p">(</span><span class="n">high</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">low</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">high</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">low</span> <span class="o">&gt;=</span> <span class="n">high</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;`low` must be stricly lower than `high`.&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;`low` must be strictly lower than `high`.&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;low&quot;</span><span class="p">,</span> <span class="n">low</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">low_eps</span> <span class="o">=</span> <span class="n">low_eps</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">low_min</span> <span class="o">=</span> <span class="o">-</span><span class="n">low_min</span>
@@ -3462,7 +3462,7 @@
 
 <span class="sd">    The :class:`CatFrames` transform can also be used offline to reproduce the</span>
 <span class="sd">    effect of the online frame concatenation at a different scale (or for the</span>
-<span class="sd">    purpose of limiting the memory consumption). The followin example</span>
+<span class="sd">    purpose of limiting the memory consumption). The following example</span>
 <span class="sd">    gives the complete picture, together with the usage of a :class:`torchrl.data.ReplayBuffer`:</span>
 
 <span class="sd">    Examples:</span>
@@ -8918,7 +8918,7 @@
 
 <span class="sd">    This transform is useful to obtain up-to-date recurrent states when</span>
 <span class="sd">    they are not available. It burns-in a number of steps along the time dimension</span>
-<span class="sd">    from sampled sequential data slices and returs the remaining data sequence with</span>
+<span class="sd">    from sampled sequential data slices and returns the remaining data sequence with</span>
 <span class="sd">    the burnt-in data in its initial time step. This transform is intended to be used as a</span>
 <span class="sd">    replay buffer transform, not as an environment transform.</span>
 
@@ -9715,7 +9715,7 @@
 <span class="sd">        replace (bool, optional): if ``False``, values are just placed as they are in the</span>
 <span class="sd">            ``&quot;next&quot;`` entry even if they are not valid. Defaults to ``True``. A value of</span>
 <span class="sd">            ``False`` overrides any subsequent filling keyword argument.</span>
-<span class="sd">            This argumet can also be passed with the constructor method by passing a</span>
+<span class="sd">            This argument can also be passed with the constructor method by passing a</span>
 <span class="sd">            ``auto_reset_replace`` argument: ``env = FooEnv(..., auto_reset=True, auto_reset_replace=False)``.</span>
 <span class="sd">        fill_float (:obj:`float` or str, optional): The filling value for floating point tensors</span>
 <span class="sd">            that terminate an episode. A value of ``None`` means no replacement (values are just</span>

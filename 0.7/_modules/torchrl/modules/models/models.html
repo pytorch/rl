@@ -481,12 +481,12 @@
 <span class="sd">            class or constructor to be used.</span>
 <span class="sd">            Defaults to :class:`~torch.nn.Tanh`.</span>
 <span class="sd">        activation_kwargs (dict or list of dicts, optional): kwargs to be used</span>
-<span class="sd">            with the activation class. Aslo accepts a list of kwargs of length</span>
+<span class="sd">            with the activation class. Also accepts a list of kwargs of length</span>
 <span class="sd">            ``depth + int(activate_last_layer)``.</span>
 <span class="sd">        norm_class (Type or callable, optional): normalization class or</span>
 <span class="sd">            constructor, if any.</span>
 <span class="sd">        norm_kwargs (dict or list of dicts, optional): kwargs to be used with</span>
-<span class="sd">            the normalization layers. Aslo accepts a list of kwargs of length</span>
+<span class="sd">            the normalization layers. Also accepts a list of kwargs of length</span>
 <span class="sd">            ``depth + int(activate_last_layer)``.</span>
 <span class="sd">        dropout (:obj:`float`, optional): dropout probability. Defaults to ``None`` (no</span>
 <span class="sd">            dropout);</span>
@@ -498,7 +498,7 @@
 <span class="sd">        layer_class (Type[nn.Module] or callable, optional): class to be used</span>
 <span class="sd">            for the linear layers;</span>
 <span class="sd">        layer_kwargs (dict or list of dicts, optional): kwargs for the linear</span>
-<span class="sd">            layers. Aslo accepts a list of kwargs of length ``depth + 1``.</span>
+<span class="sd">            layers. Also accepts a list of kwargs of length ``depth + 1``.</span>
 <span class="sd">        activate_last_layer (bool): whether the MLP output should be activated. This is useful when the MLP output</span>
 <span class="sd">            is used as the input for another module.</span>
 <span class="sd">            default: False.</span>
@@ -691,7 +691,7 @@
                 <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
                         <span class="sa">f</span><span class="s2">&quot;The lazy version of </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">layer_class</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> is not implemented yet. &quot;</span>
-                        <span class="s2">&quot;Consider providing the input feature dimensions explicitely when creating an MLP module&quot;</span>
+                        <span class="s2">&quot;Consider providing the input feature dimensions explicitly when creating an MLP module&quot;</span>
                     <span class="p">)</span>
                 <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
                     <span class="n">create_on_device</span><span class="p">(</span>
@@ -2121,7 +2121,7 @@
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">_ExecutableLayer</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A thin wrapper around a function to be exectued as a module.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A thin wrapper around a function to be executed as a module.&quot;&quot;&quot;</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">func</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">(</span><span class="n">_ExecutableLayer</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>

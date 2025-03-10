@@ -672,7 +672,7 @@
 <span class="sd">    The noise input should be reset through a :obj:`torchrl.envs.transforms.gSDENoise`</span>
 <span class="sd">    instance: each time the environment is reset, the input noise will be set to</span>
 <span class="sd">    zero by the environment transform, indicating to gSDEModule that it has to be resampled.</span>
-<span class="sd">    This scheme allows us to have the environemt tell the module to resample a</span>
+<span class="sd">    This scheme allows us to have the environment tell the module to resample a</span>
 <span class="sd">    noise only the latter knows the shape of.</span>
 
 <span class="sd">    A variable transform function can also be provided to map the noicy action</span>
@@ -1039,7 +1039,7 @@
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        input_shape (tuple, optional): the shape of the input (non-batchted), used to generate the</span>
 <span class="sd">            tensordict primers with :meth:`make_tensordict_primer`.</span>
-<span class="sd">        input_dtype (torch.dtype, optional): the dtype of the input for the primer. If none is pased,</span>
+<span class="sd">        input_dtype (torch.dtype, optional): the dtype of the input for the primer. If none is passed,</span>
 <span class="sd">            ``torch.get_default_dtype`` is assumed.</span>
 
 <span class="sd">    .. note:: To use this class within a policy, one needs the mask to be reset at reset time.</span>
@@ -1140,7 +1140,7 @@
         <span class="k">if</span> <span class="n">shape</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                 <span class="s2">&quot;Cannot infer the shape of the input automatically. &quot;</span>
-                <span class="s2">&quot;Please pass the shape of the tensor to `ConstistentDropoutModule` during construction &quot;</span>
+                <span class="s2">&quot;Please pass the shape of the tensor to `ConsistentDropoutModule` during construction &quot;</span>
                 <span class="s2">&quot;with the `input_shape` kwarg.&quot;</span>
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">TensorDictPrimer</span><span class="p">(</span>

@@ -464,12 +464,12 @@ the linear layers <code class="docutils literal notranslate"><span class="pre">o
 class or constructor to be used.
 Defaults to <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Tanh.html#torch.nn.Tanh" title="(in PyTorch v2.6)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tanh</span></code></a>.</p></li>
 <li><p><strong>activation_kwargs</strong> (<em>dict</em><em> or </em><em>list of dicts</em><em>, </em><em>optional</em>) – kwargs to be used
-with the activation class. Aslo accepts a list of kwargs of length
+with the activation class. Also accepts a list of kwargs of length
 <code class="docutils literal notranslate"><span class="pre">depth</span> <span class="pre">+</span> <span class="pre">int(activate_last_layer)</span></code>.</p></li>
 <li><p><strong>norm_class</strong> (<em>Type</em><em> or </em><em>callable</em><em>, </em><em>optional</em>) – normalization class or
 constructor, if any.</p></li>
 <li><p><strong>norm_kwargs</strong> (<em>dict</em><em> or </em><em>list of dicts</em><em>, </em><em>optional</em>) – kwargs to be used with
-the normalization layers. Aslo accepts a list of kwargs of length
+the normalization layers. Also accepts a list of kwargs of length
 <code class="docutils literal notranslate"><span class="pre">depth</span> <span class="pre">+</span> <span class="pre">int(activate_last_layer)</span></code>.</p></li>
 <li><p><strong>dropout</strong> (<code class="xref py py-obj docutils literal notranslate"><span class="pre">float</span></code>, optional) – dropout probability. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (no
 dropout);</p></li>
@@ -481,7 +481,7 @@ default: True;</p></li>
 <li><p><strong>layer_class</strong> (<em>Type</em><em>[</em><em>nn.Module</em><em>] or </em><em>callable</em><em>, </em><em>optional</em>) – class to be used
 for the linear layers;</p></li>
 <li><p><strong>layer_kwargs</strong> (<em>dict</em><em> or </em><em>list of dicts</em><em>, </em><em>optional</em>) – kwargs for the linear
-layers. Aslo accepts a list of kwargs of length <code class="docutils literal notranslate"><span class="pre">depth</span> <span class="pre">+</span> <span class="pre">1</span></code>.</p></li>
+layers. Also accepts a list of kwargs of length <code class="docutils literal notranslate"><span class="pre">depth</span> <span class="pre">+</span> <span class="pre">1</span></code>.</p></li>
 <li><p><strong>activate_last_layer</strong> (<em>bool</em>) – whether the MLP output should be activated. This is useful when the MLP output
 is used as the input for another module.
 default: False.</p></li>

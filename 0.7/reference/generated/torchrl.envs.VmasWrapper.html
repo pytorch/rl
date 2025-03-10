@@ -441,7 +441,7 @@
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>num_envs</strong> (<em>int</em>) – Number of vectorized simulation environments. VMAS perfroms vectorized simulations using PyTorch.
+<li><p><strong>num_envs</strong> (<em>int</em>) – Number of vectorized simulation environments. VMAS performs vectorized simulations using PyTorch.
 This argument indicates the number of vectorized environments that should be simulated in a batch. It will also
 determine the batch size of the environment.</p></li>
 <li><p><strong>device</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.6)"><em>torch.device</em></a><em>, </em><em>optional</em>) – Device for simulation. Defaults to the default device. All the tensors created by VMAS
@@ -473,7 +473,7 @@ input/output. See <code class="xref py py-class docutils literal notranslate"><s
 <li><p><strong>unbatched_action_spec</strong> (<a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><em>TensorSpec</em></a>) – version of the spec without the vectorized dimension</p></li>
 <li><p><strong>unbatched_observation_spec</strong> (<a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><em>TensorSpec</em></a>) – version of the spec without the vectorized dimension</p></li>
 <li><p><strong>unbatched_reward_spec</strong> (<a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><em>TensorSpec</em></a>) – version of the spec without the vectorized dimension</p></li>
-<li><p><strong>het_specs</strong> (<em>bool</em>) – whether the enviornment has any lazy spec</p></li>
+<li><p><strong>het_specs</strong> (<em>bool</em>) – whether the environment has any lazy spec</p></li>
 <li><p><strong>het_specs_map</strong> (<em>Dict</em><em>[</em><em>str</em><em>, </em><em>bool</em><em>]</em>) – dictionary mapping each group to a flag representing of the group has lazy specs</p></li>
 <li><p><strong>available_envs</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – the list of the scenarios available to build.</p></li>
 </ul>

@@ -507,26 +507,26 @@
 <span class="sd">            providing the ``clone`` argument to the forward method.</span>
 <span class="sd">            Defaults to ``False``.</span>
 
-<span class="sd">        Examples:</span>
-<span class="sd">            &gt;&gt;&gt; query_module = QueryModule(</span>
-<span class="sd">            ...     in_keys=[&quot;key1&quot;, &quot;key2&quot;],</span>
-<span class="sd">            ...     index_key=&quot;index&quot;,</span>
-<span class="sd">            ...     hash_module=SipHash(),</span>
-<span class="sd">            ... )</span>
-<span class="sd">            &gt;&gt;&gt; query = TensorDict(</span>
-<span class="sd">            ...     {</span>
-<span class="sd">            ...         &quot;key1&quot;: torch.Tensor([[1], [1], [1], [2]]),</span>
-<span class="sd">            ...         &quot;key2&quot;: torch.Tensor([[3], [3], [2], [3]]),</span>
-<span class="sd">            ...         &quot;other&quot;: torch.randn(4),</span>
-<span class="sd">            ...     },</span>
-<span class="sd">            ...     batch_size=(4,),</span>
-<span class="sd">            ... )</span>
-<span class="sd">            &gt;&gt;&gt; res = query_module(query)</span>
-<span class="sd">            &gt;&gt;&gt; # The first two pairs of key1 and key2 match</span>
-<span class="sd">            &gt;&gt;&gt; assert res[&quot;index&quot;][0] == res[&quot;index&quot;][1]</span>
-<span class="sd">            &gt;&gt;&gt; # The last three pairs of key1 and key2 have at least one mismatching value</span>
-<span class="sd">            &gt;&gt;&gt; assert res[&quot;index&quot;][1] != res[&quot;index&quot;][2]</span>
-<span class="sd">            &gt;&gt;&gt; assert res[&quot;index&quot;][2] != res[&quot;index&quot;][3]</span>
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; query_module = QueryModule(</span>
+<span class="sd">        ...     in_keys=[&quot;key1&quot;, &quot;key2&quot;],</span>
+<span class="sd">        ...     index_key=&quot;index&quot;,</span>
+<span class="sd">        ...     hash_module=SipHash(),</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; query = TensorDict(</span>
+<span class="sd">        ...     {</span>
+<span class="sd">        ...         &quot;key1&quot;: torch.Tensor([[1], [1], [1], [2]]),</span>
+<span class="sd">        ...         &quot;key2&quot;: torch.Tensor([[3], [3], [2], [3]]),</span>
+<span class="sd">        ...         &quot;other&quot;: torch.randn(4),</span>
+<span class="sd">        ...     },</span>
+<span class="sd">        ...     batch_size=(4,),</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; res = query_module(query)</span>
+<span class="sd">        &gt;&gt;&gt; # The first two pairs of key1 and key2 match</span>
+<span class="sd">        &gt;&gt;&gt; assert res[&quot;index&quot;][0] == res[&quot;index&quot;][1]</span>
+<span class="sd">        &gt;&gt;&gt; # The last three pairs of key1 and key2 have at least one mismatching value</span>
+<span class="sd">        &gt;&gt;&gt; assert res[&quot;index&quot;][1] != res[&quot;index&quot;][2]</span>
+<span class="sd">        &gt;&gt;&gt; assert res[&quot;index&quot;][2] != res[&quot;index&quot;][3]</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
