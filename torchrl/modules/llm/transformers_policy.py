@@ -121,7 +121,6 @@ def from_hf_transformers(
 ) -> TensorDictModuleBase:
     # TODO: Seq should have a return_log_prob and be of ProbabilisticTDSequential type for instance checks
 
-
     module_dict = {}
     if device:
         module_dict["clear_device"] = _maybe_clear_device

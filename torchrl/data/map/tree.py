@@ -122,7 +122,7 @@ class Tree(TensorClass["nocast"]):
         return cls(
             count=torch.zeros(()),
             wins=torch.zeros(()),
-            node=data.exclude("action", "next"),
+            node_data=data.exclude("action", "next"),
             rollout=rollout,
             subtree=subtree,
             device=device,
