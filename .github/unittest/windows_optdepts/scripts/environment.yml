@@ -16,3 +16,5 @@ dependencies:
     - pyyaml
     - scipy
     - coverage
+    - pybind11
+    - cmake

@@ -18,3 +18,5 @@ dependencies:
     - scipy
     - coverage
     - ray
+    - pybind11
+    - cmake

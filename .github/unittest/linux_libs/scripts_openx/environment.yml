@@ -21,3 +21,5 @@ dependencies:
     - h5py
     - datasets
     - pillow
+    - pybind11
+    - cmake

@@ -19,3 +19,5 @@ dependencies:
     - hydra-core
     - transformers<4.42.0
     - datasets
+    - pybind11
+    - cmake

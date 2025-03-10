@@ -19,3 +19,5 @@ dependencies:
     - hydra-core
     - jumanji
     - gymnasium<1.0.0
+    - pybind11
+    - cmake

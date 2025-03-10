@@ -27,3 +27,5 @@ dependencies:
     - ray
     - av
     - h5py
+    - pybind11
+    - cmake

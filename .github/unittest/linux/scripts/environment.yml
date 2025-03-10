@@ -32,4 +32,6 @@ dependencies:
     - ray
     - transformers
     - ninja
+    - pybind11
+    - cmake
     - timm

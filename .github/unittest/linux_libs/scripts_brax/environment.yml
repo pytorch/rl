@@ -19,3 +19,5 @@ dependencies:
     - hydra-core
     - jax[cuda12]
     - brax
+    - pybind11
+    - cmake

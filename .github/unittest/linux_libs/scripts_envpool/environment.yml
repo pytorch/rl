@@ -21,3 +21,5 @@ dependencies:
     - dm_control
     - mujoco
     - coverage
+    - pybind11
+    - cmake

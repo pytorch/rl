@@ -21,3 +21,5 @@ dependencies:
     - transformers
     - cairosvg
     - pycairo
+    - pybind11
+    - cmake

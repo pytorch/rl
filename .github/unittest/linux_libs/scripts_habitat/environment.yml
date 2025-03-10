@@ -18,3 +18,5 @@ dependencies:
     - scipy==1.9.1
     - hydra-core
     - ninja
+    - pybind11
+    - cmake
