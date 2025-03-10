@@ -18,7 +18,6 @@ import traceback
 import warnings
 from contextlib import nullcontext
 from copy import copy
-from distutils.util import strtobool
 from functools import wraps
 from importlib import import_module
 from typing import Any, Callable, cast, TypeVar
@@ -34,6 +33,21 @@ try:
     from torch.compiler import is_compiling
 except ImportError:
     from torch._dynamo import is_compiling
+
+
+def strtobool(val: Any) -> bool:
+    """Convert a string representation of truth to a boolean.
+
+    True values are 'y', 'yes', 't', 'true', 'on', and '1'; false values are 'n', 'no', 'f', 'false', 'off', and '0'.
+    Raises ValueError if 'val' is anything else.
+    """
+    val = val.lower()
+    if val in ("y", "yes", "t", "true", "on", "1"):
+        return True
+    if val in ("n", "no", "f", "false", "off", "0"):
+        return False
+    raise ValueError(f"Invalid truth value {val!r}")
+
 
 LOGGING_LEVEL = os.environ.get("RL_LOGGING_LEVEL", "INFO")
 logger = logging.getLogger("torchrl")
