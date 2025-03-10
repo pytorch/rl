@@ -267,7 +267,8 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 self._iterator = iter(self)
             out = next(self._iterator)
             # if any, we don't want the device ref to be passed in distributed settings
-            out.clear_device_()
+            if out is not None:
+                out.clear_device_()
             return out
         except StopIteration:
             return None
@@ -1430,7 +1431,7 @@ class SyncDataCollector(DataCollectorBase):
     def __repr__(self) -> str:
         env_str = indent(f"env={self.env}", 4 * " ")
         policy_str = indent(f"policy={self.policy}", 4 * " ")
-        td_out_str = indent(f"td_out={self._final_rollout}", 4 * " ")
+        td_out_str = indent(f"td_out={getattr(self, '_final_rollout', None)}", 4 * " ")
         string = (
             f"{self.__class__.__name__}("
             f"\n{env_str},"

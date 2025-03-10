@@ -27,7 +27,7 @@ if __name__ == "__main__":
     # 2. Define distributed collector
     remote_config = {
         "num_cpus": 1,
-        "num_gpus": 0.2,
+        "num_gpus": 0,
         "memory": 5 * 1024**3,
         "object_store_memory": 2 * 1024**3,
     }
@@ -36,6 +36,7 @@ if __name__ == "__main__":
         policy,
         total_frames=10000,
         frames_per_batch=200,
+        remote_configs=remote_config,
     )
 
     # Sample batches until reaching total_frames
