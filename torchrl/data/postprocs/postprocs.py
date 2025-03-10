@@ -12,7 +12,6 @@ from tensordict.utils import expand_right
 from torch import nn
 
 
-
 def _get_reward(
     gamma: float,
     reward: torch.Tensor,
@@ -367,6 +366,7 @@ class DensifyReward(TensorDictModuleBase):
         discount: float = 1.0,
     ):
         from torchrl.objectives.value.functional import reward2go
+
         super().__init__()
         self.in_keys = [unravel_key(reward_key), unravel_key(done_key)]
         if reward_key_out is None:
