@@ -47,6 +47,9 @@ class RayReplayBuffer(ReplayBuffer):
 
     .. seealso:: :class:`~torchrl.data.ReplayBuffer` for a list of keyword arguments.
 
+    The writer, sampler and storage should be passed as constructors to prevent serialization issues.
+    Transforms constructors should be passed through the `transform_factory` argument.
+
     Example:
         >>> import asyncio
         >>> from tensordict.nn import TensorDictModule

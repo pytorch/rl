@@ -16,6 +16,7 @@ from .exploration import (
     NoisyLinear,
     reset_noise,
 )
+from .llm import GPT2RewardModel
 from .model_based import (
     DreamerActor,
     ObsDecoder,
@@ -51,6 +52,7 @@ __all__ = [
     "DistributionalDQNnet",
     "BatchRenorm1d",
     "DecisionTransformer",
+    "GPT2RewardModel",
     "ConsistentDropout",
     "ConsistentDropoutModule",
     "NoisyLazyLinear",
