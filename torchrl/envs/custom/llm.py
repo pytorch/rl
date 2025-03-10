@@ -133,7 +133,9 @@ class LLMEnv(EnvBase):
         self.vocab_size = vocab_size
         self.token_key = unravel_key(token_key)
         self.str_key = unravel_key(str_key)
-        self.attention_key = unravel_key(attention_key)
+        if attention_key is not None:
+            attention_key = unravel_key(attention_key)
+        self.attention_key = attention_key
         self.no_stack = no_stack
         self.assign_reward = assign_reward
         self.assign_done = assign_done
@@ -141,11 +143,7 @@ class LLMEnv(EnvBase):
         # self.action_key = unravel_key(action_key)
         if str2str:
             self.full_observation_spec_unbatched = Composite(
-                {
-                    self.str_key: NonTensor(
-                        example_data="a string", batched=True, shape=()
-                    )
-                }
+                {self.str_key: NonTensor(example_data="a string", batched=True, shape=())}
             )
             self.full_action_spec_unbatched = Composite(
                 {action_key: NonTensor(example_data="a string", batched=True, shape=())}
