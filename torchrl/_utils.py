@@ -995,9 +995,10 @@ def compile_with_warmup(*args, warmup: int = 1, **kwargs):
             nonlocal count
             nonlocal compiled_model
             count += 1
-            if count == warmup:
-                compiled_model = torch.compile(model, *args, **kwargs)
-            return compiled_model(*model_args, **model_kwargs)
+            #if count == warmup:
+            #    compiled_model = torch.compile(model, fullgraph=True, backend="inductor")
+            out = compiled_model(*model_args, **model_kwargs)
+            return out
 
         return count_and_compile
 
