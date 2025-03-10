@@ -267,7 +267,9 @@ def _make_envs(
     transformed_in,
     transformed_out,
     N,
-    device="cpu",
+    p_env_device=None,
+    env_device=None,
+    # device="cpu",
     kwargs=None,
     local_mp_ctx=mp_ctx,
 ):
@@ -275,13 +277,13 @@ def _make_envs(
     if not transformed_in:
 
         def create_env_fn():
-            return GymEnv(env_name, frame_skip=frame_skip, device=device)
+            return GymEnv(env_name, frame_skip=frame_skip, device=env_device)
 
     else:
         if env_name == PONG_VERSIONED():
 
             def create_env_fn():
-                base_env = GymEnv(env_name, frame_skip=frame_skip, device=device)
+                base_env = GymEnv(env_name, frame_skip=frame_skip, device=env_device)
                 in_keys = list(base_env.observation_spec.keys(True, True))[:1]
                 return TransformedEnv(
                     base_env,
@@ -292,7 +294,7 @@ def _make_envs(
 
             def create_env_fn():
 
-                base_env = GymEnv(env_name, frame_skip=frame_skip, device=device)
+                base_env = GymEnv(env_name, frame_skip=frame_skip, device=env_device)
                 in_keys = list(base_env.observation_spec.keys(True, True))[:1]
 
                 return TransformedEnv(
@@ -305,9 +307,15 @@ def _make_envs(
 
     env0 = create_env_fn()
     env_parallel = ParallelEnv(
-        N, create_env_fn, create_env_kwargs=kwargs, mp_start_method=local_mp_ctx
+        N,
+        create_env_fn,
+        create_env_kwargs=kwargs,
+        mp_start_method=local_mp_ctx,
+        device=p_env_device,
     )
-    env_serial = SerialEnv(N, create_env_fn, create_env_kwargs=kwargs)
+    env_serial = SerialEnv(
+        N, create_env_fn, create_env_kwargs=kwargs, device=p_env_device
+    )
 
     for key in env0.observation_spec.keys(True, True):
         obs_key = key

@@ -1464,12 +1464,29 @@ class TestParallel:
         "transformed_in,transformed_out", [[True, True], [False, False]]
     )  # 1226: effociency
     @pytest.mark.parametrize("static_seed", [False, True])
+    @pytest.mark.parametrize("penv_device", ["cpu", None])
+    @pytest.mark.parametrize("env_device", ["cpu", None])
+    @pytest.mark.parametrize("bwad", [True, False])
     def test_parallel_env_seed(
-        self, env_name, frame_skip, transformed_in, transformed_out, static_seed
+        self,
+        env_name,
+        frame_skip,
+        transformed_in,
+        transformed_out,
+        static_seed,
+        penv_device,
+        env_device,
+        bwad,
     ):
         env_name = env_name()
         env_parallel, env_serial, _, _ = _make_envs(
-            env_name, frame_skip, transformed_in, transformed_out, 5
+            env_name,
+            frame_skip,
+            transformed_in,
+            transformed_out,
+            5,
+            p_env_device=penv_device,
+            env_device=env_device,
         )
         try:
             out_seed_serial = env_serial.set_seed(0, static_seed=static_seed)
@@ -1479,7 +1496,10 @@ class TestParallel:
             torch.manual_seed(0)
 
             td_serial = env_serial.rollout(
-                max_steps=10, auto_reset=False, tensordict=td0_serial
+                max_steps=10,
+                auto_reset=False,
+                tensordict=td0_serial,
+                break_when_any_done=bwad,
             ).contiguous()
             key = "pixels" if "pixels" in td_serial.keys() else "observation"
             torch.testing.assert_close(
@@ -1494,7 +1514,10 @@ class TestParallel:
             torch.manual_seed(0)
             assert out_seed_parallel == out_seed_serial
             td_parallel = env_parallel.rollout(
-                max_steps=10, auto_reset=False, tensordict=td0_parallel
+                max_steps=10,
+                auto_reset=False,
+                tensordict=td0_parallel,
+                break_when_any_done=bwad,
             ).contiguous()
             torch.testing.assert_close(
                 td_parallel[:, :-1].get(("next", key)), td_parallel[:, 1:].get(key)
@@ -1670,7 +1693,7 @@ class TestParallel:
             frame_skip,
             transformed_in=transformed_in,
             transformed_out=transformed_out,
-            device=device,
+            env_device=device,
             N=N,
             local_mp_ctx="spawn",
         )
