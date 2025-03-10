@@ -124,7 +124,7 @@ class RayCollector(DataCollectorBase):
     Args:
         create_env_fn (Callable or List[Callabled]): list of Callables, each returning an
             instance of :class:`~torchrl.envs.EnvBase`.
-        policy (Callable): Policy to be executed in the environment.
+        policy (Callable, optional): Policy to be executed in the environment.
             Must accept :class:`tensordict.tensordict.TensorDictBase` object as input.
             If ``None`` is provided, the policy used will be a
             :class:`~torchrl.collectors.RandomPolicy` instance with the environment
@@ -143,6 +143,11 @@ class RayCollector(DataCollectorBase):
               then the policy won't be wrapped in a :class:`~tensordict.nn.TensorDictModule`.
 
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
+
+            .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
+                pickled directly), the :meth:`~.from_policy_factory` method should be used to subclass the collector
+                and create a version that instantiates a specific version of the policy on demand.
+                The new collector subclass should then be passed as :attr:`collector_class` keyword argument.
 
     Keyword Args:
         frames_per_batch (int): A keyword-only argument representing the
@@ -291,7 +296,7 @@ class RayCollector(DataCollectorBase):
     def __init__(
         self,
         create_env_fn: Callable | EnvBase | list[Callable] | list[EnvBase],
-        policy: Callable[[TensorDict], TensorDict],
+        policy: Callable[[TensorDict], TensorDict] | None = None,
         *,
         frames_per_batch: int,
         total_frames: int = -1,
@@ -410,8 +415,16 @@ class RayCollector(DataCollectorBase):
             collector_class = MultiSyncDataCollector
         elif collector_class == "single":
             collector_class = SyncDataCollector
-        collector_class.as_remote = as_remote
-        collector_class.print_remote_collector_info = print_remote_collector_info
+        elif not isinstance(collector_class, type) or not issubclass(
+            collector_class, DataCollectorBase
+        ):
+            raise TypeError(
+                "The collector_class must be an instance of DataCollectorBase."
+            )
+        if not hasattr(collector_class, "as_remote"):
+            collector_class.as_remote = as_remote
+        if not hasattr(collector_class, "print_remote_collector_info"):
+            collector_class.print_remote_collector_info = print_remote_collector_info
 
         self.replay_buffer = replay_buffer
         self._local_policy = policy
@@ -540,11 +553,12 @@ class RayCollector(DataCollectorBase):
             self._policy_device = [value] * self.num_collectors
 
     @staticmethod
-    def _make_collector(cls, env_maker, policy, other_params):
+    def _make_collector(cls, *, env_maker, policy, other_params):
         """Create a single collector instance."""
+        if policy is not None:
+            other_params["policy"] = policy
         collector = cls(
             env_maker,
-            policy,
             total_frames=-1,
             **other_params,
         )
@@ -565,11 +579,15 @@ class RayCollector(DataCollectorBase):
             cls = self.collector_class.as_remote(remote_config).remote
             collector = self._make_collector(
                 cls,
-                [env_maker] * num_envs
-                if self.collector_class is not SyncDataCollector
+                env_maker=[env_maker] * num_envs
+                if num_envs > 1
+                or (
+                    isinstance(self.collector_class, type)
+                    and not issubclass(self.collector_class, SyncDataCollector)
+                )
                 else env_maker,
-                policy,
-                other_params,
+                policy=policy,
+                other_params=other_params,
             )
             self._remote_collectors.append(collector)
 

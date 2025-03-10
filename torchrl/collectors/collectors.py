@@ -21,7 +21,7 @@ from multiprocessing import connection, queues
 from multiprocessing.managers import SyncManager
 from queue import Empty
 from textwrap import indent
-from typing import Any, Callable, Iterator, Sequence
+from typing import Any, Callable, Iterator, Sequence, TypeVar
 
 import numpy as np
 import torch
@@ -85,6 +85,8 @@ _MAX_IDLE_COUNT = int(os.environ.get("MAX_IDLE_COUNT", torch.iinfo(torch.int64).
 DEFAULT_EXPLORATION_TYPE: ExplorationType = ExplorationType.RANDOM
 
 _is_osx = sys.platform.startswith("darwin")
+
+T = TypeVar("T")
 
 
 class _Interruptor:
@@ -315,6 +317,43 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             return -(self.total_frames // -self.requested_frames_per_batch)
         raise RuntimeError("Non-terminating collectors do not have a length")
 
+    @classmethod
+    def from_policy_factory(
+        cls: type[T],
+        policy_factory: Callable[[], Callable[[TensorDictBase], TensorDictBase]],
+    ) -> T:
+        """Creates a custom subclass of Collector that instantiates a policy from a factory.
+
+        Args:
+            policy_factory (Callable[[], Callable[[TensorDictBase], TensorDictBase]]): a factory function that returns
+                a valid policy.
+
+        Example:
+            >>> import torch
+            >>>
+            >>> from torchrl.collectors import SyncDataCollector
+            >>> from torchrl.envs import GymEnv
+            >>>
+            >>> def factory():
+            ...     return lambda td: td.set("action", torch.ones((1)))
+            >>> cls = SyncDataCollector.from_policy_factory(factory)
+            >>> collector = cls(GymEnv("Pendulum-v1"), total_frames=10, frames_per_batch=5)
+            >>> for d in collector:
+            ...     assert (d["action"] == 1).all()
+
+        """
+
+        class CustomCollectorCls(cls):
+            def __init__(self, *args, **kwargs):
+                if len(args) > 1 or "policy" in kwargs:
+                    raise TypeError(
+                        "The policy cannot be passed to the constructor of a collector class "
+                        "that instantiates the policy from a factory."
+                    )
+                super().__init__(*args, policy_factory(), **kwargs)
+
+        return CustomCollectorCls
+
 
 @accept_remote_rref_udf_invocation
 class SyncDataCollector(DataCollectorBase):
@@ -342,6 +381,10 @@ class SyncDataCollector(DataCollectorBase):
               then the policy won't be wrapped in a :class:`~tensordict.nn.TensorDictModule`.
 
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
+
+            .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
+                pickled directly), the :meth:`~.from_policy_factory` method should be used to subclass the collector
+                and create a version that instantiates a specific version of the policy on demand.
 
     Keyword Args:
         frames_per_batch (int): A keyword-only argument representing the total
@@ -1429,17 +1472,22 @@ class SyncDataCollector(DataCollectorBase):
         self._iter = state_dict["iter"]
 
     def __repr__(self) -> str:
-        env_str = indent(f"env={self.env}", 4 * " ")
-        policy_str = indent(f"policy={self.policy}", 4 * " ")
-        td_out_str = indent(f"td_out={getattr(self, '_final_rollout', None)}", 4 * " ")
-        string = (
-            f"{self.__class__.__name__}("
-            f"\n{env_str},"
-            f"\n{policy_str},"
-            f"\n{td_out_str},"
-            f"\nexploration={self.exploration_type})"
-        )
-        return string
+        try:
+            env_str = indent(f"env={self.env}", 4 * " ")
+            policy_str = indent(f"policy={self.policy}", 4 * " ")
+            td_out_str = indent(
+                f"td_out={getattr(self, '_final_rollout', None)}", 4 * " "
+            )
+            string = (
+                f"{self.__class__.__name__}("
+                f"\n{env_str},"
+                f"\n{policy_str},"
+                f"\n{td_out_str},"
+                f"\nexploration={self.exploration_type})"
+            )
+            return string
+        except AttributeError:
+            return f"{type(self).__name__}(not_init)"
 
 
 class _MultiDataCollector(DataCollectorBase):
@@ -1468,6 +1516,10 @@ class _MultiDataCollector(DataCollectorBase):
 
             - In all other cases an attempt to wrap it will be undergone as such:
               ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
+
+            .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
+                pickled directly), the :meth:`~.from_policy_factory` method should be used to subclass the collector
+                and create a version that instantiates a specific version of the policy on demand.
 
     Keyword Args:
         frames_per_batch (int): A keyword-only argument representing the
@@ -2781,6 +2833,10 @@ class aSyncDataCollector(MultiaSyncDataCollector):
               then the policy won't be wrapped in a :class:`~tensordict.nn.TensorDictModule`.
 
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
+
+            .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
+                pickled directly), the :meth:`~.from_policy_factory` method should be used to subclass the collector
+                and create a version that instantiates a specific version of the policy on demand.
 
     Keyword Args:
         frames_per_batch (int): A keyword-only argument representing the
