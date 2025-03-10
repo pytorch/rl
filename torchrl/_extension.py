@@ -52,8 +52,10 @@ if _is_nightly(__version__):
 
 else:
     EXTENSION_WARNING = (
-        "Failed to import torchrl C++ binaries. Some modules (eg, prioritized replay buffers) may not work with your installation. "
-        "This is likely due to a discrepancy between your package version and the PyTorch version. Make sure both are compatible. "
-        "Usually, torchrl majors follow the pytorch majors within a few days around the release. "
+        "Failed to import torchrl C++ binaries. Some modules (e.g., prioritized replay buffers) may not work with your installation. "
+        "This could be because you are using a platform-agnostic version of TorchRL, which does not include C++ binaries. "
+        "If a more specific version is available for your platform, consider installing it for full functionality. "
+        "Additionally, ensure that your TorchRL version is compatible with your PyTorch version. "
+        "TorchRL major versions typically align with PyTorch major versions shortly after their release. "
         "For instance, TorchRL 0.5 requires PyTorch 2.4.0, and TorchRL 0.6 requires PyTorch 2.5.0."
     )
