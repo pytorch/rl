@@ -2,8 +2,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from typing import Any, Callable
+
+import torch
 
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
+from torchrl.envs import Transform
 
 RAY_ERR = None
 try:
@@ -38,8 +42,6 @@ def as_remote(cls, remote_config=DEFAULT_REMOTE_CLASS_CONFIG):
 
 
 ReplayBuffer.as_remote = as_remote
-
-remote_cls = ReplayBuffer.as_remote(DEFAULT_REMOTE_CLASS_CONFIG).remote
 
 
 class RayReplayBuffer(ReplayBuffer):
@@ -114,6 +116,8 @@ class RayReplayBuffer(ReplayBuffer):
 
                 ray_init_kwargs = DEFAULT_RAY_INIT_CONFIG
             ray.init(**ray_init_kwargs)
+
+        remote_cls = ReplayBuffer.as_remote(DEFAULT_REMOTE_CLASS_CONFIG).remote
         self._rb = remote_cls(*args, **kwargs)
 
     def sample(self, *args, **kwargs):
@@ -129,6 +133,65 @@ class RayReplayBuffer(ReplayBuffer):
 
     def update_priority(self, *args, **kwargs):
         return ray.get(self._rb.update_priority.remote(*args, **kwargs))
+
+    def append_transform(self, *args, **kwargs):
+        return ray.get(self._rb.append_transform.remote(*args, **kwargs))
+
+    def dumps(self, path):
+        return ray.get(self._rb.dumps.remote(path))
+
+    def dump(self, path):
+        return ray.get(self._rb.dump.remote(path))
+
+    def loads(self, path):
+        return ray.get(self._rb.loads.remote(path))
+
+    def load(self, *args, **kwargs):
+        return ray.get(self._rb.load.remote(*args, **kwargs))
+
+    def empty(self):
+        return ray.get(self._rb.empty.remote())
+
+    def insert_transform(
+        self,
+        index: int,
+        transform: Transform,  # noqa-F821
+        *,
+        invert: bool = False,
+    ) -> ReplayBuffer:
+        return ray.get(
+            self._rb.insert_transform.remote(index, transform, invert=invert)
+        )
+
+    def mark_update(self, index: int | torch.Tensor) -> None:
+        return ray.get(self._rb.mark_update.remote(index))
+
+    def register_load_hook(self, hook: Callable[[Any], Any]):
+        return ray.get(self._rb.register_load_hook.remote(hook))
+
+    def register_save_hook(self, hook: Callable[[Any], Any]):
+        return ray.get(self._rb.register_save_hook.remote(hook))
+
+    def save(self, path: str):
+        return ray.get(self._rb.save.remote(path))
+
+    def set_rng(self, generator):
+        return ray.get(self._rb.set_rng.remote(generator))
+
+    def set_sampler(self, sampler):
+        return ray.get(self._rb.set_sampler.remote(sampler))
+
+    def set_storage(self, storage):
+        return ray.get(self._rb.set_storage.remote(storage))
+
+    def set_writer(self, writer):
+        return ray.get(self._rb.set_writer.remote(writer))
+
+    def share(self, shared: bool = True):
+        return ray.get(self._rb.share.remote(shared))
+
+    def state_dict(self):
+        return ray.get(self._rb.state_dict.remote())
 
     def __len__(self):
         return ray.get(self._rb.__len__.remote())
