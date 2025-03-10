@@ -9,7 +9,7 @@ from typing import Any, Callable
 import torch
 
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
-from torchrl.envs import Transform
+from torchrl.envs.transforms.transforms import Transform
 
 RAY_ERR = None
 try:
