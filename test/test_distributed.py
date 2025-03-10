@@ -446,7 +446,6 @@ class TestRayCollector(DistributedCollectorBase):
 
     @pytest.fixture(autouse=True, scope="class")
     def start_ray(self):
-        print("init ray")
         from torchrl.collectors.distributed.ray import DEFAULT_RAY_INIT_CONFIG
 
         ray.init(**DEFAULT_RAY_INIT_CONFIG)
