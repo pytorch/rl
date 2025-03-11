@@ -50,13 +50,68 @@ def from_vllm(
     from_text: bool = False,
     device: torch.device | None = None,
     generate: bool = True,
-    # Keys
-    text_key: NestedKey = "text",
-    token_key: NestedKey = "tokens",
-    attention_mask_key: NestedKey = "attention_mask",
     generate_kwargs: dict | None = None,
     tokenizer_kwargs: dict | None = None,
 ) -> TensorDictModuleBase:
+    """Creates a TensorDictModule from a vLLM model.
+
+    This function provides a consistent interface across various LLM engines.
+
+    It supports text generation and log probability computation, similar to the Hugging Face Transformers interface.
+
+    Args:
+        model (LLM): The vLLM model to wrap.
+        return_log_probs (bool, optional): Whether to return log probabilities. Defaults to `False`.
+        tokenizer (transformers.tokenization_utils.PreTrainedTokenizer, optional): The tokenizer to use. Defaults to `None`.
+        from_text (bool, optional): Whether the input is text. Defaults to `False`.
+        device (torch.device, optional): The device to use for computation. Defaults to `None`.
+        generate (bool, optional): Whether to generate text. Defaults to `True`.
+        generate_kwargs (dict, optional): Additional arguments for the model's generate method. Defaults to `None`.
+        tokenizer_kwargs (dict, optional): Additional arguments for the tokenizer. Defaults to `None`.
+
+    Returns:
+        TensorDictModuleBase: A configured TensorDictModule for the specified model.
+
+    Input Keys:
+
+        - If `from_text` is `True`:
+
+            - "text": The input text to be tokenized.
+
+        - If `from_text` is False:
+
+            - "tokens": The input token sequences.
+            - "attention_mask": The attention mask for the tokens.
+
+    Output Keys:
+
+        - "tokens_response": The generated token sequences.
+        - "log_probs": The log probabilities of the generated tokens (if `return_log_probs` is True).
+        - "text_response": The generated text (if `from_text` is True and `generate` is True).
+
+    Example:
+        >>> from vllm import LLM
+        >>> from transformers import AutoTokenizer
+        >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        >>> model = LLM(model="facebook/opt-125m")
+        >>> module = from_vllm(
+        ...     model,
+        ...     tokenizer=tokenizer,
+        ...     from_text=True,
+        ...     generate=True
+        ... )
+        >>> input_data = LLMData(text=NonTensorStack("Hello, world!"), batch_size=1)
+        >>> output_data = module(input_data)
+        >>> print(output_data.text_response)
+
+    .. seealso:: :func:`~torchrl.modules.from_hf_transformers` for a similar interface using the Hugging Face
+        Transformers library.
+
+    """
+    text_key: NestedKey = ("text",)
+    token_key: NestedKey = ("tokens",)
+    attention_mask_key: NestedKey = ("attention_mask",)
+
     # TODO: Seq should have a return_log_prob and be of ProbabilisticTDSequential type for instance checks
     if tokenizer is None:
         tokenizer = model.get_tokenizer()
@@ -171,7 +226,11 @@ def from_vllm(
     )
 
     if generate_kwargs is None:
-        generate_kwargs = {"detokenize": False, "prompt_logprobs": 1, "logprobs": 1}
+        generate_kwargs = {
+            "detokenize": False,
+            "prompt_logprobs": not generate,
+            "logprobs": return_log_probs,
+        }
     if not generate:
         generate_kwargs["max_tokens"] = 1
     sampling_params = SamplingParams(**generate_kwargs)
@@ -189,13 +248,14 @@ def from_vllm(
     )
 
     def get_output_tokens_and_log_probs(td):
-        td["tokens_out"] = RequestOutput_tc.from_request_output(td["tokens_out"])
+        td["tokens_out"] = _RequestOutput_tc.from_request_output(td["tokens_out"])
         if generate:
             # When not generate, we don't want to overwrite this
             td["tokens_response"] = td["tokens_out"].outputs.token_ids
-            td["log_probs"] = td["tokens_out"].outputs.logprobs
-        else:
-            td["prompt_logprobs"] = td["tokens_out"].prompt_logprobs
+            if return_log_probs:
+                td["log_probs"] = td["tokens_out"].outputs.logprobs.unsqueeze(-1)
+        elif not generate:
+            td["prompt_logprobs"] = td["tokens_out"].prompt_logprobs.unsqueeze(-1)
         return td
 
     module_dict["get_output_tokens_and_log_probs"] = get_output_tokens_and_log_probs
@@ -204,7 +264,7 @@ def from_vllm(
 
         def translate_lps(tokens_response, x):
             # we disregard the tokens from the prompt to focus on those of the response
-            return x[..., -tokens_response.shape[-1] :]
+            return x[..., -tokens_response.shape[-1] :, :]
 
         module_dict["translate_lps"] = Mod(
             translate_lps,
@@ -253,7 +313,7 @@ def from_vllm(
     return Seq(module_dict, inplace=True)
 
 
-class RequestOutput_tc(TensorClass["nocast"]):
+class _RequestOutput_tc(TensorClass["nocast"]):
     request_id: str
     prompt: str
     prompt_token_ids: str
@@ -276,7 +336,8 @@ class RequestOutput_tc(TensorClass["nocast"]):
                     )
                 return torch.tensor(t)
 
-            output.logprobs = get_logprob(output)
+            if output.logprobs:
+                output.logprobs = get_logprob(output)
             output.token_ids = torch.tensor(output.token_ids)
             return output
 
@@ -337,10 +398,8 @@ if __name__ == "__main__":
     m = from_vllm(llm, from_text=True)
 
     td = m(LLMData(text=NonTensorStack("a text"), batch_size=1))
-    print("result", td)
 
     td = m(LLMData(text=NonTensorData("a text"), batch_size=()))
-    print("result", td)
 
     td = m(LLMData(text=NonTensorStack("a text"), batch_size=1))
     m = from_vllm(llm, from_text=True, generate=False)
@@ -351,10 +410,7 @@ if __name__ == "__main__":
         batch_size=(1,),
     )
     td_lp = m(td_lp)
-    print("td_lp", td_lp)
-    print(td.log_probs / td_lp.log_probs)
     # torch.testing.assert_close(td.log_probs, td_lp.log_probs)
 
     m = from_vllm(llm, from_text=True, generate=True)
     td = m(LLMData(text=NonTensorStack("a text", "another text here"), batch_size=2))
-    print(td)
