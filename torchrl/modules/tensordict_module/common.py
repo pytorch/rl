@@ -436,7 +436,7 @@ class VmapModule(TensorDictModuleBase):
         >>> assert (sample_in_td["x"][:, 0] == sample_in_td["y"]).all()
     """
 
-    def __init__(self, module: TensorDictModuleBase, vmap_dim=None):
+    def __init__(self, module: TensorDictModuleBase, vmap_dim=None, mock: bool = False):
         if not _has_functorch:
             raise ImportError("VmapModule requires torch>=2.0.")
         super().__init__()
@@ -444,12 +444,16 @@ class VmapModule(TensorDictModuleBase):
         self.out_keys = module.out_keys
         self.module = module
         self.vmap_dim = vmap_dim
+        self.mock = mock
         if torch.__version__ >= "2.0":
             self._vmap = torch.vmap
         else:
             import functorch
 
             self._vmap = functorch.vmap
+
+    def mock_(self, value: bool = True):
+        self.mock = value
 
     def forward(self, tensordict):
         # TODO: there is a risk of segfault if input is not a tensordict.
@@ -458,7 +462,12 @@ class VmapModule(TensorDictModuleBase):
         if vmap_dim is None:
             ndim = tensordict.ndim
             vmap_dim = ndim - 1
-        td = self._vmap(self.module, (vmap_dim,), (vmap_dim,))(tensordict)
+        if self.mock:
+            td = torch.stack(
+                [self.module(_td) for _td in tensordict.unbind(vmap_dim)], vmap_dim
+            )
+        else:
+            td = self._vmap(self.module, (vmap_dim,), (vmap_dim,))(tensordict)
         return tensordict.update(td)
 
 

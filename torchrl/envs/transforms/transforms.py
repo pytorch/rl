@@ -1619,10 +1619,14 @@ class Compose(Transform):
         return len(self.transforms)
 
     def __repr__(self) -> str:
-        layers_str = ",\n".join(
-            [indent(str(trsf), 4 * " ") for trsf in self.transforms]
-        )
-        return f"{self.__class__.__name__}(\n{indent(layers_str, 4 * ' ')})"
+        if len(self.transforms):
+            layers_str = ",\n".join(
+                [indent(str(trsf), 4 * " ") for trsf in self.transforms]
+            )
+            layers_str = f"\n{indent(layers_str, 4 * ' ')}"
+        else:
+            layers_str = ""
+        return f"{self.__class__.__name__}({layers_str})"
 
     def empty_cache(self):
         for t in self.transforms:
@@ -6134,7 +6138,7 @@ class TensorDictPrimer(Transform):
 
     @property
     def reset_key(self):
-        reset_key = self.__dict__.get("_reset_key", None)
+        reset_key = self.__dict__.get("_reset_key")
         if reset_key is None:
             if self.parent is None:
                 raise RuntimeError(
@@ -6361,10 +6365,13 @@ class TensorDictPrimer(Transform):
 
     def __repr__(self) -> str:
         class_name = self.__class__.__name__
-        default_value = {
-            key: value if isinstance(value, float) else "Callable"
-            for key, value in self.default_value.items()
-        }
+        if callable(self.default_value):
+            default_value = self.default_value
+        else:
+            default_value = {
+                key: value if isinstance(value, float) else "Callable"
+                for key, value in self.default_value.items()
+            }
         return f"{class_name}(primers={self.primers}, default_value={default_value}, random={self.random})"
 
 
@@ -7352,7 +7359,9 @@ class StepCounter(Transform):
                 else:
                     # It may be the case that reset did not provide a done state, in which case
                     # we fall back on the spec
-                    done = self.parent.output_spec["full_done_spec", entry_name].zero()
+                    done = self.parent.output_spec_unbatched[
+                        "full_done_spec", entry_name
+                    ].zero(tensordict_reset.shape)
                 reset = torch.ones_like(done)
 
             step_count = tensordict.get(step_count_key, default=None)
@@ -7362,7 +7371,7 @@ class StepCounter(Transform):
                     step_count = step_count.to(reset.device, non_blocking=True)
 
             # zero the step count if reset is needed
-            step_count = torch.where(~expand_as_right(reset, step_count), step_count, 0)
+            step_count = torch.where(~reset, step_count.expand_as(reset), 0)
             tensordict_reset.set(step_count_key, step_count)
             if self.max_steps is not None:
                 truncated = step_count >= self.max_steps
@@ -8122,7 +8131,7 @@ class InitTracker(Transform):
             _reset = tensordict.get(reset_key, None)
             if _reset is None:
                 done_key = _replace_last(init_key, "done")
-                shape = self.parent.full_done_spec[done_key].shape
+                shape = self.parent.full_done_spec[done_key]._safe_shape
                 tensordict_reset.set(
                     init_key,
                     torch.ones(
@@ -10302,10 +10311,15 @@ class TrajCounter(Transform):
 
     """
 
-    def __init__(self, out_key: NestedKey = "traj_count"):
+    def __init__(
+        self, out_key: NestedKey = "traj_count", *, repeats: int | None = None
+    ):
         super().__init__(in_keys=[], out_keys=[out_key])
         self._make_shared_value()
         self._initialized = False
+        if repeats is None:
+            repeats = 0
+        self.repeats = repeats
 
     def _make_shared_value(self):
         self._traj_count = mp.Value("i", 0)

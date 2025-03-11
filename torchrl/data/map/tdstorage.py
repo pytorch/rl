@@ -128,7 +128,6 @@ class TensorDictMap(
         self.in_keys = query_module.in_keys
         if out_keys is not None:
             self.out_keys = out_keys
-            assert not self._has_lazy_out_keys()
 
         self.query_module = query_module
         self.index_key = query_module.index_key
