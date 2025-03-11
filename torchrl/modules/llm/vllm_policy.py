@@ -21,6 +21,7 @@ from tensordict.nn import (
     TensorDictModuleBase,
     TensorDictSequential as Seq,
 )
+from tensordict.utils import _zip_strict
 
 from torchrl.data import LLMData
 
@@ -367,8 +368,8 @@ class _RequestOutput_tc(TensorClass["nocast"]):
             self.prompt_logprobs = torch.tensor(
                 [
                     v[tid].logprob if v is not None else 0.0
-                    for v, tid in zip(
-                        self.prompt_logprobs, self.prompt_token_ids, strict=True
+                    for v, tid in _zip_strict(
+                        self.prompt_logprobs, self.prompt_token_ids
                     )
                 ]
             )
