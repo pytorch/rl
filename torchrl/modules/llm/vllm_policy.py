@@ -116,6 +116,11 @@ def from_vllm(
         Transformers library.
 
     """
+    try:
+        from vllm import SamplingParams
+    except ImportError:
+        raise ImportError("Please install `vllm` to use `from_vllm`.")
+
     text_key: NestedKey = ("text",)
     token_key: NestedKey = ("tokens",)
     attention_mask_key: NestedKey = ("attention_mask",)
