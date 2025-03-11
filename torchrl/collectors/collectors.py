@@ -433,7 +433,7 @@ class SyncDataCollector(DataCollectorBase):
         use_buffers (bool, optional): if ``True``, a buffer will be used to stack the data.
             This isn't compatible with environments with dynamic specs. Defaults to ``True``
             for envs without dynamic specs, ``False`` for others.
-        replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordict
+        replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordicts
             but populate the buffer instead. Defaults to ``None``.
         trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
             assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
@@ -1587,7 +1587,7 @@ class _MultiDataCollector(DataCollectorBase):
         use_buffers (bool, optional): if ``True``, a buffer will be used to stack the data.
             This isn't compatible with environments with dynamic specs. Defaults to ``True``
             for envs without dynamic specs, ``False`` for others.
-        replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordict
+        replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordicts
             but populate the buffer instead. Defaults to ``None``.
         trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
             assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules

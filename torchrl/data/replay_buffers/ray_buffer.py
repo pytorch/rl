@@ -20,24 +20,23 @@ except ImportError as err:
     _has_ray = False
     RAY_ERR = err
 
-DEFAULT_REMOTE_CLASS_CONFIG = {
-    "num_cpus": 1,
-    "num_gpus": 0.0,
-    "memory": 2 * 1024**3,
-}
-
 
 @classmethod
-def as_remote(cls, remote_config=DEFAULT_REMOTE_CLASS_CONFIG):
+def as_remote(cls, remote_config=None):
     """Creates an instance of a remote ray class.
 
     Args:
         cls (Python Class): class to be remotely instantiated.
         remote_config (dict): the quantity of CPU cores to reserve for this class.
+            Defaults to `torchrl.collectors.distributed.ray.DEFAULT_REMOTE_CLASS_CONFIG`.
 
     Returns:
         A function that creates ray remote class instances.
     """
+    if remote_config is None:
+        from torchrl.collectors.distributed.ray import DEFAULT_REMOTE_CLASS_CONFIG
+
+        remote_config = DEFAULT_REMOTE_CLASS_CONFIG
     remote_collector = ray.remote(**remote_config)(cls)
     remote_collector.is_remote = True
     return remote_collector
@@ -49,7 +48,12 @@ ReplayBuffer.as_remote = as_remote
 class RayReplayBuffer(ReplayBuffer):
     """A Ray implementation of the Replay Buffer that can be extended and sampled remotely.
 
-    .. seealso:: :class:`~torchrl.data.ReplayBuffer` for a list of keyword arguments.
+    Keyword Args:
+        ray_init_kwargs (dict[str, Any], optiona): keyword arguments to pass to `ray.init()`.
+        remote_config (dict[str, Any], optiona): keyword arguments to pass to `cls.as_remote()`.
+            Defaults to `torchrl.collectors.distributed.ray.DEFAULT_REMOTE_CLASS_CONFIG`.
+
+    .. seealso:: :class:`~torchrl.data.ReplayBuffer` for a list of other keyword arguments.
 
     The writer, sampler and storage should be passed as constructors to prevent serialization issues.
     Transforms constructors should be passed through the `transform_factory` argument.
@@ -107,7 +111,13 @@ class RayReplayBuffer(ReplayBuffer):
 
     """
 
-    def __init__(self, *args, ray_init_kwargs=None, **kwargs) -> None:
+    def __init__(
+        self,
+        *args,
+        ray_init_kwargs: dict[str, Any] | None = None,
+        remote_config: dict[str, Any] | None = None,
+        **kwargs,
+    ) -> None:
         if not _has_ray:
             raise RuntimeError(
                 "ray library not found, unable to create a RayReplayBuffer. "
@@ -119,7 +129,7 @@ class RayReplayBuffer(ReplayBuffer):
                 ray_init_kwargs = DEFAULT_RAY_INIT_CONFIG
             ray.init(**ray_init_kwargs)
 
-        remote_cls = ReplayBuffer.as_remote(DEFAULT_REMOTE_CLASS_CONFIG).remote
+        remote_cls = ReplayBuffer.as_remote(remote_config).remote
         self._rb = remote_cls(*args, **kwargs)
 
     def sample(self, *args, **kwargs):

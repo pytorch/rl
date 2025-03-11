@@ -258,6 +258,11 @@ class RayCollector(DataCollectorBase):
             parameters being updated for a certain time even if ``update_after_each_batch``
             is turned on.
             Defaults to -1 (no forced update).
+        replay_buffer (RayReplayBuffer, optional): if provided, the collector will not yield tensordicts
+            but populate the buffer instead. Defaults to ``None``.
+
+            .. note:: although it is not enfoced (to allow users to implement their own replay buffer class), a
+                :class:`~torchrl.data.RayReplayBuffer` instance should be used here.
 
     Examples:
         >>> from torch import nn
