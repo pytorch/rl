@@ -2,12 +2,10 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
-# TODO: lazy imports
+from __future__ import annotations
 
 import torch
 
-import transformers
 from tensordict import NestedKey, TensorDictBase
 from tensordict.nn import (
     TensorDictModule as Mod,
@@ -17,7 +15,6 @@ from tensordict.nn import (
 )
 from tensordict.tensorclass import NonTensorData, NonTensorStack
 from torchrl.data.llm import LLMData
-from transformers import AutoTokenizer, GPT2Config, GPT2LMHeadModel
 
 
 def _maybe_clear_device(td):
@@ -107,11 +104,12 @@ def log_probs_from_logits(td: TensorDictBase) -> TensorDictBase:
 
 
 def from_hf_transformers(
-    model: transformers.modeling_utils.PreTrainedModel,
+    model: transformers.modeling_utils.PreTrainedModel,  # noqa
     *,
     generate: bool = True,
     return_log_probs: bool = True,
-    tokenizer: transformers.tokenization_utils.PreTrainedTokenizer | None = None,
+    tokenizer: transformers.tokenization_utils.PreTrainedTokenizer
+    | None = None,  # noqa
     from_text: bool = False,
     device: torch.device | None = None,
     kwargs: dict | None = None,
@@ -404,6 +402,9 @@ def from_hf_transformers(
 
 
 if __name__ == "__main__":
+    import transformers
+    from transformers import AutoTokenizer, GPT2Config, GPT2LMHeadModel
+
     max_seq_length = 50000
 
     tokenizer = AutoTokenizer.from_pretrained("gpt2")
