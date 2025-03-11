@@ -1619,10 +1619,14 @@ class Compose(Transform):
         return len(self.transforms)
 
     def __repr__(self) -> str:
-        layers_str = ",\n".join(
-            [indent(str(trsf), 4 * " ") for trsf in self.transforms]
-        )
-        return f"{self.__class__.__name__}(\n{indent(layers_str, 4 * ' ')})"
+        if len(self.transforms):
+            layers_str = ",\n".join(
+                [indent(str(trsf), 4 * " ") for trsf in self.transforms]
+            )
+            layers_str = f"\n{indent(layers_str, 4 * ' ')}"
+        else:
+            layers_str = ""
+        return f"{self.__class__.__name__}({layers_str})"
 
     def empty_cache(self):
         for t in self.transforms:
@@ -8127,7 +8131,7 @@ class InitTracker(Transform):
             _reset = tensordict.get(reset_key, None)
             if _reset is None:
                 done_key = _replace_last(init_key, "done")
-                shape = self.parent.full_done_spec[done_key].shape
+                shape = self.parent.full_done_spec[done_key]._safe_shape
                 tensordict_reset.set(
                     init_key,
                     torch.ones(
