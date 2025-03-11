@@ -17,5 +17,6 @@ dependencies:
     - pyyaml
     - scipy
     - hydra-core
-    - transformers<4.42.0
+    - transformers
     - datasets
+    - vllm

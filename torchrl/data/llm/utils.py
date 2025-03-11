@@ -626,7 +626,7 @@ class LLMData(TensorClass["nocast"]):
 
     """
 
-    tokens: torch.Tensor
+    tokens: torch.Tensor | None = None
     tokens_response: torch.Tensor | None = None
     attention_mask: torch.Tensor | None = None
     token_list: list[int] | list[list[int]] | None = None
@@ -634,3 +634,4 @@ class LLMData(TensorClass["nocast"]):
     logits: torch.Tensor | None = None
     log_probs: torch.Tensor | None = None
     text: str | list[str] | None = None
+    text_response: torch.Tensor | None = None

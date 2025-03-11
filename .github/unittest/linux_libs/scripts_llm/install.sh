@@ -26,23 +26,24 @@ fi
 # submodules
 git submodule sync && git submodule update --init --recursive
 
-printf "Installing PyTorch with cu128"
-if [[ "$TORCH_VERSION" == "nightly" ]]; then
-  if [ "${CU_VERSION:-}" == cpu ] ; then
-      pip3 install --pre torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/nightly/cpu -U
-  else
-      pip3 install --pre torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/nightly/cu128 -U
-  fi
-elif [[ "$TORCH_VERSION" == "stable" ]]; then
-    if [ "${CU_VERSION:-}" == cpu ] ; then
-      pip3 install torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/cpu
-  else
-      pip3 install torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/cu128
-  fi
-else
-  printf "Failed to install pytorch"
-  exit 1
-fi
+# We skip pytorch install due to vllm requirements
+#printf "Installing PyTorch with cu128"
+#if [[ "$TORCH_VERSION" == "nightly" ]]; then
+#  if [ "${CU_VERSION:-}" == cpu ] ; then
+#      pip3 install --pre torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/nightly/cpu -U
+#  else
+#      pip3 install --pre torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/nightly/cu128 -U
+#  fi
+#elif [[ "$TORCH_VERSION" == "stable" ]]; then
+#    if [ "${CU_VERSION:-}" == cpu ] ; then
+#      pip3 install torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/cpu
+#  else
+#      pip3 install torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/cu128
+#  fi
+#else
+#  printf "Failed to install pytorch"
+#  exit 1
+#fi
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then

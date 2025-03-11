@@ -34,4 +34,4 @@ def init_actor_critic(model_cfg, sys_cfg):
     critic = model.get_value_operator()
     critic_head = model.get_value_head()
 
-    return actor, VmapModule(critic), critic_head, base_model
+    return actor, VmapModule(critic, mock=True), critic_head, base_model
