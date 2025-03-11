@@ -2788,7 +2788,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             if reset_value is not None:
                 for done_key in done_key_group:
                     done_val = tensordict_reset.get(done_key)
-                    if done_val[reset_value].any() and not self._allow_done_after_reset:
+                    if (
+                        done_val.any()
+                        and done_val[reset_value].any()
+                        and not self._allow_done_after_reset
+                    ):
                         raise RuntimeError(
                             f"Env done entry '{done_key}' was (partially) True after reset on specified '_reset' dimensions. This is not allowed."
                         )
@@ -3588,7 +3592,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         """
         any_done = self.any_done(tensordict)
         if any_done:
-            return self.reset(tensordict, select_reset_only=True)
+            tensordict = self.reset(tensordict, select_reset_only=True)
         return tensordict
 
     def empty_cache(self):
