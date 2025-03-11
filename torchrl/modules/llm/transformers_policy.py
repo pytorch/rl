@@ -57,16 +57,18 @@ def log_probs_from_scores(td: TensorDictBase) -> TensorDictBase:
 
     """
     # TODO: how do we avoid getting these?
+    tokens_out = td["tokens_out", "sequences"]
+    seq_len = tokens_out.shape[1]
+
     del td["tokens_out", "past_key_values"]
     scores = dict(td["tokens_out", "scores"].items())
     scores = torch.stack(
         [scores[str(k)] for k in range(len(scores))], 1
     )  # shape (B, seq-len, vocab_size)
     logits = scores - scores.logsumexp(dim=-1, keepdim=True)
-    td["logits"] = scores
+    td["logits"] = scores[..., -seq_len:, :]
     del td["tokens_out", "scores"]
-    seq_len = scores.shape[1]
-    tokens = td["tokens_out", "sequences"][..., -seq_len:]  # shape (B, seq-len)
+    tokens = tokens_out[..., -seq_len:]  # shape (B, seq-len)
     log_probs = logits.gather(-1, tokens.unsqueeze(-1))
     td["log_probs"] = log_probs
     return td
@@ -112,14 +114,76 @@ def from_hf_transformers(
     tokenizer: transformers.tokenization_utils.PreTrainedTokenizer | None = None,
     from_text: bool = False,
     device: torch.device | None = None,
-    # Keys:
-    text_key: NestedKey = "text",
-    token_key: NestedKey = "tokens",
-    attention_mask_key: NestedKey = "attention_mask",
     kwargs: dict | None = None,
     tokenizer_kwargs: dict | None = None,
 ) -> TensorDictModuleBase:
+    """Creates a TensorDictModule from a Hugging Face Transformers model.
+
+    This allows for a consistent interface across various LLM engines.
+    This function facilitates text generation and log probability computation.
+
+    Args:
+        model (transformers.modeling_utils.PreTrainedModel): The Hugging Face model to wrap.
+        generate (bool, optional): Whether to generate text. Defaults to `True`.
+        return_log_probs (bool, optional): Whether to return log probabilities. Defaults to `True`.
+        tokenizer (transformers.tokenization_utils.PreTrainedTokenizer, optional): The tokenizer to use. Defaults to `None`.
+        from_text (bool, optional): Whether the input is text. Defaults to `False`.
+        device (torch.device, optional): The device to use for computation. Defaults to `None`.
+        kwargs (dict, optional): Additional arguments for the model's generate method. Defaults to `None`.
+        tokenizer_kwargs (dict, optional): Additional arguments for the tokenizer. Defaults to `None`.
+
+    Returns:
+        TensorDictModuleBase: A configured TensorDictModule for the specified model.
+
+    Input Keys:
+
+        - If `from_text` is `True`:
+
+            - "text": The input text to be tokenized.
+
+        - If `from_text` is `False`:
+
+            - "tokens": The input token sequences.
+            - "attention_mask": The attention mask for the tokens.
+
+    Output Keys:
+
+        - "tokens_response": The generated token sequences.
+        - "log_probs": The log probabilities of the generated tokens (if `return_log_probs` is `True`).
+        - "logits": The logits of the generated tokens (if applicable).
+        - "text_response": The generated text (if `from_text` is `True` and `generate` is `True`).
+
+    Example:
+        >>> from tensordict.tensorclass import NonTensorStack
+        >>> from transformers import AutoTokenizer, GPT2LMHeadModel, GPT2Config
+        >>>
+        >>> from torchrl.data import LLMData
+        >>> from torchrl.modules import from_hf_transformers
+        >>>
+        >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        >>> model = GPT2LMHeadModel(GPT2Config())
+        >>> tokenizer.pad_token = tokenizer.eos_token
+        >>>
+        >>> module = from_hf_transformers(
+        ...     model,
+        ...     tokenizer=tokenizer,
+        ...     from_text=True,
+        ...     generate=True
+        ... )
+        >>> input_data = LLMData(text=NonTensorStack("Hello, world!"), batch_size=1)
+        >>> output_data = module(input_data)
+        >>> print(output_data.text_response)
+        [' heritageillon rooft rooft Pear Tes grantingalde 58ocrocrocrocrcubecubecubecubecubecubecube']
+
+    .. seealso:: :func:`~torchrl.modules.from_vllm` for a similar interface using the vLLM library.
+
+    """
     # TODO: Seq should have a return_log_prob and be of ProbabilisticTDSequential type for instance checks
+
+    # Keys:
+    text_key: NestedKey = "text"
+    token_key: NestedKey = "tokens"
+    attention_mask_key: NestedKey = "attention_mask"
 
     module_dict = {}
     if device:
@@ -137,13 +201,59 @@ def from_hf_transformers(
         if tokenizer_kwargs.setdefault("padding_side", "left") != "left":
             raise RuntimeError
 
-        module_dict["encode"] = Mod(
-            tokenizer,
-            in_keys=[text_key],
-            out_keys=["tokens_in"],
-            method_kwargs=tokenizer_kwargs,
-            strict=True,
-            # We don't need the text after this
+        if generate:
+            module_dict["encode"] = Mod(
+                tokenizer,
+                in_keys=[text_key],
+                out_keys=["tokens_in"],
+                method_kwargs=tokenizer_kwargs,
+                strict=True,
+                # We don't need the text after this
+                inplace=False,
+            )
+        else:
+            module_dict["encode"] = Mod(
+                # TODO: make this work with many strings
+                # Tokenize both strings, and only the first
+                lambda x, y: (
+                    tokenizer([_x + _y for _x, _y in zip(x, y)], **tokenizer_kwargs),
+                    tokenizer(x, **tokenizer_kwargs),
+                ),
+                in_keys=[text_key, "text_response"],
+                out_keys=["tokens_in", "tokens_response"],
+                strict=True,
+                inplace=False,
+            )
+
+            def select(x, y):
+                return x.apply(lambda _x, _y: _x[..., _y.shape[-1] :], y)
+
+            module_dict["stack_response"] = Mod(
+                # Remove the init from the total tokens to get only the response tokens
+                select,
+                in_keys=["tokens_in", "tokens_response"],
+                out_keys=["tokens_response"],
+                strict=True,
+            )
+    elif not generate:
+
+        def stack_for_logprobs(tokens, tokens_response, attention_mask=None):
+            tokens = torch.cat([tokens, tokens_response], -1)
+            if attention_mask is not None:
+                attention_mask = torch.cat(
+                    [attention_mask, attention_mask.new_ones(tokens_response.shape)], -1
+                )
+            return tokens, tokens_response, attention_mask
+
+        module_dict["stack_response"] = Mod(
+            stack_for_logprobs,
+            in_keys=["tokens", "tokens_response", "attention_mask"],
+            out_keys=[
+                ("tokens_in", "input_ids"),
+                ("tokens_response", "input_ids"),
+                ("tokens_in", "attention_mask"),
+            ],
+            strict=False,
             inplace=False,
         )
     else:
@@ -190,6 +300,17 @@ def from_hf_transformers(
             out_to_in_map=True,
             strict=True,
         )
+
+        # Keep only the new tokens
+        def remove_input_seq(tokens_in, tokens_out):
+            return tokens_out[..., tokens_in.shape[-1] :]
+
+        module_dict["remove_input_seq"] = Mod(
+            remove_input_seq,
+            in_keys=[("tokens_in", "input_ids"), ("tokens_out", "sequences")],
+            out_keys=[("tokens_out", "sequences")],
+            strict=True,
+        )
         if return_log_probs:
             module_dict["extract_log_probs"] = WrapModule(
                 log_probs_from_scores,
@@ -205,6 +326,7 @@ def from_hf_transformers(
             )
             if device:
                 module_dict["to_source_device"] = _maybe_set_device
+
             module_dict["rebuild"] = Mod(
                 lambda *x: x,
                 in_keys=[
@@ -223,7 +345,8 @@ def from_hf_transformers(
                     "log_probs",
                     "logits",
                 ],
-                strict=True,
+                # There may not be log_probs and logits
+                strict=False,
                 inplace=False,
             )
         else:
@@ -240,8 +363,10 @@ def from_hf_transformers(
             kwargs = {}
         if not kwargs.setdefault("return_dict", True):
             raise RuntimeError
-        if not return_log_probs:
-            raise RuntimeError
+        if return_log_probs not in (True, None):
+            raise RuntimeError(
+                "return_log_probs should be True or None when not generating."
+            )
         module_dict["get_logprobs"] = Mod(
             model,
             method_kwargs=kwargs,
@@ -263,8 +388,8 @@ def from_hf_transformers(
         if from_text:
             module_dict["rebuild"] = Mod(
                 lambda *x: x,
-                in_keys=["log_probs", "logits", ("tokens_in", "attention_mask")],
-                out_keys=["log_probs", "logits", "attention_mask"],
+                in_keys=["log_probs", "logits", "tokens_response"],
+                out_keys=["log_probs", "logits", "tokens_response"],
                 inplace=False,
             )
         else:

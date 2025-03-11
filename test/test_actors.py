@@ -919,54 +919,108 @@ def test_lmhead_actorvalueoperator(device):
 
 @pytest.mark.skipif(not _has_transformers, reason="missing transformers dependencies")
 @pytest.mark.skipif(not _has_vllm, reason="missing vllm dependencies")
-class TestTransformerActor:
+class TestLLMActor:
     @pytest.mark.parametrize(
-        "from_text, generate, tokens, attention_mask",
+        "from_text, generate, return_log_probs, tokens, attention_mask",
         [
-            (True, True, None, None),
-            (True, False, None, None),
+            (True, True, True, None, None),
+            (True, True, False, None, None),
+            (True, False, None, None, None),
             (
                 False,
+                True,
                 True,
                 torch.randint(1024, (1, 10)),
                 torch.ones(1, 10, dtype=torch.int64),
             ),
-            (False, True, torch.randint(1024, (1, 10)), None),
+            (False, True, True, torch.randint(1024, (1, 10)), None),
+            (
+                False,
+                True,
+                False,
+                torch.randint(1024, (1, 10)),
+                torch.ones(1, 10, dtype=torch.int64),
+            ),
+            (False, True, False, torch.randint(1024, (1, 10)), None),
         ],
     )
-    def test_from_hf_transformers(self, from_text, generate, tokens, attention_mask):
+    def test_from_hf_transformers(
+        self, from_text, generate, return_log_probs, tokens, attention_mask
+    ):
         from transformers import AutoTokenizer, GPT2Config, GPT2LMHeadModel
 
+        model_name = "distilbert-base-uncased"  # or "minilm" or "albert-tiny"
+        # Load the model and tokenizer
+        # model = AutoModel.from_pretrained(model_name)
+        # tokenizer = AutoTokenizer.from_pretrained(model_name)
+
         tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        tokenizer.pad_token = tokenizer.eos_token
         model = GPT2LMHeadModel(GPT2Config())
+
+        tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
+
         m = from_hf_transformers(
-            model, tokenizer=tokenizer, from_text=from_text, generate=generate
+            model,
+            tokenizer=tokenizer,
+            from_text=from_text,
+            generate=generate,
+            return_log_probs=return_log_probs,
         )
-        self._run_check(m, tokens, attention_mask, generate, from_text, has_logits=True)
+        self._run_check(
+            m,
+            tokens,
+            attention_mask,
+            generate,
+            return_log_probs,
+            from_text,
+            has_logits=True,
+        )
 
     @pytest.mark.parametrize(
-        "from_text, generate, tokens, attention_mask",
+        "from_text, generate, return_log_probs, tokens, attention_mask",
         [
-            (True, True, None, None),
-            (True, False, None, None),
+            (True, True, True, None, None),
+            (True, True, False, None, None),
+            (True, False, None, None, None),
             (
                 False,
+                True,
                 True,
                 torch.randint(1024, (1, 10)),
                 torch.ones(1, 10, dtype=torch.int64),
             ),
-            (False, True, torch.randint(1024, (1, 10)), None),
+            (False, True, True, torch.randint(1024, (1, 10)), None),
+            (
+                False,
+                True,
+                False,
+                torch.randint(1024, (1, 10)),
+                torch.ones(1, 10, dtype=torch.int64),
+            ),
+            (False, True, False, torch.randint(1024, (1, 10)), None),
         ],
     )
-    def test_from_vllm(self, from_text, generate, tokens, attention_mask):
+    def test_from_vllm(
+        self, from_text, generate, return_log_probs, tokens, attention_mask
+    ):
         from vllm import LLM
 
         model = LLM(model="facebook/opt-125m")
-        m = from_vllm(model, from_text=from_text, generate=generate)
+        m = from_vllm(
+            model,
+            from_text=from_text,
+            generate=generate,
+            return_log_probs=return_log_probs,
+        )
         self._run_check(
-            m, tokens, attention_mask, generate, from_text, has_logits=False
+            m,
+            tokens,
+            attention_mask,
+            generate,
+            return_log_probs,
+            from_text,
+            has_logits=False,
         )
 
     def _make_data(
@@ -1007,7 +1061,16 @@ class TestTransformerActor:
             )
         return tdin
 
-    def _run_check(self, m, tokens, attention_mask, generate, from_text, has_logits):
+    def _run_check(
+        self,
+        m,
+        tokens,
+        attention_mask,
+        generate,
+        return_log_probs,
+        from_text,
+        has_logits,
+    ):
         tdin = self._make_data(
             m, tokens, attention_mask, generate, from_text, has_logits
         )
@@ -1024,13 +1087,19 @@ class TestTransformerActor:
         if generate and (attention_mask is not None or from_text):
             assert td.attention_mask is not None, (generate, generate, from_text)
         else:
-            assert td.attention_mask is None
+            assert td.attention_mask is None, (generate, from_text)
         if not generate:
             # logprobs are computed on text response of tokens_response
             assert td.text_response is not None or td.tokens_response is not None
             assert td.log_probs is not None
             if has_logits:
                 assert td.logits is not None
+        if generate:
+            if return_log_probs:
+                assert td.log_probs is not None
+                assert td.log_probs.shape[-2] == td.tokens_response.shape[-1]
+            else:
+                assert td.log_probs is None
 
         # Test the shapes
         assert td.tokens_response is not None, (generate, has_logits, from_text)
@@ -1042,7 +1111,7 @@ class TestTransformerActor:
             assert (
                 td.tokens_response[..., : td.tokens.shape[-1]]
                 != td.tokens[..., : td.tokens_response.shape[-1]]
-            ).any()
+            ).any(), (generate, from_text)
 
     @pytest.mark.parametrize(
         "from_text, tokens, attention_mask",
@@ -1060,7 +1129,9 @@ class TestTransformerActor:
         from vllm import LLM
 
         model = LLM(model="facebook/opt-125m")
-        m_generate = from_vllm(model, from_text=from_text, generate=True)
+        m_generate = from_vllm(
+            model, from_text=from_text, generate=True, return_log_probs=True
+        )
         m_logprobs = from_vllm(model, from_text=from_text, generate=False)
         self._check_lps(
             m_generate, m_logprobs, tokens, attention_mask, from_text, has_logits=False
@@ -1091,7 +1162,6 @@ class TestTransformerActor:
             text_response=td_generate.text_response,
         )
         td_logprobs = model_logprobs(tdin_logprobs)
-        print(td_generate.log_probs / td_logprobs.log_probs)
         torch.testing.assert_close(
             td_generate.log_probs, td_logprobs.log_probs, rtol=1e-2, atol=1e-2
         )
