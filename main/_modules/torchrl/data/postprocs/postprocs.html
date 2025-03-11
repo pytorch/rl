@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+5ec9bc5) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+9cd95d5) &#x25BC</span></a>
     </div>
     
 
@@ -427,7 +427,8 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">NestedKey</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">unravel_key</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModuleBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">expand_right</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
 
@@ -712,6 +713,103 @@
         <span class="p">)</span>
         <span class="n">tensordict</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">batch_size</span><span class="p">[:</span><span class="n">ndim</span><span class="p">]</span>
     <span class="k">return</span> <span class="n">tensordict</span>
+
+
+<div class="viewcode-block" id="DensifyReward"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.DensifyReward.html#torchrl.data.DensifyReward">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">DensifyReward</span><span class="p">(</span><span class="n">TensorDictModuleBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A util to reassign the reward at done state to the rest of the trajectory.</span>
+
+<span class="sd">    This transform is to be used with sparse rewards to assign a reward to each step of a trajectory when only the</span>
+<span class="sd">    reward at `done` is non-null.</span>
+
+<span class="sd">    .. note:: The class calls the :func:`~torchrl.objectives.value.functional.reward2go` function, which will</span>
+<span class="sd">        also sum intermediate rewards. Make sure you understand what the `reward2go` function returns before using</span>
+<span class="sd">        this module.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        reward_key (NestedKey, optional): The key in the input TensorDict where the reward is stored.</span>
+<span class="sd">            Defaults to `&quot;reward&quot;`.</span>
+<span class="sd">        done_key (NestedKey, optional): The key in the input TensorDict where the done flag is stored.</span>
+<span class="sd">            Defaults to `&quot;done&quot;`.</span>
+<span class="sd">        reward_key_out (NestedKey | None, optional): The key in the output TensorDict where the reassigned reward</span>
+<span class="sd">            will be stored. If None, it defaults to the value of `reward_key`.</span>
+<span class="sd">            Defaults to `None`.</span>
+<span class="sd">        time_dim (int, optional): The dimension in the input TensorDict where the time is unrolled.</span>
+<span class="sd">            Defaults to `2`.</span>
+<span class="sd">        discount (float, optional): The discount factor to use for computing the discounted cumulative sum of rewards.</span>
+<span class="sd">            Defaults to `1.0` (no discounting).</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        TensorDict: The input TensorDict with the reassigned reward stored under the key specified by `reward_key_out`.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; from tensordict import TensorDict</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data import DensifyReward</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Create a sample TensorDict</span>
+<span class="sd">        &gt;&gt;&gt; tensordict = TensorDict({</span>
+<span class="sd">        ...     &quot;next&quot;: {</span>
+<span class="sd">        ...         &quot;reward&quot;: torch.zeros(10, 1),</span>
+<span class="sd">        ...         &quot;done&quot;: torch.zeros(10, 1, dtype=torch.bool)</span>
+<span class="sd">        ...     }</span>
+<span class="sd">        ... }, batch_size=[10])</span>
+<span class="sd">        &gt;&gt;&gt; # Set some done flags and rewards</span>
+<span class="sd">        &gt;&gt;&gt; tensordict[&quot;next&quot;, &quot;done&quot;][[3, 7]] = True</span>
+<span class="sd">        &gt;&gt;&gt; tensordict[&quot;next&quot;, &quot;reward&quot;][3] = 3</span>
+<span class="sd">        &gt;&gt;&gt; tensordict[&quot;next&quot;, &quot;reward&quot;][7] = 7</span>
+<span class="sd">        &gt;&gt;&gt; # Create an instance of LastRewardToTraj</span>
+<span class="sd">        &gt;&gt;&gt; last_reward_to_traj = DensifyReward()</span>
+<span class="sd">        &gt;&gt;&gt; # Apply the transform</span>
+<span class="sd">        &gt;&gt;&gt; new_tensordict = last_reward_to_traj(tensordict)</span>
+<span class="sd">        &gt;&gt;&gt; # Print the reassigned rewards</span>
+<span class="sd">        &gt;&gt;&gt; print(new_tensordict[&quot;next&quot;, &quot;reward&quot;])</span>
+<span class="sd">        tensor([[3.],</span>
+<span class="sd">                [3.],</span>
+<span class="sd">                [3.],</span>
+<span class="sd">                [3.],</span>
+<span class="sd">                [7.],</span>
+<span class="sd">                [7.],</span>
+<span class="sd">                [7.],</span>
+<span class="sd">                [7.],</span>
+<span class="sd">                [0.],</span>
+<span class="sd">                [0.]])</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">reward_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;reward&quot;</span><span class="p">,</span>
+        <span class="n">done_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;done&quot;</span><span class="p">,</span>
+        <span class="n">reward_key_out</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">time_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
+        <span class="n">discount</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives.value.functional</span><span class="w"> </span><span class="kn">import</span> <span class="n">reward2go</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span> <span class="o">=</span> <span class="p">[</span><span class="n">unravel_key</span><span class="p">(</span><span class="n">reward_key</span><span class="p">),</span> <span class="n">unravel_key</span><span class="p">(</span><span class="n">done_key</span><span class="p">)]</span>
+        <span class="k">if</span> <span class="n">reward_key_out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">reward_key_out</span> <span class="o">=</span> <span class="n">reward_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span><span class="n">unravel_key</span><span class="p">(</span><span class="n">reward_key_out</span><span class="p">)]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">time_dim</span> <span class="o">=</span> <span class="n">time_dim</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">discount</span> <span class="o">=</span> <span class="n">discount</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reward2go</span> <span class="o">=</span> <span class="n">reward2go</span>
+
+<div class="viewcode-block" id="DensifyReward.forward"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.DensifyReward.html#torchrl.data.DensifyReward.forward">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+        <span class="c1"># Get done</span>
+        <span class="n">done</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+        <span class="c1"># Get reward</span>
+        <span class="n">reward</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+        <span class="k">if</span> <span class="n">reward</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">done</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;reward and done state are expected to have the same shape. Got reard.shape=</span><span class="si">{</span><span class="n">reward</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;and done.shape=</span><span class="si">{</span><span class="n">done</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">reward</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">reward2go</span><span class="p">(</span><span class="n">reward</span><span class="p">,</span> <span class="n">done</span><span class="p">,</span> <span class="n">time_dim</span><span class="o">=-</span><span class="mi">2</span><span class="p">,</span> <span class="n">gamma</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">discount</span><span class="p">)</span>
+        <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">reward</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tensordict</span></div></div>
 </pre></div>
 
              </article>

@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+5ec9bc5) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+9cd95d5) &#x25BC</span></a>
     </div>
     
 
@@ -428,6 +428,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Literal</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">NestedKey</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">unravel_key</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.tensorclass</span><span class="w"> </span><span class="kn">import</span> <span class="n">NonTensorData</span><span class="p">,</span> <span class="n">NonTensorStack</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_zip_strict</span>
@@ -460,14 +461,39 @@
 
 <span class="sd">    Prompts to the language model can be loaded when the environment is ``reset`` if the environment is created via :meth:`~from_dataloader`</span>
 
-<span class="sd">    Args:</span>
-<span class="sd">        observation_key (NestedKey, optional): The key in the tensordict where the observation is stored. Defaults to</span>
-<span class="sd">            ``&quot;observation&quot;``.</span>
-<span class="sd">        action_key (NestedKey, optional): The key in the tensordict where the action is stored. Defaults to ``&quot;action&quot;``.</span>
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        token_key (NestedKey, optional): The key in the tensordict where the tokens are stored (when `str2str=False`).</span>
+<span class="sd">            Defaults to ``&quot;tokens&quot;``.</span>
+<span class="sd">        str_key (NestedKey, optional): The key in the tensordict where the string input is stored (when `str2str=True`).</span>
+<span class="sd">            Defaults to ``&quot;text&quot;``.</span>
+<span class="sd">        attention_key (NestedKey, optional): The key in the tensordict where the attention mask is stored.</span>
+<span class="sd">            Defaults to ``&quot;attention_mask&quot;``.</span>
+<span class="sd">        action_key (NestedKey, optional): The key in the tensordict where the action is stored. Defaults to</span>
+<span class="sd">            ``tokens_response`` or ``&quot;text_response&quot;``.</span>
+<span class="sd">        reward_key (NestedKey, optional): The key in the tensordict where the reward is stored if `assign_reward=True`.</span>
+<span class="sd">            Defaults to  ``&quot;reward&quot;``.</span>
 <span class="sd">        str2str (bool, optional): Whether the environment should expect strings as input and output. Defaults to ``False``.</span>
 <span class="sd">        device (torch.device | None, optional): The device on which the environment should run. Defaults to ``None``.</span>
 <span class="sd">        vocab_size (int | None, optional): The size of the vocabulary. If None, the environment will assume an</span>
 <span class="sd">            unbounded vocabulary. Defaults to ``None``.</span>
+<span class="sd">        no_stack (bool, optional): If ``False`` (default), the environment should stack the action with the past</span>
+<span class="sd">            observation, each action being a new, unseen part of a conversation. Otherwise, the action is assumed</span>
+<span class="sd">            to be the plain output of the LLM, including the input tokens / strings.</span>
+<span class="sd">        has_attention (bool, optional): if ``True``, an attention mask is to be used under the key indicated by</span>
+<span class="sd">            :attr:`attention_key`. Defaults to ``True``.</span>
+<span class="sd">        assign_reward (bool, optional): if ``True``, a zero-valued reward of shape equal to to the action shape</span>
+<span class="sd">            is written during calls to `step()`. Defaults to ``False``.</span>
+<span class="sd">        assign_done (bool, optional): if ``True``, a zero-valued done and terminated state of shape equal to to the</span>
+<span class="sd">            action shape is written during calls to `step()`. Defaults to ``False``.</span>
+
+<span class="sd">            .. note:: regardless of the value assigned to `assign_done`, a done state will be written at the root</span>
+<span class="sd">                as it is a requirement for all TorchRL environments.</span>
+
+<span class="sd">        batch_size (int or torch.Size, optional): Batch size of the environment. If left empty, the environment</span>
+<span class="sd">            is batchless (or batch-unlocked), meaning that it can accept tensordicts of any batch size.</span>
+<span class="sd">            Defaults to ``None`` (batch-unlocked).</span>
+<span class="sd">        as_llm_data (bool, optional): If ``True``, the data will be of type :class:`~torchrl.data.LLMData`.</span>
+<span class="sd">            Defaults to ``False``.</span>
 
 <span class="sd">    .. seealso:: :class:`~torchrl.envs.DataLoadingPrimer` for examples.</span>
 
@@ -476,42 +502,88 @@
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
+    <span class="n">_DEFAULT_TOKEN_KEY</span> <span class="o">=</span> <span class="s2">&quot;tokens&quot;</span>
+    <span class="n">_DEFAULT_STR_KEY</span> <span class="o">=</span> <span class="s2">&quot;text&quot;</span>
+    <span class="n">_DEFAULT_ATTENTION_KEY</span> <span class="o">=</span> <span class="s2">&quot;attention_mask&quot;</span>
+    <span class="n">_DEFAULT_ACTION_TOKENS_KEY</span> <span class="o">=</span> <span class="s2">&quot;tokens_response&quot;</span>
+    <span class="n">_DEFAULT_ACTION_STR_KEY</span> <span class="o">=</span> <span class="s2">&quot;text_response&quot;</span>
+
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">observation_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;observation&quot;</span><span class="p">,</span>
-        <span class="n">action_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;action&quot;</span><span class="p">,</span>
+        <span class="n">token_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">str_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">attention_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">action_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">reward_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;reward&quot;</span><span class="p">,</span>
         <span class="n">str2str</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">vocab_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">no_stack</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">assign_reward</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">assign_done</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">has_attention</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">as_llm_data</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_batch_locked</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">as_llm_data</span> <span class="o">=</span> <span class="n">as_llm_data</span>
+        <span class="k">if</span> <span class="n">token_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">token_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_DEFAULT_TOKEN_KEY</span>
+        <span class="k">if</span> <span class="n">str_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">str_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_DEFAULT_STR_KEY</span>
+        <span class="k">if</span> <span class="n">attention_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">attention_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_DEFAULT_ATTENTION_KEY</span>
+        <span class="k">if</span> <span class="n">action_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">str2str</span><span class="p">:</span>
+                <span class="n">action_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_DEFAULT_ACTION_STR_KEY</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">action_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_DEFAULT_ACTION_TOKENS_KEY</span>
+        <span class="k">if</span> <span class="n">batch_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_batch_locked</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="n">batch_size</span> <span class="o">=</span> <span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_batch_locked</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="p">(</span><span class="nb">tuple</span><span class="p">,</span> <span class="nb">list</span><span class="p">)):</span>
+                <span class="n">batch_size</span> <span class="o">=</span> <span class="p">(</span><span class="n">batch_size</span><span class="p">,)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">has_attention</span> <span class="o">=</span> <span class="n">has_attention</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">str2str</span> <span class="o">=</span> <span class="n">str2str</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">vocab_size</span> <span class="o">=</span> <span class="n">vocab_size</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">observation_key</span> <span class="o">=</span> <span class="n">unravel_key</span><span class="p">(</span><span class="n">observation_key</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">token_key</span> <span class="o">=</span> <span class="n">unravel_key</span><span class="p">(</span><span class="n">token_key</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">str_key</span> <span class="o">=</span> <span class="n">unravel_key</span><span class="p">(</span><span class="n">str_key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">attention_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">attention_key</span> <span class="o">=</span> <span class="n">unravel_key</span><span class="p">(</span><span class="n">attention_key</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attention_key</span> <span class="o">=</span> <span class="n">attention_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">no_stack</span> <span class="o">=</span> <span class="n">no_stack</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assign_reward</span> <span class="o">=</span> <span class="n">assign_reward</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assign_done</span> <span class="o">=</span> <span class="n">assign_done</span>
+
         <span class="c1"># self.action_key = unravel_key(action_key)</span>
         <span class="k">if</span> <span class="n">str2str</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">observation_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec_unbatched</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
                 <span class="p">{</span>
-                    <span class="n">observation_key</span><span class="p">:</span> <span class="n">NonTensor</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">str_key</span><span class="p">:</span> <span class="n">NonTensor</span><span class="p">(</span>
                         <span class="n">example_data</span><span class="o">=</span><span class="s2">&quot;a string&quot;</span><span class="p">,</span> <span class="n">batched</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">()</span>
                     <span class="p">)</span>
                 <span class="p">}</span>
             <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">full_action_spec_unbatched</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
                 <span class="p">{</span><span class="n">action_key</span><span class="p">:</span> <span class="n">NonTensor</span><span class="p">(</span><span class="n">example_data</span><span class="o">=</span><span class="s2">&quot;a string&quot;</span><span class="p">,</span> <span class="n">batched</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">())}</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">vocab_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">observation_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
-                    <span class="p">{</span>
-                        <span class="n">observation_key</span><span class="p">:</span> <span class="n">Unbounded</span><span class="p">(</span>
-                            <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
-                        <span class="p">)</span>
-                    <span class="p">}</span>
-                <span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+                <span class="n">observation_spec</span> <span class="o">=</span> <span class="p">{</span>
+                    <span class="n">token_key</span><span class="p">:</span> <span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+                <span class="p">}</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">has_attention</span><span class="p">:</span>
+                    <span class="n">observation_spec</span><span class="p">[</span><span class="n">attention_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">Unbounded</span><span class="p">(</span>
+                        <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+                    <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec_unbatched</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span><span class="n">observation_spec</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">full_action_spec_unbatched</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
                     <span class="p">{</span>
                         <span class="n">action_key</span><span class="p">:</span> <span class="n">Unbounded</span><span class="p">(</span>
                             <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
@@ -519,9 +591,9 @@
                     <span class="p">}</span>
                 <span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">observation_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec_unbatched</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
                     <span class="p">{</span>
-                        <span class="n">observation_key</span><span class="p">:</span> <span class="n">Bounded</span><span class="p">(</span>
+                        <span class="n">token_key</span><span class="p">:</span> <span class="n">Bounded</span><span class="p">(</span>
                             <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,),</span>
                             <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span>
                             <span class="n">low</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
@@ -530,7 +602,7 @@
                         <span class="p">)</span>
                     <span class="p">}</span>
                 <span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">full_action_spec_unbatched</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
                     <span class="p">{</span>
                         <span class="n">action_key</span><span class="p">:</span> <span class="n">Bounded</span><span class="p">(</span>
                             <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,),</span>
@@ -541,28 +613,64 @@
                         <span class="p">)</span>
                     <span class="p">}</span>
                 <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">full_done_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
-            <span class="n">done</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
-            <span class="n">truncated</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
-            <span class="n">terminated</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+        <span class="n">STR2STR_ERR</span> <span class="o">=</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;str2str cannot be True when either of assign_reward / assign_done are True. &quot;</span>
+            <span class="s2">&quot;Tokens are required to compute the reward shape.&quot;</span>
         <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">assign_reward</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">str2str</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">STR2STR_ERR</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">full_reward_spec_unbatched</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+                <span class="p">{</span><span class="n">reward_key</span><span class="p">:</span> <span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,),</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)}</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">full_reward_spec_unbatched</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">assign_done</span><span class="p">:</span>
+            <span class="c1"># Use single done</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">full_done_spec_unbatched</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+                <span class="n">done</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+                <span class="n">terminated</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">str2str</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">STR2STR_ERR</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Use single done</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">full_done_spec_unbatched</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+                <span class="n">tokens_data</span><span class="o">=</span><span class="n">Composite</span><span class="p">(</span>
+                    <span class="n">done</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+                    <span class="n">terminated</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+                <span class="p">),</span>
+                <span class="n">done</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+                <span class="n">terminated</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+            <span class="p">)</span>
 
 <div class="viewcode-block" id="LLMEnv.from_dataloader"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.LLMEnv.html#torchrl.envs.LLMEnv.from_dataloader">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">from_dataloader</span><span class="p">(</span>
         <span class="bp">cls</span><span class="p">,</span>
         <span class="n">dataloader</span><span class="p">:</span> <span class="n">DataLoader</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">observation_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;observation&quot;</span><span class="p">,</span>
-        <span class="n">action_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;action&quot;</span><span class="p">,</span>
+        <span class="n">token_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">str_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">attention_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">action_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">reward_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;reward&quot;</span><span class="p">,</span>
         <span class="n">str2str</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">vocab_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">no_stack</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">as_llm_data</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">has_attention</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">assign_reward</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">assign_done</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">primers</span><span class="p">:</span> <span class="n">Composite</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">data_keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">data_specs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TensorSpec</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">example_data</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">stack_method</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]</span>
         <span class="o">|</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;as_nested_tensor&quot;</span><span class="p">,</span> <span class="s2">&quot;as_padded_tensor&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">repeats</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LLMEnv</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Creates an LLMEnv instance from a dataloader.</span>
 
@@ -570,13 +678,36 @@
 
 <span class="sd">        Args:</span>
 <span class="sd">            dataloader (DataLoader): The dataloader to load data from.</span>
-<span class="sd">            observation_key (NestedKey, optional): The key in the tensordict where the observation is stored. Defaults</span>
-<span class="sd">                to ``&quot;observation&quot;``.</span>
-<span class="sd">            action_key (NestedKey, optional): The key in the tensordict where the action is stored. Defaults to ``&quot;action&quot;``.</span>
+<span class="sd">            token_key (NestedKey, optional): The key in the tensordict where the tokens are stored (when `str2str=False`).</span>
+<span class="sd">                Defaults to ``(&quot;tokens_in&quot;, &quot;input_ids&quot;)``.</span>
+<span class="sd">            str_key (NestedKey, optional): The key in the tensordict where the string input is stored (when `str2str=True`).</span>
+<span class="sd">                Defaults to ``&quot;test&quot;``.</span>
+<span class="sd">            attention_key (NestedKey, optional): The key in the tensordict where the attention mask is stored.</span>
+<span class="sd">                Defaults to ``(&quot;tokens_in&quot;, &quot;input_ids&quot;)``</span>
+<span class="sd">            action_key (NestedKey, optional): The key in the tensordict where the action is stored. Defaults to</span>
+<span class="sd">                ``(&quot;tokens_out&quot;, &quot;sequences&quot;)``.</span>
+<span class="sd">            reward_key (NestedKey, optional): The key in the tensordict where the reward is stored if `assign_reward=True`.</span>
+<span class="sd">                Defaults to  ``&quot;reward&quot;``.</span>
 <span class="sd">            str2str (bool, optional): Whether the environment should expect strings as input and output. Defaults to ``False``.</span>
 <span class="sd">            device (torch.device | None, optional): The device on which the environment should run. Defaults to ``None``.</span>
 <span class="sd">            vocab_size (int | None, optional): The size of the vocabulary. If None, the environment will assume an</span>
 <span class="sd">                unbounded vocabulary. Defaults to ``None``.</span>
+<span class="sd">            no_stack (bool, optional): If ``False`` (default), the environment should stack the action with the past</span>
+<span class="sd">                observation, each action being a new, unseen part of a conversation. Otherwise, the action is assumed</span>
+<span class="sd">                to be the plain output of the LLM, including the input tokens / strings.</span>
+<span class="sd">            has_attention (bool, optional): if ``True``, an attention mask is to be used under the key indicated by</span>
+<span class="sd">                :attr:`attention_key`. Defaults to ``True``.</span>
+<span class="sd">            assign_reward (bool, optional): if ``True``, a zero-valued reward of shape equal to to the action shape</span>
+<span class="sd">                is written during calls to `step()`. Defaults to ``False``.</span>
+<span class="sd">            assign_done (bool, optional): if ``True``, a zero-valued done and terminated state of shape equal to to the</span>
+<span class="sd">                action shape is written during calls to `step()`. Defaults to ``False``.</span>
+
+<span class="sd">                .. note:: regardless of the value assigned to `assign_done`, a done state will be written at the root</span>
+<span class="sd">                    as it is a requirement for all TorchRL environments.</span>
+
+<span class="sd">            batch_size (int or torch.Size, optional): Batch size of the environment. If left empty, the environment</span>
+<span class="sd">                is batchless (or batch-unlocked), meaning that it can accept tensordicts of any batch size.</span>
+<span class="sd">                Defaults to ``None`` (batch-unlocked).</span>
 <span class="sd">            primers (Composite | None, optional): The primers to use for each key in the dataloader.</span>
 <span class="sd">                Defaults to ``None``.</span>
 <span class="sd">            data_keys (list[NestedKey] | None, optional): The keys to use for each item in the dataloader. If not passed ``observation_key`` will be populated with the data.</span>
@@ -586,26 +717,58 @@
 <span class="sd">            example_data (Any, optional): Example data to use for initializing the primer. Defaults to ``None``.</span>
 <span class="sd">            stack_method (Callable[[Any], Any] | Literal[&quot;as_nested_tensor&quot;, &quot;as_padded_tensor&quot;], optional): The</span>
 <span class="sd">                method to use for stacking the data. Defaults to ``None``.</span>
+<span class="sd">            repeats (int, optional): How many times the same sample needs to appear successively. This can be useful in</span>
+<span class="sd">                situations like GRPO where a single prompt is used multiple times to estimate the advantage using Monte-Carlo</span>
+<span class="sd">                samples (rather than an advantage module).</span>
+<span class="sd">            as_llm_data (bool, optional): If ``True``, the data will be of type :class:`~torchrl.data.LLMData`.</span>
+<span class="sd">                Defaults to ``False``.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            LLMEnv: The created LLMEnv instance.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataLoadingPrimer</span>
 
+        <span class="k">if</span> <span class="n">data_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">str2str</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">str_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">data_keys</span> <span class="o">=</span> <span class="p">[</span><span class="n">LLMEnv</span><span class="o">.</span><span class="n">_DEFAULT_STR_KEY</span><span class="p">]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">data_keys</span> <span class="o">=</span> <span class="p">[</span><span class="n">str_key</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">token_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">data_keys</span> <span class="o">=</span> <span class="p">[</span><span class="n">LLMEnv</span><span class="o">.</span><span class="n">_DEFAULT_TOKEN_KEY</span><span class="p">]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">data_keys</span> <span class="o">=</span> <span class="p">[</span><span class="n">token_key</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">has_attention</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">attention_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="n">data_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">LLMEnv</span><span class="o">.</span><span class="n">_DEFAULT_ATTENTION_KEY</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">data_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">attention_key</span><span class="p">)</span>
+
         <span class="n">primer</span> <span class="o">=</span> <span class="n">DataLoadingPrimer</span><span class="p">(</span>
             <span class="n">dataloader</span><span class="o">=</span><span class="n">dataloader</span><span class="p">,</span>
             <span class="n">primers</span><span class="o">=</span><span class="n">primers</span><span class="p">,</span>
-            <span class="n">data_keys</span><span class="o">=</span><span class="n">data_keys</span> <span class="k">if</span> <span class="n">data_keys</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">[</span><span class="n">observation_key</span><span class="p">],</span>
+            <span class="n">data_keys</span><span class="o">=</span><span class="n">data_keys</span><span class="p">,</span>
             <span class="n">data_specs</span><span class="o">=</span><span class="n">data_specs</span><span class="p">,</span>
             <span class="n">example_data</span><span class="o">=</span><span class="n">example_data</span><span class="p">,</span>
             <span class="n">stack_method</span><span class="o">=</span><span class="n">stack_method</span><span class="p">,</span>
+            <span class="n">repeats</span><span class="o">=</span><span class="n">repeats</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">env</span> <span class="o">=</span> <span class="n">LLMEnv</span><span class="p">(</span>
             <span class="n">str2str</span><span class="o">=</span><span class="n">str2str</span><span class="p">,</span>
             <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
-            <span class="n">observation_key</span><span class="o">=</span><span class="n">observation_key</span><span class="p">,</span>
+            <span class="n">token_key</span><span class="o">=</span><span class="n">token_key</span><span class="p">,</span>
+            <span class="n">str_key</span><span class="o">=</span><span class="n">str_key</span><span class="p">,</span>
+            <span class="n">attention_key</span><span class="o">=</span><span class="n">attention_key</span><span class="p">,</span>
             <span class="n">action_key</span><span class="o">=</span><span class="n">action_key</span><span class="p">,</span>
+            <span class="n">reward_key</span><span class="o">=</span><span class="n">reward_key</span><span class="p">,</span>
             <span class="n">vocab_size</span><span class="o">=</span><span class="n">vocab_size</span><span class="p">,</span>
+            <span class="n">no_stack</span><span class="o">=</span><span class="n">no_stack</span><span class="p">,</span>
+            <span class="n">assign_reward</span><span class="o">=</span><span class="n">assign_reward</span><span class="p">,</span>
+            <span class="n">assign_done</span><span class="o">=</span><span class="n">assign_done</span><span class="p">,</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">has_attention</span><span class="o">=</span><span class="n">has_attention</span><span class="p">,</span>
+            <span class="n">as_llm_data</span><span class="o">=</span><span class="n">as_llm_data</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">primer</span><span class="p">)</span></div>
 
@@ -621,9 +784,74 @@
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="n">next_td</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_make_next_obs</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">next_td</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_make_reward</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">next_td</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_make_done</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">next_td</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">as_llm_data</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">next_td</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_make_reward</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">next_td</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">assign_reward</span><span class="p">:</span>
+            <span class="n">next_td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">reward_key</span><span class="p">,</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span>
+                    <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">action_key</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">reward_spec</span><span class="o">.</span><span class="n">dtype</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">next_td</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_make_done</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">next_td</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">assign_done</span><span class="p">:</span>
+            <span class="n">action</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">action_key</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">action</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">done</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                    <span class="n">tensordict</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">done</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
+            <span class="n">next_td</span><span class="o">.</span><span class="n">set</span><span class="p">((</span><span class="s2">&quot;tokens_data&quot;</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">),</span> <span class="n">done</span><span class="p">)</span>
+            <span class="n">next_td</span><span class="o">.</span><span class="n">set</span><span class="p">((</span><span class="s2">&quot;tokens_data&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">),</span> <span class="n">done</span><span class="o">.</span><span class="n">clone</span><span class="p">())</span>
+            <span class="n">next_td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                <span class="s2">&quot;terminated&quot;</span><span class="p">,</span> <span class="n">next_td</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;tokens_data&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="n">next_td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                <span class="s2">&quot;terminated&quot;</span><span class="p">,</span>
+                <span class="n">next_td</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;tokens_data&quot;</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">next_td</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_make_next_obs</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">nex_td</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">no_stack</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">str2str</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+            <span class="n">action</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">action_key</span><span class="p">)</span>
+            <span class="n">nex_td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">token_key</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">has_attention</span><span class="p">:</span>
+                <span class="n">attention_mask</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">attention_key</span><span class="p">)</span>
+                <span class="n">n</span> <span class="o">=</span> <span class="n">action</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">attention_mask</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">n</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="c1"># It can happen that there&#39;s only one action (eg rand_action)</span>
+                    <span class="n">attention_mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span>
+                        <span class="p">[</span>
+                            <span class="n">attention_mask</span><span class="p">,</span>
+                            <span class="n">attention_mask</span><span class="o">.</span><span class="n">new_ones</span><span class="p">(</span><span class="n">attention_mask</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span><span class="n">n</span><span class="p">,)),</span>
+                        <span class="p">],</span>
+                        <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="n">nex_td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">attention_key</span><span class="p">,</span> <span class="n">attention_mask</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">nex_td</span>
+
         <span class="c1"># Cat action entry with prev obs</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">str2str</span><span class="p">:</span>
-            <span class="n">obs</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">observation_key</span><span class="p">]</span>
+            <span class="n">obs</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">str_key</span><span class="p">]</span>
             <span class="n">action</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">action_key</span><span class="p">]</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">batch_size</span><span class="p">:</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obs</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
@@ -639,20 +867,15 @@
                         <span class="k">for</span> <span class="p">(</span><span class="n">_obs</span><span class="p">,</span> <span class="n">_action</span><span class="p">)</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="n">obs</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
                     <span class="p">]</span>
                 <span class="p">)</span>
+            <span class="k">return</span> <span class="n">nex_td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">str_key</span><span class="p">,</span> <span class="n">observation</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">try</span><span class="p">:</span>
-                <span class="n">obs</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">observation_key</span><span class="p">)</span>
+                <span class="n">obs</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">token_key</span><span class="p">)</span>
                 <span class="n">action</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">action_key</span><span class="p">)</span>
                 <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obs</span><span class="p">,</span> <span class="s2">&quot;is_nested&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
                     <span class="n">observation</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nested</span><span class="o">.</span><span class="n">as_nested_tensor</span><span class="p">(</span>
                         <span class="p">[</span>
-                            <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span>
-                                <span class="p">[</span>
-                                    <span class="n">_obs</span><span class="p">,</span>
-                                    <span class="n">_action</span><span class="p">,</span>
-                                <span class="p">],</span>
-                                <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
-                            <span class="p">)</span>
+                            <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">_obs</span><span class="p">,</span> <span class="n">_action</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
                             <span class="k">for</span> <span class="n">_obs</span><span class="p">,</span> <span class="n">_action</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span>
                                 <span class="n">obs</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">action</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
                             <span class="p">)</span>
@@ -660,30 +883,36 @@
                         <span class="n">layout</span><span class="o">=</span><span class="n">obs</span><span class="o">.</span><span class="n">layout</span><span class="p">,</span>
                     <span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>
-                    <span class="n">observation</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span>
-                        <span class="p">[</span>
-                            <span class="n">obs</span><span class="p">,</span>
-                            <span class="n">action</span><span class="p">,</span>
-                        <span class="p">],</span>
-                        <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
-                    <span class="p">)</span>
+                    <span class="n">observation</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">obs</span><span class="p">,</span> <span class="n">action</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
             <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
                     <span class="s2">&quot;Failed to cat action and observation tensors. Check that str2str argument is correctly &quot;</span>
                     <span class="sa">f</span><span class="s2">&quot;set in </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.&quot;</span>
                 <span class="p">)</span>
-        <span class="k">return</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">observation_key</span><span class="p">,</span> <span class="n">observation</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">nex_td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">token_key</span><span class="p">,</span> <span class="n">observation</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="c1"># We should have an observation by this time, if not raise an exception</span>
-        <span class="k">if</span> <span class="n">tensordict</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">observation_key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span>
-            <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">observation_key</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span>
-        <span class="p">):</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">check_token</span><span class="p">():</span>
+            <span class="k">return</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">str2str</span> <span class="ow">and</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">token_key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">token_key</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">))</span>
+            <span class="p">)</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">check_str</span><span class="p">():</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">str2str</span> <span class="ow">and</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">str_key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">str_key</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">))</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">tensordict</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">check_token</span><span class="p">()</span> <span class="ow">or</span> <span class="n">check_str</span><span class="p">():</span>
             <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Observation key </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">observation_key</span><span class="si">}</span><span class="s2"> is not defined. Make sure a TensorDictPrimer (eg, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Observation key </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">token_key</span><span class="si">}</span><span class="s2"> is not defined. Make sure a TensorDictPrimer (eg, &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;torchrl.envs.DataLoadingPrimer) is appended to the env transforms.&quot;</span>
             <span class="p">)</span>
-        <span class="k">return</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">td_reset</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">tensordict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_make_done</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">td_reset</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">as_llm_data</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">tensordict</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">seed</span></div>

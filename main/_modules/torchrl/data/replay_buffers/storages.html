@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+5ec9bc5) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+9cd95d5) &#x25BC</span></a>
     </div>
     
 
@@ -1957,10 +1957,10 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_get_default_collate</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">_is_tensordict</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">ListStorage</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">_stack_anything</span>
-    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">TensorStorage</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">LazyStackStorage</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">TensorStorage</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">_collate_id</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">ListStorage</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">_stack_anything</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;Could not find a default collate_fn for storage </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>

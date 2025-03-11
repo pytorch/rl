@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+5ec9bc5) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+9cd95d5) &#x25BC</span></a>
     </div>
     
 
@@ -448,8 +448,8 @@ this key must be unique.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>actor</strong> (<em>TensorDictModuleBase</em>) – An actor.</p></li>
-<li><p><strong>n_steps</strong> (<em>int</em>) – the number of actions the actor outputs at once
-(lookahead window).</p></li>
+<li><p><strong>n_steps</strong> (<em>int</em><em>, </em><em>optional</em>) – the number of actions the actor outputs at once
+(lookahead window). Defaults to <cite>None</cite>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
@@ -462,6 +462,8 @@ with the <code class="docutils literal notranslate"><span class="pre">&quot;acti
 when the environment has gone through a reset.
 Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;is_init&quot;</span></code> which is the <code class="docutils literal notranslate"><span class="pre">out_key</span></code> from the
 <a class="reference internal" href="torchrl.envs.transforms.InitTracker.html#torchrl.envs.transforms.InitTracker" title="torchrl.envs.transforms.InitTracker"><code class="xref py py-class docutils literal notranslate"><span class="pre">InitTracker</span></code></a> transform.</p></li>
+<li><p><strong>keep_dim</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to keep the time dimension of
+the macro during indexing. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
 </dl>

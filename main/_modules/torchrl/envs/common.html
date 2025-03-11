@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+5ec9bc5) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+9cd95d5) &#x25BC</span></a>
     </div>
     
 
@@ -3209,7 +3209,11 @@
             <span class="k">if</span> <span class="n">reset_value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">for</span> <span class="n">done_key</span> <span class="ow">in</span> <span class="n">done_key_group</span><span class="p">:</span>
                     <span class="n">done_val</span> <span class="o">=</span> <span class="n">tensordict_reset</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">done_key</span><span class="p">)</span>
-                    <span class="k">if</span> <span class="n">done_val</span><span class="p">[</span><span class="n">reset_value</span><span class="p">]</span><span class="o">.</span><span class="n">any</span><span class="p">()</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_allow_done_after_reset</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="p">(</span>
+                        <span class="n">done_val</span><span class="o">.</span><span class="n">any</span><span class="p">()</span>
+                        <span class="ow">and</span> <span class="n">done_val</span><span class="p">[</span><span class="n">reset_value</span><span class="p">]</span><span class="o">.</span><span class="n">any</span><span class="p">()</span>
+                        <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_allow_done_after_reset</span>
+                    <span class="p">):</span>
                         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                             <span class="sa">f</span><span class="s2">&quot;Env done entry &#39;</span><span class="si">{</span><span class="n">done_key</span><span class="si">}</span><span class="s2">&#39; was (partially) True after reset on specified &#39;_reset&#39; dimensions. This is not allowed.&quot;</span>
                         <span class="p">)</span>
@@ -4009,7 +4013,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">any_done</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">any_done</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">any_done</span><span class="p">:</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">select_reset_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">tensordict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">select_reset_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">tensordict</span></div>
 
 <div class="viewcode-block" id="EnvBase.empty_cache"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.empty_cache">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">empty_cache</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>

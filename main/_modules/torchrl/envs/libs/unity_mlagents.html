@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+5ec9bc5) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+9cd95d5) &#x25BC</span></a>
     </div>
     
 
@@ -553,7 +553,6 @@
         <span class="k">for</span> <span class="n">steps_idx</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]:</span>
             <span class="k">for</span> <span class="n">behavior</span> <span class="ow">in</span> <span class="n">env</span><span class="o">.</span><span class="n">behavior_specs</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
                 <span class="n">steps</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">get_steps</span><span class="p">(</span><span class="n">behavior</span><span class="p">)[</span><span class="n">steps_idx</span><span class="p">]</span>
-                <span class="n">is_terminal</span> <span class="o">=</span> <span class="n">steps_idx</span> <span class="o">==</span> <span class="mi">1</span>
                 <span class="n">agent_ids</span> <span class="o">=</span> <span class="n">steps</span><span class="o">.</span><span class="n">agent_id</span>
                 <span class="n">group_ids</span> <span class="o">=</span> <span class="n">steps</span><span class="o">.</span><span class="n">group_id</span>
 
@@ -563,7 +562,6 @@
                         <span class="c1"># Sometimes in an MLAgents environment, an agent may</span>
                         <span class="c1"># show up in both the decision steps and the terminal</span>
                         <span class="c1"># steps. When that happens, just skip the duplicate.</span>
-                        <span class="k">assert</span> <span class="n">is_terminal</span>
                         <span class="k">continue</span>
                     <span class="n">agent_name_to_behavior_map</span><span class="p">[</span><span class="n">agent_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">behavior</span>
                     <span class="n">agent_name_to_group_id_map</span><span class="p">[</span><span class="n">agent_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">group_id</span>
