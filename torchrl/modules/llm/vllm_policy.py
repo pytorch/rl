@@ -2,11 +2,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import collections
+import importlib.util
 
 import torch
-import transformers
-import vllm
 from tensordict import (
     from_dataclass,
     maybe_dense_stack,
@@ -22,9 +23,15 @@ from tensordict.nn import (
 )
 
 from torchrl.data import LLMData
-from vllm import LLM, SamplingParams
 
-CompletionOutput_tc = from_dataclass(vllm.outputs.CompletionOutput)
+_has_vllm = importlib.util.find_spec("vllm")
+
+if _has_vllm:
+    import vllm
+
+    CompletionOutput_tc = from_dataclass(vllm.outputs.CompletionOutput)
+else:
+    CompletionOutput_tc = None
 
 
 def _maybe_clear_device(td):
@@ -43,10 +50,11 @@ def _maybe_set_device(td):
 
 
 def from_vllm(
-    model: LLM,
+    model: vllm.LLM,  # noqa
     *,
     return_log_probs: bool = False,
-    tokenizer: transformers.tokenization_utils.PreTrainedTokenizer | None = None,
+    tokenizer: transformers.tokenization_utils.PreTrainedTokenizer  # noqa
+    | None = None,  # noqa
     from_text: bool = False,
     device: torch.device | None = None,
     generate: bool = True,
@@ -386,6 +394,8 @@ class _RequestOutput_tc(TensorClass["nocast"]):
 
 
 if __name__ == "__main__":
+    from vllm import LLM, SamplingParams
+
     prompts = [
         "Hello, my name is",
         "The president of the United States is",
