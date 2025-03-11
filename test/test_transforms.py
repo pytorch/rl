@@ -131,6 +131,7 @@ from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 from torchrl.envs.utils import check_env_specs, MarlGroupMapType, step_mdp
 from torchrl.modules import GRUModule, LSTMModule, MLP, ProbabilisticActor, TanhNormal
 from torchrl.modules.utils import get_primers_from_module
+from torchrl.record.recorder import VideoRecorder
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import (  # noqa
@@ -13976,6 +13977,14 @@ class TestTimer(TransformBase):
 
     def test_transform_inverse(self):
         raise pytest.skip("Tested elsewhere")
+
+
+class TestVideoRecorder:
+    # TODO: add more tests
+    def test_can_init_with_fps(self):
+        recorder = VideoRecorder(None, None, fps=30)
+
+        assert recorder is not None
 
 
 if __name__ == "__main__":
