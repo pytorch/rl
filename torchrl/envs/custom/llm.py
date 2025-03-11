@@ -143,7 +143,11 @@ class LLMEnv(EnvBase):
         # self.action_key = unravel_key(action_key)
         if str2str:
             self.full_observation_spec_unbatched = Composite(
-                {self.str_key: NonTensor(example_data="a string", batched=True, shape=())}
+                {
+                    self.str_key: NonTensor(
+                        example_data="a string", batched=True, shape=()
+                    )
+                }
             )
             self.full_action_spec_unbatched = Composite(
                 {action_key: NonTensor(example_data="a string", batched=True, shape=())}
