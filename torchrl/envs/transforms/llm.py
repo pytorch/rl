@@ -24,6 +24,7 @@ from torch import nn
 from torchrl.data.tensor_specs import Composite, NonTensor, TensorSpec, Unbounded
 from torchrl.envs.transforms.transforms import TensorDictPrimer, Transform
 from torchrl.envs.transforms.utils import _set_missing_tolerance, _stateless_param
+from torchrl.envs.utils import make_composite_from_td
 
 
 def as_nested_tensor(list_of_tensordicts: list[TensorDictBase]) -> TensorDictBase:
@@ -103,6 +104,9 @@ class DataLoadingPrimer(TensorDictPrimer):
         auto_batch_size (bool, optional): If ``True`` (default if `dataloader.batch_size > 0`), the batch size of the
             tensordict returned by the transform will be automatically determined assuming that there is a single batch
             dimension.
+        repeats (int, optional): How many times the same sample needs to appear successively. This can be useful in
+            situations like GRPO where a single prompt is used multiple times to estimate the advantage using Monte-Carlo
+            samples (rather than an advantage module).
 
     Attributes:
         dataloader (Iterable[Any]): The dataloader to load data from.
@@ -359,31 +363,26 @@ class DataLoadingPrimer(TensorDictPrimer):
         | Literal["as_nested_tensor", "as_padded_tensor"] = None,
         use_buffer: bool | None = None,
         auto_batch_size: bool = True,
+        repeats: int | None = None,
     ):
         self.dataloader = dataloader
-        if getattr(dataloader, "batch_size", 1) > 1 and use_buffer is None:
+        if repeats is None:
+            repeats = 0
+        self.repeats = repeats
+        if (
+            getattr(dataloader, "batch_size", 1) > 1 and use_buffer is None
+        ) or repeats > 0:
             use_buffer = True
 
         self.use_buffer = use_buffer
+        if self.use_buffer:
+            self._queue = deque()
+
         # No auto_batch_size if we know we have a single element
         self.auto_batch_size = auto_batch_size and (
-            getattr(dataloader, "dataloader", 1) > 0
+            getattr(dataloader, "batch_size", 1) > 0
         )
         self.endless_dataloader = self._endless_iter(self.dataloader)
-        if primers is None:
-            if data_keys is None:
-                data_keys = ["data"]
-            if data_specs is None:
-                data_specs = [NonTensor(example_data=example_data, shape=())]
-            primers = Composite(
-                {
-                    data_key: data_spec
-                    for data_key, data_spec in _zip_strict(data_keys, data_specs)
-                }
-            )
-            self.data_keys = data_keys
-        else:
-            self.data_keys = list(primers.keys(True, True))
 
         if stack_method is None:
             stack_method = maybe_dense_stack
@@ -395,6 +394,29 @@ class DataLoadingPrimer(TensorDictPrimer):
             raise ValueError(f"Unknown stack_method={stack_method}")
         self.stack_method = stack_method
 
+        if primers is None and not self.use_buffer:
+            if data_keys is None:
+                data_keys = ["data"]
+            if data_specs is None:
+                data_specs = [NonTensor(example_data=example_data, shape=())]
+            primers = Composite(
+                {
+                    data_key: data_spec
+                    for data_key, data_spec in _zip_strict(data_keys, data_specs)
+                }
+            )
+            self.data_keys = data_keys
+        elif primers is None:
+            self.data_keys = data_keys
+            # We can get the primer from the dataloader itself
+            data = self._load_from_dataloader()
+            primers = make_composite_from_td(data, dynamic_shape=True)
+            self._queue.insert(0, data)
+            if data_keys is None:
+                self.data_keys = list(primers.keys(True, True))
+        else:
+            self.data_keys = list(primers.keys(True, True))
+
         super().__init__(
             primers=primers,
             default_value=self._load_from_dataloader,
@@ -403,8 +425,7 @@ class DataLoadingPrimer(TensorDictPrimer):
             single_default_value=True,
             call_before_env_reset=True,
         )
-        if self.use_buffer:
-            self._queue = deque()
+        self._reset_key = "_reset"
 
     @classmethod
     def _endless_iter(self, obj):
@@ -420,11 +441,13 @@ class DataLoadingPrimer(TensorDictPrimer):
             if not reset.any():
                 raise RuntimeError("reset must have at least one True value.")
             if reset.ndim > 0:
-                return self.stack_method(
-                    [self._load_from_dataloader() for i in range(reset.sum())]
-                )
+                loaded = [self._load_from_dataloader() for i in range(reset.sum())]
+                return self.stack_method(loaded)
+
         if self.use_buffer and len(self._queue) > 0:
-            return self._queue.popleft()
+            result = self._queue.popleft()
+            return result
+
         data = next(self.endless_dataloader)
         # Some heuristic here:
         # if data is a map, assume its keys match the keys in spec
@@ -432,6 +455,12 @@ class DataLoadingPrimer(TensorDictPrimer):
         if isinstance(data, Mapping):
             out = TensorDict.from_dict(
                 data, auto_batch_size=self.auto_batch_size, batch_dims=1
+            )
+        elif self.data_keys is None:
+            raise RuntimeError(
+                f"Cannot lazily instantiate the {type(self).__name__} as the data_keys was "
+                f"not passed but the data is not a Mapping, therefore the keys cannot be retrieved "
+                f"automatically. Please pass the data_keys to the constructor."
             )
         elif len(self.data_keys) > 1 and isinstance(data, (list, tuple)):
             out = TensorDict.from_dict(
@@ -450,7 +479,11 @@ class DataLoadingPrimer(TensorDictPrimer):
                 f"Unrecognized data type: {type(data)} with keys {self.data_keys}."
             )
         if self.use_buffer:
-            self._queue.extend(out.unbind(0))
+            if not out.ndim:
+                out = out.unsqueeze(0)
+            self._queue.extend(
+                [d for d in out.unbind(0) for _ in range(max(1, self.repeats))]
+            )
             return self._queue.popleft()
         return out
 

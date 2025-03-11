@@ -121,7 +121,7 @@ class VideoRecorder(ObservationTransform):
         video_kwargs = {}
         video_kwargs.update(kwargs)
         if fps is not None:
-            self.video_kwargs["fps"] = fps
+            video_kwargs["fps"] = fps
         self.video_kwargs = video_kwargs
         self.iter = 0
         self.skip = skip
