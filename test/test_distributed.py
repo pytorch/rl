@@ -605,7 +605,8 @@ class TestRayCollector(DistributedCollectorBase):
 
         collector = self.distributed_class()(
             [env] * n_collectors,
-            collector_class=SyncDataCollector.from_policy_factory(policy_constructor),
+            collector_class=SyncDataCollector,
+            policy_factory=policy_constructor,
             total_frames=total_frames,
             frames_per_batch=frames_per_batch,
             **self.distributed_kwargs(),

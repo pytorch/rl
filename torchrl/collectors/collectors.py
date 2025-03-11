@@ -317,43 +317,6 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             return -(self.total_frames // -self.requested_frames_per_batch)
         raise RuntimeError("Non-terminating collectors do not have a length")
 
-    @classmethod
-    def from_policy_factory(
-        cls: type[T],
-        policy_factory: Callable[[], Callable[[TensorDictBase], TensorDictBase]],
-    ) -> T:
-        """Creates a custom subclass of Collector that instantiates a policy from a factory.
-
-        Args:
-            policy_factory (Callable[[], Callable[[TensorDictBase], TensorDictBase]]): a factory function that returns
-                a valid policy.
-
-        Example:
-            >>> import torch
-            >>>
-            >>> from torchrl.collectors import SyncDataCollector
-            >>> from torchrl.envs import GymEnv
-            >>>
-            >>> def factory():
-            ...     return lambda td: td.set("action", torch.ones((1)))
-            >>> cls = SyncDataCollector.from_policy_factory(factory)
-            >>> collector = cls(GymEnv("Pendulum-v1"), total_frames=10, frames_per_batch=5)
-            >>> for d in collector:
-            ...     assert (d["action"] == 1).all()
-
-        """
-
-        class CustomCollectorCls(cls):
-            def __init__(self, *args, **kwargs):
-                if len(args) > 1 or "policy" in kwargs:
-                    raise TypeError(
-                        "The policy cannot be passed to the constructor of a collector class "
-                        "that instantiates the policy from a factory."
-                    )
-                super().__init__(*args, policy_factory(), **kwargs)
-
-        return CustomCollectorCls
-
 
 @accept_remote_rref_udf_invocation
 class SyncDataCollector(DataCollectorBase):
@@ -383,10 +346,14 @@ class SyncDataCollector(DataCollectorBase):
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
             .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
-                pickled directly), the :meth:`~.from_policy_factory` method should be used to subclass the collector
-                and create a version that instantiates a specific version of the policy on demand.
+                pickled directly), the :arg:`policy_factory` should be used instead.
 
     Keyword Args:
+        policy_factory (Callable[[], Callable], optional): a callable that returns
+            a policy instance. This is exclusive with the `policy` argument.
+
+            .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.
+
         frames_per_batch (int): A keyword-only argument representing the total
             number of elements in a batch.
         total_frames (int): A keyword-only argument representing the total
@@ -558,6 +525,7 @@ class SyncDataCollector(DataCollectorBase):
         policy: None
         | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]) = None,
         *,
+        policy_factory: Callable[[], Callable] | None = None,
         frames_per_batch: int,
         total_frames: int = -1,
         device: DEVICE_TYPING = None,
@@ -601,8 +569,13 @@ class SyncDataCollector(DataCollectorBase):
                 env.update_kwargs(create_env_kwargs)
 
         if policy is None:
+            if policy_factory is not None:
+                policy = policy_factory()
+            else:
+                policy = RandomPolicy(env.full_action_spec)
+        elif policy_factory is not None:
+            raise TypeError("policy_factory cannot be used with policy argument.")
 
-            policy = RandomPolicy(env.full_action_spec)
         if trust_policy is None:
             trust_policy = isinstance(policy, (RandomPolicy, CudaGraphModule))
         self.trust_policy = trust_policy
@@ -1518,10 +1491,17 @@ class _MultiDataCollector(DataCollectorBase):
               ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
             .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
-                pickled directly), the :meth:`~.from_policy_factory` method should be used to subclass the collector
-                and create a version that instantiates a specific version of the policy on demand.
+                pickled directly), the :arg:`policy_factory` should be used instead.
 
     Keyword Args:
+        policy_factory (Callable[[], Callable], optional): a callable that returns
+            a policy instance. This is exclusive with the `policy` argument.
+
+            .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.
+
+            .. warning:: `policy_factory` is currently not compatible with multiprocessed data
+                collectors.
+
         frames_per_batch (int): A keyword-only argument representing the
             total number of elements in a batch.
         total_frames (int, optional): A keyword-only argument representing the
@@ -1664,6 +1644,7 @@ class _MultiDataCollector(DataCollectorBase):
         policy: None
         | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]) = None,
         *,
+        policy_factory: Callable[[], Callable] | None = None,
         frames_per_batch: int,
         total_frames: int | None = -1,
         device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
@@ -1747,27 +1728,36 @@ class _MultiDataCollector(DataCollectorBase):
         self._get_weights_fn_dict = {}
 
         if trust_policy is None:
-            trust_policy = isinstance(policy, CudaGraphModule)
+            trust_policy = policy is not None and isinstance(policy, CudaGraphModule)
         self.trust_policy = trust_policy
 
-        for policy_device, env_maker, env_maker_kwargs in zip(
-            self.policy_device, self.create_env_fn, self.create_env_kwargs
-        ):
-            (policy_copy, get_weights_fn,) = self._get_policy_and_device(
-                policy=policy,
-                policy_device=policy_device,
-                env_maker=env_maker,
-                env_maker_kwargs=env_maker_kwargs,
+        if policy_factory is not None and policy is not None:
+            raise TypeError("policy_factory and policy are mutually exclusive")
+        elif policy_factory is None:
+            for policy_device, env_maker, env_maker_kwargs in zip(
+                self.policy_device, self.create_env_fn, self.create_env_kwargs
+            ):
+                (policy_copy, get_weights_fn,) = self._get_policy_and_device(
+                    policy=policy,
+                    policy_device=policy_device,
+                    env_maker=env_maker,
+                    env_maker_kwargs=env_maker_kwargs,
+                )
+                if type(policy_copy) is not type(policy):
+                    policy = policy_copy
+                weights = (
+                    TensorDict.from_module(policy_copy)
+                    if isinstance(policy_copy, nn.Module)
+                    else TensorDict()
+                )
+                self._policy_weights_dict[policy_device] = weights
+                self._get_weights_fn_dict[policy_device] = get_weights_fn
+        else:
+            # TODO
+            raise NotImplementedError(
+                "weight syncing is not supported for multiprocessed data collectors at the "
+                "moment."
             )
-            if type(policy_copy) is not type(policy):
-                policy = policy_copy
-            weights = (
-                TensorDict.from_module(policy_copy)
-                if isinstance(policy_copy, nn.Module)
-                else TensorDict()
-            )
-            self._policy_weights_dict[policy_device] = weights
-            self._get_weights_fn_dict[policy_device] = get_weights_fn
         self.policy = policy
 
         remainder = 0
@@ -2835,10 +2825,14 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
             .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
-                pickled directly), the :meth:`~.from_policy_factory` method should be used to subclass the collector
-                and create a version that instantiates a specific version of the policy on demand.
+                pickled directly), the :arg:`policy_factory` should be used instead.
 
     Keyword Args:
+        policy_factory (Callable[[], Callable], optional): a callable that returns
+            a policy instance. This is exclusive with the `policy` argument.
+
+            .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.
+
         frames_per_batch (int): A keyword-only argument representing the
             total number of elements in a batch.
         total_frames (int, optional): A keyword-only argument representing the
@@ -2944,8 +2938,10 @@ class aSyncDataCollector(MultiaSyncDataCollector):
     def __init__(
         self,
         create_env_fn: Callable[[], EnvBase],
-        policy: None | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]),
+        policy: None
+        | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]) = None,
         *,
+        policy_factory: Callable[[], Callable] | None = None,
         frames_per_batch: int,
         total_frames: int | None = -1,
         device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
@@ -2970,6 +2966,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         super().__init__(
             create_env_fn=[create_env_fn],
             policy=policy,
+            policy_factory=policy_factory,
             total_frames=total_frames,
             create_env_kwargs=[create_env_kwargs],
             max_frames_per_traj=max_frames_per_traj,
