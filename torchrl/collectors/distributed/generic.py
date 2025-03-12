@@ -231,7 +231,7 @@ def _run_collector(
                 # been updated
                 policy_weights.irecv(0)
             # the policy has been updated: we can simply update the weights
-            collector.update_policy_weights_(policy_weights)
+            collector.update_policy_weights_(policy_weights=policy_weights)
             _store.set(f"NODE_{rank}_out", b"updated")
         elif instruction.startswith(b"seeding"):
             seed = int(instruction.split(b"seeding_"))
@@ -468,6 +468,13 @@ class DistributedDataCollector(DataCollectorBase):
         if isinstance(policy, nn.Module):
             policy_weights = TensorDict.from_module(policy)
             policy_weights = policy_weights.data.lock_()
+        elif policy_factory is not None:
+            policy_weights = None
+            if remote_weights_updater is None:
+                raise RuntimeError(
+                    "remote_weights_updater must be passed along with "
+                    "a policy_factory."
+                )
         else:
             warnings.warn(_NON_NN_POLICY_WEIGHTS)
             policy_weights = TensorDict(lock=True)
@@ -554,6 +561,7 @@ class DistributedDataCollector(DataCollectorBase):
                 store=self._store,
                 policy_weights=self.policy_weights,
                 num_workers=self.num_workers,
+                sync=self._sync,
             )
         self.remote_weights_updater = remote_weights_updater
         self.local_weights_updater = local_weights_updater
@@ -840,7 +848,9 @@ class DistributedDataCollector(DataCollectorBase):
                         self._batches_since_weight_update[j]
                         > self.max_weight_update_interval
                     ):
-                        self.update_policy_weights_(rank)
+                        self.update_policy_weights_(
+                            policy_weights=None, worker_ids=rank
+                        )
 
         for i in range(self.num_workers):
             rank = i + 1
@@ -889,7 +899,7 @@ class DistributedDataCollector(DataCollectorBase):
                         _tracker.wait()
                     data = self._tensordict_out[i].clone()
                     if self.update_after_each_batch:
-                        self.update_policy_weights_(rank)
+                        self.update_policy_weights_(worker_ids=rank)
                     total_frames += data.numel()
                     if total_frames < self.total_frames:
                         if self._VERBOSE:
@@ -965,6 +975,8 @@ class DistributedRemoteWeightUpdater(RemoteWeightUpdaterBase):
         policy_weights (TensorDictBase): The current weights of the policy that need to be distributed
             to the workers.
         num_workers (int): The number of distributed workers that will receive the updated policy weights.
+        sync (bool): if ``True``, the sync happens synchronously (the server waits for the worker to have completed
+            the update to restart the run).
 
     Methods:
         update_weights: Updates the weights on specified or all distributed workers.
@@ -986,12 +998,19 @@ class DistributedRemoteWeightUpdater(RemoteWeightUpdaterBase):
 
     """
 
+    _VERBOSE = True
+
     def __init__(
-        self, store: dict[str, str], policy_weights: TensorDictBase, num_workers: int
+        self,
+        store: dict[str, str],
+        policy_weights: TensorDictBase,
+        num_workers: int,
+        sync: bool,
     ):
         self._store = store
         self.policy_weights = policy_weights
         self.num_workers = num_workers
+        self._sync = sync
         self._batches_since_weight_update = [0 for _ in range(self.num_workers)]
 
     def _sync_weights_with_worker(
@@ -1019,15 +1038,16 @@ class DistributedRemoteWeightUpdater(RemoteWeightUpdaterBase):
                 raise RuntimeError("worker_rank must be greater than 1")
             worker_rank = [worker_rank - 1]
         workers = range(self.num_workers) if worker_rank is None else worker_rank
+        weights = self.policy_weights if weights is None else weights
         for i in workers:
             rank = i + 1
             if self._VERBOSE:
                 torchrl_logger.info(f"updating weights of {rank}")
             self._store.set(f"NODE_{rank}_in", b"update_weights")
             if self._sync:
-                self.policy_weights.send(rank)
+                weights.send(rank)
             else:
-                self.policy_weights.isend(rank)
+                weights.isend(rank)
             self._batches_since_weight_update[i] = 0
             status = self._store.get(f"NODE_{rank}_out")
             if status != b"updated":

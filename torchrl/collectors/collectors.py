@@ -1054,7 +1054,9 @@ class SyncDataCollector(DataCollectorBase):
         *,
         worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
     ) -> None:
-        super().update_policy_weights_(policy_weights, worker_ids=worker_ids)
+        super().update_policy_weights_(
+            policy_weights=policy_weights, worker_ids=worker_ids
+        )
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
@@ -2376,7 +2378,9 @@ class MultiSyncDataCollector(_MultiDataCollector):
         *,
         worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
     ) -> None:
-        super().update_policy_weights_(policy_weights, worker_ids=worker_ids)
+        super().update_policy_weights_(
+            policy_weights=policy_weights, worker_ids=worker_ids
+        )
 
     @property
     def frames_per_batch_worker(self):
@@ -2743,7 +2747,9 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         *,
         worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
     ) -> None:
-        super().update_policy_weights_(policy_weights, worker_ids=worker_ids)
+        super().update_policy_weights_(
+            policy_weights=policy_weights, worker_ids=worker_ids
+        )
 
     @property
     def frames_per_batch_worker(self):

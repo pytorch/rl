@@ -343,7 +343,7 @@ class RayRemoteWeightUpdater(RemoteWeightUpdaterBase):
         self, worker_id: int, server_weights: TensorDictBase
     ) -> TensorDictBase:
         c = self.remote_collectors[worker_id]
-        c.update_policy_weights_.remote(server_weights)
+        c.update_policy_weights_.remote(policy_weights=server_weights)
         self._batches_since_weight_update[worker_id] = 0
 
     def _skip_update(self, worker_id: int) -> bool:

@@ -687,7 +687,7 @@ class RPCDataCollector(DataCollectorBase):
                     if self._batches_since_weight_update[j]
                     > self.max_weight_update_interval
                 ]
-                self.update_policy_weights_(ranks, wait=True)
+                self.update_policy_weights_(worker_ids=ranks, wait=True)
 
     def _next_async_rpc(self):
         if self._VERBOSE:
@@ -700,7 +700,7 @@ class RPCDataCollector(DataCollectorBase):
             future, i = self.futures.popleft()
             if future.done():
                 if self.update_after_each_batch:
-                    self.update_policy_weights_(workers=(i,), wait=False)
+                    self.update_policy_weights_(worker_ids=(i,), wait=False)
                 if self._VERBOSE:
                     torchrl_logger.info(f"future {i} is done")
                 data = future.value()
