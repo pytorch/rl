@@ -47,6 +47,10 @@ from torchrl.collectors.collectors import (
     MultiSyncDataCollector,
     SyncDataCollector,
 )
+from torchrl.collectors.weight_update import (
+    LocalWeightUpdaterBase,
+    RemoteWeightUpdaterBase,
+)
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import EnvCreator
 
@@ -262,6 +266,14 @@ class RPCDataCollector(DataCollectorBase):
             device used to pass data to main.
         tensorpipe_options (dict, optional): a dictionary of keyword argument
             to pass to :class:`torch.distributed.rpc.TensorPipeRpcBackendOption`.
+        local_weights_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
+            or its subclass, responsible for updating the policy weights on the local inference worker. This is
+            typically not used in :class:`~torchrl.collectors.distrbibuted.RPCDataCollector` as it focuses on
+            distributed environments.
+        remote_weights_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
+            or its subclass, responsible for updating the policy weights on remote inference workers using RPC.
+            If not provided, an :class:`~torchrl.collectors.distributed.RPCRemoteWeightUpdater` will be used by default, which
+            handles weight synchronization via RPC.
 
     """
 
@@ -296,6 +308,8 @@ class RPCDataCollector(DataCollectorBase):
         tcp_port=None,
         visible_devices=None,
         tensorpipe_options=None,
+        remote_weights_updater: RemoteWeightUpdaterBase | None = None,
+        local_weights_updater: LocalWeightUpdaterBase | None = None,
     ):
         if collector_class == "async":
             collector_class = MultiaSyncDataCollector
@@ -393,6 +407,16 @@ class RPCDataCollector(DataCollectorBase):
                 tensorpipe_options
             )
         self._init()
+        if remote_weights_updater is None:
+            remote_weights_updater = RPCRemoteWeightUpdater(
+                collector_infos=self.collector_infos,
+                collector_class=self.collector_class,
+                collector_rrefs=self.collector_rrefs,
+                policy_weights=self.policy_weights,
+                num_workers=self.num_workers,
+            )
+        self.local_weights_updater = local_weights_updater
+        self.remote_weights_updater = remote_weights_updater
 
     @property
     def device(self) -> list[torch.device]:
@@ -665,28 +689,6 @@ class RPCDataCollector(DataCollectorBase):
                 ]
                 self.update_policy_weights_(ranks, wait=True)
 
-    def update_policy_weights_(self, workers=None, wait=True) -> None:
-        if workers is None:
-            workers = list(range(self.num_workers))
-        futures = []
-        for i in workers:
-            if self._VERBOSE:
-                torchrl_logger.info(f"calling update on worker {i}")
-            futures.append(
-                rpc.rpc_async(
-                    self.collector_infos[i],
-                    self.collector_class.update_policy_weights_,
-                    args=(self.collector_rrefs[i], self.policy_weights.detach()),
-                )
-            )
-        if wait:
-            for i in workers:
-                if self._VERBOSE:
-                    torchrl_logger.info(f"waiting for worker {i}")
-                futures[i].wait()
-                if self._VERBOSE:
-                    torchrl_logger.info("got it!")
-
     def _next_async_rpc(self):
         if self._VERBOSE:
             torchrl_logger.info("next async")
@@ -792,3 +794,100 @@ class RPCDataCollector(DataCollectorBase):
         else:
             raise NotImplementedError(f"Unknown launcher {self.launcher}")
         self._shutdown = True
+
+
+class RPCRemoteWeightUpdater(RemoteWeightUpdaterBase):
+    """A remote weight updater for synchronizing policy weights across remote workers using RPC.
+
+    The `RPCRemoteWeightUpdater` class provides a mechanism for updating the weights of a policy
+    across remote inference workers using RPC. It is designed to work with the :class:`~torchrl.collectors.distributed.RPCDataCollector`
+    to ensure that each worker receives the latest policy weights.
+    This class is typically used in distributed data collection scenarios where remote workers
+    are managed via RPC and need to be kept in sync with the central policy weights.
+
+    Args:
+        collector_infos: Information about the collectors, used for RPC communication.
+        collector_class: The class of the collectors being used.
+        collector_rrefs: Remote references to the collectors.
+        policy_weights (TensorDictBase): The current weights of the policy that need to be distributed
+            to the workers.
+        num_workers (int): The number of remote workers that will receive the updated policy weights.
+
+    Methods:
+        update_weights: Updates the weights on specified or all remote workers using RPC.
+        all_worker_ids: Returns a list of all worker identifiers (not implemented in this class).
+        _sync_weights_with_worker: Synchronizes the server weights with a specific worker (not implemented).
+        _get_server_weights: Retrieves the latest weights from the server (not implemented).
+        _maybe_map_weights: Optionally maps server weights before distribution (not implemented).
+
+    .. note::
+        This class assumes that the server weights can be directly applied to the remote workers
+        without any additional processing. If your use case requires more complex weight mapping or
+        synchronization logic, consider extending `RemoteWeightUpdaterBase` with a custom implementation.
+
+    .. seealso:: :class:`~torchrl.collectors.RemoteWeightUpdaterBase` and
+        :class:`~torchrl.collectors.distributed.RPCDataCollector`.
+
+    """
+
+    _VERBOSE = VERBOSE  # for debugging
+
+    def __init__(
+        self,
+        collector_infos,
+        collector_class,
+        collector_rrefs,
+        policy_weights: TensorDictBase,
+        num_workers: int,
+    ):
+        super().__init__()
+        self.collector_infos = collector_infos
+        self.collector_class = collector_class
+        self.collector_rrefs = collector_rrefs
+        self.policy_weights = policy_weights
+        self.num_workers = num_workers
+
+    def _sync_weights_with_worker(
+        self, worker_id: int | torch.device, server_weights: TensorDictBase
+    ) -> TensorDictBase:
+        raise NotImplementedError
+
+    def _get_server_weights(self) -> TensorDictBase:
+        raise NotImplementedError
+
+    def _maybe_map_weights(self, server_weights: TensorDictBase) -> TensorDictBase:
+        raise NotImplementedError
+
+    def all_worker_ids(self) -> list[int] | list[torch.device]:
+        raise NotImplementedError
+
+    def update_weights(
+        self,
+        weights: TensorDictBase | None = None,
+        worker_ids: torch.device | int | list[int] | list[torch.device] | None = None,
+        **kwargs,
+    ):
+        workers = worker_ids
+        if isinstance(worker_ids, int):
+            workers = [worker_ids]
+        if workers is None:
+            workers = list(range(self.num_workers))
+        futures = []
+        weights = self.policy_weights.data if weights is None else weights
+        for i in workers:
+            if self._VERBOSE:
+                torchrl_logger.info(f"calling update on worker {i}")
+            futures.append(
+                rpc.rpc_async(
+                    self.collector_infos[i],
+                    self.collector_class.update_policy_weights_,
+                    args=(self.collector_rrefs[i], weights),
+                )
+            )
+        if kwargs.get("wait"):
+            for i in workers:
+                if self._VERBOSE:
+                    torchrl_logger.info(f"waiting for worker {i}")
+                futures[i].wait()
+                if self._VERBOSE:
+                    torchrl_logger.info("got it!")
