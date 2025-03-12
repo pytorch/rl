@@ -49,7 +49,7 @@ class RayReplayBuffer(ReplayBuffer):
     """A Ray implementation of the Replay Buffer that can be extended and sampled remotely.
 
     Keyword Args:
-        ray_init_kwargs (dict[str, Any], optiona): keyword arguments to pass to `ray.init()`.
+        ray_init_config (dict[str, Any], optiona): keyword arguments to pass to `ray.init()`.
         remote_config (dict[str, Any], optiona): keyword arguments to pass to `cls.as_remote()`.
             Defaults to `torchrl.collectors.distributed.ray.DEFAULT_REMOTE_CLASS_CONFIG`.
 
@@ -114,7 +114,7 @@ class RayReplayBuffer(ReplayBuffer):
     def __init__(
         self,
         *args,
-        ray_init_kwargs: dict[str, Any] | None = None,
+        ray_init_config: dict[str, Any] | None = None,
         remote_config: dict[str, Any] | None = None,
         **kwargs,
     ) -> None:
@@ -123,11 +123,11 @@ class RayReplayBuffer(ReplayBuffer):
                 "ray library not found, unable to create a RayReplayBuffer. "
             ) from RAY_ERR
         if not ray.is_initialized():
-            if ray_init_kwargs is None:
+            if ray_init_config is None:
                 from torchrl.collectors.distributed.ray import DEFAULT_RAY_INIT_CONFIG
 
-                ray_init_kwargs = DEFAULT_RAY_INIT_CONFIG
-            ray.init(**ray_init_kwargs)
+                ray_init_config = DEFAULT_RAY_INIT_CONFIG
+            ray.init(**ray_init_config)
 
         remote_cls = ReplayBuffer.as_remote(remote_config).remote
         self._rb = remote_cls(*args, **kwargs)
