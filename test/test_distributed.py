@@ -11,10 +11,19 @@ import argparse
 import os
 import sys
 import time
+from functools import partial
 
 import pytest
+from tensordict import TensorDict
 from tensordict.nn import TensorDictModuleBase
 from torchrl._utils import logger as torchrl_logger
+from torchrl.data import (
+    LazyTensorStorage,
+    RandomSampler,
+    RayReplayBuffer,
+    RoundRobinWriter,
+    SamplerWithoutReplacement,
+)
 
 try:
     import ray
@@ -435,6 +444,15 @@ class TestRayCollector(DistributedCollectorBase):
     to avoid potential deadlocks when combining Ray and multiprocessing.
     """
 
+    @pytest.fixture(autouse=True, scope="class")
+    def start_ray(self):
+        from torchrl.collectors.distributed.ray import DEFAULT_RAY_INIT_CONFIG
+
+        ray.init(**DEFAULT_RAY_INIT_CONFIG)
+
+        yield
+        ray.shutdown()
+
     @classmethod
     def distributed_class(cls) -> type:
         return RayCollector
@@ -551,6 +569,29 @@ class TestRayCollector(DistributedCollectorBase):
         assert (last_batch["action"] == 2).all(), last_batch["action"]
         collector.shutdown()
         assert total == total_frames
+
+    @pytest.mark.parametrize("storage", [None, partial(LazyTensorStorage, 1000)])
+    @pytest.mark.parametrize(
+        "sampler", [None, partial(RandomSampler), SamplerWithoutReplacement]
+    )
+    @pytest.mark.parametrize("writer", [None, partial(RoundRobinWriter)])
+    def test_ray_replaybuffer(self, storage, sampler, writer):
+        kwargs = self.distributed_kwargs()
+        kwargs["remote_config"] = kwargs.pop("remote_configs")
+        rb = RayReplayBuffer(
+            storage=storage,
+            sampler=sampler,
+            writer=writer,
+            batch_size=32,
+            **kwargs,
+        )
+        td = TensorDict(a=torch.arange(100, 200), batch_size=[100])
+        index = rb.extend(td)
+        assert (index == torch.arange(100)).all()
+        for _ in range(10):
+            sample = rb.sample()
+            if sampler is SamplerWithoutReplacement:
+                assert sample["a"].unique().numel() == sample.numel()
 
 
 if __name__ == "__main__":
