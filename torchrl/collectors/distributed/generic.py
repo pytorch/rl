@@ -14,7 +14,7 @@ from datetime import timedelta
 from typing import Callable, OrderedDict
 
 import torch.cuda
-from tensordict import TensorDict
+from tensordict import TensorDict, TensorDictBase
 from torch import nn
 
 from torchrl._utils import _ProcessNoWarn, logger as torchrl_logger, VERBOSE
@@ -270,7 +270,15 @@ class DistributedDataCollector(DataCollectorBase):
 
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
+            .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
+                pickled directly), the :arg:`policy_factory` should be used instead.
+
     Keyword Args:
+        policy_factory (Callable[[], Callable], optional): a callable that returns
+            a policy instance. This is exclusive with the `policy` argument.
+
+            .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.
+
         frames_per_batch (int): A keyword-only argument representing the total
             number of elements in a batch.
         total_frames (int): A keyword-only argument representing the total
@@ -406,8 +414,9 @@ class DistributedDataCollector(DataCollectorBase):
     def __init__(
         self,
         create_env_fn,
-        policy,
+        policy: Callable[[TensorDictBase], TensorDictBase] | None = None,
         *,
+        policy_factory: Callable[[], Callable] | None = None,
         frames_per_batch: int,
         total_frames: int = -1,
         device: torch.device | list[torch.device] = None,
