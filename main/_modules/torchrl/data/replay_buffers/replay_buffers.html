@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+9cd95d5) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+49a8a42) &#x25BC</span></a>
     </div>
     
 
@@ -444,6 +444,8 @@
 <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">torch._dynamo</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_compiling</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">partial</span>
+
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">is_tensor_collection</span><span class="p">,</span>
     <span class="n">is_tensorclass</span><span class="p">,</span>
@@ -487,21 +489,24 @@
     <span class="n">WriterEnsemble</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">DEVICE_TYPING</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">_InvertTransform</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">_InvertTransform</span><span class="p">,</span> <span class="n">Transform</span>
 
 
 <div class="viewcode-block" id="ReplayBuffer"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">ReplayBuffer</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A generic, composable replay buffer class.</span>
 
 <span class="sd">    Keyword Args:</span>
-<span class="sd">        storage (Storage, optional): the storage to be used. If none is provided</span>
-<span class="sd">            a default :class:`~torchrl.data.replay_buffers.ListStorage` with</span>
+<span class="sd">        storage (Storage, Callable[[], Storage], optional): the storage to be used.</span>
+<span class="sd">            If a callable is passed, it is used as constructor for the storage.</span>
+<span class="sd">            If none is provided a default :class:`~torchrl.data.replay_buffers.ListStorage` with</span>
 <span class="sd">            ``max_size`` of ``1_000`` will be created.</span>
-<span class="sd">        sampler (Sampler, optional): the sampler to be used. If none is provided,</span>
-<span class="sd">            a default :class:`~torchrl.data.replay_buffers.RandomSampler`</span>
+<span class="sd">        sampler (Sampler, Callable[[], Sampler], optional): the sampler to be used.</span>
+<span class="sd">            If a callable is passed, it is used as constructor for the sampler.</span>
+<span class="sd">            If none is provided, a default :class:`~torchrl.data.replay_buffers.RandomSampler`</span>
 <span class="sd">            will be used.</span>
-<span class="sd">        writer (Writer, optional): the writer to be used. If none is provided</span>
-<span class="sd">            a default :class:`~torchrl.data.replay_buffers.RoundRobinWriter`</span>
+<span class="sd">        writer (Writer, Callable[[], Writer], optional): the writer to be used.</span>
+<span class="sd">            If a callable is passed, it is used as constructor for the writer.</span>
+<span class="sd">            If none is provided a default :class:`~torchrl.data.replay_buffers.RoundRobinWriter`</span>
 <span class="sd">            will be used.</span>
 <span class="sd">        collate_fn (callable, optional): merges a list of samples to form a</span>
 <span class="sd">            mini-batch of Tensor(s)/outputs.  Used when using batched</span>
@@ -511,12 +516,17 @@
 <span class="sd">            samples.</span>
 <span class="sd">        prefetch (int, optional): number of next batches to be prefetched</span>
 <span class="sd">            using multithreading. Defaults to None (no prefetching).</span>
-<span class="sd">        transform (Transform, optional): Transform to be executed when</span>
+<span class="sd">        transform (Transform or Callable[[Any], Any], optional): Transform to be executed when</span>
 <span class="sd">            :meth:`sample` is called.</span>
 <span class="sd">            To chain transforms use the :class:`~torchrl.envs.Compose` class.</span>
 <span class="sd">            Transforms should be used with :class:`tensordict.TensorDict`</span>
 <span class="sd">            content. A generic callable can also be passed if the replay buffer</span>
 <span class="sd">            is used with PyTree structures (see example below).</span>
+<span class="sd">            Unlike storages, writers and samplers, transform constructors must</span>
+<span class="sd">            be passed as separate keyword argument :attr:`transform_factory`,</span>
+<span class="sd">            as it is impossible to distinguish a constructor from a transform.</span>
+<span class="sd">        transform_factory (Callable[[], Callable], optional): a factory for the</span>
+<span class="sd">            transform. Exclusive with :attr:`transform`.</span>
 <span class="sd">        batch_size (int, optional): the batch size to be used when sample() is</span>
 <span class="sd">            called.</span>
 
@@ -636,32 +646,28 @@
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">storage</span><span class="p">:</span> <span class="n">Storage</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">sampler</span><span class="p">:</span> <span class="n">Sampler</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">writer</span><span class="p">:</span> <span class="n">Writer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">storage</span><span class="p">:</span> <span class="n">Storage</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Storage</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">sampler</span><span class="p">:</span> <span class="n">Sampler</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Sampler</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">writer</span><span class="p">:</span> <span class="n">Writer</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Writer</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">collate_fn</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">pin_memory</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">prefetch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">transform</span><span class="p">:</span> <span class="n">Transform</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># noqa-F821</span>
+        <span class="n">transform</span><span class="p">:</span> <span class="n">Transform</span> <span class="o">|</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># noqa-F821</span>
+        <span class="n">transform_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Transform</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">]</span>
+        <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># noqa-F821</span>
         <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">dim_extend</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">checkpointer</span><span class="p">:</span> <span class="n">StorageCheckpointerBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
+        <span class="n">checkpointer</span><span class="p">:</span> <span class="n">StorageCheckpointerBase</span>  <span class="c1"># noqa: F821</span>
+        <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">StorageCheckpointerBase</span><span class="p">]</span>  <span class="c1"># noqa: F821</span>
+        <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
         <span class="n">generator</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">shared</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">compilable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">storage</span>
-            <span class="k">if</span> <span class="n">storage</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-            <span class="k">else</span> <span class="n">ListStorage</span><span class="p">(</span><span class="n">max_size</span><span class="o">=</span><span class="mi">1_000</span><span class="p">,</span> <span class="n">compilable</span><span class="o">=</span><span class="n">compilable</span><span class="p">)</span>
-        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_make_storage</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">compilable</span><span class="o">=</span><span class="n">compilable</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">attach</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span> <span class="o">=</span> <span class="n">sampler</span> <span class="k">if</span> <span class="n">sampler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">RandomSampler</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">writer</span>
-            <span class="k">if</span> <span class="n">writer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-            <span class="k">else</span> <span class="n">RoundRobinWriter</span><span class="p">(</span><span class="n">compilable</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">compilable</span><span class="p">))</span>
-        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_make_sampler</span><span class="p">(</span><span class="n">sampler</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_make_writer</span><span class="p">(</span><span class="n">writer</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span><span class="o">.</span><span class="n">register_storage</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_get_collate_fn</span><span class="p">(</span><span class="n">collate_fn</span><span class="p">)</span>
@@ -678,24 +684,8 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_replay_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">RLock</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_futures_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">RLock</span><span class="p">()</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-            <span class="n">_CallableTransform</span><span class="p">,</span>
-            <span class="n">Compose</span><span class="p">,</span>
-            <span class="n">Transform</span><span class="p">,</span>
-        <span class="p">)</span>
 
-        <span class="k">if</span> <span class="n">transform</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">transform</span> <span class="o">=</span> <span class="n">Compose</span><span class="p">()</span>
-        <span class="k">elif</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">transform</span><span class="p">,</span> <span class="n">Compose</span><span class="p">):</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">transform</span><span class="p">,</span> <span class="n">Transform</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">callable</span><span class="p">(</span><span class="n">transform</span><span class="p">):</span>
-                <span class="n">transform</span> <span class="o">=</span> <span class="n">_CallableTransform</span><span class="p">(</span><span class="n">transform</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">transform</span><span class="p">,</span> <span class="n">Transform</span><span class="p">):</span>
-                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                    <span class="s2">&quot;transform must be either a Transform instance or a callable.&quot;</span>
-                <span class="p">)</span>
-            <span class="n">transform</span> <span class="o">=</span> <span class="n">Compose</span><span class="p">(</span><span class="n">transform</span><span class="p">)</span>
-        <span class="n">transform</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_transform</span> <span class="o">=</span> <span class="n">transform</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_transform</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_make_transform</span><span class="p">(</span><span class="n">transform</span><span class="p">,</span> <span class="n">transform_factory</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">batch_size</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">prefetch</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -719,6 +709,81 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">dim_extend</span> <span class="o">=</span> <span class="n">dim_extend</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">checkpointer</span> <span class="o">=</span> <span class="n">checkpointer</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">set_rng</span><span class="p">(</span><span class="n">generator</span><span class="o">=</span><span class="n">generator</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_make_storage</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">storage</span><span class="p">:</span> <span class="n">Storage</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Storage</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">compilable</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Storage</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">storage</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">ListStorage</span><span class="p">(</span><span class="n">max_size</span><span class="o">=</span><span class="mi">1_000</span><span class="p">,</span> <span class="n">compilable</span><span class="o">=</span><span class="n">compilable</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">Storage</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">storage</span>
+        <span class="k">elif</span> <span class="nb">callable</span><span class="p">(</span><span class="n">storage</span><span class="p">):</span>
+            <span class="n">storage</span> <span class="o">=</span> <span class="n">storage</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">Storage</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;storage must be either a Storage or a callable returning a storage instance.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">storage</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_make_sampler</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">sampler</span><span class="p">:</span> <span class="n">Sampler</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Sampler</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Sampler</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">sampler</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">RandomSampler</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">sampler</span><span class="p">,</span> <span class="n">Sampler</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">sampler</span>
+        <span class="k">elif</span> <span class="nb">callable</span><span class="p">(</span><span class="n">sampler</span><span class="p">):</span>
+            <span class="n">sampler</span> <span class="o">=</span> <span class="n">sampler</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">sampler</span><span class="p">,</span> <span class="n">Sampler</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;sampler must be either a Sampler or a callable returning a sampler instance.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">sampler</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_make_writer</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">writer</span><span class="p">:</span> <span class="n">Writer</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Writer</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Writer</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">writer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">RoundRobinWriter</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">writer</span><span class="p">,</span> <span class="n">Writer</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">writer</span>
+        <span class="k">elif</span> <span class="nb">callable</span><span class="p">(</span><span class="n">writer</span><span class="p">):</span>
+            <span class="n">writer</span> <span class="o">=</span> <span class="n">writer</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">writer</span><span class="p">,</span> <span class="n">Writer</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;writer must be either a Writer or a callable returning a writer instance.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">writer</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_make_transform</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">transform</span><span class="p">:</span> <span class="n">Transform</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Transform</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">transform_factory</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Transform</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+            <span class="n">_CallableTransform</span><span class="p">,</span>
+            <span class="n">Compose</span><span class="p">,</span>
+            <span class="n">Transform</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">transform_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">transform</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="s2">&quot;transform and transform_factory cannot be used simultaneously&quot;</span>
+                <span class="p">)</span>
+            <span class="n">transform</span> <span class="o">=</span> <span class="n">transform_factory</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">transform</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">transform</span> <span class="o">=</span> <span class="n">Compose</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">transform</span><span class="p">,</span> <span class="n">Compose</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">transform</span><span class="p">,</span> <span class="n">Transform</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">callable</span><span class="p">(</span><span class="n">transform</span><span class="p">):</span>
+                <span class="n">transform</span> <span class="o">=</span> <span class="n">_CallableTransform</span><span class="p">(</span><span class="n">transform</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">transform</span><span class="p">,</span> <span class="n">Transform</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;transform must be either a Transform instance or a callable.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">transform</span> <span class="o">=</span> <span class="n">Compose</span><span class="p">(</span><span class="n">transform</span><span class="p">)</span>
+        <span class="n">transform</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">transform</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">share</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">shared</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">shared</span> <span class="o">=</span> <span class="n">shared</span>
@@ -811,18 +876,25 @@
     <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">Compose</span>
 
-        <span class="n">storage</span> <span class="o">=</span> <span class="n">textwrap</span><span class="o">.</span><span class="n">indent</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;storage=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot; &quot;</span> <span class="o">*</span> <span class="mi">4</span><span class="p">)</span>
-        <span class="n">writer</span> <span class="o">=</span> <span class="n">textwrap</span><span class="o">.</span><span class="n">indent</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;writer=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_writer</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot; &quot;</span> <span class="o">*</span> <span class="mi">4</span><span class="p">)</span>
-        <span class="n">sampler</span> <span class="o">=</span> <span class="n">textwrap</span><span class="o">.</span><span class="n">indent</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;sampler=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot; &quot;</span> <span class="o">*</span> <span class="mi">4</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transform</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="p">(</span>
-            <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_transform</span><span class="p">,</span> <span class="n">Compose</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_transform</span><span class="p">)</span>
+        <span class="n">storage</span> <span class="o">=</span> <span class="n">textwrap</span><span class="o">.</span><span class="n">indent</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;storage=</span><span class="si">{</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;_storage&#39;</span><span class="p">,</span><span class="w"> </span><span class="kc">None</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot; &quot;</span> <span class="o">*</span> <span class="mi">4</span><span class="p">)</span>
+        <span class="n">writer</span> <span class="o">=</span> <span class="n">textwrap</span><span class="o">.</span><span class="n">indent</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;writer=</span><span class="si">{</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;_writer&#39;</span><span class="p">,</span><span class="w"> </span><span class="kc">None</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot; &quot;</span> <span class="o">*</span> <span class="mi">4</span><span class="p">)</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="n">textwrap</span><span class="o">.</span><span class="n">indent</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;sampler=</span><span class="si">{</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;_sampler&#39;</span><span class="p">,</span><span class="w"> </span><span class="kc">None</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot; &quot;</span> <span class="o">*</span> <span class="mi">4</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_transform&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="p">(</span>
+            <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_transform</span><span class="p">,</span> <span class="n">Compose</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="ow">not</span> <span class="nb">len</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_transform&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
         <span class="p">):</span>
-            <span class="n">transform</span> <span class="o">=</span> <span class="n">textwrap</span><span class="o">.</span><span class="n">indent</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;transform=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_transform</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot; &quot;</span> <span class="o">*</span> <span class="mi">4</span><span class="p">)</span>
+            <span class="n">transform</span> <span class="o">=</span> <span class="n">textwrap</span><span class="o">.</span><span class="n">indent</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;transform=</span><span class="si">{</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;_transform&#39;</span><span class="p">,</span><span class="w"> </span><span class="kc">None</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot; &quot;</span> <span class="o">*</span> <span class="mi">4</span>
+            <span class="p">)</span>
             <span class="n">transform</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_transform</span><span class="si">}</span><span class="s2">, &quot;</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">transform</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
-        <span class="n">batch_size</span> <span class="o">=</span> <span class="n">textwrap</span><span class="o">.</span><span class="n">indent</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;batch_size=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_batch_size</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot; &quot;</span> <span class="o">*</span> <span class="mi">4</span><span class="p">)</span>
-        <span class="n">collate_fn</span> <span class="o">=</span> <span class="n">textwrap</span><span class="o">.</span><span class="n">indent</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;collate_fn=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_collate_fn</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot; &quot;</span> <span class="o">*</span> <span class="mi">4</span><span class="p">)</span>
+        <span class="n">batch_size</span> <span class="o">=</span> <span class="n">textwrap</span><span class="o">.</span><span class="n">indent</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;batch_size=</span><span class="si">{</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;_batch_size&#39;</span><span class="p">,</span><span class="w"> </span><span class="kc">None</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot; &quot;</span> <span class="o">*</span> <span class="mi">4</span>
+        <span class="p">)</span>
+        <span class="n">collate_fn</span> <span class="o">=</span> <span class="n">textwrap</span><span class="o">.</span><span class="n">indent</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;collate_fn=</span><span class="si">{</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;_collate_fn&#39;</span><span class="p">,</span><span class="w"> </span><span class="kc">None</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot; &quot;</span> <span class="o">*</span> <span class="mi">4</span>
+        <span class="p">)</span>
         <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(</span><span class="se">\n</span><span class="si">{</span><span class="n">storage</span><span class="si">}</span><span class="s2">, </span><span class="se">\n</span><span class="si">{</span><span class="n">sampler</span><span class="si">}</span><span class="s2">, </span><span class="se">\n</span><span class="si">{</span><span class="n">writer</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">transform</span><span class="si">}</span><span class="se">\n</span><span class="si">{</span><span class="n">batch_size</span><span class="si">}</span><span class="s2">, </span><span class="se">\n</span><span class="si">{</span><span class="n">collate_fn</span><span class="si">}</span><span class="s2">)&quot;</span>
 
     <span class="nd">@pin_memory_output</span>
@@ -1254,7 +1326,7 @@
 
     <span class="k">def</span><span class="w"> </span><span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
         <span class="n">state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rng</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_rng&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">rng_state</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
                 <span class="n">rng_state</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rng</span><span class="o">.</span><span class="n">get_state</span><span class="p">()</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span>
                 <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rng</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
@@ -1451,13 +1523,17 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;TensorDict-specific wrapper around the :class:`~torchrl.data.ReplayBuffer` class.</span>
 
 <span class="sd">    Keyword Args:</span>
-<span class="sd">        storage (Storage, optional): the storage to be used. If none is provided</span>
-<span class="sd">            a default :class:`~torchrl.data.replay_buffers.ListStorage` with</span>
+<span class="sd">        storage (Storage, Callable[[], Storage], optional): the storage to be used.</span>
+<span class="sd">            If a callable is passed, it is used as constructor for the storage.</span>
+<span class="sd">            If none is provided a default :class:`~torchrl.data.replay_buffers.ListStorage` with</span>
 <span class="sd">            ``max_size`` of ``1_000`` will be created.</span>
-<span class="sd">        sampler (Sampler, optional): the sampler to be used. If none is provided</span>
-<span class="sd">            a default RandomSampler() will be used.</span>
-<span class="sd">        writer (Writer, optional): the writer to be used. If none is provided</span>
-<span class="sd">            a default :class:`~torchrl.data.replay_buffers.RoundRobinWriter`</span>
+<span class="sd">        sampler (Sampler, Callable[[], Sampler], optional): the sampler to be used.</span>
+<span class="sd">            If a callable is passed, it is used as constructor for the sampler.</span>
+<span class="sd">            If none is provided, a default :class:`~torchrl.data.replay_buffers.RandomSampler`</span>
+<span class="sd">            will be used.</span>
+<span class="sd">        writer (Writer, Callable[[], Writer], optional): the writer to be used.</span>
+<span class="sd">            If a callable is passed, it is used as constructor for the writer.</span>
+<span class="sd">            If none is provided a default :class:`~torchrl.data.replay_buffers.TensorDictRoundRobinWriter`</span>
 <span class="sd">            will be used.</span>
 <span class="sd">        collate_fn (callable, optional): merges a list of samples to form a</span>
 <span class="sd">            mini-batch of Tensor(s)/outputs.  Used when using batched</span>
@@ -1467,13 +1543,17 @@
 <span class="sd">            samples.</span>
 <span class="sd">        prefetch (int, optional): number of next batches to be prefetched</span>
 <span class="sd">            using multithreading. Defaults to None (no prefetching).</span>
-<span class="sd">        transform (Transform, optional): Transform to be executed when</span>
-<span class="sd">            sample() is called.</span>
+<span class="sd">        transform (Transform or Callable[[Any], Any], optional): Transform to be executed when</span>
+<span class="sd">            :meth:`sample` is called.</span>
 <span class="sd">            To chain transforms use the :class:`~torchrl.envs.Compose` class.</span>
 <span class="sd">            Transforms should be used with :class:`tensordict.TensorDict`</span>
-<span class="sd">            content. If used with other structures, the transforms should be</span>
-<span class="sd">            encoded with a ``&quot;data&quot;`` leading key that will be used to</span>
-<span class="sd">            construct a tensordict from the non-tensordict content.</span>
+<span class="sd">            content. A generic callable can also be passed if the replay buffer</span>
+<span class="sd">            is used with PyTree structures (see example below).</span>
+<span class="sd">            Unlike storages, writers and samplers, transform constructors must</span>
+<span class="sd">            be passed as separate keyword argument :attr:`transform_factory`,</span>
+<span class="sd">            as it is impossible to distinguish a constructor from a transform.</span>
+<span class="sd">        transform_factory (Callable[[], Callable], optional): a factory for the</span>
+<span class="sd">            transform. Exclusive with :attr:`transform`.</span>
 <span class="sd">        batch_size (int, optional): the batch size to be used when sample() is</span>
 <span class="sd">            called.</span>
 
@@ -1590,10 +1670,9 @@
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">priority_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;td_error&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">writer</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;writer&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">writer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;writer&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">TensorDictRoundRobinWriter</span><span class="p">(</span>
-                <span class="n">compilable</span><span class="o">=</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;compilable&quot;</span><span class="p">)</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;writer&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">partial</span><span class="p">(</span>
+                <span class="n">TensorDictRoundRobinWriter</span><span class="p">,</span> <span class="n">compilable</span><span class="o">=</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;compilable&quot;</span><span class="p">)</span>
             <span class="p">)</span>
-
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">priority_key</span> <span class="o">=</span> <span class="n">priority_key</span>
 
@@ -1802,8 +1881,9 @@
 <span class="sd">        beta (:obj:`float`): importance sampling negative exponent.</span>
 <span class="sd">        eps (:obj:`float`): delta added to the priorities to ensure that the buffer</span>
 <span class="sd">            does not contain null priorities.</span>
-<span class="sd">        storage (Storage, optional): the storage to be used. If none is provided</span>
-<span class="sd">            a default :class:`~torchrl.data.replay_buffers.ListStorage` with</span>
+<span class="sd">        storage (Storage, Callable[[], Storage], optional): the storage to be used.</span>
+<span class="sd">            If a callable is passed, it is used as constructor for the storage.</span>
+<span class="sd">            If none is provided a default :class:`~torchrl.data.replay_buffers.ListStorage` with</span>
 <span class="sd">            ``max_size`` of ``1_000`` will be created.</span>
 <span class="sd">        collate_fn (callable, optional): merges a list of samples to form a</span>
 <span class="sd">            mini-batch of Tensor(s)/outputs.  Used when using batched</span>
@@ -1813,13 +1893,17 @@
 <span class="sd">            samples.</span>
 <span class="sd">        prefetch (int, optional): number of next batches to be prefetched</span>
 <span class="sd">            using multithreading. Defaults to None (no prefetching).</span>
-<span class="sd">        transform (Transform, optional): Transform to be executed when</span>
-<span class="sd">            sample() is called.</span>
+<span class="sd">        transform (Transform or Callable[[Any], Any], optional): Transform to be executed when</span>
+<span class="sd">            :meth:`sample` is called.</span>
 <span class="sd">            To chain transforms use the :class:`~torchrl.envs.Compose` class.</span>
 <span class="sd">            Transforms should be used with :class:`tensordict.TensorDict`</span>
-<span class="sd">            content. If used with other structures, the transforms should be</span>
-<span class="sd">            encoded with a ``&quot;data&quot;`` leading key that will be used to</span>
-<span class="sd">            construct a tensordict from the non-tensordict content.</span>
+<span class="sd">            content. A generic callable can also be passed if the replay buffer</span>
+<span class="sd">            is used with PyTree structures (see example below).</span>
+<span class="sd">            Unlike storages, writers and samplers, transform constructors must</span>
+<span class="sd">            be passed as separate keyword argument :attr:`transform_factory`,</span>
+<span class="sd">            as it is impossible to distinguish a constructor from a transform.</span>
+<span class="sd">        transform_factory (Callable[[], Callable], optional): a factory for the</span>
+<span class="sd">            transform. Exclusive with :attr:`transform`.</span>
 <span class="sd">        batch_size (int, optional): the batch size to be used when sample() is</span>
 <span class="sd">            called.</span>
 
@@ -1951,8 +2035,7 @@
         <span class="n">shared</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">compilable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">storage</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">storage</span> <span class="o">=</span> <span class="n">ListStorage</span><span class="p">(</span><span class="n">max_size</span><span class="o">=</span><span class="mi">1_000</span><span class="p">)</span>
+        <span class="n">storage</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_make_storage</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">compilable</span><span class="o">=</span><span class="n">compilable</span><span class="p">)</span>
         <span class="n">sampler</span> <span class="o">=</span> <span class="n">PrioritizedSampler</span><span class="p">(</span>
             <span class="n">storage</span><span class="o">.</span><span class="n">max_size</span><span class="p">,</span> <span class="n">alpha</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">eps</span><span class="p">,</span> <span class="n">reduction</span><span class="o">=</span><span class="n">reduction</span>
         <span class="p">)</span>
@@ -1972,14 +2055,14 @@
         <span class="p">)</span></div>
 
 
-<span class="nd">@accept_remote_rref_udf_invocation</span>
+<div class="viewcode-block" id="RemoteTensorDictReplayBuffer"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.RemoteTensorDictReplayBuffer.html#torchrl.data.RemoteTensorDictReplayBuffer">[docs]</a><span class="nd">@accept_remote_rref_udf_invocation</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">RemoteTensorDictReplayBuffer</span><span class="p">(</span><span class="n">TensorDictReplayBuffer</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A remote invocation friendly ReplayBuffer class. Public methods can be invoked by remote agents using `torch.rpc` or called locally as normal.&quot;&quot;&quot;</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span>
+<div class="viewcode-block" id="RemoteTensorDictReplayBuffer.sample"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.RemoteTensorDictReplayBuffer.html#torchrl.data.RemoteTensorDictReplayBuffer.sample">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">include_info</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -1987,13 +2070,13 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span>
             <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">include_info</span><span class="o">=</span><span class="n">include_info</span><span class="p">,</span> <span class="n">return_info</span><span class="o">=</span><span class="n">return_info</span>
-        <span class="p">)</span>
+        <span class="p">)</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<div class="viewcode-block" id="RemoteTensorDictReplayBuffer.add"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.RemoteTensorDictReplayBuffer.html#torchrl.data.RemoteTensorDictReplayBuffer.add">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">data</span><span class="p">)</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">extend</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordicts</span><span class="p">:</span> <span class="nb">list</span> <span class="o">|</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">tensordicts</span><span class="p">)</span>
+<div class="viewcode-block" id="RemoteTensorDictReplayBuffer.extend"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.RemoteTensorDictReplayBuffer.html#torchrl.data.RemoteTensorDictReplayBuffer.extend">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">extend</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordicts</span><span class="p">:</span> <span class="nb">list</span> <span class="o">|</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">tensordicts</span><span class="p">)</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">update_priority</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">priority</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
@@ -2001,7 +2084,7 @@
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">update_priority</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">priority</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">update_tensordict_priority</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">update_tensordict_priority</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">update_tensordict_priority</span><span class="p">(</span><span class="n">data</span><span class="p">)</span></div>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">InPlaceSampler</span><span class="p">:</span>

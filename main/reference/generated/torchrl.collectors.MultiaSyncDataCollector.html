@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+9cd95d5) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+49a8a42) &#x25BC</span></a>
     </div>
     
 
@@ -528,11 +528,28 @@ then the policy won’t be wrapped in a <code class="xref py py-class docutils l
 <li><p>In all other cases an attempt to wrap it will be undergone as such:
 <code class="docutils literal notranslate"><span class="pre">TensorDictModule(policy,</span> <span class="pre">in_keys=env_obs_key,</span> <span class="pre">out_keys=env.action_keys)</span></code>.</p></li>
 </ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If the policy needs to be passed as a policy factory (e.g., in case it mustn’t be serialized /
+pickled directly), the <a href="#id1"><span class="problematic" id="id2">:arg:`policy_factory`</span></a> should be used instead.</p>
+</div>
 </p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
+<li><p><strong>policy_factory</strong> (<em>Callable</em><em>[</em><em>[</em><em>]</em><em>, </em><em>Callable</em><em>]</em><em>, </em><em>optional</em>) – <p>a callable that returns
+a policy instance. This is exclusive with the <cite>policy</cite> argument.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><cite>policy_factory</cite> comes in handy whenever the policy cannot be serialized.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p><cite>policy_factory</cite> is currently not compatible with multiprocessed data
+collectors.</p>
+</div>
+</p></li>
 <li><p><strong>frames_per_batch</strong> (<em>int</em>) – A keyword-only argument representing the
 total number of elements in a batch.</p></li>
 <li><p><strong>total_frames</strong> (<em>int</em><em>, </em><em>optional</em>) – <p>A keyword-only argument representing the
@@ -655,7 +672,7 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 <li><p><strong>use_buffers</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a buffer will be used to stack the data.
 This isn’t compatible with environments with dynamic specs. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>
 for envs without dynamic specs, <code class="docutils literal notranslate"><span class="pre">False</span></code> for others.</p></li>
-<li><p><strong>replay_buffer</strong> (<a class="reference internal" href="torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer" title="torchrl.data.ReplayBuffer"><em>ReplayBuffer</em></a><em>, </em><em>optional</em>) – if provided, the collector will not yield tensordict
+<li><p><strong>replay_buffer</strong> (<a class="reference internal" href="torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer" title="torchrl.data.ReplayBuffer"><em>ReplayBuffer</em></a><em>, </em><em>optional</em>) – if provided, the collector will not yield tensordicts
 but populate the buffer instead. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 <li><p><strong>trust_policy</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a non-TensorDictModule policy will be trusted to be
 assumed to be compatible with the collector. This defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code> for CudaGraphModules

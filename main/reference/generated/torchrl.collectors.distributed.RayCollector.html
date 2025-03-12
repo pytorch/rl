@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+9cd95d5) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+49a8a42) &#x25BC</span></a>
     </div>
     
 
@@ -431,7 +431,7 @@
 <h1>RayCollector<a class="headerlink" href="#raycollector" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.collectors.distributed.RayCollector">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.collectors.distributed.</span></span><span class="sig-name descname"><span class="pre">RayCollector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">create_env_fn:</span> <span class="pre">Callable</span> <span class="pre">|</span> <span class="pre">EnvBase</span> <span class="pre">|</span> <span class="pre">list[Callable]</span> <span class="pre">|</span> <span class="pre">list[EnvBase],</span> <span class="pre">policy:</span> <span class="pre">Callable[[TensorDict],</span> <span class="pre">TensorDict],</span> <span class="pre">*,</span> <span class="pre">frames_per_batch:</span> <span class="pre">int,</span> <span class="pre">total_frames:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">-1,</span> <span class="pre">device:</span> <span class="pre">torch.device</span> <span class="pre">|</span> <span class="pre">list[torch.device]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">storing_device:</span> <span class="pre">torch.device</span> <span class="pre">|</span> <span class="pre">list[torch.device]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">env_device:</span> <span class="pre">torch.device</span> <span class="pre">|</span> <span class="pre">list[torch.device]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">policy_device:</span> <span class="pre">torch.device</span> <span class="pre">|</span> <span class="pre">list[torch.device]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">max_frames_per_traj=-1,</span> <span class="pre">init_random_frames=-1,</span> <span class="pre">reset_at_each_iter=False,</span> <span class="pre">postproc=None,</span> <span class="pre">split_trajs=False,</span> <span class="pre">exploration_type=InteractionType.RANDOM,</span> <span class="pre">collector_class:</span> <span class="pre">Callable[[TensorDict],</span> <span class="pre">TensorDict]</span> <span class="pre">=</span> <span class="pre">&lt;class</span> <span class="pre">'torchrl.collectors.collectors.SyncDataCollector'&gt;,</span> <span class="pre">collector_kwargs:</span> <span class="pre">dict</span> <span class="pre">|</span> <span class="pre">list[dict]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">num_workers_per_collector:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">1,</span> <span class="pre">sync:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False,</span> <span class="pre">ray_init_config:</span> <span class="pre">dict</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">remote_configs:</span> <span class="pre">dict</span> <span class="pre">|</span> <span class="pre">list[dict]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">num_collectors:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">update_after_each_batch=False,</span> <span class="pre">max_weight_update_interval=-1</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/distributed/ray.html#RayCollector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.distributed.RayCollector" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.collectors.distributed.</span></span><span class="sig-name descname"><span class="pre">RayCollector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">create_env_fn:</span> <span class="pre">Callable</span> <span class="pre">|</span> <span class="pre">EnvBase</span> <span class="pre">|</span> <span class="pre">list[Callable]</span> <span class="pre">|</span> <span class="pre">list[EnvBase],</span> <span class="pre">policy:</span> <span class="pre">Callable[[TensorDictBase],</span> <span class="pre">TensorDictBase]</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">*,</span> <span class="pre">policy_factory:</span> <span class="pre">Callable[[],</span> <span class="pre">Callable]</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">frames_per_batch:</span> <span class="pre">int,</span> <span class="pre">total_frames:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">-1,</span> <span class="pre">device:</span> <span class="pre">torch.device</span> <span class="pre">|</span> <span class="pre">list[torch.device]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">storing_device:</span> <span class="pre">torch.device</span> <span class="pre">|</span> <span class="pre">list[torch.device]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">env_device:</span> <span class="pre">torch.device</span> <span class="pre">|</span> <span class="pre">list[torch.device]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">policy_device:</span> <span class="pre">torch.device</span> <span class="pre">|</span> <span class="pre">list[torch.device]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">max_frames_per_traj=-1,</span> <span class="pre">init_random_frames=-1,</span> <span class="pre">reset_at_each_iter=False,</span> <span class="pre">postproc=None,</span> <span class="pre">split_trajs=False,</span> <span class="pre">exploration_type=InteractionType.RANDOM,</span> <span class="pre">collector_class:</span> <span class="pre">Callable[[TensorDict],</span> <span class="pre">TensorDict]</span> <span class="pre">=</span> <span class="pre">&lt;class</span> <span class="pre">'torchrl.collectors.collectors.SyncDataCollector'&gt;,</span> <span class="pre">collector_kwargs:</span> <span class="pre">dict</span> <span class="pre">|</span> <span class="pre">list[dict]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">num_workers_per_collector:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">1,</span> <span class="pre">sync:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False,</span> <span class="pre">ray_init_config:</span> <span class="pre">dict</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">remote_configs:</span> <span class="pre">dict</span> <span class="pre">|</span> <span class="pre">list[dict]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">num_collectors:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">update_after_each_batch=False,</span> <span class="pre">max_weight_update_interval=-1,</span> <span class="pre">replay_buffer:</span> <span class="pre">ReplayBuffer</span> <span class="pre">=</span> <span class="pre">None</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/distributed/ray.html#RayCollector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.distributed.RayCollector" title="Permalink to this definition">¶</a></dt>
 <dd><p>Distributed data collector with <a class="reference external" href="https://docs.ray.io/">Ray</a> backend.</p>
 <p>This Python class serves as a ray-based solution to instantiate and coordinate multiple
 data collectors in a distributed cluster. Like TorchRL non-distributed collectors, this
@@ -462,7 +462,7 @@ provides the rollouts as they become available from individual remote collectors
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>create_env_fn</strong> (<em>Callable</em><em> or </em><em>List</em><em>[</em><em>Callabled</em><em>]</em>) – list of Callables, each returning an
 instance of <a class="reference internal" href="torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnvBase</span></code></a>.</p></li>
-<li><p><strong>policy</strong> (<em>Callable</em>) – <p>Policy to be executed in the environment.
+<li><p><strong>policy</strong> (<em>Callable</em><em>, </em><em>optional</em>) – <p>Policy to be executed in the environment.
 Must accept <code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.tensordict.TensorDictBase</span></code> object as input.
 If <code class="docutils literal notranslate"><span class="pre">None</span></code> is provided, the policy used will be a
 <code class="xref py py-class docutils literal notranslate"><span class="pre">RandomPolicy</span></code> instance with the environment
@@ -481,11 +481,23 @@ any typing with a single argument typed as a subclass of <code class="docutils l
 then the policy won’t be wrapped in a <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code>.</p></li>
 <li><p>In all other cases an attempt to wrap it will be undergone as such: <code class="docutils literal notranslate"><span class="pre">TensorDictModule(policy,</span> <span class="pre">in_keys=env_obs_key,</span> <span class="pre">out_keys=env.action_keys)</span></code>.</p></li>
 </ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If the policy needs to be passed as a policy factory (e.g., in case it mustn’t be serialized /
+pickled directly), the <a href="#id1"><span class="problematic" id="id2">:arg:`policy_factory`</span></a> should be used instead.</p>
+</div>
 </p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
+<li><p><strong>policy_factory</strong> (<em>Callable</em><em>[</em><em>[</em><em>]</em><em>, </em><em>Callable</em><em>]</em><em>, </em><em>optional</em>) – <p>a callable that returns
+a policy instance. This is exclusive with the <cite>policy</cite> argument.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><cite>policy_factory</cite> comes in handy whenever the policy cannot be serialized.</p>
+</div>
+</p></li>
 <li><p><strong>frames_per_batch</strong> (<em>int</em>) – A keyword-only argument representing the
 total number of elements in a batch.</p></li>
 <li><p><strong>total_frames</strong> (<em>int</em><em>, </em><em>Optional</em>) – lower bound of the total number of frames returned by the collector.
@@ -599,6 +611,14 @@ For async collections, it may be that one worker has not seen its
 parameters being updated for a certain time even if <code class="docutils literal notranslate"><span class="pre">update_after_each_batch</span></code>
 is turned on.
 Defaults to -1 (no forced update).</p></li>
+<li><p><strong>replay_buffer</strong> (<a class="reference internal" href="torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer" title="torchrl.data.RayReplayBuffer"><em>RayReplayBuffer</em></a><em>, </em><em>optional</em>) – <p>if provided, the collector will not yield tensordicts
+but populate the buffer instead. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>although it is not enfoced (to allow users to implement their own replay buffer class), a
+<a class="reference internal" href="torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer" title="torchrl.data.RayReplayBuffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">RayReplayBuffer</span></code></a> instance should be used here.</p>
+</div>
+</p></li>
 </ul>
 </dd>
 </dl>
@@ -638,6 +658,12 @@ Defaults to -1 (no forced update).</p></li>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.distributed.RayCollector.async_shutdown">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">async_shutdown</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/distributed/ray.html#RayCollector.async_shutdown"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.distributed.RayCollector.async_shutdown" title="Permalink to this definition">¶</a></dt>
+<dd><p>Finishes processes started by ray.init() during async execution.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrl.collectors.distributed.RayCollector.load_state_dict">
 <span class="sig-name descname"><span class="pre">load_state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">OrderedDict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">OrderedDict</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/collectors/distributed/ray.html#RayCollector.load_state_dict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.distributed.RayCollector.load_state_dict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Calls parent method for each remote collector.</p>
@@ -665,6 +691,12 @@ Defaults to -1 (no forced update).</p></li>
 <dt class="sig sig-object py" id="torchrl.collectors.distributed.RayCollector.shutdown">
 <span class="sig-name descname"><span class="pre">shutdown</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/distributed/ray.html#RayCollector.shutdown"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.distributed.RayCollector.shutdown" title="Permalink to this definition">¶</a></dt>
 <dd><p>Finishes processes started by ray.init().</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.distributed.RayCollector.start">
+<span class="sig-name descname"><span class="pre">start</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/distributed/ray.html#RayCollector.start"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.distributed.RayCollector.start" title="Permalink to this definition">¶</a></dt>
+<dd><p>Starts the RayCollector.</p>
 </dd></dl>
 
 <dl class="py method">
