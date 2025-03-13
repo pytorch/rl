@@ -5325,6 +5325,9 @@ class Tokenizer(UnaryTransform):
         add_special_tokens: bool = False,
         padding: bool = True,
         max_length: int | None = None,
+        return_attention_mask: bool = True,
+        missing_tolerance: bool = True,
+        call_before_reset: bool = False,
     ):
         if tokenizer is None:
             from transformers import AutoTokenizer
@@ -5340,6 +5343,8 @@ class Tokenizer(UnaryTransform):
         self.skip_special_tokens = skip_special_tokens
         self.padding = padding
         self.max_length = max_length
+        self.return_attention_mask = return_attention_mask
+        self.call_before_reset = call_before_reset
         if additional_tokens:
             self.tokenizer.add_tokens(additional_tokens)
         super().__init__(
@@ -5351,6 +5356,7 @@ class Tokenizer(UnaryTransform):
             inv_fn=self.call_tokenizer_inv_fn,
             use_raw_nontensor=use_raw_nontensor,
         )
+        self._missing_tolerance = missing_tolerance
 
     @property
     def device(self):
@@ -5363,6 +5369,44 @@ class Tokenizer(UnaryTransform):
         self._device = device
         return device
 
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+        # Specialized for attention mask
+        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+            value = next_tensordict.get(in_key, default=None)
+            if value is not None:
+                observation = self._apply_transform(value)
+                if self.return_attention_mask:
+                    observation, attention_mask = observation
+                    next_tensordict.set(
+                        _replace_last(out_key, "attention_mask"),
+                        attention_mask,
+                    )
+                next_tensordict.set(
+                    out_key,
+                    observation,
+                )
+                print('next tensordict', next_tensordict)
+            elif not self.missing_tolerance or out_key not in next_tensordict.keys(
+                True
+            ):
+                raise KeyError(
+                    f"{self}: '{in_key}' not found in tensordict {next_tensordict}"
+                )
+        return next_tensordict
+
+    def _reset_env_preprocess(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self.call_before_reset:
+            with _set_missing_tolerance(self, True):
+                tensordict = self._call(tensordict)
+        return tensordict
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        if self.call_before_reset:
+            return tensordict_reset
+        return super()._reset(tensordict, tensordict_reset)
+
     def call_tokenizer_fn(self, value: str | list[str]):
         device = self.device
         kwargs = {"add_special_tokens": self.add_special_tokens}
@@ -5372,19 +5416,26 @@ class Tokenizer(UnaryTransform):
         if isinstance(value, str):
             out = self.tokenizer.encode(value, return_tensors="pt", **kwargs)[0]
             # TODO: incorporate attention mask
-            # attention_mask = torch.ones_like(out, dtype=torch.bool)
+            if self.return_attention_mask:
+                attention_mask = torch.ones_like(out, dtype=torch.bool)
         else:
             kwargs["padding"] = (
                 self.padding if self.max_length is None else "max_length"
             )
-            # kwargs["return_attention_mask"] = False
+            kwargs["return_attention_mask"] = self.return_attention_mask
             # kwargs["return_token_type_ids"] = False
             out = self.tokenizer.batch_encode_plus(value, return_tensors="pt", **kwargs)
-            # attention_mask = out["attention_mask"]
+            if self.return_attention_mask:
+                attention_mask = out["attention_mask"]
             out = out["input_ids"]
 
         if device is not None and out.device != device:
             out = out.to(device)
+            if self.return_attention_mask:
+                attention_mask = attention_mask.to(device)
+        if self.return_attention_mask:
+            print('out, attention_mask', out.shape, attention_mask.shape)
+            return out, attention_mask
         return out
 
     def call_tokenizer_inv_fn(self, value: Tensor):
@@ -5401,76 +5452,62 @@ class Tokenizer(UnaryTransform):
         return NonTensorData(out)
 
     def transform_input_spec(self, input_spec: Composite) -> Composite:
-        input_spec = super().transform_input_spec(input_spec)
         # We need to cap the spec to generate valid random strings
-        for out_key in self.out_keys_inv:
-            if out_key in input_spec["full_state_spec"].keys(True, True):
-                new_shape = input_spec["full_state_spec"][out_key].shape
-                if self.max_length is None:
-                    # Then we can't tell what the shape will be
-                    new_shape = new_shape[:-1] + torch.Size((-1,))
-                input_spec["full_state_spec"][out_key] = Bounded(
-                    0,
-                    self.tokenizer.vocab_size,
-                    shape=new_shape,
-                    device=input_spec["full_state_spec"][out_key].device,
-                    dtype=input_spec["full_state_spec"][out_key].dtype,
-                )
-            elif out_key in input_spec["full_action_spec"].keys(True, True):
-                new_shape = input_spec["full_action_spec"][out_key].shape
-                if self.max_length is None:
-                    # Then we can't tell what the shape will be
-                    new_shape = new_shape[:-1] + torch.Size((-1,))
-                input_spec["full_action_spec"][out_key] = Bounded(
-                    0,
-                    self.tokenizer.vocab_size,
-                    shape=new_shape,
-                    device=input_spec["full_action_spec"][out_key].device,
-                    dtype=input_spec["full_action_spec"][out_key].dtype,
-                )
+        for in_key, out_key in _zip_strict(self.in_keys_inv, self.out_keys_inv):
+            if in_key in input_spec["full_state_spec"].keys(True, True):
+                spec = input_spec["full_state_spec"]
+            elif in_key in input_spec["full_action_spec"].keys(False, True):
+                spec = input_spec["full_action_spec"]
+            else:
+                raise KeyError(f"The input keys {in_key} wasn't found in the env input specs.")
+            local_spec = spec.pop(in_key)
+            new_shape = spec.shape
+            if self.max_length is None:
+                # Then we can't tell what the shape will be
+                new_shape = new_shape + torch.Size((-1,))
+            else:
+                new_shape = new_shape + torch.Size((self.max_length,))
+            spec[out_key] = Bounded(
+                0,
+                self.tokenizer.vocab_size,
+                shape=new_shape,
+                device=local_spec.device,
+                dtype=local_spec.dtype,
+            )
         return input_spec
 
-    def transform_output_spec(self, output_spec: Composite) -> Composite:
-        output_spec = super().transform_output_spec(output_spec)
-        # We need to cap the spec to generate valid random strings
-        for out_key in self.out_keys:
-            if out_key in output_spec["full_observation_spec"].keys(True, True):
-                new_shape = output_spec["full_observation_spec"][out_key].shape
-                if self.max_length is None:
-                    # Then we can't tell what the shape will be
-                    new_shape = new_shape[:-1] + torch.Size((-1,))
-                output_spec["full_observation_spec"][out_key] = Bounded(
-                    0,
-                    self.tokenizer.vocab_size,
-                    shape=new_shape,
-                    device=output_spec["full_observation_spec"][out_key].device,
-                    dtype=output_spec["full_observation_spec"][out_key].dtype,
-                )
-            elif out_key in output_spec["full_reward_spec"].keys(True, True):
-                new_shape = output_spec["full_reward_spec"][out_key].shape
-                if self.max_length is None:
-                    # Then we can't tell what the shape will be
-                    new_shape = new_shape[:-1] + torch.Size((-1,))
-                output_spec["full_reward_spec"][out_key] = Bounded(
-                    0,
-                    self.tokenizer.vocab_size,
-                    shape=new_shape,
-                    device=output_spec["full_reward_spec"][out_key].device,
-                    dtype=output_spec["full_reward_spec"][out_key].dtype,
-                )
-            elif out_key in output_spec["full_done_spec"].keys(True, True):
-                new_shape = output_spec["full_done_spec"][out_key].shape
-                if self.max_length is None:
-                    # Then we can't tell what the shape will be
-                    new_shape = new_shape[:-1] + torch.Size((-1,))
-                output_spec["full_done_spec"][out_key] = Bounded(
-                    0,
-                    self.tokenizer.vocab_size,
-                    shape=new_shape,
-                    device=output_spec["full_done_spec"][out_key].device,
-                    dtype=output_spec["full_done_spec"][out_key].dtype,
-                )
-        return output_spec
+    transform_output_spec = Transform.transform_output_spec
+    transform_reward_spec = Transform.transform_reward_spec
+    transform_done_spec = Transform.transform_done_spec
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        attention_mask_keys = set()
+        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+            new_shape = observation_spec.shape + torch.Size((-1,))
+            observation_spec[out_key] = Bounded(
+                0,
+                self.tokenizer.vocab_size,
+                shape=new_shape,
+                device=observation_spec[in_key].device,
+                dtype=observation_spec[in_key].dtype,
+            )
+            if self.return_attention_mask:
+                attention_mask_key = _replace_last(out_key, "attention_mask")
+                if attention_mask_key in attention_mask_keys:
+                    raise KeyError(
+                        "Conflicting attention_mask keys. Make sure the token tensors are "
+                        "nested at different places in the tensordict such that `(*root, 'attention_mask')` "
+                        "entries are unique."
+                    )
+                attention_mask_keys.add(attention_mask_key)
+                observation_spec[attention_mask_key] = Bounded(
+                0,
+                2,
+                shape=new_shape,
+                device=observation_spec[in_key].device,
+                dtype=observation_spec[in_key].dtype,
+            )
+        return observation_spec
 
 
 class Stack(Transform):

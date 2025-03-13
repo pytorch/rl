@@ -20,6 +20,8 @@ widely used replay buffers:
     PrioritizedReplayBuffer
     TensorDictReplayBuffer
     TensorDictPrioritizedReplayBuffer
+    RayReplayBuffer
+    RemoteTensorDictReplayBuffer
 
 Composable Replay Buffers
 -------------------------

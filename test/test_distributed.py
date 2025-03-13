@@ -11,10 +11,19 @@ import argparse
 import os
 import sys
 import time
+from functools import partial
 
 import pytest
+from tensordict import TensorDict
 from tensordict.nn import TensorDictModuleBase
 from torchrl._utils import logger as torchrl_logger
+from torchrl.data import (
+    LazyTensorStorage,
+    RandomSampler,
+    RayReplayBuffer,
+    RoundRobinWriter,
+    SamplerWithoutReplacement,
+)
 
 try:
     import ray
@@ -435,6 +444,15 @@ class TestRayCollector(DistributedCollectorBase):
     to avoid potential deadlocks when combining Ray and multiprocessing.
     """
 
+    @pytest.fixture(autouse=True, scope="class")
+    def start_ray(self):
+        from torchrl.collectors.distributed.ray import DEFAULT_RAY_INIT_CONFIG
+
+        ray.init(**DEFAULT_RAY_INIT_CONFIG)
+
+        yield
+        ray.shutdown()
+
     @classmethod
     def distributed_class(cls) -> type:
         return RayCollector
@@ -538,19 +556,72 @@ class TestRayCollector(DistributedCollectorBase):
         total = 0
         first_batch = None
         last_batch = None
-        for i, data in enumerate(collector):
-            total += data.numel()
-            assert data.numel() == frames_per_batch
-            if i == 0:
-                first_batch = data
-                policy.weight.data += 1
-                collector.update_policy_weights_()
-            elif total == total_frames - frames_per_batch:
-                last_batch = data
-        assert (first_batch["action"] == 1).all(), first_batch["action"]
-        assert (last_batch["action"] == 2).all(), last_batch["action"]
-        collector.shutdown()
-        assert total == total_frames
+        try:
+            for i, data in enumerate(collector):
+                total += data.numel()
+                assert data.numel() == frames_per_batch
+                if i == 0:
+                    first_batch = data
+                    policy.weight.data += 1
+                    collector.update_policy_weights_()
+                elif total == total_frames - frames_per_batch:
+                    last_batch = data
+            assert (first_batch["action"] == 1).all(), first_batch["action"]
+            assert (last_batch["action"] == 2).all(), last_batch["action"]
+            assert total == total_frames
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.parametrize("storage", [None, partial(LazyTensorStorage, 1000)])
+    @pytest.mark.parametrize(
+        "sampler", [None, partial(RandomSampler), SamplerWithoutReplacement]
+    )
+    @pytest.mark.parametrize("writer", [None, partial(RoundRobinWriter)])
+    def test_ray_replaybuffer(self, storage, sampler, writer):
+        kwargs = self.distributed_kwargs()
+        kwargs["remote_config"] = kwargs.pop("remote_configs")
+        rb = RayReplayBuffer(
+            storage=storage,
+            sampler=sampler,
+            writer=writer,
+            batch_size=32,
+            **kwargs,
+        )
+        td = TensorDict(a=torch.arange(100, 200), batch_size=[100])
+        index = rb.extend(td)
+        assert (index == torch.arange(100)).all()
+        for _ in range(10):
+            sample = rb.sample()
+            if sampler is SamplerWithoutReplacement:
+                assert sample["a"].unique().numel() == sample.numel()
+
+    # class CustomCollectorCls(SyncDataCollector):
+    #     def __init__(self, create_env_fn, **kwargs):
+    #         policy = lambda td: td.set("action", torch.full(td.shape, 2))
+    #         super().__init__(create_env_fn, policy, **kwargs)
+
+    def test_ray_collector_policy_constructor(self):
+        n_collectors = 2
+        frames_per_batch = 50
+        total_frames = 300
+        env = CountingEnv
+
+        def policy_constructor():
+            return lambda td: td.set("action", torch.full(td.shape, 2))
+
+        collector = self.distributed_class()(
+            [env] * n_collectors,
+            collector_class=SyncDataCollector,
+            policy_factory=policy_constructor,
+            total_frames=total_frames,
+            frames_per_batch=frames_per_batch,
+            **self.distributed_kwargs(),
+        )
+        try:
+            for data in collector:
+                assert (data["action"] == 2).all()
+        finally:
+            collector.shutdown()
 
 
 if __name__ == "__main__":

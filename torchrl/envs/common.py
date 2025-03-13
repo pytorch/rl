@@ -3383,6 +3383,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 else:
                     tensordict.clear_device_()
             # In case policy(..) does not modify in-place - no-op for TensorDict and related
+            print('policy input', tensordict)
             tensordict.update(policy(tensordict))
             if auto_cast_to_device:
                 if env_device is not None:

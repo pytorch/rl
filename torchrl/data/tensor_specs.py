@@ -4941,7 +4941,7 @@ class Composite(TensorSpec):
                     spec.shape = self.shape
                 else:
                     raise ValueError(
-                        f"The shape of the spec {type(spec).__name__} and the Composite {type(self).__name__} mismatch: the first "
+                        f"The shapes of the spec {type(spec).__name__} and the {type(self).__name__} mismatch: the first "
                         f"{self.ndim} dimensions should match but got spec.shape={spec.shape} and "
                         f"Composite.shape={self.shape}."
                     )
