@@ -456,8 +456,9 @@ class RayCollector(DataCollectorBase):
             policy_weights = TensorDict.from_module(self._local_policy)
             policy_weights = policy_weights.data.lock_()
         else:
-            warnings.warn(_NON_NN_POLICY_WEIGHTS)
             policy_weights = TensorDict(lock=True)
+            if remote_weights_updater is None:
+                warnings.warn(_NON_NN_POLICY_WEIGHTS)
         self.policy_weights = policy_weights
         self.collector_class = collector_class
         self.collected_frames = 0
@@ -467,11 +468,6 @@ class RayCollector(DataCollectorBase):
 
         self.update_after_each_batch = update_after_each_batch
         self.max_weight_update_interval = max_weight_update_interval
-        self.remote_weights_updater = RayRemoteWeightUpdater(
-            policy_weights=policy_weights,
-            remote_collectors=self.remote_collectors,
-            max_interval=self.max_weight_update_interval,
-        )
 
         self.collector_kwargs = (
             collector_kwargs if collector_kwargs is not None else [{}]
@@ -529,6 +525,14 @@ class RayCollector(DataCollectorBase):
                 collector_kwargs,
                 remote_configs,
             )
+        if remote_weights_updater is None:
+            remote_weights_updater = RayRemoteWeightUpdater(
+                policy_weights=policy_weights,
+                remote_collectors=self.remote_collectors,
+                max_interval=self.max_weight_update_interval,
+            )
+        self.remote_weights_updater = remote_weights_updater
+        self.local_weights_updater = local_weights_updater
 
         # Print info of all remote workers
         pending_samples = [

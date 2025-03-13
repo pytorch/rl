@@ -873,7 +873,7 @@ class RPCRemoteWeightUpdater(RemoteWeightUpdaterBase):
         if workers is None:
             workers = list(range(self.num_workers))
         futures = []
-        weights = self.policy_weights.data if weights is None else weights
+        weights = self.policy_weights if weights is None else weights
         for i in workers:
             if self._VERBOSE:
                 torchrl_logger.info(f"calling update on worker {i}")
@@ -884,7 +884,7 @@ class RPCRemoteWeightUpdater(RemoteWeightUpdaterBase):
                     args=(self.collector_rrefs[i], weights),
                 )
             )
-        if kwargs.get("wait"):
+        if kwargs.get("wait", True):
             for i in workers:
                 if self._VERBOSE:
                     torchrl_logger.info(f"waiting for worker {i}")
