@@ -679,7 +679,7 @@ class RPCDataCollector(DataCollectorBase):
                         self._batches_since_weight_update[j]
                         > self.max_weight_update_interval
                     ):
-                        self.update_policy_weights_([j], wait=False)
+                        self.update_policy_weights_(worker_ids=[j], wait=False)
             elif self.max_weight_update_interval > -1:
                 ranks = [
                     1
