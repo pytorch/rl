@@ -390,25 +390,29 @@ class TestSyncCollector(DistributedCollectorBase):
             update_interval=update_interval,
             **cls.distributed_kwargs(),
         )
-        total = 0
-        first_batch = None
-        last_batch = None
-        for i, data in enumerate(collector):
-            total += data.numel()
-            assert data.numel() == frames_per_batch
-            if i == 0:
-                first_batch = data
-                policy.weight.data += 1
-            elif total == total_frames - frames_per_batch:
-                last_batch = data
-        assert (first_batch["action"] == 1).all(), first_batch["action"]
-        if update_interval == 1:
-            assert (last_batch["action"] == 2).all(), last_batch["action"]
-        else:
-            assert (last_batch["action"] == 1).all(), last_batch["action"]
-        collector.shutdown()
-        assert total == total_frames
-        queue.put("passed")
+        try:
+
+            total = 0
+            first_batch = None
+            last_batch = None
+            for i, data in enumerate(collector):
+                total += data.numel()
+                assert data.numel() == frames_per_batch
+                if i == 0:
+                    first_batch = data
+                    policy.weight.data += 1
+                elif total == total_frames - frames_per_batch:
+                    last_batch = data
+            assert (first_batch["action"] == 1).all(), first_batch["action"]
+            if update_interval == 1:
+                assert (last_batch["action"] == 2).all(), last_batch["action"]
+            else:
+                assert (last_batch["action"] == 1).all(), last_batch["action"]
+            assert total == total_frames
+            queue.put("passed")
+        finally:
+            collector.shutdown()
+            queue.put("not passed")
 
     @pytest.mark.parametrize(
         "collector_class",
@@ -490,12 +494,14 @@ class TestRayCollector(DistributedCollectorBase):
             sync=sync,
             **self.distributed_kwargs(),
         )
-        total = 0
-        for data in collector:
-            total += data.numel()
-            assert data.numel() == frames_per_batch
-        collector.shutdown()
-        assert total == 200
+        try:
+            total = 0
+            for data in collector:
+                total += data.numel()
+                assert data.numel() == frames_per_batch
+            assert total == 200
+        finally:
+            collector.shutdown()
 
     @pytest.mark.parametrize(
         "collector_class",
@@ -517,12 +523,14 @@ class TestRayCollector(DistributedCollectorBase):
             frames_per_batch=frames_per_batch,
             **self.distributed_kwargs(),
         )
-        total = 0
-        for data in collector:
-            total += data.numel()
-            assert data.numel() == frames_per_batch
-        collector.shutdown()
-        assert total == 200
+        try:
+            total = 0
+            for data in collector:
+                total += data.numel()
+                assert data.numel() == frames_per_batch
+            assert total == 200
+        finally:
+            collector.shutdown()
 
     @pytest.mark.parametrize(
         "collector_class",
