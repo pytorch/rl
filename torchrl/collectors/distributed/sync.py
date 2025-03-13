@@ -601,7 +601,13 @@ class DistributedSyncDataCollector(DataCollectorBase):
                 data = self.postproc(data)
             yield data
 
-    def update_policy_weights_(self, worker_rank=None) -> None:
+    def update_policy_weights_(
+        self,
+        policy_weights: TensorDictBase | None = None,
+        *,
+        worker_ids=None,
+        wait=True,
+    ) -> None:
         raise NotImplementedError
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
