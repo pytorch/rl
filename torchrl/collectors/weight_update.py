@@ -219,6 +219,7 @@ class VanillaLocalWeightUpdater(LocalWeightUpdaterBase):
     ) -> TensorDictBase:
         if local_weights is None or mapped_weights is None:
             return
+        local_weights.update_(mapped_weights)
 
 
 class MultiProcessedRemoteWeightUpdate(RemoteWeightUpdaterBase):
