@@ -21,7 +21,7 @@ from multiprocessing import connection, queues
 from multiprocessing.managers import SyncManager
 from queue import Empty
 from textwrap import indent
-from typing import Any, Callable, Iterator, Sequence
+from typing import Any, Callable, Iterator, Sequence, TypeVar
 
 import numpy as np
 import torch
@@ -85,6 +85,8 @@ _MAX_IDLE_COUNT = int(os.environ.get("MAX_IDLE_COUNT", torch.iinfo(torch.int64).
 DEFAULT_EXPLORATION_TYPE: ExplorationType = ExplorationType.RANDOM
 
 _is_osx = sys.platform.startswith("darwin")
+
+T = TypeVar("T")
 
 
 class _Interruptor:
@@ -267,7 +269,8 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 self._iterator = iter(self)
             out = next(self._iterator)
             # if any, we don't want the device ref to be passed in distributed settings
-            out.clear_device_()
+            if out is not None:
+                out.clear_device_()
             return out
         except StopIteration:
             return None
@@ -342,7 +345,15 @@ class SyncDataCollector(DataCollectorBase):
 
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
+            .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
+                pickled directly), the :arg:`policy_factory` should be used instead.
+
     Keyword Args:
+        policy_factory (Callable[[], Callable], optional): a callable that returns
+            a policy instance. This is exclusive with the `policy` argument.
+
+            .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.
+
         frames_per_batch (int): A keyword-only argument representing the total
             number of elements in a batch.
         total_frames (int): A keyword-only argument representing the total
@@ -432,7 +443,7 @@ class SyncDataCollector(DataCollectorBase):
         use_buffers (bool, optional): if ``True``, a buffer will be used to stack the data.
             This isn't compatible with environments with dynamic specs. Defaults to ``True``
             for envs without dynamic specs, ``False`` for others.
-        replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordict
+        replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordicts
             but populate the buffer instead. Defaults to ``None``.
         trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
             assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
@@ -514,6 +525,7 @@ class SyncDataCollector(DataCollectorBase):
         policy: None
         | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]) = None,
         *,
+        policy_factory: Callable[[], Callable] | None = None,
         frames_per_batch: int,
         total_frames: int = -1,
         device: DEVICE_TYPING = None,
@@ -557,8 +569,13 @@ class SyncDataCollector(DataCollectorBase):
                 env.update_kwargs(create_env_kwargs)
 
         if policy is None:
+            if policy_factory is not None:
+                policy = policy_factory()
+            else:
+                policy = RandomPolicy(env.full_action_spec)
+        elif policy_factory is not None:
+            raise TypeError("policy_factory cannot be used with policy argument.")
 
-            policy = RandomPolicy(env.full_action_spec)
         if trust_policy is None:
             trust_policy = isinstance(policy, (RandomPolicy, CudaGraphModule))
         self.trust_policy = trust_policy
@@ -1428,17 +1445,22 @@ class SyncDataCollector(DataCollectorBase):
         self._iter = state_dict["iter"]
 
     def __repr__(self) -> str:
-        env_str = indent(f"env={self.env}", 4 * " ")
-        policy_str = indent(f"policy={self.policy}", 4 * " ")
-        td_out_str = indent(f"td_out={self._final_rollout}", 4 * " ")
-        string = (
-            f"{self.__class__.__name__}("
-            f"\n{env_str},"
-            f"\n{policy_str},"
-            f"\n{td_out_str},"
-            f"\nexploration={self.exploration_type})"
-        )
-        return string
+        try:
+            env_str = indent(f"env={self.env}", 4 * " ")
+            policy_str = indent(f"policy={self.policy}", 4 * " ")
+            td_out_str = indent(
+                f"td_out={getattr(self, '_final_rollout', None)}", 4 * " "
+            )
+            string = (
+                f"{self.__class__.__name__}("
+                f"\n{env_str},"
+                f"\n{policy_str},"
+                f"\n{td_out_str},"
+                f"\nexploration={self.exploration_type})"
+            )
+            return string
+        except AttributeError:
+            return f"{type(self).__name__}(not_init)"
 
 
 class _MultiDataCollector(DataCollectorBase):
@@ -1468,7 +1490,18 @@ class _MultiDataCollector(DataCollectorBase):
             - In all other cases an attempt to wrap it will be undergone as such:
               ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
+            .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
+                pickled directly), the :arg:`policy_factory` should be used instead.
+
     Keyword Args:
+        policy_factory (Callable[[], Callable], optional): a callable that returns
+            a policy instance. This is exclusive with the `policy` argument.
+
+            .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.
+
+            .. warning:: `policy_factory` is currently not compatible with multiprocessed data
+                collectors.
+
         frames_per_batch (int): A keyword-only argument representing the
             total number of elements in a batch.
         total_frames (int, optional): A keyword-only argument representing the
@@ -1586,7 +1619,7 @@ class _MultiDataCollector(DataCollectorBase):
         use_buffers (bool, optional): if ``True``, a buffer will be used to stack the data.
             This isn't compatible with environments with dynamic specs. Defaults to ``True``
             for envs without dynamic specs, ``False`` for others.
-        replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordict
+        replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordicts
             but populate the buffer instead. Defaults to ``None``.
         trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
             assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
@@ -1611,6 +1644,7 @@ class _MultiDataCollector(DataCollectorBase):
         policy: None
         | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]) = None,
         *,
+        policy_factory: Callable[[], Callable] | None = None,
         frames_per_batch: int,
         total_frames: int | None = -1,
         device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
@@ -1694,27 +1728,36 @@ class _MultiDataCollector(DataCollectorBase):
         self._get_weights_fn_dict = {}
 
         if trust_policy is None:
-            trust_policy = isinstance(policy, CudaGraphModule)
+            trust_policy = policy is not None and isinstance(policy, CudaGraphModule)
         self.trust_policy = trust_policy
 
-        for policy_device, env_maker, env_maker_kwargs in zip(
-            self.policy_device, self.create_env_fn, self.create_env_kwargs
-        ):
-            (policy_copy, get_weights_fn,) = self._get_policy_and_device(
-                policy=policy,
-                policy_device=policy_device,
-                env_maker=env_maker,
-                env_maker_kwargs=env_maker_kwargs,
+        if policy_factory is not None and policy is not None:
+            raise TypeError("policy_factory and policy are mutually exclusive")
+        elif policy_factory is None:
+            for policy_device, env_maker, env_maker_kwargs in zip(
+                self.policy_device, self.create_env_fn, self.create_env_kwargs
+            ):
+                (policy_copy, get_weights_fn,) = self._get_policy_and_device(
+                    policy=policy,
+                    policy_device=policy_device,
+                    env_maker=env_maker,
+                    env_maker_kwargs=env_maker_kwargs,
+                )
+                if type(policy_copy) is not type(policy):
+                    policy = policy_copy
+                weights = (
+                    TensorDict.from_module(policy_copy)
+                    if isinstance(policy_copy, nn.Module)
+                    else TensorDict()
+                )
+                self._policy_weights_dict[policy_device] = weights
+                self._get_weights_fn_dict[policy_device] = get_weights_fn
+        else:
+            # TODO
+            raise NotImplementedError(
+                "weight syncing is not supported for multiprocessed data collectors at the "
+                "moment."
             )
-            if type(policy_copy) is not type(policy):
-                policy = policy_copy
-            weights = (
-                TensorDict.from_module(policy_copy)
-                if isinstance(policy_copy, nn.Module)
-                else TensorDict()
-            )
-            self._policy_weights_dict[policy_device] = weights
-            self._get_weights_fn_dict[policy_device] = get_weights_fn
         self.policy = policy
 
         remainder = 0
@@ -2781,7 +2824,15 @@ class aSyncDataCollector(MultiaSyncDataCollector):
 
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
+            .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
+                pickled directly), the :arg:`policy_factory` should be used instead.
+
     Keyword Args:
+        policy_factory (Callable[[], Callable], optional): a callable that returns
+            a policy instance. This is exclusive with the `policy` argument.
+
+            .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.
+
         frames_per_batch (int): A keyword-only argument representing the
             total number of elements in a batch.
         total_frames (int, optional): A keyword-only argument representing the
@@ -2887,8 +2938,10 @@ class aSyncDataCollector(MultiaSyncDataCollector):
     def __init__(
         self,
         create_env_fn: Callable[[], EnvBase],
-        policy: None | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]),
+        policy: None
+        | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]) = None,
         *,
+        policy_factory: Callable[[], Callable] | None = None,
         frames_per_batch: int,
         total_frames: int | None = -1,
         device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
@@ -2913,6 +2966,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         super().__init__(
             create_env_fn=[create_env_fn],
             policy=policy,
+            policy_factory=policy_factory,
             total_frames=total_frames,
             create_env_kwargs=[create_env_kwargs],
             max_frames_per_traj=max_frames_per_traj,
