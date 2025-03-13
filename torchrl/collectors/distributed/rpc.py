@@ -679,6 +679,10 @@ class RPCDataCollector(DataCollectorBase):
                         self._batches_since_weight_update[j]
                         > self.max_weight_update_interval
                     ):
+                        if self._VERBOSE:
+                            torchrl_logger.info(
+                                f"Updating policy of worker {j} with wait=False"
+                            )
                         self.update_policy_weights_(worker_ids=[j], wait=False)
             elif self.max_weight_update_interval > -1:
                 ranks = [
@@ -687,6 +691,10 @@ class RPCDataCollector(DataCollectorBase):
                     if self._batches_since_weight_update[j]
                     > self.max_weight_update_interval
                 ]
+                if self._VERBOSE:
+                    torchrl_logger.info(
+                        f"Updating policy of workers {ranks} with wait=True"
+                    )
                 self.update_policy_weights_(worker_ids=ranks, wait=True)
 
     def _next_async_rpc(self):
@@ -868,10 +876,12 @@ class RPCRemoteWeightUpdater(RemoteWeightUpdaterBase):
         **kwargs,
     ):
         workers = worker_ids
-        if isinstance(worker_ids, int):
-            workers = [worker_ids]
+        if isinstance(workers, int):
+            workers = [workers]
         if workers is None:
             workers = list(range(self.num_workers))
+        else:
+            workers = list(workers)
         futures = []
         weights = self.policy_weights if weights is None else weights
         for i in workers:
