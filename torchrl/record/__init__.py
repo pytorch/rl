@@ -5,3 +5,13 @@
 
 from .loggers import CSVLogger, MLFlowLogger, TensorboardLogger, WandbLogger
 from .recorder import PixelRenderTransform, TensorDictRecorder, VideoRecorder
+
+__all__ = [
+    "CSVLogger",
+    "MLFlowLogger",
+    "TensorboardLogger",
+    "WandbLogger",
+    "PixelRenderTransform",
+    "TensorDictRecorder",
+    "VideoRecorder",
+]

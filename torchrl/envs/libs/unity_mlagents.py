@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import importlib.util
-from typing import Dict, List, Optional
 
 import torch
 from tensordict import TensorDict, TensorDictBase
@@ -87,7 +86,6 @@ class UnityMLAgentsWrapper(_EnvWrapper):
         if cls._lib is not None:
             return cls._lib
 
-        import mlagents_envs
         import mlagents_envs.environment
 
         cls._lib = mlagents_envs
@@ -97,7 +95,7 @@ class UnityMLAgentsWrapper(_EnvWrapper):
         self,
         env=None,
         *,
-        group_map: MarlGroupMapType | Dict[str, List[str]] | None = None,
+        group_map: MarlGroupMapType | dict[str, list[str]] | None = None,
         categorical_actions: bool = False,
         **kwargs,
     ):
@@ -108,7 +106,7 @@ class UnityMLAgentsWrapper(_EnvWrapper):
         self.categorical_actions = categorical_actions
         super().__init__(**kwargs)
 
-    def _check_kwargs(self, kwargs: Dict):
+    def _check_kwargs(self, kwargs: dict):
         mlagents_envs = self.lib
         if "env" not in kwargs:
             raise TypeError("Could not find environment key 'env' in kwargs.")
@@ -134,7 +132,6 @@ class UnityMLAgentsWrapper(_EnvWrapper):
         for steps_idx in [0, 1]:
             for behavior in env.behavior_specs.keys():
                 steps = env.get_steps(behavior)[steps_idx]
-                is_terminal = steps_idx == 1
                 agent_ids = steps.agent_id
                 group_ids = steps.group_id
 
@@ -144,7 +141,6 @@ class UnityMLAgentsWrapper(_EnvWrapper):
                         # Sometimes in an MLAgents environment, an agent may
                         # show up in both the decision steps and the terminal
                         # steps. When that happens, just skip the duplicate.
-                        assert is_terminal
                         continue
                     agent_name_to_behavior_map[agent_name] = behavior
                     agent_name_to_group_id_map[agent_name] = group_id
@@ -177,7 +173,7 @@ class UnityMLAgentsWrapper(_EnvWrapper):
         return group_map, agent_name_to_group_name_map
 
     def _make_specs(
-        self, env: "mlagents_envs.environment.UnityEnvironment"  # noqa: F821
+        self, env: mlagents_envs.environment.UnityEnvironment  # noqa: F821
     ) -> None:
         # NOTE: We need to reset here because mlagents only initializes the
         # agents and behaviors after reset. In order to build specs, we make the
@@ -288,17 +284,13 @@ class UnityMLAgentsWrapper(_EnvWrapper):
     def _check_agent_exists(self, agent_name, group_id):
         if agent_name not in self.agent_name_to_group_id_map:
             raise RuntimeError(
-                (
-                    "Unity environment added a new agent. This is not yet "
-                    "supported in torchrl."
-                )
+                "Unity environment added a new agent. This is not yet "
+                "supported in torchrl."
             )
         if self.agent_name_to_group_id_map[agent_name] != group_id:
             raise RuntimeError(
-                (
-                    "Unity environment changed the group of an agent. This "
-                    "is not yet supported in torchrl."
-                )
+                "Unity environment changed the group of an agent. This "
+                "is not yet supported in torchrl."
             )
 
     def _update_action_mask(self):
@@ -836,10 +828,10 @@ class UnityMLAgentsEnv(UnityMLAgentsWrapper):
 
     def __init__(
         self,
-        file_name: Optional[str] = None,
-        registered_name: Optional[str] = None,
+        file_name: str | None = None,
+        registered_name: str | None = None,
         *,
-        group_map: MarlGroupMapType | Dict[str, List[str]] | None = None,
+        group_map: MarlGroupMapType | dict[str, list[str]] | None = None,
         categorical_actions=False,
         **kwargs,
     ):
@@ -853,10 +845,10 @@ class UnityMLAgentsEnv(UnityMLAgentsWrapper):
 
     def _build_env(
         self,
-        file_name: Optional[str],
-        registered_name: Optional[str],
+        file_name: str | None,
+        registered_name: str | None,
         **kwargs,
-    ) -> "mlagents_envs.environment.UnityEnvironment":  # noqa: F821
+    ) -> mlagents_envs.environment.UnityEnvironment:  # noqa: F821
         if not _has_unity_mlagents:
             raise ImportError(
                 "mlagents_envs not found, unable to create environment. "
@@ -888,7 +880,7 @@ class UnityMLAgentsEnv(UnityMLAgentsWrapper):
     def registered_name(self):
         return self._constructor_kwargs["registered_name"]
 
-    def _check_kwargs(self, kwargs: Dict):
+    def _check_kwargs(self, kwargs: dict):
         pass
 
     def __repr__(self) -> str:

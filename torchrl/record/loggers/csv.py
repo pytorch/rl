@@ -7,11 +7,10 @@ from __future__ import annotations
 import os
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, Optional, Sequence, Union
+from typing import Sequence
 
 import tensordict.utils
 import torch
-
 from tensordict import MemoryMappedTensor
 from torch import Tensor
 
@@ -35,7 +34,7 @@ class CSVExperiment:
 
         self.files = {}
 
-    def add_scalar(self, name: str, value: float, global_step: Optional[int] = None):
+    def add_scalar(self, name: str, value: float, global_step: int | None = None):
         if global_step is None:
             global_step = len(self.scalars[name])
         value = float(value)
@@ -50,7 +49,7 @@ class CSVExperiment:
         fd.write(",".join([str(global_step), str(value)]) + "\n")
         fd.flush()
 
-    def add_video(self, tag, vid_tensor, global_step: Optional[int] = None, **kwargs):
+    def add_video(self, tag, vid_tensor, global_step: int | None = None, **kwargs):
         """Writes a video on a file on disk.
 
         The video format can be one of
@@ -106,7 +105,7 @@ class CSVExperiment:
                 f"Unknown video format {self.video_format}. Must be one of 'pt', 'memmap' or 'mp4'."
             )
 
-    def add_text(self, tag, text, global_step: Optional[int] = None):
+    def add_text(self, tag, text, global_step: int | None = None):
         if global_step is None:
             global_step = self.videos_counter[tag]
             self.videos_counter[tag] += 1
@@ -161,7 +160,7 @@ class CSVLogger(Logger):
         super().__init__(exp_name=exp_name, log_dir=log_dir)
         self._has_imported_moviepy = False
 
-    def _create_experiment(self) -> "CSVExperiment":
+    def _create_experiment(self) -> CSVExperiment:
         """Creates a CSV experiment."""
         log_dir = str(os.path.join(self.log_dir, self.exp_name))
         return CSVExperiment(
@@ -205,7 +204,7 @@ class CSVLogger(Logger):
             **kwargs,
         )
 
-    def log_hparams(self, cfg: Union["DictConfig", Dict]) -> None:  # noqa: F821
+    def log_hparams(self, cfg: DictConfig | dict) -> None:  # noqa: F821
         """Logs the hyperparameters of the experiment.
 
         Args:

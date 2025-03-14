@@ -9,12 +9,10 @@ import warnings
 from dataclasses import dataclass
 from functools import wraps
 from numbers import Number
-from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
-
 from tensordict.nn import (
     composite_lp_aggregate,
     CompositeDistribution,
@@ -24,13 +22,13 @@ from tensordict.nn import (
 )
 from tensordict.utils import expand_right, NestedKey
 from torch import Tensor
+
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.data.utils import _find_action_space
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import ProbabilisticActor
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
-
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
@@ -317,8 +315,8 @@ class SACLoss(LossModule):
     def __init__(
         self,
         actor_network: ProbabilisticActor,
-        qvalue_network: TensorDictModule | List[TensorDictModule],
-        value_network: Optional[TensorDictModule] = None,
+        qvalue_network: TensorDictModule | list[TensorDictModule],
+        value_network: TensorDictModule | None = None,
         *,
         num_qvalue_nets: int = 2,
         loss_function: str = "smooth_l1",
@@ -327,7 +325,7 @@ class SACLoss(LossModule):
         max_alpha: float = None,
         action_spec=None,
         fixed_alpha: bool = False,
-        target_entropy: Union[str, float] = "auto",
+        target_entropy: str | float = "auto",
         delay_actor: bool = False,
         delay_qvalue: bool = True,
         delay_value: bool = True,
@@ -653,7 +651,7 @@ class SACLoss(LossModule):
 
     def _actor_loss(
         self, tensordict: TensorDictBase
-    ) -> Tuple[Tensor, Dict[str, Tensor]]:
+    ) -> tuple[Tensor, dict[str, Tensor]]:
         with set_exploration_type(
             ExplorationType.RANDOM
         ), self.actor_network_params.to_module(self.actor_network):
@@ -693,7 +691,7 @@ class SACLoss(LossModule):
 
     def _qvalue_v1_loss(
         self, tensordict: TensorDictBase
-    ) -> Tuple[Tensor, Dict[str, Tensor]]:
+    ) -> tuple[Tensor, dict[str, Tensor]]:
         target_params = self._cached_target_params_actor_value
         with set_exploration_type(self.deterministic_sampling_mode):
             target_value = self.value_estimator.value_estimate(
@@ -808,7 +806,7 @@ class SACLoss(LossModule):
 
     def _qvalue_v2_loss(
         self, tensordict: TensorDictBase
-    ) -> Tuple[Tensor, Dict[str, Tensor]]:
+    ) -> tuple[Tensor, dict[str, Tensor]]:
         # we pass the alpha value to the tensordict. Since it's a scalar, we must erase the batch-size first.
         target_value = self._compute_target_v2(tensordict)
 
@@ -830,7 +828,7 @@ class SACLoss(LossModule):
 
     def _value_loss(
         self, tensordict: TensorDictBase
-    ) -> Tuple[Tensor, Dict[str, Tensor]]:
+    ) -> tuple[Tensor, dict[str, Tensor]]:
         # value loss
         td_copy = tensordict.select(*self.value_network.in_keys, strict=False).detach()
         with self.value_network_params.to_module(self.value_network):
@@ -1085,8 +1083,8 @@ class DiscreteSACLoss(LossModule):
         actor_network: ProbabilisticActor,
         qvalue_network: TensorDictModule,
         *,
-        action_space: Union[str, TensorSpec] = None,
-        num_actions: Optional[int] = None,
+        action_space: str | TensorSpec = None,
+        num_actions: int | None = None,
         num_qvalue_nets: int = 2,
         loss_function: str = "smooth_l1",
         alpha_init: float = 1.0,
@@ -1094,7 +1092,7 @@ class DiscreteSACLoss(LossModule):
         max_alpha: float = None,
         fixed_alpha: bool = False,
         target_entropy_weight: float = 0.98,
-        target_entropy: Union[str, Number] = "auto",
+        target_entropy: str | Number = "auto",
         delay_qvalue: bool = True,
         priority_key: str = None,
         separate_losses: bool = False,
@@ -1338,7 +1336,7 @@ class DiscreteSACLoss(LossModule):
 
     def _value_loss(
         self, tensordict: TensorDictBase
-    ) -> Tuple[Tensor, Dict[str, Tensor]]:
+    ) -> tuple[Tensor, dict[str, Tensor]]:
         target_value = self._compute_target(tensordict)
         tensordict_expand = self._vmap_qnetworkN0(
             tensordict.select(*self.qvalue_network.in_keys, strict=False),
@@ -1376,7 +1374,7 @@ class DiscreteSACLoss(LossModule):
 
     def _actor_loss(
         self, tensordict: TensorDictBase
-    ) -> Tuple[Tensor, Dict[str, Tensor]]:
+    ) -> tuple[Tensor, dict[str, Tensor]]:
         # get probs and log probs for actions
         with self.actor_network_params.to_module(self.actor_network):
             dist = self.actor_network.get_dist(tensordict.clone(False))

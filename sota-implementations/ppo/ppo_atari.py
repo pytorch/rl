@@ -12,12 +12,11 @@ from __future__ import annotations
 import warnings
 
 import hydra
-
 from torchrl._utils import compile_with_warmup
 
 
 @hydra.main(config_path="", config_name="config_atari", version_base="1.1")
-def main(cfg: "DictConfig"):  # noqa: F821
+def main(cfg: DictConfig):  # noqa: F821
 
     import torch.optim
     import tqdm

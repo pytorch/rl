@@ -6,8 +6,7 @@ from __future__ import annotations
 
 import weakref
 from collections import deque
-
-from typing import Any, Callable, Dict, List, Literal, Tuple
+from typing import Any, Callable, Literal
 
 import torch
 from tensordict import (
@@ -18,11 +17,11 @@ from tensordict import (
     TensorDictBase,
     unravel_key,
 )
+
 from torchrl.data.map.tdstorage import TensorDictMap
 from torchrl.data.map.utils import _plot_plotly_box, _plot_plotly_tree
 from torchrl.data.replay_buffers.storages import ListStorage
 from torchrl.data.tensor_specs import Composite
-
 from torchrl.envs.common import EnvBase
 
 
@@ -88,10 +87,10 @@ class Tree(TensorClass["nocast"]):
     node_data: TensorDict | None = None
 
     # Stack of subtrees. A subtree is produced when an action is taken.
-    subtree: "Tree" = None
+    subtree: Tree = None
 
     # weakrefs to the parent(s) of the node
-    _parent: weakref.ref | List[weakref.ref] | None = None
+    _parent: weakref.ref | list[weakref.ref] | None = None
 
     # Specs: contains information such as action or observation keys and spaces.
     #  If present, they should be structured like env specs are:
@@ -123,7 +122,7 @@ class Tree(TensorClass["nocast"]):
         return cls(
             count=torch.zeros(()),
             wins=torch.zeros(()),
-            node=data.exclude("action", "next"),
+            node_data=data.exclude("action", "next"),
             rollout=rollout,
             subtree=subtree,
             device=device,
@@ -389,7 +388,7 @@ class Tree(TensorClass["nocast"]):
 
     def vertices(
         self, *, key_type: Literal["id", "hash", "path"] = "hash"
-    ) -> Dict[int | Tuple[int], Tree]:
+    ) -> dict[int | tuple[int], Tree]:
         """Returns a map containing the vertices of the Tree.
 
         Keyword args:
@@ -463,7 +462,7 @@ class Tree(TensorClass["nocast"]):
             }
         )
 
-    def edges(self) -> List[Tuple[int, int]]:
+    def edges(self) -> list[tuple[int, int]]:
         """Retrieves a list of edges in the tree.
 
         Each edge is represented as a tuple of two node IDs: the parent node ID and the child node ID.
@@ -530,7 +529,7 @@ class Tree(TensorClass["nocast"]):
             return lengths[0]
         return max(*lengths)
 
-    def rollout_from_path(self, path: Tuple[int]) -> TensorDictBase | None:
+    def rollout_from_path(self, path: tuple[int]) -> TensorDictBase | None:
         """Retrieves the rollout data along a given path in the tree.
 
         The rollout data is concatenated along the last dimension (dim=-1) for each node in the path.
@@ -557,7 +556,7 @@ class Tree(TensorClass["nocast"]):
             return torch.cat(rollouts, dim=-1)
 
     @staticmethod
-    def _label(info: List[str], tree: "Tree", root=False):
+    def _label(info: list[str], tree: Tree, root=False):
         labels = []
         for key in info:
             if key == "hash":
@@ -577,7 +576,7 @@ class Tree(TensorClass["nocast"]):
         self: Tree,
         backend: str = "plotly",
         figure: str = "tree",
-        info: List[str] = None,
+        info: list[str] = None,
         make_labels: Callable[[Any, ...], Any] | None = None,
     ):
         """Plots a visualization of the tree using the specified backend and figure type.
@@ -811,11 +810,11 @@ class MCTSForest:
         data_map: TensorDictMap | None = None,
         node_map: TensorDictMap | None = None,
         max_size: int | None = None,
-        done_keys: List[NestedKey] | None = None,
-        reward_keys: List[NestedKey] = None,
-        observation_keys: List[NestedKey] = None,
-        action_keys: List[NestedKey] = None,
-        excluded_keys: List[NestedKey] = None,
+        done_keys: list[NestedKey] | None = None,
+        reward_keys: list[NestedKey] = None,
+        observation_keys: list[NestedKey] = None,
+        action_keys: list[NestedKey] = None,
+        excluded_keys: list[NestedKey] = None,
         consolidated: bool | None = None,
     ):
 
@@ -856,7 +855,7 @@ class MCTSForest:
         self.consolidated = consolidated
 
     @property
-    def done_keys(self) -> List[NestedKey]:
+    def done_keys(self) -> list[NestedKey]:
         """Done Keys.
 
         Returns the keys used to indicate that an episode has ended.
@@ -877,7 +876,7 @@ class MCTSForest:
         self._done_keys = _make_list_of_nestedkeys(value, "done_keys")
 
     @property
-    def reward_keys(self) -> List[NestedKey]:
+    def reward_keys(self) -> list[NestedKey]:
         """Reward Keys.
 
         Returns the keys used to retrieve rewards from the environment's output.
@@ -897,7 +896,7 @@ class MCTSForest:
         self._reward_keys = _make_list_of_nestedkeys(value, "reward_keys")
 
     @property
-    def action_keys(self) -> List[NestedKey]:
+    def action_keys(self) -> list[NestedKey]:
         """Action Keys.
 
         Returns the keys used to retrieve actions from the environment's input.
@@ -917,7 +916,7 @@ class MCTSForest:
         self._action_keys = _make_list_of_nestedkeys(value, "action_keys")
 
     @property
-    def observation_keys(self) -> List[NestedKey]:
+    def observation_keys(self) -> list[NestedKey]:
         """Observation Keys.
 
         Returns the keys used to retrieve observations from the environment's output.
@@ -936,7 +935,7 @@ class MCTSForest:
         self._observation_keys = _make_list_of_nestedkeys(value, "observation_keys")
 
     @property
-    def excluded_keys(self) -> List[NestedKey] | None:
+    def excluded_keys(self) -> list[NestedKey] | None:
         return self._excluded_keys
 
     @excluded_keys.setter
@@ -1223,7 +1222,7 @@ class MCTSForest:
         root: TensorDictBase,
         index: torch.Tensor | None = None,
         compact: bool = True,
-    ) -> Tuple[Tree, torch.Tensor | None, torch.Tensor | None]:
+    ) -> tuple[Tree, torch.Tensor | None, torch.Tensor | None]:
         root = root.select(*self.node_map.in_keys)
         node_meta = None
         if root in self.node_map:
@@ -1422,7 +1421,7 @@ class MCTSForest:
         return tree.to_string(node_format_fn)
 
 
-def _make_list_of_nestedkeys(obj: Any, attr: str) -> List[NestedKey]:
+def _make_list_of_nestedkeys(obj: Any, attr: str) -> list[NestedKey]:
     if obj is None:
         return obj
     if isinstance(obj, (str, tuple)):

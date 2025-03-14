@@ -7,11 +7,12 @@ from __future__ import annotations
 import abc
 import functools
 from abc import abstractmethod
-from typing import Any, Callable, Dict, Generic, List, TypeVar
+from typing import Any, Callable, Generic, TypeVar
 
 import torch
 from tensordict import is_tensor_collection, NestedKey, TensorDictBase
 from tensordict.nn.common import TensorDictModuleBase
+
 from torchrl.data.map.hash import RandomProjectionHash, SipHash
 from torchrl.data.map.query import QueryModule
 from torchrl.data.replay_buffers.storages import (
@@ -117,9 +118,9 @@ class TensorDictMap(
         self,
         *,
         query_module: QueryModule,
-        storage: Dict[NestedKey, TensorMap[torch.Tensor, torch.Tensor]],
+        storage: dict[NestedKey, TensorMap[torch.Tensor, torch.Tensor]],
         collate_fn: Callable[[Any], Any] | None = None,
-        out_keys: List[NestedKey] | None = None,
+        out_keys: list[NestedKey] | None = None,
         write_fn: Callable[[Any, Any], Any] | None = None,
     ):
         super().__init__()
@@ -127,7 +128,6 @@ class TensorDictMap(
         self.in_keys = query_module.in_keys
         if out_keys is not None:
             self.out_keys = out_keys
-            assert not self._has_lazy_out_keys()
 
         self.query_module = query_module
         self.index_key = query_module.index_key
@@ -143,7 +143,7 @@ class TensorDictMap(
         return self.storage.max_size
 
     @property
-    def out_keys(self) -> List[NestedKey]:
+    def out_keys(self) -> list[NestedKey]:
         out_keys = self.__dict__.get("_out_keys_and_lazy")
         if out_keys is not None:
             return out_keys[0]
@@ -173,8 +173,8 @@ class TensorDictMap(
         cls,
         source,
         dest,
-        in_keys: List[NestedKey],
-        out_keys: List[NestedKey] | None = None,
+        in_keys: list[NestedKey],
+        out_keys: list[NestedKey] | None = None,
         max_size: int = 1000,
         storage_constructor: type | None = None,
         hash_module: Callable | None = None,

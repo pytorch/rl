@@ -4,13 +4,13 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import Callable, List
+from typing import Callable
 
 from tensordict import NestedKey
 
 
 def _plot_plotly_tree(
-    tree: "Tree", make_labels: Callable[[Tree], str] | None = None  # noqa: F821
+    tree: Tree, make_labels: Callable[[Tree], str] | None = None  # noqa: F821
 ):
     import plotly.graph_objects as go
     from igraph import Graph
@@ -78,7 +78,7 @@ def _plot_plotly_tree(
     fig.show()
 
 
-def _plot_plotly_box(tree: "Tree", info: List[NestedKey] = None):  # noqa: F821
+def _plot_plotly_box(tree: Tree, info: list[NestedKey] = None):  # noqa: F821
     import plotly.graph_objects as go
 
     if info is None:
@@ -89,7 +89,7 @@ def _plot_plotly_box(tree: "Tree", info: List[NestedKey] = None):  # noqa: F821
 
     _tree = tree
 
-    def extend(tree: "Tree", parent):  # noqa: F821
+    def extend(tree: Tree, parent):  # noqa: F821
         children = tree.subtree
         if children is None:
             return

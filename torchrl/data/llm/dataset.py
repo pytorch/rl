@@ -7,13 +7,10 @@ from __future__ import annotations
 import importlib.util
 import os
 from pathlib import Path
-
-from typing import Sequence, Type
+from typing import Sequence
 
 import torch
-
 from tensordict import TensorDict, TensorDictBase
-
 from tensordict.utils import NestedKey
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.replay_buffers import (
@@ -34,7 +31,7 @@ class TokenizedDatasetLoader:
         max_length (int): the maximum sequence length.
         dataset_name (str): the name of the dataset.
         tokenizer_fn (callable): the tokeinizing method constructor, such as
-            :class:`torchrl.data.rlhf.TensorDictTokenizer`. When called,
+            :class:`torchrl.data.llm.TensorDictTokenizer`. When called,
             it should return a :class:`tensordict.TensorDict` instance
             or a dictionary-like structure with the tokenized data.
         pre_tokenization_hook (callable, optional): called on
@@ -65,8 +62,8 @@ class TokenizedDatasetLoader:
     The dataset will be stored in ``<root_dir>/<split>/<max_length>/``.
 
     Examples:
-        >>> from torchrl.data.rlhf import TensorDictTokenizer
-        >>> from torchrl.data.rlhf.reward import  pre_tokenization_hook
+        >>> from torchrl.data.llm import TensorDictTokenizer
+        >>> from torchrl.data.llm.reward import  pre_tokenization_hook
         >>> split = "train"
         >>> max_length = 550
         >>> dataset_name = "CarperAI/openai_summarize_comparisons"
@@ -94,7 +91,7 @@ class TokenizedDatasetLoader:
         split,
         max_length,
         dataset_name,
-        tokenizer_fn: Type[TensorDictTokenizer],
+        tokenizer_fn: type[TensorDictTokenizer],
         pre_tokenization_hook=None,
         root_dir=None,
         from_disk=False,
@@ -227,7 +224,7 @@ class TokenizedDatasetLoader:
 
     @staticmethod
     def dataset_to_tensordict(
-        dataset: "datasets.Dataset" | TensorDict,  # noqa: F821
+        dataset: datasets.Dataset | TensorDict,  # noqa: F821
         data_dir: Path,
         prefix: NestedKey = None,
         features: Sequence[str] = None,
@@ -320,7 +317,7 @@ def create_infinite_iterator(iterator):
 def get_dataloader(
     batch_size: int,
     block_size: int,
-    tensorclass_type: Type,
+    tensorclass_type: type,
     device: torch.device,
     dataset_name: str | None = None,
     infinite: bool = True,
@@ -362,7 +359,7 @@ def get_dataloader(
             Defaults to ``max(os.cpu_count() // 2, 1)``.
 
     Examples:
-        >>> from torchrl.data.rlhf.reward import PairwiseDataset
+        >>> from torchrl.data.llm.reward import PairwiseDataset
         >>> dataloader = get_dataloader(
         ...     batch_size=256, block_size=550, tensorclass_type=PairwiseDataset, device="cpu")
         >>> for d in dataloader:

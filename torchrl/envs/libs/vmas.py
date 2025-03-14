@@ -7,8 +7,6 @@ from __future__ import annotations
 import importlib.util
 import warnings
 
-from typing import Dict, List, Optional, Union
-
 import torch
 from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 
@@ -237,9 +235,9 @@ class VmasWrapper(_EnvWrapper):
 
     def __init__(
         self,
-        env: "vmas.simulator.environment.environment.Environment" = None,  # noqa
+        env: vmas.simulator.environment.environment.Environment = None,  # noqa
         categorical_actions: bool = True,
-        group_map: MarlGroupMapType | Dict[str, List[str]] | None = None,
+        group_map: MarlGroupMapType | dict[str, list[str]] | None = None,
         **kwargs,
     ):
         if env is not None:
@@ -253,7 +251,7 @@ class VmasWrapper(_EnvWrapper):
 
     def _build_env(
         self,
-        env: "vmas.simulator.environment.environment.Environment",  # noqa
+        env: vmas.simulator.environment.environment.Environment,  # noqa
         from_pixels: bool = False,
         pixels_only: bool = False,
     ):
@@ -281,7 +279,7 @@ class VmasWrapper(_EnvWrapper):
 
         return env
 
-    def _get_default_group_map(self, agent_names: List[str]):
+    def _get_default_group_map(self, agent_names: list[str]):
         # This function performs the default grouping in vmas.
         # Agents with names "<name>_<int>" will be grouped in group name "<name>".
         # If any of the agents does not follow the naming convention, we fall back
@@ -316,7 +314,7 @@ class VmasWrapper(_EnvWrapper):
         return group_map
 
     def _make_specs(
-        self, env: "vmas.simulator.environment.environment.Environment"  # noqa
+        self, env: vmas.simulator.environment.environment.Environment  # noqa
     ) -> None:
         # Create and check group map
         self.agent_names = [agent.name for agent in self.agents]
@@ -478,7 +476,7 @@ class VmasWrapper(_EnvWrapper):
             group_info_spec,
         )
 
-    def _check_kwargs(self, kwargs: Dict):
+    def _check_kwargs(self, kwargs: dict):
         vmas = self.lib
 
         if "env" not in kwargs:
@@ -489,14 +487,14 @@ class VmasWrapper(_EnvWrapper):
                 "env is not of type 'vmas.simulator.environment.Environment'."
             )
 
-    def _init_env(self) -> Optional[int]:
+    def _init_env(self) -> int | None:
         pass
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None):
         self._env.seed(seed)
 
     def _reset(
-        self, tensordict: Optional[TensorDictBase] = None, **kwargs
+        self, tensordict: TensorDictBase | None = None, **kwargs
     ) -> TensorDictBase:
         if tensordict is not None and "_reset" in tensordict.keys():
             _reset = tensordict.get("_reset")
@@ -607,9 +605,7 @@ class VmasWrapper(_EnvWrapper):
         )
         return tensordict_out
 
-    def read_obs(
-        self, observations: Union[Dict, torch.Tensor]
-    ) -> Union[Dict, torch.Tensor]:
+    def read_obs(self, observations: dict | torch.Tensor) -> dict | torch.Tensor:
         if isinstance(observations, torch.Tensor):
             return _selective_unsqueeze(observations, batch_size=self.batch_size)
         return TensorDict(
@@ -617,7 +613,7 @@ class VmasWrapper(_EnvWrapper):
             batch_size=self.batch_size,
         )
 
-    def read_info(self, infos: Dict[str, torch.Tensor]) -> torch.Tensor:
+    def read_info(self, infos: dict[str, torch.Tensor]) -> torch.Tensor:
         if len(infos) == 0:
             return None
         infos = TensorDict(
@@ -777,14 +773,14 @@ class VmasEnv(VmasWrapper):
 
     def __init__(
         self,
-        scenario: Union[str, "vmas.simulator.scenario.BaseScenario"],  # noqa
+        scenario: str | vmas.simulator.scenario.BaseScenario,  # noqa
         *,
         num_envs: int,
         continuous_actions: bool = True,
-        max_steps: Optional[int] = None,
+        max_steps: int | None = None,
         categorical_actions: bool = True,
-        seed: Optional[int] = None,
-        group_map: MarlGroupMapType | Dict[str, List[str]] | None = None,
+        seed: int | None = None,
+        group_map: MarlGroupMapType | dict[str, list[str]] | None = None,
         **kwargs,
     ):
         if not _has_vmas:
@@ -803,7 +799,7 @@ class VmasEnv(VmasWrapper):
             **kwargs,
         )
 
-    def _check_kwargs(self, kwargs: Dict):
+    def _check_kwargs(self, kwargs: dict):
         if "scenario" not in kwargs:
             raise TypeError("Could not find environment key 'scenario' in kwargs.")
         if "num_envs" not in kwargs:
@@ -811,13 +807,13 @@ class VmasEnv(VmasWrapper):
 
     def _build_env(
         self,
-        scenario: Union[str, "vmas.simulator.scenario.BaseScenario"],  # noqa
+        scenario: str | vmas.simulator.scenario.BaseScenario,  # noqa
         num_envs: int,
         continuous_actions: bool,
-        max_steps: Optional[int],
-        seed: Optional[int],
+        max_steps: int | None,
+        seed: int | None,
         **scenario_kwargs,
-    ) -> "vmas.simulator.environment.environment.Environment":  # noqa
+    ) -> vmas.simulator.environment.environment.Environment:  # noqa
         vmas = self.lib
 
         self.scenario_name = scenario

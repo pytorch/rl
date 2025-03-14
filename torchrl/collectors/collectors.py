@@ -7,9 +7,7 @@ from __future__ import annotations
 import _pickle
 import abc
 import collections
-
 import contextlib
-
 import functools
 import os
 import queue
@@ -23,18 +21,12 @@ from multiprocessing import connection, queues
 from multiprocessing.managers import SyncManager
 from queue import Empty
 from textwrap import indent
-from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Iterator, Sequence, TypeVar
 
 import numpy as np
-
 import torch
 import torch.nn as nn
-from tensordict import (
-    LazyStackedTensorDict,
-    TensorDict,
-    TensorDictBase,
-    TensorDictParams,
-)
+from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 from tensordict.base import NO_DEFAULT
 from tensordict.nn import CudaGraphModule, TensorDictModule
 from tensordict.utils import Buffer
@@ -56,6 +48,12 @@ from torchrl._utils import (
     VERBOSE,
 )
 from torchrl.collectors.utils import split_trajectories
+from torchrl.collectors.weight_update import (
+    LocalWeightUpdaterBase,
+    MultiProcessedRemoteWeightUpdate,
+    RemoteWeightUpdaterBase,
+    VanillaLocalWeightUpdater,
+)
 from torchrl.data import ReplayBuffer
 from torchrl.data.tensor_specs import TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
@@ -88,6 +86,8 @@ _MAX_IDLE_COUNT = int(os.environ.get("MAX_IDLE_COUNT", torch.iinfo(torch.int64).
 DEFAULT_EXPLORATION_TYPE: ExplorationType = ExplorationType.RANDOM
 
 _is_osx = sys.platform.startswith("darwin")
+
+T = TypeVar("T")
 
 
 class _Interruptor:
@@ -124,8 +124,6 @@ class _InterruptorManager(SyncManager):
     between processes.
     """
 
-    pass
-
 
 _InterruptorManager.register("_Interruptor", _Interruptor)
 
@@ -154,6 +152,8 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     trust_policy: bool
     compiled_policy: bool
     cudagraphed_policy: bool
+    local_weights_updater: LocalWeightUpdaterBase | None = None
+    remote_weights_updater: RemoteWeightUpdaterBase | None = None
 
     def _get_policy_and_device(
         self,
@@ -162,7 +162,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         policy_device: Any = NO_DEFAULT,
         env_maker: Any | None = None,
         env_maker_kwargs: dict | None = None,
-    ) -> Tuple[TensorDictModule, Union[None, Callable[[], dict]]]:
+    ) -> tuple[TensorDictModule, None | Callable[[], dict]]:
         """Util method to get a policy and its device given the collector __init__ inputs.
 
         We want to copy the policy and then move the data there, not call policy.to(device).
@@ -245,19 +245,50 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         return policy, get_original_weights
 
     def update_policy_weights_(
-        self, policy_weights: Optional[TensorDictBase] = None
+        self,
+        policy_weights: TensorDictBase | None = None,
+        *,
+        worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
+        **kwargs,
     ) -> None:
-        """Updates the policy weights if the policy of the data collector and the trained policy live on different devices.
+        """Updates the policy weights for the data collector, accommodating both local and remote execution contexts.
+
+        This method ensures that the policy weights used by the data collector are synchronized with the latest
+        trained weights. It supports both local and remote weight updates, depending on the configuration of the
+        data collector. The local (download) update is performed before the remote (upload) update, such that weights
+        can be transferred to the children workers from a server.
 
         Args:
-            policy_weights (TensorDictBase, optional): if provided, a TensorDict containing
-                the weights of the policy to be used for the udpdate.
+            policy_weights (TensorDictBase, optional): A TensorDict containing the weights of the policy to be used
+                for the update. If not provided, the method will attempt to fetch the weights using the configured
+                weight updater.
+            worker_ids (int | List[int] | torch.device | List[torch.device] | None, optional): Identifiers for the
+                workers that need to be updated. This is relevant when using a remote weights updater, which must
+                be specified during the data collector's initialization. If `worker_ids` is provided without a
+                configured remote weights updater, a TypeError will be raised.
+
+        Raises:
+            TypeError: If `worker_ids` is provided but no `remote_weights_updater` is configured.
+
+        .. note::
+
+            - The method first attempts to update weights locally using `local_weights_updater`, if available.
+            - If a `remote_weights_updater` is configured, it will be used to update the specified remote workers.
+            - Users can extend the `LocalWeightUpdaterBase` and `RemoteWeightUpdaterBase` classes to customize
+              the weight update logic for specific use cases. This method should not be overwritten.
+
+        .. seealso:: :class:`~torchrl.collectors.LocalWeightsUpdaterBase` and
+            :meth:`~torchrl.collectors.RemoteWeightsUpdaterBase`.
 
         """
-        if policy_weights is not None:
-            self.policy_weights.data.update_(policy_weights)
-        elif self.get_weights_fn is not None:
-            self.policy_weights.data.update_(self.get_weights_fn())
+        if self.local_weights_updater is not None:
+            self.local_weights_updater(policy_weights, **kwargs)
+        if self.remote_weights_updater is not None:
+            self.remote_weights_updater(policy_weights, worker_ids=worker_ids, **kwargs)
+        elif worker_ids is not None:
+            raise TypeError(
+                "worker_ids was passed but remote_weights_updater was None."
+            )
 
     def __iter__(self) -> Iterator[TensorDictBase]:
         try:
@@ -272,7 +303,8 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 self._iterator = iter(self)
             out = next(self._iterator)
             # if any, we don't want the device ref to be passed in distributed settings
-            out.clear_device_()
+            if out is not None:
+                out.clear_device_()
             return out
         except StopIteration:
             return None
@@ -347,7 +379,15 @@ class SyncDataCollector(DataCollectorBase):
 
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
+            .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
+                pickled directly), the :arg:`policy_factory` should be used instead.
+
     Keyword Args:
+        policy_factory (Callable[[], Callable], optional): a callable that returns
+            a policy instance. This is exclusive with the `policy` argument.
+
+            .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.
+
         frames_per_batch (int): A keyword-only argument representing the total
             number of elements in a batch.
         total_frames (int): A keyword-only argument representing the total
@@ -437,7 +477,7 @@ class SyncDataCollector(DataCollectorBase):
         use_buffers (bool, optional): if ``True``, a buffer will be used to stack the data.
             This isn't compatible with environments with dynamic specs. Defaults to ``True``
             for envs without dynamic specs, ``False`` for others.
-        replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordict
+        replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordicts
             but populate the buffer instead. Defaults to ``None``.
         trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
             assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
@@ -453,6 +493,13 @@ class SyncDataCollector(DataCollectorBase):
             or `ManiSkills <https://github.com/haosulab/ManiSkill/>`_) cuda synchronization may cause unexpected
             crashes.
             Defaults to ``False``.
+        local_weights_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
+            or its subclass, responsible for updating the policy weights on the local inference worker.
+            If not provided, a :class:`~torchrl.collectors.VanillaLocalWeightUpdater` will be used by default,
+            which directly fetches and applies the weights from the server.
+        remote_weights_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
+            or its subclass, responsible for updating the policy weights on remote inference workers.
+            This is typically not used in :class:`~torchrl.collectors.SyncDataCollector` as it operates in a single-process environment.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -513,16 +560,13 @@ class SyncDataCollector(DataCollectorBase):
 
     def __init__(
         self,
-        create_env_fn: Union[
-            EnvBase, "EnvCreator", Sequence[Callable[[], EnvBase]]  # noqa: F821
-        ],  # noqa: F821
-        policy: Optional[
-            Union[
-                TensorDictModule,
-                Callable[[TensorDictBase], TensorDictBase],
-            ]
-        ] = None,
+        create_env_fn: (
+            EnvBase | EnvCreator | Sequence[Callable[[], EnvBase]]  # noqa: F821
+        ),  # noqa: F821
+        policy: None
+        | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]) = None,
         *,
+        policy_factory: Callable[[], Callable] | None = None,
         frames_per_batch: int,
         total_frames: int = -1,
         device: DEVICE_TYPING = None,
@@ -543,9 +587,11 @@ class SyncDataCollector(DataCollectorBase):
         use_buffers: bool | None = None,
         replay_buffer: ReplayBuffer | None = None,
         trust_policy: bool = None,
-        compile_policy: bool | Dict[str, Any] | None = None,
-        cudagraph_policy: bool | Dict[str, Any] | None = None,
+        compile_policy: bool | dict[str, Any] | None = None,
+        cudagraph_policy: bool | dict[str, Any] | None = None,
         no_cuda_sync: bool = False,
+        local_weights_updater: LocalWeightUpdaterBase | None = None,
+        remote_weights_updater: RemoteWeightUpdaterBase | None = None,
         **kwargs,
     ):
         from torchrl.envs.batched_envs import BatchedEnvBase
@@ -566,8 +612,13 @@ class SyncDataCollector(DataCollectorBase):
                 env.update_kwargs(create_env_kwargs)
 
         if policy is None:
+            if policy_factory is not None:
+                policy = policy_factory()
+            else:
+                policy = RandomPolicy(env.full_action_spec)
+        elif policy_factory is not None:
+            raise TypeError("policy_factory cannot be used with policy argument.")
 
-            policy = RandomPolicy(env.full_action_spec)
         if trust_policy is None:
             trust_policy = isinstance(policy, (RandomPolicy, CudaGraphModule))
         self.trust_policy = trust_policy
@@ -780,6 +831,14 @@ class SyncDataCollector(DataCollectorBase):
         self._frames = 0
         self._iter = -1
 
+        if local_weights_updater is None:
+            local_weights_updater = VanillaLocalWeightUpdater(
+                weight_getter=self.get_weights_fn, policy_weights=self.policy_weights
+            )
+
+        self.local_weights_updater = local_weights_updater
+        self.remote_weights_updater = remote_weights_updater
+
     @property
     def _traj_pool(self):
         pool = getattr(self, "_traj_pool_val", None)
@@ -990,9 +1049,14 @@ class SyncDataCollector(DataCollectorBase):
 
     # for RPC
     def update_policy_weights_(
-        self, policy_weights: Optional[TensorDictBase] = None
+        self,
+        policy_weights: TensorDictBase | None = None,
+        *,
+        worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
     ) -> None:
-        super().update_policy_weights_(policy_weights)
+        super().update_policy_weights_(
+            policy_weights=policy_weights, worker_ids=worker_ids
+        )
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
@@ -1437,17 +1501,22 @@ class SyncDataCollector(DataCollectorBase):
         self._iter = state_dict["iter"]
 
     def __repr__(self) -> str:
-        env_str = indent(f"env={self.env}", 4 * " ")
-        policy_str = indent(f"policy={self.policy}", 4 * " ")
-        td_out_str = indent(f"td_out={self._final_rollout}", 4 * " ")
-        string = (
-            f"{self.__class__.__name__}("
-            f"\n{env_str},"
-            f"\n{policy_str},"
-            f"\n{td_out_str},"
-            f"\nexploration={self.exploration_type})"
-        )
-        return string
+        try:
+            env_str = indent(f"env={self.env}", 4 * " ")
+            policy_str = indent(f"policy={self.policy}", 4 * " ")
+            td_out_str = indent(
+                f"td_out={getattr(self, '_final_rollout', None)}", 4 * " "
+            )
+            string = (
+                f"{self.__class__.__name__}("
+                f"\n{env_str},"
+                f"\n{policy_str},"
+                f"\n{td_out_str},"
+                f"\nexploration={self.exploration_type})"
+            )
+            return string
+        except AttributeError:
+            return f"{type(self).__name__}(not_init)"
 
 
 class _MultiDataCollector(DataCollectorBase):
@@ -1477,7 +1546,18 @@ class _MultiDataCollector(DataCollectorBase):
             - In all other cases an attempt to wrap it will be undergone as such:
               ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
+            .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
+                pickled directly), the :arg:`policy_factory` should be used instead.
+
     Keyword Args:
+        policy_factory (Callable[[], Callable], optional): a callable that returns
+            a policy instance. This is exclusive with the `policy` argument.
+
+            .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.
+
+            .. warning:: `policy_factory` is currently not compatible with multiprocessed data
+                collectors.
+
         frames_per_batch (int): A keyword-only argument representing the
             total number of elements in a batch.
         total_frames (int, optional): A keyword-only argument representing the
@@ -1595,7 +1675,7 @@ class _MultiDataCollector(DataCollectorBase):
         use_buffers (bool, optional): if ``True``, a buffer will be used to stack the data.
             This isn't compatible with environments with dynamic specs. Defaults to ``True``
             for envs without dynamic specs, ``False`` for others.
-        replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordict
+        replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordicts
             but populate the buffer instead. Defaults to ``None``.
         trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
             assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
@@ -1611,31 +1691,35 @@ class _MultiDataCollector(DataCollectorBase):
             or `ManiSkills <https://github.com/haosulab/ManiSkill/>`_) cuda synchronization may cause unexpected
             crashes.
             Defaults to ``False``.
+        local_weights_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
+            or its subclass, responsible for updating the policy weights on each local inference worker.
+            If not provided, left unused.
+        remote_weights_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
+            or its subclass, responsible for updating the policy weights on remote inference workers.
+            If not provided, a :class:`~torchrl.collectors.MultiProcessedRemoteWeightUpdate` will be used by default,
+            which handles weight synchronization across multiple processes.
 
     """
 
     def __init__(
         self,
         create_env_fn: Sequence[Callable[[], EnvBase]],
-        policy: Optional[
-            Union[
-                TensorDictModule,
-                Callable[[TensorDictBase], TensorDictBase],
-            ]
-        ] = None,
+        policy: None
+        | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]) = None,
         *,
+        policy_factory: Callable[[], Callable] | None = None,
         frames_per_batch: int,
-        total_frames: Optional[int] = -1,
+        total_frames: int | None = -1,
         device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         storing_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         env_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         policy_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
-        create_env_kwargs: Optional[Sequence[dict]] = None,
+        create_env_kwargs: Sequence[dict] | None = None,
         max_frames_per_traj: int | None = None,
         init_random_frames: int | None = None,
         reset_at_each_iter: bool = False,
-        postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
-        split_trajs: Optional[bool] = None,
+        postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
+        split_trajs: bool | None = None,
         exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
         reset_when_done: bool = True,
         update_at_each_batch: bool = False,
@@ -1648,9 +1732,11 @@ class _MultiDataCollector(DataCollectorBase):
         replay_buffer: ReplayBuffer | None = None,
         replay_buffer_chunk: bool = True,
         trust_policy: bool = None,
-        compile_policy: bool | Dict[str, Any] | None = None,
-        cudagraph_policy: bool | Dict[str, Any] | None = None,
+        compile_policy: bool | dict[str, Any] | None = None,
+        cudagraph_policy: bool | dict[str, Any] | None = None,
         no_cuda_sync: bool = False,
+        remote_weights_updater: RemoteWeightUpdaterBase | None = None,
+        local_weights_updater: LocalWeightUpdaterBase | None = None,
     ):
         self.closed = True
         self.num_workers = len(create_env_fn)
@@ -1704,30 +1790,46 @@ class _MultiDataCollector(DataCollectorBase):
             replay_buffer.share()
 
         self._policy_weights_dict = {}
-        self._get_weights_fn_dict = {}
 
         if trust_policy is None:
-            trust_policy = isinstance(policy, CudaGraphModule)
+            trust_policy = policy is not None and isinstance(policy, CudaGraphModule)
         self.trust_policy = trust_policy
 
-        for policy_device, env_maker, env_maker_kwargs in zip(
-            self.policy_device, self.create_env_fn, self.create_env_kwargs
-        ):
-            (policy_copy, get_weights_fn,) = self._get_policy_and_device(
-                policy=policy,
-                policy_device=policy_device,
-                env_maker=env_maker,
-                env_maker_kwargs=env_maker_kwargs,
+        if policy_factory is not None and policy is not None:
+            raise TypeError("policy_factory and policy are mutually exclusive")
+        elif policy_factory is None:
+            for policy_device, env_maker, env_maker_kwargs in zip(
+                self.policy_device, self.create_env_fn, self.create_env_kwargs
+            ):
+                (policy_copy, get_weights_fn,) = self._get_policy_and_device(
+                    policy=policy,
+                    policy_device=policy_device,
+                    env_maker=env_maker,
+                    env_maker_kwargs=env_maker_kwargs,
+                )
+                if type(policy_copy) is not type(policy):
+                    policy = policy_copy
+                weights = (
+                    TensorDict.from_module(policy_copy)
+                    if isinstance(policy_copy, nn.Module)
+                    else TensorDict()
+                )
+                self._policy_weights_dict[policy_device] = weights
+            self._get_weights_fn = get_weights_fn
+            if remote_weights_updater is None:
+                remote_weights_updater = MultiProcessedRemoteWeightUpdate(
+                    get_server_weights=self._get_weights_fn,
+                    policy_weights=self._policy_weights_dict,
+                )
+        elif remote_weights_updater is None:
+            # TODO
+            raise NotImplementedError(
+                "remote_weights_updater cannot be None when policy_factory is provided."
             )
-            if type(policy_copy) is not type(policy):
-                policy = policy_copy
-            weights = (
-                TensorDict.from_module(policy_copy)
-                if isinstance(policy_copy, nn.Module)
-                else TensorDict()
-            )
-            self._policy_weights_dict[policy_device] = weights
-            self._get_weights_fn_dict[policy_device] = get_weights_fn
+
+        self.remote_weights_updater = remote_weights_updater
+        self.local_weights_updater = local_weights_updater
+
         self.policy = policy
 
         remainder = 0
@@ -1883,21 +1985,6 @@ class _MultiDataCollector(DataCollectorBase):
     def frames_per_batch_worker(self):
         raise NotImplementedError
 
-    def update_policy_weights_(self, policy_weights=None) -> None:
-        if isinstance(policy_weights, TensorDictParams):
-            policy_weights = policy_weights.data
-        for _device in self._policy_weights_dict:
-            if policy_weights is not None:
-                self._policy_weights_dict[_device].data.update_(policy_weights)
-            elif self._get_weights_fn_dict[_device] is not None:
-                original_weights = self._get_weights_fn_dict[_device]()
-                if original_weights is None:
-                    # if the weights match in identity, we can spare a call to update_
-                    continue
-                if isinstance(original_weights, TensorDictParams):
-                    original_weights = original_weights.data
-                self._policy_weights_dict[_device].data.update_(original_weights)
-
     @property
     def _queue_len(self) -> int:
         raise NotImplementedError
@@ -1928,6 +2015,10 @@ class _MultiDataCollector(DataCollectorBase):
             policy_device = self.policy_device[i]
             storing_device = self.storing_device[i]
             env_device = self.env_device[i]
+            # We take the weights, the policy, and locally dispatch the weights to the policy
+            #  while we send the policy to the remote process.
+            #  This makes sure that a given set of shared weights for a given device are
+            #  shared for all policies that rely on that device.
             policy = self.policy
             policy_weights = self._policy_weights_dict[policy_device]
             if policy is not None and policy_weights is not None:
@@ -2086,7 +2177,7 @@ also that the state dict is synchronised across processes if needed."""
         self.reset()
         return seed
 
-    def reset(self, reset_idx: Optional[Sequence[bool]] = None) -> None:
+    def reset(self, reset_idx: Sequence[bool] | None = None) -> None:
         """Resets the environments to a new initial state.
 
         Args:
@@ -2282,9 +2373,14 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
     # for RPC
     def update_policy_weights_(
-        self, policy_weights: Optional[TensorDictBase] = None
+        self,
+        policy_weights: TensorDictBase | None = None,
+        *,
+        worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
     ) -> None:
-        super().update_policy_weights_(policy_weights)
+        super().update_policy_weights_(
+            policy_weights=policy_weights, worker_ids=worker_ids
+        )
 
     @property
     def frames_per_batch_worker(self):
@@ -2646,15 +2742,20 @@ class MultiaSyncDataCollector(_MultiDataCollector):
 
     # for RPC
     def update_policy_weights_(
-        self, policy_weights: Optional[TensorDictBase] = None
+        self,
+        policy_weights: TensorDictBase | None = None,
+        *,
+        worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
     ) -> None:
-        super().update_policy_weights_(policy_weights)
+        super().update_policy_weights_(
+            policy_weights=policy_weights, worker_ids=worker_ids
+        )
 
     @property
     def frames_per_batch_worker(self):
         return self.requested_frames_per_batch
 
-    def _get_from_queue(self, timeout=None) -> Tuple[int, int, TensorDictBase]:
+    def _get_from_queue(self, timeout=None) -> tuple[int, int, TensorDictBase]:
         new_data, j = self.queue_out.get(timeout=timeout)
         use_buffers = self._use_buffers
         if self.replay_buffer is not None:
@@ -2745,7 +2846,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             del self.out_tensordicts
         return super()._shutdown_main()
 
-    def reset(self, reset_idx: Optional[Sequence[bool]] = None) -> None:
+    def reset(self, reset_idx: Sequence[bool] | None = None) -> None:
         super().reset(reset_idx)
         if self.queue_out.full():
             time.sleep(_TIMEOUT)  # wait until queue is empty
@@ -2794,7 +2895,15 @@ class aSyncDataCollector(MultiaSyncDataCollector):
 
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
+            .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
+                pickled directly), the :arg:`policy_factory` should be used instead.
+
     Keyword Args:
+        policy_factory (Callable[[], Callable], optional): a callable that returns
+            a policy instance. This is exclusive with the `policy` argument.
+
+            .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.
+
         frames_per_batch (int): A keyword-only argument representing the
             total number of elements in a batch.
         total_frames (int, optional): A keyword-only argument representing the
@@ -2900,25 +3009,22 @@ class aSyncDataCollector(MultiaSyncDataCollector):
     def __init__(
         self,
         create_env_fn: Callable[[], EnvBase],
-        policy: Optional[
-            Union[
-                TensorDictModule,
-                Callable[[TensorDictBase], TensorDictBase],
-            ]
-        ],
+        policy: None
+        | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]) = None,
         *,
+        policy_factory: Callable[[], Callable] | None = None,
         frames_per_batch: int,
-        total_frames: Optional[int] = -1,
+        total_frames: int | None = -1,
         device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         storing_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         env_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         policy_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
-        create_env_kwargs: Optional[Sequence[dict]] = None,
+        create_env_kwargs: Sequence[dict] | None = None,
         max_frames_per_traj: int | None = None,
         init_random_frames: int | None = None,
         reset_at_each_iter: bool = False,
-        postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
-        split_trajs: Optional[bool] = None,
+        postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
+        split_trajs: bool | None = None,
         exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
         reset_when_done: bool = True,
         update_at_each_batch: bool = False,
@@ -2931,6 +3037,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         super().__init__(
             create_env_fn=[create_env_fn],
             policy=policy,
+            policy_factory=policy_factory,
             total_frames=total_frames,
             create_env_kwargs=[create_env_kwargs],
             max_frames_per_traj=max_frames_per_traj,
@@ -2977,15 +3084,15 @@ def _main_async_collector(
     pipe_parent: connection.Connection,
     pipe_child: connection.Connection,
     queue_out: queues.Queue,
-    create_env_fn: Union[EnvBase, "EnvCreator", Callable[[], EnvBase]],  # noqa: F821
-    create_env_kwargs: Dict[str, Any],
+    create_env_fn: EnvBase | EnvCreator | Callable[[], EnvBase],  # noqa: F821
+    create_env_kwargs: dict[str, Any],
     policy: Callable[[TensorDictBase], TensorDictBase],
     max_frames_per_traj: int,
     frames_per_batch: int,
     reset_at_each_iter: bool,
-    storing_device: Optional[Union[torch.device, str, int]],
-    env_device: Optional[Union[torch.device, str, int]],
-    policy_device: Optional[Union[torch.device, str, int]],
+    storing_device: torch.device | str | int | None,
+    env_device: torch.device | str | int | None,
+    policy_device: torch.device | str | int | None,
     idx: int = 0,
     exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
     reset_when_done: bool = True,

@@ -2,11 +2,13 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import importlib.util
 
 import os
 from tempfile import TemporaryDirectory
-from typing import Any, Dict, Optional, Sequence, Union
+from typing import Any, Sequence
 
 from torch import Tensor
 
@@ -34,7 +36,7 @@ class MLFlowLogger(Logger):
         self,
         exp_name: str,
         tracking_uri: str,
-        tags: Optional[Dict[str, Any]] = None,
+        tags: dict[str, Any] | None = None,
         *,
         video_fps: int = 30,
         **kwargs,
@@ -51,7 +53,7 @@ class MLFlowLogger(Logger):
         self.video_log_counter = 0
         self.video_fps = video_fps
 
-    def _create_experiment(self) -> "mlflow.ActiveRun":  # noqa
+    def _create_experiment(self) -> mlflow.ActiveRun:  # noqa
         import mlflow
 
         """Creates an mlflow experiment.
@@ -70,7 +72,7 @@ class MLFlowLogger(Logger):
             self.id = experiment.experiment_id
         return mlflow.start_run(experiment_id=self.id)
 
-    def log_scalar(self, name: str, value: float, step: Optional[int] = None) -> None:
+    def log_scalar(self, name: str, value: float, step: int | None = None) -> None:
         """Logs a scalar value to mlflow.
 
         Args:
@@ -118,7 +120,7 @@ class MLFlowLogger(Logger):
                 torchvision.io.write_video(filename=f.name, video_array=video, fps=fps)
                 mlflow.log_artifact(f.name, "videos")
 
-    def log_hparams(self, cfg: Union["DictConfig", Dict]) -> None:  # noqa: F821
+    def log_hparams(self, cfg: DictConfig | dict) -> None:  # noqa: F821
         """Logs the hyperparameters of the experiment.
 
         Args:
