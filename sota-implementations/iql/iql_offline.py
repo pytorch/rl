@@ -18,14 +18,11 @@ import numpy as np
 import torch
 import tqdm
 from tensordict.nn import CudaGraphModule
-
 from torchrl._utils import timeit
-
 from torchrl.envs import set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives import group_optimizers
 from torchrl.record.loggers import generate_exp_name, get_logger
-
 from utils import (
     dump_video,
     log_metrics,
@@ -36,12 +33,11 @@ from utils import (
     make_offline_replay_buffer,
 )
 
-
 torch.set_float32_matmul_precision("high")
 
 
 @hydra.main(config_path="", config_name="offline_config")
-def main(cfg: "DictConfig"):  # noqa: F821
+def main(cfg: DictConfig):  # noqa: F821
     set_gym_backend(cfg.env.backend).set()
 
     # Create logger

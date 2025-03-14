@@ -11,10 +11,9 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any, Callable, Dict, Tuple
+from typing import Any, Callable
 
 import torch
-
 from tensordict import make_tensordict, NonTensorData, pad, TensorDict
 from tensordict.utils import _is_non_tensor
 
@@ -313,7 +312,7 @@ class OpenXExperienceReplay(BaseDatasetExperienceReplay):
         collate_fn: Callable | None = None,
         pin_memory: bool = False,
         prefetch: int | None = None,
-        transform: "torchrl.envs.Transform" | None = None,  # noqa-F821
+        transform: torchrl.envs.Transform | None = None,  # noqa-F821
         split_trajs: bool = False,
         strict_length: bool = True,
     ):
@@ -656,7 +655,7 @@ class _StreamingStorage(Storage):
         state_dict = self.state_dict()
         json.dump(state_dict, path / "state_dict.json")
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         return {
             "repo": self.repo,
             "split": self.split,
@@ -674,7 +673,7 @@ class _StreamingStorage(Storage):
         state_dict = json.load(path / "state_dict.json")
         self.load_state_dict(state_dict)
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         for key, val in state_dict.items():
             setattr(self, key, val)
         self._init()
@@ -722,7 +721,7 @@ class _StreamingSampler(Sampler):
     def __init__(self):
         ...
 
-    def sample(self, storage: Storage, batch_size: int) -> Tuple[Any, dict]:
+    def sample(self, storage: Storage, batch_size: int) -> tuple[Any, dict]:
         return range(batch_size), {}
 
     def _empty(self):
@@ -734,10 +733,10 @@ class _StreamingSampler(Sampler):
     def loads(self, path):
         ...
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         return {}
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         ...
 
 

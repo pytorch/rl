@@ -6,7 +6,7 @@
 import hydra
 import torch
 from models.actor_critic import init_actor_critic
-from torchrl.data.rlhf.utils import AdaptiveKLController, RolloutFromModel
+from torchrl.data.llm.utils import AdaptiveKLController, RolloutFromModel
 
 from torchrl.record.loggers import get_logger
 

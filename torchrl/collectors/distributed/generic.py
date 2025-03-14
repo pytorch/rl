@@ -11,10 +11,10 @@ import socket
 import warnings
 from copy import copy, deepcopy
 from datetime import timedelta
-from typing import Callable, List, OrderedDict, Type
+from typing import Callable, OrderedDict
 
 import torch.cuda
-from tensordict import TensorDict
+from tensordict import TensorDict, TensorDictBase
 from torch import nn
 
 from torchrl._utils import _ProcessNoWarn, logger as torchrl_logger, VERBOSE
@@ -31,6 +31,10 @@ from torchrl.collectors.distributed.default_configs import (
     TCP_PORT,
 )
 from torchrl.collectors.utils import _NON_NN_POLICY_WEIGHTS, split_trajectories
+from torchrl.collectors.weight_update import (
+    LocalWeightUpdaterBase,
+    RemoteWeightUpdaterBase,
+)
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import EnvCreator
@@ -227,7 +231,7 @@ def _run_collector(
                 # been updated
                 policy_weights.irecv(0)
             # the policy has been updated: we can simply update the weights
-            collector.update_policy_weights_(policy_weights)
+            collector.update_policy_weights_(policy_weights=policy_weights)
             _store.set(f"NODE_{rank}_out", b"updated")
         elif instruction.startswith(b"seeding"):
             seed = int(instruction.split(b"seeding_"))
@@ -270,7 +274,15 @@ class DistributedDataCollector(DataCollectorBase):
 
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
+            .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
+                pickled directly), the :arg:`policy_factory` should be used instead.
+
     Keyword Args:
+        policy_factory (Callable[[], Callable], optional): a callable that returns
+            a policy instance. This is exclusive with the `policy` argument.
+
+            .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.
+
         frames_per_batch (int): A keyword-only argument representing the total
             number of elements in a batch.
         total_frames (int): A keyword-only argument representing the total
@@ -399,6 +411,15 @@ class DistributedDataCollector(DataCollectorBase):
             to learn more.
             Defaults to ``"submitit"``.
         tcp_port (int, optional): the TCP port to be used. Defaults to 10003.
+        local_weights_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
+            or its subclass, responsible for updating the policy weights on the local inference worker.
+            This is typically not used in :class:`~torchrl.collectors.distributed.DistributedDataCollector` as it
+            focuses on distributed environments.
+        remote_weights_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
+            or its subclass, responsible for updating the policy weights on distributed inference workers.
+            If not provided, a :class:`~torchrl.collectors.distributed.DistributedRemoteWeightUpdater` will be used by
+            default, which handles weight synchronization across distributed workers.
+
     """
 
     _VERBOSE = VERBOSE  # for debugging
@@ -406,21 +427,22 @@ class DistributedDataCollector(DataCollectorBase):
     def __init__(
         self,
         create_env_fn,
-        policy,
+        policy: Callable[[TensorDictBase], TensorDictBase] | None = None,
         *,
+        policy_factory: Callable[[], Callable] | None = None,
         frames_per_batch: int,
         total_frames: int = -1,
-        device: torch.device | List[torch.device] = None,
-        storing_device: torch.device | List[torch.device] = None,
-        env_device: torch.device | List[torch.device] = None,
-        policy_device: torch.device | List[torch.device] = None,
+        device: torch.device | list[torch.device] = None,
+        storing_device: torch.device | list[torch.device] = None,
+        env_device: torch.device | list[torch.device] = None,
+        policy_device: torch.device | list[torch.device] = None,
         max_frames_per_traj: int = -1,
         init_random_frames: int = -1,
         reset_at_each_iter: bool = False,
         postproc: Callable | None = None,
         split_trajs: bool = False,
-        exploration_type: "ExporationType" = DEFAULT_EXPLORATION_TYPE,  # noqa
-        collector_class: Type = SyncDataCollector,
+        exploration_type: ExporationType = DEFAULT_EXPLORATION_TYPE,  # noqa
+        collector_class: type = SyncDataCollector,
         collector_kwargs: dict = None,
         num_workers_per_collector: int = 1,
         sync: bool = False,
@@ -430,6 +452,8 @@ class DistributedDataCollector(DataCollectorBase):
         max_weight_update_interval: int = -1,
         launcher: str = "submitit",
         tcp_port: int = None,
+        remote_weights_updater: RemoteWeightUpdaterBase | None = None,
+        local_weights_updater: LocalWeightUpdaterBase | None = None,
     ):
 
         if collector_class == "async":
@@ -444,6 +468,13 @@ class DistributedDataCollector(DataCollectorBase):
         if isinstance(policy, nn.Module):
             policy_weights = TensorDict.from_module(policy)
             policy_weights = policy_weights.data.lock_()
+        elif policy_factory is not None:
+            policy_weights = None
+            if remote_weights_updater is None:
+                raise RuntimeError(
+                    "remote_weights_updater must be passed along with "
+                    "a policy_factory."
+                )
         else:
             warnings.warn(_NON_NN_POLICY_WEIGHTS)
             policy_weights = TensorDict(lock=True)
@@ -525,21 +556,30 @@ class DistributedDataCollector(DataCollectorBase):
 
         self._init_workers()
         self._make_container()
+        if remote_weights_updater is None:
+            remote_weights_updater = DistributedRemoteWeightUpdater(
+                store=self._store,
+                policy_weights=self.policy_weights,
+                num_workers=self.num_workers,
+                sync=self._sync,
+            )
+        self.remote_weights_updater = remote_weights_updater
+        self.local_weights_updater = local_weights_updater
 
     @property
-    def device(self) -> List[torch.device]:
+    def device(self) -> list[torch.device]:
         return self._device
 
     @property
-    def storing_device(self) -> List[torch.device]:
+    def storing_device(self) -> list[torch.device]:
         return self._storing_device
 
     @property
-    def env_device(self) -> List[torch.device]:
+    def env_device(self) -> list[torch.device]:
         return self._env_device
 
     @property
-    def policy_device(self) -> List[torch.device]:
+    def policy_device(self) -> list[torch.device]:
         return self._policy_device
 
     @device.setter
@@ -808,7 +848,9 @@ class DistributedDataCollector(DataCollectorBase):
                         self._batches_since_weight_update[j]
                         > self.max_weight_update_interval
                     ):
-                        self.update_policy_weights_(rank)
+                        self.update_policy_weights_(
+                            policy_weights=None, worker_ids=rank
+                        )
 
         for i in range(self.num_workers):
             rank = i + 1
@@ -857,7 +899,7 @@ class DistributedDataCollector(DataCollectorBase):
                         _tracker.wait()
                     data = self._tensordict_out[i].clone()
                     if self.update_after_each_batch:
-                        self.update_policy_weights_(rank)
+                        self.update_policy_weights_(worker_ids=rank)
                     total_frames += data.numel()
                     if total_frames < self.total_frames:
                         if self._VERBOSE:
@@ -871,35 +913,10 @@ class DistributedDataCollector(DataCollectorBase):
                     break
         return data, total_frames
 
-    def update_policy_weights_(self, worker_rank=None) -> None:
-        """Updates the weights of the worker nodes.
-
-        Args:
-            worker_rank (int, optional): if provided, only this worker weights
-                will be updated.
-        """
-        if worker_rank is not None and worker_rank < 1:
-            raise RuntimeError("worker_rank must be greater than 1")
-        workers = range(self.num_workers) if worker_rank is None else [worker_rank - 1]
-        for i in workers:
-            rank = i + 1
-            if self._VERBOSE:
-                torchrl_logger.info(f"updating weights of {rank}")
-            self._store.set(f"NODE_{rank}_in", b"update_weights")
-            if self._sync:
-                self.policy_weights.send(rank)
-            else:
-                self.policy_weights.isend(rank)
-            self._batches_since_weight_update[i] = 0
-            status = self._store.get(f"NODE_{rank}_out")
-            if status != b"updated":
-                raise RuntimeError(f"Expected 'updated' but got status {status}.")
-            self._store.delete_key(f"NODE_{rank}_out")
-
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         for i in range(self.num_workers):
             rank = i + 1
-            self._store.set(f"NODE_{rank}_in", f"seeding_{seed}".encode("utf-8"))
+            self._store.set(f"NODE_{rank}_in", f"seeding_{seed}".encode())
             status = self._store.get(f"NODE_{rank}_out")
             if status != b"updated":
                 raise RuntimeError(f"Expected 'seeded' but got status {status}.")
@@ -941,3 +958,98 @@ class DistributedDataCollector(DataCollectorBase):
                 pass
         if self._VERBOSE:
             torchrl_logger.info("collector shut down")
+
+
+class DistributedRemoteWeightUpdater(RemoteWeightUpdaterBase):
+    """A remote weight updater for synchronizing policy weights across distributed workers.
+
+    The `DistributedRemoteWeightUpdater` class provides a mechanism for updating the weights
+    of a policy across distributed inference workers. It is designed to work with the
+    :class:`~torchrl.collectors.distributed.DistributedDataCollector` to ensure that each worker receives the latest policy weights.
+    This class is typically used in distributed data collection scenarios where multiple workers
+    need to be kept in sync with the central policy weights.
+
+    Args:
+        store (dict[str, str]): A dictionary-like store used for communication between the server
+            and the distributed workers.
+        policy_weights (TensorDictBase): The current weights of the policy that need to be distributed
+            to the workers.
+        num_workers (int): The number of distributed workers that will receive the updated policy weights.
+        sync (bool): if ``True``, the sync happens synchronously (the server waits for the worker to have completed
+            the update to restart the run).
+
+    Methods:
+        update_weights: Updates the weights on specified or all distributed workers.
+        all_worker_ids: Returns a list of all worker identifiers (not implemented in this class).
+        _sync_weights_with_worker: Synchronizes the server weights with a specific worker (not implemented).
+        _get_server_weights: Retrieves the latest weights from the server (not implemented).
+        _maybe_map_weights: Optionally maps server weights before distribution (not implemented).
+
+    .. note::
+        This class assumes that the server weights can be directly applied to the distributed workers
+        without any additional processing. If your use case requires more complex weight mapping or
+        synchronization logic, consider extending `RemoteWeightUpdaterBase` with a custom implementation.
+
+    Raises:
+        RuntimeError: If the worker rank is less than 1 or if the status returned by the store is not "updated".
+
+    .. seealso:: :class:`~torchrl.collectors.RemoteWeightUpdaterBase` and
+        :class:`~torchrl.collectors.distributed.DistributedDataCollector`.
+
+    """
+
+    _VERBOSE = True
+
+    def __init__(
+        self,
+        store: dict[str, str],
+        policy_weights: TensorDictBase,
+        num_workers: int,
+        sync: bool,
+    ):
+        self._store = store
+        self.policy_weights = policy_weights
+        self.num_workers = num_workers
+        self._sync = sync
+        self._batches_since_weight_update = [0 for _ in range(self.num_workers)]
+
+    def _sync_weights_with_worker(
+        self, worker_id: int | torch.device, server_weights: TensorDictBase
+    ) -> TensorDictBase:
+        raise NotImplementedError
+
+    def _get_server_weights(self) -> TensorDictBase:
+        raise NotImplementedError
+
+    def _maybe_map_weights(self, server_weights: TensorDictBase) -> TensorDictBase:
+        raise NotImplementedError
+
+    def all_worker_ids(self) -> list[int] | list[torch.device]:
+        raise NotImplementedError
+
+    def update_weights(
+        self,
+        weights: TensorDictBase | None = None,
+        worker_ids: torch.device | int | list[int] | list[torch.device] | None = None,
+    ):
+        worker_rank = worker_ids
+        if isinstance(worker_ids, int):
+            if worker_rank is not None and worker_rank < 1:
+                raise RuntimeError("worker_rank must be greater than 1")
+            worker_rank = [worker_rank - 1]
+        workers = range(self.num_workers) if worker_rank is None else worker_rank
+        weights = self.policy_weights if weights is None else weights
+        for i in workers:
+            rank = i + 1
+            if self._VERBOSE:
+                torchrl_logger.info(f"updating weights of {rank}")
+            self._store.set(f"NODE_{rank}_in", b"update_weights")
+            if self._sync:
+                weights.send(rank)
+            else:
+                weights.isend(rank)
+            self._batches_since_weight_update[i] = 0
+            status = self._store.get(f"NODE_{rank}_out")
+            if status != b"updated":
+                raise RuntimeError(f"Expected 'updated' but got status {status}.")
+            self._store.delete_key(f"NODE_{rank}_out")

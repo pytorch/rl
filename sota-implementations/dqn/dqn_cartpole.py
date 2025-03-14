@@ -11,7 +11,6 @@ import hydra
 import torch.nn
 import torch.optim
 import tqdm
-
 from tensordict.nn import CudaGraphModule, TensorDictSequential
 from torchrl._utils import timeit
 from torchrl.collectors import SyncDataCollector
@@ -27,7 +26,7 @@ torch.set_float32_matmul_precision("high")
 
 
 @hydra.main(config_path="", config_name="config_cartpole", version_base="1.1")
-def main(cfg: "DictConfig"):  # noqa: F821
+def main(cfg: DictConfig):  # noqa: F821
 
     device = cfg.device
     if device in ("", None):

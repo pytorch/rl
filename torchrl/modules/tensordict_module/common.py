@@ -9,20 +9,16 @@ import importlib.util
 import inspect
 import re
 import warnings
-from typing import Iterable, List, Optional, Type, Union
+from typing import Iterable
 
 import torch
-
 from tensordict import TensorDictBase, unravel_key_list
-
 from tensordict.nn import dispatch, TensorDictModule, TensorDictModuleBase
 from tensordict.utils import NestedKey
-
 from torch import nn
 from torch.nn import functional as F
 
 from torchrl.data.tensor_specs import Composite, TensorSpec
-
 from torchrl.data.utils import DEVICE_TYPING
 
 _has_functorch = importlib.util.find_spec("functorch") is not None
@@ -194,12 +190,15 @@ class SafeModule(TensorDictModule):
 
     def __init__(
         self,
-        module: Union[
-            FunctionalModule, FunctionalModuleWithBuffers, TensorDictModule, nn.Module
-        ],
+        module: (
+            FunctionalModule
+            | FunctionalModuleWithBuffers
+            | TensorDictModule
+            | nn.Module
+        ),
         in_keys: Iterable[str],
         out_keys: Iterable[str],
-        spec: Optional[TensorSpec] = None,
+        spec: TensorSpec | None = None,
         safe: bool = False,
     ):
         super().__init__(module, in_keys, out_keys)
@@ -282,14 +281,14 @@ class SafeModule(TensorDictModule):
         """See :obj:`TensorDictModule.random(...)`."""
         return self.random(tensordict)
 
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> TensorDictModule:
+    def to(self, dest: torch.dtype | DEVICE_TYPING) -> TensorDictModule:
         if hasattr(self, "spec") and self.spec is not None:
             self.spec = self.spec.to(dest)
         out = super().to(dest)
         return out
 
 
-def is_tensordict_compatible(module: Union[TensorDictModule, nn.Module]):
+def is_tensordict_compatible(module: TensorDictModule | nn.Module):
     """Returns `True` if a module can be used as a TensorDictModule, and False if it can't.
 
     If the signature is misleading an error is raised.
@@ -356,13 +355,13 @@ def is_tensordict_compatible(module: Union[TensorDictModule, nn.Module]):
 
 
 def ensure_tensordict_compatible(
-    module: Union[
-        FunctionalModule, FunctionalModuleWithBuffers, TensorDictModule, nn.Module
-    ],
-    in_keys: Optional[List[NestedKey]] = None,
-    out_keys: Optional[List[NestedKey]] = None,
+    module: (
+        FunctionalModule | FunctionalModuleWithBuffers | TensorDictModule | nn.Module
+    ),
+    in_keys: list[NestedKey] | None = None,
+    out_keys: list[NestedKey] | None = None,
     safe: bool = False,
-    wrapper_type: Optional[Type] = TensorDictModule,
+    wrapper_type: type | None = TensorDictModule,
     **kwargs,
 ):
     """Ensures module is compatible with TensorDictModule and, if not, it wraps it."""
@@ -437,7 +436,7 @@ class VmapModule(TensorDictModuleBase):
         >>> assert (sample_in_td["x"][:, 0] == sample_in_td["y"]).all()
     """
 
-    def __init__(self, module: TensorDictModuleBase, vmap_dim=None):
+    def __init__(self, module: TensorDictModuleBase, vmap_dim=None, mock: bool = False):
         if not _has_functorch:
             raise ImportError("VmapModule requires torch>=2.0.")
         super().__init__()
@@ -445,12 +444,16 @@ class VmapModule(TensorDictModuleBase):
         self.out_keys = module.out_keys
         self.module = module
         self.vmap_dim = vmap_dim
+        self.mock = mock
         if torch.__version__ >= "2.0":
             self._vmap = torch.vmap
         else:
             import functorch
 
             self._vmap = functorch.vmap
+
+    def mock_(self, value: bool = True):
+        self.mock = value
 
     def forward(self, tensordict):
         # TODO: there is a risk of segfault if input is not a tensordict.
@@ -459,7 +462,12 @@ class VmapModule(TensorDictModuleBase):
         if vmap_dim is None:
             ndim = tensordict.ndim
             vmap_dim = ndim - 1
-        td = self._vmap(self.module, (vmap_dim,), (vmap_dim,))(tensordict)
+        if self.mock:
+            td = torch.stack(
+                [self.module(_td) for _td in tensordict.unbind(vmap_dim)], vmap_dim
+            )
+        else:
+            td = self._vmap(self.module, (vmap_dim,), (vmap_dim,))(tensordict)
         return tensordict.update(td)
 
 

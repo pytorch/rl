@@ -5,8 +5,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import warnings
-from typing import Callable, Dict, Iterator, List, OrderedDict, Union
+from typing import Callable, Iterator, OrderedDict
 
 import torch
 import torch.nn as nn
@@ -21,9 +22,14 @@ from torchrl.collectors.collectors import (
     SyncDataCollector,
 )
 from torchrl.collectors.utils import _NON_NN_POLICY_WEIGHTS, split_trajectories
+from torchrl.collectors.weight_update import (
+    LocalWeightUpdaterBase,
+    RayRemoteWeightUpdater,
+    RemoteWeightUpdaterBase,
+)
+from torchrl.data import ReplayBuffer
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import EnvCreator
-
 
 RAY_ERR = None
 try:
@@ -123,7 +129,7 @@ class RayCollector(DataCollectorBase):
     Args:
         create_env_fn (Callable or List[Callabled]): list of Callables, each returning an
             instance of :class:`~torchrl.envs.EnvBase`.
-        policy (Callable): Policy to be executed in the environment.
+        policy (Callable, optional): Policy to be executed in the environment.
             Must accept :class:`tensordict.tensordict.TensorDictBase` object as input.
             If ``None`` is provided, the policy used will be a
             :class:`~torchrl.collectors.RandomPolicy` instance with the environment
@@ -143,7 +149,15 @@ class RayCollector(DataCollectorBase):
 
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
+            .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
+                pickled directly), the :arg:`policy_factory` should be used instead.
+
     Keyword Args:
+        policy_factory (Callable[[], Callable], optional): a callable that returns
+            a policy instance. This is exclusive with the `policy` argument.
+
+            .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.
+
         frames_per_batch (int): A keyword-only argument representing the
             total number of elements in a batch.
         total_frames (int, Optional): lower bound of the total number of frames returned by the collector.
@@ -246,9 +260,10 @@ class RayCollector(DataCollectorBase):
             all workers will see their weights updated. For ``sync=False``,
             only the worker from which the data has been gathered will be
             updated.
+            This is equivalent to `max_weight_update_interval=0`.
             Defaults to ``False``, i.e. updates have to be executed manually
             through
-            ``torchrl.collectors.distributed.RayDistributedCollector.update_policy_weights_()``
+            :meth:`torchrl.collectors.DataCollector.update_policy_weights_`
         max_weight_update_interval (int, optional): the maximum number of
             batches that can be collected before the policy weights of a worker
             is updated.
@@ -257,6 +272,18 @@ class RayCollector(DataCollectorBase):
             parameters being updated for a certain time even if ``update_after_each_batch``
             is turned on.
             Defaults to -1 (no forced update).
+        replay_buffer (RayReplayBuffer, optional): if provided, the collector will not yield tensordicts
+            but populate the buffer instead. Defaults to ``None``.
+
+            .. note:: although it is not enfoced (to allow users to implement their own replay buffer class), a
+                :class:`~torchrl.data.RayReplayBuffer` instance should be used here.
+        local_weights_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
+            or its subclass, responsible for updating the policy weights on the local inference worker.
+            This is typically not used in :class:`~torchrl.collectors.RayCollector` as it focuses on distributed environments.
+        remote_weights_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
+            or its subclass, responsible for updating the policy weights on remote inference workers managed by Ray.
+            If not provided, a :class:`~torchrl.collectors.RayRemoteWeightUpdater` will be used by default, leveraging
+            Ray's distributed capabilities.
 
     Examples:
         >>> from torch import nn
@@ -289,15 +316,16 @@ class RayCollector(DataCollectorBase):
 
     def __init__(
         self,
-        create_env_fn: Union[Callable, EnvBase, List[Callable], List[EnvBase]],
-        policy: Callable[[TensorDict], TensorDict],
+        create_env_fn: Callable | EnvBase | list[Callable] | list[EnvBase],
+        policy: Callable[[TensorDictBase], TensorDictBase] | None = None,
         *,
+        policy_factory: Callable[[], Callable] | None = None,
         frames_per_batch: int,
         total_frames: int = -1,
-        device: torch.device | List[torch.device] = None,
-        storing_device: torch.device | List[torch.device] = None,
-        env_device: torch.device | List[torch.device] = None,
-        policy_device: torch.device | List[torch.device] = None,
+        device: torch.device | list[torch.device] = None,
+        storing_device: torch.device | list[torch.device] = None,
+        env_device: torch.device | list[torch.device] = None,
+        policy_device: torch.device | list[torch.device] = None,
         max_frames_per_traj=-1,
         init_random_frames=-1,
         reset_at_each_iter=False,
@@ -305,15 +333,19 @@ class RayCollector(DataCollectorBase):
         split_trajs=False,
         exploration_type=DEFAULT_EXPLORATION_TYPE,
         collector_class: Callable[[TensorDict], TensorDict] = SyncDataCollector,
-        collector_kwargs: Union[Dict, List[Dict]] = None,
+        collector_kwargs: dict | list[dict] = None,
         num_workers_per_collector: int = 1,
         sync: bool = False,
-        ray_init_config: Dict = None,
-        remote_configs: Union[Dict, List[Dict]] = None,
+        ray_init_config: dict = None,
+        remote_configs: dict | list[dict] = None,
         num_collectors: int = None,
         update_after_each_batch=False,
         max_weight_update_interval=-1,
+        replay_buffer: ReplayBuffer = None,
+        remote_weights_updater: RemoteWeightUpdaterBase | None = None,
+        local_weights_updater: LocalWeightUpdaterBase | None = None,
     ):
+        self.frames_per_batch = frames_per_batch
         if remote_configs is None:
             remote_configs = DEFAULT_REMOTE_CLASS_CONFIG
 
@@ -322,6 +354,14 @@ class RayCollector(DataCollectorBase):
 
         if collector_kwargs is None:
             collector_kwargs = {}
+        if replay_buffer is not None:
+            if isinstance(collector_kwargs, dict):
+                collector_kwargs.setdefault("replay_buffer", replay_buffer)
+            else:
+                collector_kwargs = [
+                    ck.setdefault("replay_buffer", replay_buffer)
+                    for ck in collector_kwargs
+                ]
 
         # Make sure input parameters are consistent
         def check_consistency_with_num_collectors(param, param_name, num_collectors):
@@ -387,7 +427,8 @@ class RayCollector(DataCollectorBase):
             raise RuntimeError(
                 "ray library not found, unable to create a DistributedCollector. "
             ) from RAY_ERR
-        ray.init(**ray_init_config)
+        if not ray.is_initialized():
+            ray.init(**ray_init_config)
         if not ray.is_initialized():
             raise RuntimeError("Ray could not be initialized.")
 
@@ -398,24 +439,36 @@ class RayCollector(DataCollectorBase):
             collector_class = MultiSyncDataCollector
         elif collector_class == "single":
             collector_class = SyncDataCollector
-        collector_class.as_remote = as_remote
-        collector_class.print_remote_collector_info = print_remote_collector_info
+        elif not isinstance(collector_class, type) or not issubclass(
+            collector_class, DataCollectorBase
+        ):
+            raise TypeError(
+                "The collector_class must be an instance of DataCollectorBase."
+            )
+        if not hasattr(collector_class, "as_remote"):
+            collector_class.as_remote = as_remote
+        if not hasattr(collector_class, "print_remote_collector_info"):
+            collector_class.print_remote_collector_info = print_remote_collector_info
 
+        self.replay_buffer = replay_buffer
         self._local_policy = policy
         if isinstance(self._local_policy, nn.Module):
             policy_weights = TensorDict.from_module(self._local_policy)
             policy_weights = policy_weights.data.lock_()
         else:
-            warnings.warn(_NON_NN_POLICY_WEIGHTS)
             policy_weights = TensorDict(lock=True)
+            if remote_weights_updater is None:
+                warnings.warn(_NON_NN_POLICY_WEIGHTS)
         self.policy_weights = policy_weights
         self.collector_class = collector_class
         self.collected_frames = 0
         self.split_trajs = split_trajs
         self.total_frames = total_frames
         self.num_collectors = num_collectors
+
         self.update_after_each_batch = update_after_each_batch
         self.max_weight_update_interval = max_weight_update_interval
+
         self.collector_kwargs = (
             collector_kwargs if collector_kwargs is not None else [{}]
         )
@@ -438,6 +491,7 @@ class RayCollector(DataCollectorBase):
 
         # update collector kwargs
         for i, collector_kwarg in enumerate(self.collector_kwargs):
+            collector_kwarg["policy_factory"] = policy_factory
             collector_kwarg["max_frames_per_traj"] = max_frames_per_traj
             collector_kwarg["init_random_frames"] = (
                 init_random_frames // self.num_collectors
@@ -471,10 +525,18 @@ class RayCollector(DataCollectorBase):
                 collector_kwargs,
                 remote_configs,
             )
+        if remote_weights_updater is None:
+            remote_weights_updater = RayRemoteWeightUpdater(
+                policy_weights=policy_weights,
+                remote_collectors=self.remote_collectors,
+                max_interval=self.max_weight_update_interval,
+            )
+        self.remote_weights_updater = remote_weights_updater
+        self.local_weights_updater = local_weights_updater
 
         # Print info of all remote workers
         pending_samples = [
-            e.print_remote_collector_info.remote() for e in self.remote_collectors()
+            e.print_remote_collector_info.remote() for e in self.remote_collectors
         ]
         ray.wait(pending_samples)
 
@@ -483,19 +545,19 @@ class RayCollector(DataCollectorBase):
         return self.num_collectors
 
     @property
-    def device(self) -> List[torch.device]:
+    def device(self) -> list[torch.device]:
         return self._device
 
     @property
-    def storing_device(self) -> List[torch.device]:
+    def storing_device(self) -> list[torch.device]:
         return self._storing_device
 
     @property
-    def env_device(self) -> List[torch.device]:
+    def env_device(self) -> list[torch.device]:
         return self._env_device
 
     @property
-    def policy_device(self) -> List[torch.device]:
+    def policy_device(self) -> list[torch.device]:
         return self._policy_device
 
     @device.setter
@@ -527,11 +589,12 @@ class RayCollector(DataCollectorBase):
             self._policy_device = [value] * self.num_collectors
 
     @staticmethod
-    def _make_collector(cls, env_maker, policy, other_params):
+    def _make_collector(cls, *, env_maker, policy, other_params):
         """Create a single collector instance."""
+        if policy is not None:
+            other_params["policy"] = policy
         collector = cls(
             env_maker,
-            policy,
             total_frames=-1,
             **other_params,
         )
@@ -552,18 +615,23 @@ class RayCollector(DataCollectorBase):
             cls = self.collector_class.as_remote(remote_config).remote
             collector = self._make_collector(
                 cls,
-                [env_maker] * num_envs
-                if self.collector_class is not SyncDataCollector
+                env_maker=[env_maker] * num_envs
+                if num_envs > 1
+                or (
+                    isinstance(self.collector_class, type)
+                    and not issubclass(self.collector_class, SyncDataCollector)
+                )
                 else env_maker,
-                policy,
-                other_params,
+                policy=policy,
+                other_params=other_params,
             )
-            self._remote_collectors.extend([collector])
+            self._remote_collectors.append(collector)
 
     def local_policy(self):
         """Returns local collector."""
         return self._local_policy
 
+    @property
     def remote_collectors(self):
         """Returns list of remote collectors."""
         return self._remote_collectors
@@ -571,36 +639,49 @@ class RayCollector(DataCollectorBase):
     def stop_remote_collectors(self):
         """Stops all remote collectors."""
         for _ in range(len(self._remote_collectors)):
-            collector = self.remote_collectors().pop()
+            collector = self.remote_collectors.pop()
             # collector.__ray_terminate__.remote()  # This will kill the actor but let pending tasks finish
             ray.kill(
                 collector
             )  # This will interrupt any running tasks on the actor, causing them to fail immediately
 
     def iterator(self):
+        def proc(data):
+            if self.split_trajs:
+                data = split_trajectories(data)
+            if self.postproc is not None:
+                data = self.postproc(data)
+            return data
+
         if self._sync:
-            data = self._sync_iterator()
+            meth = self._sync_iterator
         else:
-            data = self._async_iterator()
+            meth = self._async_iterator
+        yield from (proc(data) for data in meth())
 
-        if self.split_trajs:
-            data = split_trajectories(data)
-        if self.postproc is not None:
-            data = self.postproc(data)
+    async def _asyncio_iterator(self):
+        def proc(data):
+            if self.split_trajs:
+                data = split_trajectories(data)
+            if self.postproc is not None:
+                data = self.postproc(data)
+            return data
 
-        return data
+        if self._sync:
+            for d in self._sync_iterator():
+                yield proc(d)
+        else:
+            for d in self._async_iterator():
+                yield proc(d)
 
     def _sync_iterator(self) -> Iterator[TensorDictBase]:
         """Collects one data batch per remote collector in each iteration."""
         while self.collected_frames < self.total_frames:
-            if self.update_after_each_batch:
+            if self.update_after_each_batch or self.max_weight_update_interval > -1:
                 self.update_policy_weights_()
-            else:
-                for j in range(self.num_collectors):
-                    self._batches_since_weight_update[j] += 1
 
             # Ask for batches to all remote workers.
-            pending_tasks = [e.next.remote() for e in self.remote_collectors()]
+            pending_tasks = [e.next.remote() for e in self.remote_collectors]
 
             # Wait for all rollouts
             samples_ready = []
@@ -626,55 +707,59 @@ class RayCollector(DataCollectorBase):
 
             yield out_td
 
-            if self.max_weight_update_interval > -1:
-                for j in range(self.num_collectors):
-                    rank = j + 1
-                    if (
-                        self._batches_since_weight_update[j]
-                        > self.max_weight_update_interval
-                    ):
-                        self.update_policy_weights_(rank)
+        if self._task is None:
+            self.shutdown()
 
-        self.shutdown()
+    _task = None
+
+    def start(self):
+        """Starts the RayCollector."""
+        if self.replay_buffer is None:
+            raise RuntimeError("Replay buffer must be defined for asyncio execution.")
+        if self._task is None or self._task.done():
+            loop = asyncio.get_event_loop()
+            self._task = loop.create_task(self._run_iterator_silently())
+
+    async def _run_iterator_silently(self):
+        async for _ in self._asyncio_iterator():
+            # Process each item silently
+            continue
+
+    async def async_shutdown(self):
+        """Finishes processes started by ray.init() during async execution."""
+        if self._task is not None:
+            await self._task
+        self.stop_remote_collectors()
+        ray.shutdown()
 
     def _async_iterator(self) -> Iterator[TensorDictBase]:
         """Collects a data batch from a single remote collector in each iteration."""
         pending_tasks = {}
-        for index, collector in enumerate(self.remote_collectors()):
+        for index, collector in enumerate(self.remote_collectors):
             future = collector.next.remote()
             pending_tasks[future] = index
 
         while self.collected_frames < self.total_frames:
-            if not len(list(pending_tasks.keys())) == len(self.remote_collectors()):
+            if not len(list(pending_tasks.keys())) == len(self.remote_collectors):
                 raise RuntimeError("Missing pending tasks, something went wrong")
 
             # Wait for first worker to finish
             wait_results = ray.wait(list(pending_tasks.keys()))
             future = wait_results[0][0]
             collector_index = pending_tasks.pop(future)
-            collector = self.remote_collectors()[collector_index]
+            collector = self.remote_collectors[collector_index]
 
             # Retrieve single rollouts
             out_td = ray.get(future)
             ray.internal.free(
                 [future]
             )  # should not be necessary, deleted automatically when ref count is down to 0
-            self.collected_frames += out_td.numel()
+            self.collected_frames += self.frames_per_batch
 
             yield out_td
 
-            for j in range(self.num_collectors):
-                self._batches_since_weight_update[j] += 1
-            if self.update_after_each_batch:
-                self.update_policy_weights_(worker_rank=collector_index + 1)
-            elif self.max_weight_update_interval > -1:
-                for j in range(self.num_collectors):
-                    rank = j + 1
-                    if (
-                        self._batches_since_weight_update[j]
-                        > self.max_weight_update_interval
-                    ):
-                        self.update_policy_weights_(rank)
+            if self.update_after_each_batch or self.max_weight_update_interval > -1:
+                self.update_policy_weights_(worker_ids=collector_index + 1)
 
             # Schedule a new collection task
             future = collector.next.remote()
@@ -690,52 +775,30 @@ class RayCollector(DataCollectorBase):
         #         object_ref=ref,
         #         force=False,
         #     )
+        if self._task is None:
+            self.shutdown()
 
-        self.shutdown()
-
-    def update_policy_weights_(self, worker_rank=None) -> None:
-        """Updates the weights of the worker nodes.
-
-        Args:
-            worker_rank (int, optional): if provided, only this worker weights
-                will be updated.
-        """
-        # Update agent weights
-        policy_weights_local_collector_ref = ray.put(self.policy_weights.detach())
-
-        if worker_rank is None:
-            for index, e in enumerate(self.remote_collectors()):
-                e.update_policy_weights_.remote(policy_weights_local_collector_ref)
-                self._batches_since_weight_update[index] = 0
-        else:
-            self.remote_collectors()[worker_rank - 1].update_policy_weights_.remote(
-                policy_weights_local_collector_ref
-            )
-            self._batches_since_weight_update[worker_rank - 1] = 0
-
-    def set_seed(self, seed: int, static_seed: bool = False) -> List[int]:
+    def set_seed(self, seed: int, static_seed: bool = False) -> list[int]:
         """Calls parent method for each remote collector iteratively and returns final seed."""
-        for collector in self.remote_collectors():
+        for collector in self.remote_collectors:
             seed = ray.get(object_refs=collector.set_seed.remote(seed, static_seed))
         return seed
 
-    def state_dict(self) -> List[OrderedDict]:
+    def state_dict(self) -> list[OrderedDict]:
         """Calls parent method for each remote collector and returns a list of results."""
         futures = [
-            collector.state_dict.remote() for collector in self.remote_collectors()
+            collector.state_dict.remote() for collector in self.remote_collectors
         ]
         results = ray.get(object_refs=futures)
         return results
 
-    def load_state_dict(
-        self, state_dict: Union[OrderedDict, List[OrderedDict]]
-    ) -> None:
+    def load_state_dict(self, state_dict: OrderedDict | list[OrderedDict]) -> None:
         """Calls parent method for each remote collector."""
         if isinstance(state_dict, OrderedDict):
             state_dicts = [state_dict]
         if len(state_dict) == 1:
-            state_dicts = state_dict * len(self.remote_collectors())
-        for collector, state_dict in zip(self.remote_collectors(), state_dicts):
+            state_dicts = state_dict * len(self.remote_collectors)
+        for collector, state_dict in zip(self.remote_collectors, state_dicts):
             collector.load_state_dict.remote(state_dict)
 
     def shutdown(self):

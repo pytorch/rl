@@ -11,14 +11,13 @@ import socket
 import warnings
 from copy import copy, deepcopy
 from datetime import timedelta
-from typing import Callable, List, OrderedDict
+from typing import Callable, OrderedDict
 
 import torch.cuda
-from tensordict import TensorDict
+from tensordict import TensorDict, TensorDictBase
 from torch import nn
 
 from torchrl._utils import _ProcessNoWarn, logger as torchrl_logger, VERBOSE
-
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
     DataCollectorBase,
@@ -151,7 +150,15 @@ class DistributedSyncDataCollector(DataCollectorBase):
 
             - In all other cases an attempt to wrap it will be undergone as such: ``TensorDictModule(policy, in_keys=env_obs_key, out_keys=env.action_keys)``.
 
+            .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
+                pickled directly), the :arg:`policy_factory` should be used instead.
+
     Keyword Args:
+        policy_factory (Callable[[], Callable], optional): a callable that returns
+            a policy instance. This is exclusive with the `policy` argument.
+
+            .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.
+
         frames_per_batch (int): A keyword-only argument representing the total
             number of elements in a batch.
         total_frames (int): A keyword-only argument representing the total
@@ -272,20 +279,21 @@ class DistributedSyncDataCollector(DataCollectorBase):
     def __init__(
         self,
         create_env_fn,
-        policy,
+        policy: Callable[[TensorDictBase], TensorDictBase] | None = None,
         *,
+        policy_factory: Callable[[], Callable] | None = None,
         frames_per_batch: int,
         total_frames: int = -1,
-        device: torch.device | List[torch.device] = None,
-        storing_device: torch.device | List[torch.device] = None,
-        env_device: torch.device | List[torch.device] = None,
-        policy_device: torch.device | List[torch.device] = None,
+        device: torch.device | list[torch.device] = None,
+        storing_device: torch.device | list[torch.device] = None,
+        env_device: torch.device | list[torch.device] = None,
+        policy_device: torch.device | list[torch.device] = None,
         max_frames_per_traj: int = -1,
         init_random_frames: int = -1,
         reset_at_each_iter: bool = False,
         postproc: Callable | None = None,
         split_trajs: bool = False,
-        exploration_type: "ExporationType" = DEFAULT_EXPLORATION_TYPE,  # noqa
+        exploration_type: ExporationType = DEFAULT_EXPLORATION_TYPE,  # noqa
         collector_class=SyncDataCollector,
         collector_kwargs=None,
         num_workers_per_collector=1,
@@ -384,19 +392,19 @@ class DistributedSyncDataCollector(DataCollectorBase):
         self._make_container()
 
     @property
-    def device(self) -> List[torch.device]:
+    def device(self) -> list[torch.device]:
         return self._device
 
     @property
-    def storing_device(self) -> List[torch.device]:
+    def storing_device(self) -> list[torch.device]:
         return self._storing_device
 
     @property
-    def env_device(self) -> List[torch.device]:
+    def env_device(self) -> list[torch.device]:
         return self._env_device
 
     @property
-    def policy_device(self) -> List[torch.device]:
+    def policy_device(self) -> list[torch.device]:
         return self._policy_device
 
     @device.setter
@@ -593,7 +601,13 @@ class DistributedSyncDataCollector(DataCollectorBase):
                 data = self.postproc(data)
             yield data
 
-    def update_policy_weights_(self, worker_rank=None) -> None:
+    def update_policy_weights_(
+        self,
+        policy_weights: TensorDictBase | None = None,
+        *,
+        worker_ids=None,
+        wait=True,
+    ) -> None:
         raise NotImplementedError
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:

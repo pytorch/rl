@@ -3,12 +3,17 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import time
+
 import torch
 import torchrl
+import torchrl.envs
 from tensordict import TensorDict
 
+start_time = time.time()
+
 pgn_or_fen = "fen"
-mask_actions = False
+mask_actions = True
 
 env = torchrl.envs.ChessEnv(
     include_pgn=False,
@@ -161,11 +166,6 @@ def tree_format_fn(tree):
 def get_best_move(fen, mcts_steps, rollout_steps):
     root = env.reset(TensorDict({"fen": fen}))
     tree = traverse_MCTS(forest, root, env, mcts_steps, rollout_steps)
-
-    # print('------------------------------')
-    # print(tree.to_string(tree_format_fn))
-    # print('------------------------------')
-
     moves = []
 
     for subtree in tree.subtree:
@@ -198,3 +198,8 @@ assert get_best_move(fen1, 100, 10) == "Qg6#"
 # White has M2, best move Rxg8+. Any other move loses.
 fen2 = "2R3qk/5p1p/7K/8/8/8/5r2/2R5 w - - 0 1"
 assert get_best_move(fen2, 1000, 10) == "Rxg8+"
+
+end_time = time.time()
+total_time = end_time - start_time
+
+print(f"Took {total_time} s")

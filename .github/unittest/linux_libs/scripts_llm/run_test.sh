@@ -24,6 +24,8 @@ python -c "import transformers, datasets"
 
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_rlhf.py --instafail -v --durations 200 --capture no --error-for-skips
 
+python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_actors.py -k llm --instafail -v --durations 200 --capture no --error-for-skips --runslow
+
 python .github/unittest/helpers/coverage_run_parallel.py examples/rlhf/train_rlhf.py \
   sys.device=cuda:0 sys.ref_device=cuda:0 \
   model.name_or_path=gpt2 train.max_epochs=2 \

@@ -5,12 +5,10 @@
 from __future__ import annotations
 
 import warnings
-from typing import Optional, Union
 
 import numpy as np
 import torch
 from tensordict import TensorDictBase
-
 from tensordict.nn import (
     TensorDictModule,
     TensorDictModuleBase,
@@ -95,8 +93,8 @@ class EGreedyModule(TensorDictModuleBase):
         eps_end: float = 0.1,
         annealing_num_steps: int = 1000,
         *,
-        action_key: Optional[NestedKey] = "action",
-        action_mask_key: Optional[NestedKey] = None,
+        action_key: NestedKey | None = "action",
+        action_mask_key: NestedKey | None = None,
         device: torch.device | None = None,
     ):
         if not isinstance(eps_init, float):
@@ -209,9 +207,9 @@ class EGreedyWrapper(TensorDictModuleWrapper):
         eps_init: float = 1.0,
         eps_end: float = 0.1,
         annealing_num_steps: int = 1000,
-        action_key: Optional[NestedKey] = "action",
-        action_mask_key: Optional[NestedKey] = None,
-        spec: Optional[TensorSpec] = None,
+        action_key: NestedKey | None = "action",
+        action_mask_key: NestedKey | None = None,
+        spec: TensorSpec | None = None,
     ):
         raise RuntimeError(
             "This class has been deprecated in favor of torchrl.modules.EGreedyModule."
@@ -230,9 +228,9 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         annealing_num_steps: int = 1000,
         mean: float = 0.0,
         std: float = 1.0,
-        action_key: Optional[NestedKey] = "action",
-        spec: Optional[TensorSpec] = None,
-        safe: Optional[bool] = True,
+        action_key: NestedKey | None = "action",
+        spec: TensorSpec | None = None,
+        safe: bool | None = True,
         device: torch.device | None = None,
     ):
         raise RuntimeError(
@@ -287,7 +285,7 @@ class AdditiveGaussianModule(TensorDictModuleBase):
         mean: float = 0.0,
         std: float = 1.0,
         *,
-        action_key: Optional[NestedKey] = "action",
+        action_key: NestedKey | None = "action",
         # safe is already implemented because we project in the noise addition
         safe: bool = False,
         device: torch.device | None = None,
@@ -383,14 +381,14 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
         mu: float = 0.0,
         sigma: float = 0.2,
         dt: float = 1e-2,
-        x0: Optional[Union[torch.Tensor, np.ndarray]] = None,
-        sigma_min: Optional[float] = None,
+        x0: torch.Tensor | np.ndarray | None = None,
+        sigma_min: float | None = None,
         n_steps_annealing: int = 1000,
-        action_key: Optional[NestedKey] = "action",
-        is_init_key: Optional[NestedKey] = "is_init",
+        action_key: NestedKey | None = "action",
+        is_init_key: NestedKey | None = "is_init",
         spec: TensorSpec = None,
         safe: bool = True,
-        key: Optional[NestedKey] = None,
+        key: NestedKey | None = None,
         device: torch.device | None = None,
     ):
         raise RuntimeError(
@@ -611,11 +609,11 @@ class _OrnsteinUhlenbeckProcess(nn.Module):
         mu: float = 0.0,
         sigma: float = 0.2,
         dt: float = 1e-2,
-        x0: Optional[Union[torch.Tensor, np.ndarray]] = None,
-        sigma_min: Optional[float] = None,
+        x0: torch.Tensor | np.ndarray | None = None,
+        sigma_min: float | None = None,
         n_steps_annealing: int = 1000,
-        key: Optional[NestedKey] = "action",
-        is_init_key: Optional[NestedKey] = "is_init",
+        key: NestedKey | None = "action",
+        is_init_key: NestedKey | None = "is_init",
         device: torch.device | None = None,
     ):
         super().__init__()
@@ -688,7 +686,7 @@ class _OrnsteinUhlenbeckProcess(nn.Module):
         self,
         tensordict: TensorDictBase,
         eps: float = 1.0,
-        is_init: Optional[torch.Tensor] = None,
+        is_init: torch.Tensor | None = None,
     ) -> TensorDictBase:
 
         # Get the nested tensordict where the action lives

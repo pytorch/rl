@@ -23,7 +23,6 @@ Typical usage:
     # OpenGL context is available here.
 """
 
-from __future__ import print_function
 
 # pylint: disable=unused-import,g-import-not-at-top,g-statement-before-imports
 
