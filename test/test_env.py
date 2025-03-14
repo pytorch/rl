@@ -4630,6 +4630,7 @@ class TestLLMEnv:
                 else:
                     return tensors
 
+    @pytest.mark.skipif(not _has_transformers, reason="test requires transformers")
     @pytest.mark.parametrize(
         "str2str,stack_method",
         [
@@ -4675,21 +4676,26 @@ class TestLLMEnv:
             env.check_env_specs(break_when_any_done="both")
 
     @pytest.mark.parametrize(
-        "str2str,stack_method",
+        "str2str,no_stack,stack_method",
         [
-            [True, None],
-            [False, "as_padded_tensor"],
-            # TODO: a bit experimental, fails with check_env_specs
-            # [False, "as_nested_tensor"],
-            [False, None],
+            [True, True, None],
+            [True, False, None],
+            [False, False, "as_padded_tensor"],
+            [False, False, None],
         ],
     )
     @pytest.mark.parametrize("batched", [True, False])
     @pytest.mark.parametrize("device", [None, "cpu"])
     @pytest.mark.parametrize("batch_size", [0, 4])
+    @pytest.mark.parametrize("tokenizer", [True, False])
     def test_llm_from_dataloader(
-        self, str2str, batched, stack_method, device, batch_size
+        self, str2str, batched, stack_method, device, batch_size, tokenizer, no_stack,
     ):
+        from transformers import AutoTokenizer
+        if tokenizer:
+            tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        else:
+            tokenizer = None
         if str2str:
             kwargs = {
                 "dataloader": self.DummyDataLoader(batch_size=batch_size),
@@ -4712,7 +4718,8 @@ class TestLLMEnv:
                 "str2str": str2str,
                 "device": device,
                 "has_attention": False,
-                "no_stack": False,
+                "no_stack": no_stack,
+                "tokenizer": tokenizer,
             }
         )
         env = LLMEnv.from_dataloader(**kwargs)
