@@ -185,6 +185,7 @@ class MaskedCategorical(D.Categorical):
         padding_value: The padding value in the mask tensor. When
             sparse_mask == True, the padding_value will be ignored.
 
+    Examples:
         >>> torch.manual_seed(0)
         >>> logits = torch.randn(4) / 100  # almost equal probabilities
         >>> mask = torch.tensor([True, False, True, True])
