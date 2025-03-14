@@ -17,13 +17,14 @@ from tensordict import (
     TensorDictParams,
 )
 from tensordict.nn import (
-    TensorDictModuleBase, composite_lp_aggregate,
+    composite_lp_aggregate,
     CompositeDistribution,
     dispatch,
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
     set_composite_lp_aggregate,
     TensorDictModule,
+    TensorDictModuleBase,
 )
 from tensordict.utils import NestedKey
 from torch import distributions as d
@@ -349,11 +350,15 @@ class PPOLoss(LossModule):
         if critic is not None:
             critic_network = critic
             del critic
-        if actor_network is None or (critic_network is None and critic_coef not in (None, 0.0)):
+        if actor_network is None or (
+            critic_network is None and critic_coef not in (None, 0.0)
+        ):
             raise TypeError(
                 "Missing positional arguments actor_network or critic_network."
             )
-        critic_coef = 1.0 if critic_coef is None and critic_network is not None else critic_coef
+        critic_coef = (
+            1.0 if critic_coef is None and critic_network is not None else critic_coef
+        )
         if reduction is None:
             reduction = "mean"
 
@@ -523,7 +528,10 @@ class PPOLoss(LossModule):
 
     def _get_cur_log_prob(self, tensordict):
 
-        if isinstance(self.actor_network, (ProbabilisticTensorDictSequential, ProbabilisticTensorDictModule)):
+        if isinstance(
+            self.actor_network,
+            (ProbabilisticTensorDictSequential, ProbabilisticTensorDictModule),
+        ):
             with self.actor_network_params.to_module(
                 self.actor_network
             ) if self.functional else contextlib.nullcontext():
@@ -591,8 +599,6 @@ class PPOLoss(LossModule):
                     if is_tensor_collection(log_prob):
                         log_prob = _sum_td_features(log_prob)
                         log_prob.view_as(prev_log_prob)
-        print('log_prob', log_prob.shape)
-        print('prev_log_prob', prev_log_prob.shape)
         log_weight = (log_prob - prev_log_prob).unsqueeze(-1)
         if is_tensor_collection(log_weight):
             log_weight = _sum_td_features(log_weight)
@@ -1377,16 +1383,19 @@ class KLPENPPOLoss(PPOLoss):
     def reset(self) -> None:
         self.beta = self._beta_init
 
+
 class GRPO(ClipPPOLoss):
-    def __init__(self,
-                 actor_network: TensorDictModuleBase,
-                 # Default value of LLMData
-                 log_prob_key="log_probs",
+    """TODO"""
+    def __init__(
+        self,
+        actor_network: TensorDictModuleBase,
+        # Default value of LLMData
+        log_prob_key="log_probs",
     ):
         super().__init__(
-        actor_network=actor_network,
-        critic_network=None,
-        critic_coef=0.0,
-        functional=False,
+            actor_network=actor_network,
+            critic_network=None,
+            critic_coef=0.0,
+            functional=False,
         )
         self.set_keys(log_prob_key=log_prob_key)

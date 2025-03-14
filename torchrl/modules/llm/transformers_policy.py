@@ -91,7 +91,6 @@ def log_probs_from_logits(td: TensorDictBase) -> TensorDictBase:
     - "forward"
     """
     tokens_out = td["tokens_response", "input_ids"]
-    print('tokens_out', tokens_out.shape)
     seq_len = tokens_out.shape[-1]
 
     del td["forward", "past_key_values"]

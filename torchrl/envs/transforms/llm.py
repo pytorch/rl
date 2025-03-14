@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from collections import deque
 from collections.abc import Mapping
-from copy import copy, deepcopy
+from copy import copy
 from typing import Any, Callable, Iterable, Literal
 
 import torch
@@ -17,13 +17,15 @@ from tensordict import (
     TensorDictBase,
     unravel_key,
 )
-from tensordict.nn import ProbabilisticTensorDictModule, TensorDictParams, ProbabilisticTensorDictSequential
+from tensordict.nn import (
+    ProbabilisticTensorDictModule,
+    ProbabilisticTensorDictSequential,
+)
 from tensordict.utils import _zip_strict, is_seq_of_nested_key
-from torch import nn
 
 from torchrl.data.tensor_specs import Composite, NonTensor, TensorSpec, Unbounded
 from torchrl.envs.transforms.transforms import TensorDictPrimer, Transform
-from torchrl.envs.transforms.utils import _set_missing_tolerance, _stateless_param
+from torchrl.envs.transforms.utils import _set_missing_tolerance
 from torchrl.envs.utils import make_composite_from_td
 
 
@@ -564,7 +566,7 @@ class KLRewardTransform(Transform):
         out_keys=None,
         requires_grad=False,
         log_prob_key: NestedKey = "sample_log_prob",
-            action_key: NestedKey = "action",
+        action_key: NestedKey = "action",
     ):
         if in_keys is None:
             in_keys = self.DEFAULT_IN_KEYS
@@ -650,12 +652,17 @@ class KLRewardTransform(Transform):
                 next_tensordict.set(self.out_keys[0], self.parent.reward_spec.zero())
             return next_tensordict
         # with self.frozen_params.to_module(self.functional_actor):
-        if isinstance(self.functional_actor, (ProbabilisticTensorDictModule, ProbablisticTensorDictSequential)):
+        if isinstance(
+            self.functional_actor,
+            (ProbabilisticTensorDictModule, ProbabilisticTensorDictSequential),
+        ):
             dist = self.functional_actor.get_dist(next_tensordict.copy())
             # get the log_prob given the original model
             log_prob = dist.log_prob(action)
         else:
-            log_prob = self.functional_actor(next_tensordict.copy()).get(self.sample_log_prob_key)
+            log_prob = self.functional_actor(next_tensordict.copy()).get(
+                self.sample_log_prob_key
+            )
 
         reward_key = self.in_keys[0]
         reward = next_tensordict.get("next").get(reward_key)

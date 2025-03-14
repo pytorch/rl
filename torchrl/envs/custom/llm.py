@@ -18,6 +18,8 @@ from tensordict import (
 from tensordict.tensorclass import NonTensorData, NonTensorStack
 from tensordict.utils import _zip_strict
 from torch.utils.data import DataLoader
+
+from torchrl._utils import _replace_last
 from torchrl.data.map.hash import SipHash
 from torchrl.data.tensor_specs import (
     Bounded,
@@ -236,7 +238,7 @@ class LLMEnv(EnvBase):
         cls,
         dataloader: DataLoader,
         *,
-        tokenizer: Tokenizer | None = None,
+        tokenizer: transformers.PretrainedTokenizerBase | None = None,  # noqa
         token_key: NestedKey | None = None,
         str_key: NestedKey | None = None,
         attention_key: NestedKey | None = None,
@@ -347,6 +349,7 @@ class LLMEnv(EnvBase):
                 if action_key is None:
                     action_key = cls._DEFAULT_ACTION_STR_KEY
                 tokenizer_transform = Tokenizer(
+                    tokenizer=tokenizer,
                     in_keys=[str_key],
                     out_keys=[token_key],
                     # Assume that the tokens are named according to _DEFAULT_ACTION_TOKENS_KEY
@@ -358,6 +361,7 @@ class LLMEnv(EnvBase):
                 )
             else:
                 tokenizer_transform = Tokenizer(
+                    tokenizer=tokenizer,
                     in_keys=[str_key],
                     out_keys=[token_key],
                     call_before_reset=True,

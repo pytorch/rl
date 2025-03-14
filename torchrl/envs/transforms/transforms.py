@@ -5385,7 +5385,6 @@ class Tokenizer(UnaryTransform):
                     out_key,
                     observation,
                 )
-                print('next tensordict', next_tensordict)
             elif not self.missing_tolerance or out_key not in next_tensordict.keys(
                 True
             ):
@@ -5434,7 +5433,6 @@ class Tokenizer(UnaryTransform):
             if self.return_attention_mask:
                 attention_mask = attention_mask.to(device)
         if self.return_attention_mask:
-            print('out, attention_mask', out.shape, attention_mask.shape)
             return out, attention_mask
         return out
 
@@ -5459,7 +5457,9 @@ class Tokenizer(UnaryTransform):
             elif in_key in input_spec["full_action_spec"].keys(False, True):
                 spec = input_spec["full_action_spec"]
             else:
-                raise KeyError(f"The input keys {in_key} wasn't found in the env input specs.")
+                raise KeyError(
+                    f"The input keys {in_key} wasn't found in the env input specs."
+                )
             local_spec = spec.pop(in_key)
             new_shape = spec.shape
             if self.max_length is None:
@@ -5501,12 +5501,12 @@ class Tokenizer(UnaryTransform):
                     )
                 attention_mask_keys.add(attention_mask_key)
                 observation_spec[attention_mask_key] = Bounded(
-                0,
-                2,
-                shape=new_shape,
-                device=observation_spec[in_key].device,
-                dtype=observation_spec[in_key].dtype,
-            )
+                    0,
+                    2,
+                    shape=new_shape,
+                    device=observation_spec[in_key].device,
+                    dtype=observation_spec[in_key].dtype,
+                )
         return observation_spec
 
 
