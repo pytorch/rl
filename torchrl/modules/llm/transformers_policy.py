@@ -53,11 +53,11 @@ def log_probs_from_scores(td: TensorDictBase) -> TensorDictBase:
     - "tokens_out", "scores"
 
     """
-    # TODO: how do we avoid getting these?
     tokens_out = td["tokens_out", "sequences"]
     seq_len = tokens_out.shape[1]
 
     del td["tokens_out", "past_key_values"]
+
     scores = dict(td["tokens_out", "scores"].items())
     scores = torch.stack(
         [scores[str(k)] for k in range(len(scores))], 1
@@ -90,15 +90,18 @@ def log_probs_from_logits(td: TensorDictBase) -> TensorDictBase:
     - "forward", "past_key_values"
     - "forward"
     """
-    # TODO: how do we avoid getting these?
+    tokens_out = td["tokens_response", "input_ids"]
+    seq_len = tokens_out.shape[-1]
+
     del td["forward", "past_key_values"]
+
     scores = td["forward", "logits"]
+    scores = scores[..., -seq_len:, :]
     logits = scores - scores.logsumexp(dim=-1, keepdim=True)
     td["logits"] = scores
     del td["forward"]
     scores.shape[1]
-    tokens = td["tokens_in", "input_ids"]
-    log_probs = logits.gather(-1, tokens.unsqueeze(-1))
+    log_probs = logits.gather(-1, tokens_out.unsqueeze(-1))
     td["log_probs"] = log_probs
     return td
 
