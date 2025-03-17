@@ -285,11 +285,6 @@ def from_vllm(
                 padded_values = tokens_response_td["tokens_response"] == padding_value
                 tokens_response_td.rename_key_("logprobs", "log_probs")
                 if padded_values.any():
-                    print(
-                        "padded_values:",
-                        padded_values.sum(),
-                        torch.where(padded_values),
-                    )
                     lps = tokens_response_td["log_probs"]
                     lps = torch.where(expand_as_right(~padded_values, lps), lps, 0.0)
                     tokens_response_td["log_probs"] = lps
