@@ -24,7 +24,7 @@ from tensordict.nn import (
     TensorDictSequential as Seq,
     WrapModule,
 )
-from tensordict.utils import _zip_strict
+from tensordict.utils import _zip_strict, expand_as_right
 
 from torchrl.data import LLMData
 
@@ -129,6 +129,9 @@ def from_vllm(
     text_key: NestedKey = ("text",)
     token_key: NestedKey = ("tokens",)
     attention_mask_key: NestedKey = ("attention_mask",)
+
+    # retrieve the padding value - we use this to make the log-probs of pad token = 1
+    padding_value = tokenizer(tokenizer.pad_token)["input_ids"][0]
 
     # TODO: Seq should have a return_log_prob and be of ProbabilisticTDSequential type for instance checks
     if tokenizer is None:
@@ -264,8 +267,6 @@ def from_vllm(
         strict=True,
     )
 
-    padding_value = tokenizer(tokenizer.pad_token)["input_ids"][0]
-
     def get_output_tokens_and_log_probs(td, padding_value=padding_value):
         td["tokens_out"] = _RequestOutput_tc.from_request_output(td["tokens_out"])
         if pad_output and td.ndim and not isinstance(td, LazyStackedTensorDict):
@@ -280,10 +281,18 @@ def from_vllm(
                     layout=torch.strided
                 ).to_padded_tensor(padding=padding_value)
             tokens_response_td.rename_key_("token_ids", "tokens_response")
-            # td["tokens_response"] = outputs.token_ids
             if return_log_probs:
+                padded_values = tokens_response_td["tokens_response"] == padding_value
                 tokens_response_td.rename_key_("logprobs", "log_probs")
-                # td["log_probs"] = outputs.logprobs.unsqueeze(-1)
+                if padded_values.any():
+                    print(
+                        "padded_values:",
+                        padded_values.sum(),
+                        torch.where(padded_values),
+                    )
+                    lps = tokens_response_td["log_probs"]
+                    lps = torch.where(expand_as_right(~padded_values, lps), lps, 0.0)
+                    tokens_response_td["log_probs"] = lps
             td.update(tokens_response_td)
         elif not generate:
             td["prompt_logprobs"] = td["tokens_out"].prompt_logprobs.unsqueeze(-1)
@@ -295,7 +304,10 @@ def from_vllm(
 
         def translate_lps(tokens_response, x):
             # we disregard the tokens from the prompt to focus on those of the response
-            return x[..., -tokens_response.shape[-1] :, :]
+            padded = tokens_response == padding_value
+            lps = x[..., -tokens_response.shape[-1] :, :]
+            lps[padded] = 0.0
+            return x
 
         module_dict["translate_lps"] = Mod(
             translate_lps,
