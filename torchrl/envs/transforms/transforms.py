@@ -6263,7 +6263,7 @@ class TensorDictPrimer(Transform):
     @property
     def device(self):
         device = self._device
-        if device is None and self.parent is not None:
+        if device is None and hasattr(self, "parent") and self.parent is not None:
             device = self.parent.device
             self._device = device
         return device
