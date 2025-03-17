@@ -333,6 +333,7 @@ def from_vllm(
             td = td.select(*in_keys, strict=False)
             td.rename_key_(("tokens_in", "input_ids"), token_key)
             td.rename_key_(("tokens_in", "attention_mask"), attention_mask_key)
+            del td["tokens_in"]
             return td
 
         module_dict["format"] = WrapModule(
