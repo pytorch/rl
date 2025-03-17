@@ -154,12 +154,19 @@ class LLMEnv(EnvBase):
             self.full_observation_spec_unbatched = Composite(
                 {
                     self.str_key: NonTensor(
-                        example_data="a string", batched=True, shape=()
+                        example_data="a string",
+                        batched=True,
+                        shape=(),
+                        device=device,
                     )
                 }
             )
             self.full_action_spec_unbatched = Composite(
-                {action_key: NonTensor(example_data="a string", batched=True, shape=())}
+                {
+                    action_key: NonTensor(
+                        example_data="a string", batched=True, shape=(), device=device
+                    )
+                }
             )
         else:
             if vocab_size is None:
@@ -217,8 +224,8 @@ class LLMEnv(EnvBase):
         if not self.assign_done:
             # Use single done
             self.full_done_spec_unbatched = Composite(
-                done=Unbounded(shape=(1,), dtype=torch.bool),
-                terminated=Unbounded(shape=(1,), dtype=torch.bool),
+                done=Unbounded(shape=(1,), dtype=torch.bool, device=device),
+                terminated=Unbounded(shape=(1,), dtype=torch.bool, device=device),
             )
         elif self.str2str:
             raise STR2STR_ERR
@@ -226,11 +233,11 @@ class LLMEnv(EnvBase):
             # Use single done
             self.full_done_spec_unbatched = Composite(
                 tokens_data=Composite(
-                    done=Unbounded(shape=(-1,), dtype=torch.bool),
-                    terminated=Unbounded(shape=(-1,), dtype=torch.bool),
+                    done=Unbounded(shape=(-1,), dtype=torch.bool, device=device),
+                    terminated=Unbounded(shape=(-1,), dtype=torch.bool, device=device),
                 ),
-                done=Unbounded(shape=(1,), dtype=torch.bool),
-                terminated=Unbounded(shape=(1,), dtype=torch.bool),
+                done=Unbounded(shape=(1,), dtype=torch.bool, device=device),
+                terminated=Unbounded(shape=(1,), dtype=torch.bool, device=device),
             )
 
     @classmethod
@@ -346,6 +353,7 @@ class LLMEnv(EnvBase):
 
         if tokenizer is not None:
             if str2str:
+                # In this case, the tokenizer is appended to the env after each step
                 if action_key is None:
                     action_key = cls._DEFAULT_ACTION_STR_KEY
                 tokenizer_transform = Tokenizer(
@@ -360,6 +368,7 @@ class LLMEnv(EnvBase):
                     missing_tolerance=False,
                 )
             else:
+                # In this case, the tokenizer acts before reset and that's all
                 tokenizer_transform = Tokenizer(
                     tokenizer=tokenizer,
                     in_keys=[str_key],
@@ -387,6 +396,7 @@ class LLMEnv(EnvBase):
             example_data=example_data,
             stack_method=stack_method,
             repeats=repeats,
+            device=device,
         )
         env = LLMEnv(
             str2str=str2str,
@@ -409,12 +419,12 @@ class LLMEnv(EnvBase):
         return env.append_transform(primer)
 
     @staticmethod
-    def _check_obs_act_and_cat(obs, action):
+    def _check_obs_act_and_cat(obs, action, *, device):
         if not isinstance(obs, str):
             raise TypeError(f"Observation must be a string, got {type(obs)}.")
         if not isinstance(action, str):
             raise TypeError(f"Action must be a string, got {type(action)}.")
-        return obs + action
+        return NonTensorData(obs + action, device=device)
 
     def _step(
         self,
@@ -496,11 +506,13 @@ class LLMEnv(EnvBase):
                         "The tensordict is batchless, yet the action and/or observations are not "
                         f"strings but {type(action)} and {type(obs)}, respectivly."
                     )
-                observation = self._check_obs_act_and_cat(obs, action)
+                observation = self._check_obs_act_and_cat(
+                    obs, action, device=self.device
+                )
             else:
                 observation = NonTensorStack(
                     *[
-                        self._check_obs_act_and_cat(_obs, _action)
+                        self._check_obs_act_and_cat(_obs, _action, device=self.device)
                         for (_obs, _action) in _zip_strict(obs, action)
                     ]
                 )
@@ -553,6 +565,11 @@ class LLMEnv(EnvBase):
                 f"torchrl.envs.DataLoadingPrimer) is appended to the env transforms."
             )
         td_reset = tensordict.copy()
+        if td_reset.device != self.device:
+            if self.device is None:
+                td_reset.clear_device_()
+            else:
+                td_reset = td_reset.to(self.device)
         tensordict = self._maybe_make_done(tensordict, td_reset)
         if self.as_llm_data:
             raise NotImplementedError()

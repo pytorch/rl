@@ -14,6 +14,7 @@ import random
 import re
 import string
 from collections import defaultdict
+from contextlib import nullcontext
 from functools import partial
 from sys import platform
 from typing import Any, Optional
@@ -33,7 +34,7 @@ from tensordict import (
     TensorDictBase,
 )
 from tensordict.nn import TensorDictModuleBase
-from tensordict.tensorclass import NonTensorStack, TensorClass
+from tensordict.tensorclass import NonTensorData, NonTensorStack, TensorClass
 from tensordict.utils import _unravel_key_to_tuple
 from torch import nn
 
@@ -4675,6 +4676,8 @@ class TestLLMEnv:
         else:
             env.check_env_specs(break_when_any_done="both")
 
+    @pytest.mark.skipif(not _has_transformers, reason="test requires transformers")
+    @pytest.mark.parametrize("tokenizer", [True, False])
     @pytest.mark.parametrize(
         "str2str,no_stack,stack_method",
         [
@@ -4687,11 +4690,18 @@ class TestLLMEnv:
     @pytest.mark.parametrize("batched", [True, False])
     @pytest.mark.parametrize("device", [None, "cpu"])
     @pytest.mark.parametrize("batch_size", [0, 4])
-    @pytest.mark.parametrize("tokenizer", [True, False])
     def test_llm_from_dataloader(
-        self, str2str, batched, stack_method, device, batch_size, tokenizer, no_stack,
+        self,
+        str2str,
+        batched,
+        stack_method,
+        device,
+        batch_size,
+        tokenizer,
+        no_stack,
     ):
         from transformers import AutoTokenizer
+
         if tokenizer:
             tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
         else:
@@ -4732,12 +4742,17 @@ class TestLLMEnv:
         if batch_size > 0:
 
             def policy(td):
-                if str2str:
+                if str2str and tokenizer is None:
                     if not td.shape:
-                        td[LLMEnv._DEFAULT_ACTION_STR_KEY] = "<nothing>"
+                        td[LLMEnv._DEFAULT_ACTION_STR_KEY] = NonTensorData(
+                            "<nothing>", device=device
+                        )
                     else:
                         td[LLMEnv._DEFAULT_ACTION_STR_KEY] = NonTensorStack(
-                            *["<nothing>" for _ in range(td.shape[0])]
+                            *[
+                                NonTensorData("<nothing>", device=device)
+                                for _ in range(td.shape[0])
+                            ]
                         )
                 else:
                     td[LLMEnv._DEFAULT_ACTION_TOKENS_KEY] = torch.ones(
@@ -4749,34 +4764,48 @@ class TestLLMEnv:
                 # Tell the env that we want 3 sub-envs
                 r = env.rollout(10, policy, tensordict=TensorDict(batch_size=[3]))
                 assert r.ndim == 2
-                if str2str:
+                if str2str and tokenizer is None:
                     assert isinstance(r[0, 0][LLMEnv._DEFAULT_STR_KEY], str)
                     assert isinstance(r[0, 1][LLMEnv._DEFAULT_STR_KEY], str)
-                    assert (
-                        r[0, 0][LLMEnv._DEFAULT_STR_KEY]
-                        == r[0, 1][LLMEnv._DEFAULT_STR_KEY][
-                            : -len(r[0, 0][LLMEnv._DEFAULT_ACTION_STR_KEY])
-                        ]
-                    )
-                    assert (
-                        r[0, 1][LLMEnv._DEFAULT_STR_KEY]
-                        == r[0, 2][LLMEnv._DEFAULT_STR_KEY][
-                            : -len(r[0, 1][LLMEnv._DEFAULT_ACTION_STR_KEY])
-                        ]
-                    )
-                    assert (
-                        r[-1, 0][LLMEnv._DEFAULT_STR_KEY]
-                        == r[-1, 1][LLMEnv._DEFAULT_STR_KEY][
-                            : -len(r[-1, 0][LLMEnv._DEFAULT_ACTION_STR_KEY])
-                        ]
-                    )
-                    assert (
-                        r[-1, 1][LLMEnv._DEFAULT_STR_KEY]
-                        == r[-1, 2][LLMEnv._DEFAULT_STR_KEY][
-                            : -len(r[-1, 1][LLMEnv._DEFAULT_ACTION_STR_KEY])
-                        ]
-                    )
-                else:
+                    should_fail = no_stack
+                    if should_fail:
+                        ctx = pytest.raises(AssertionError)
+                    else:
+                        ctx = nullcontext()
+                    with ctx:
+                        assert (
+                            r[0, 0][LLMEnv._DEFAULT_STR_KEY]
+                            == r[0, 1][LLMEnv._DEFAULT_STR_KEY][
+                                : -len(r[0, 0][LLMEnv._DEFAULT_ACTION_STR_KEY])
+                            ]
+                        ), (
+                            r[0, 0][LLMEnv._DEFAULT_STR_KEY],
+                            r[0, 0][LLMEnv._DEFAULT_ACTION_STR_KEY],
+                            r[0, 0]["next", LLMEnv._DEFAULT_STR_KEY],
+                            r[0, 1][LLMEnv._DEFAULT_STR_KEY],
+                        )
+                    with ctx:
+                        assert (
+                            r[0, 1][LLMEnv._DEFAULT_STR_KEY]
+                            == r[0, 2][LLMEnv._DEFAULT_STR_KEY][
+                                : -len(r[0, 1][LLMEnv._DEFAULT_ACTION_STR_KEY])
+                            ]
+                        )
+                    with ctx:
+                        assert (
+                            r[-1, 0][LLMEnv._DEFAULT_STR_KEY]
+                            == r[-1, 1][LLMEnv._DEFAULT_STR_KEY][
+                                : -len(r[-1, 0][LLMEnv._DEFAULT_ACTION_STR_KEY])
+                            ]
+                        )
+                    with ctx:
+                        assert (
+                            r[-1, 1][LLMEnv._DEFAULT_STR_KEY]
+                            == r[-1, 2][LLMEnv._DEFAULT_STR_KEY][
+                                : -len(r[-1, 1][LLMEnv._DEFAULT_ACTION_STR_KEY])
+                            ]
+                        )
+                elif tokenizer is None:
                     assert (
                         r[0, 0][LLMEnv._DEFAULT_TOKEN_KEY]
                         == r[0, 1][LLMEnv._DEFAULT_TOKEN_KEY][:-1]
