@@ -10,13 +10,7 @@ from copy import copy, deepcopy
 from typing import Any, Callable, Iterable, Literal
 
 import torch
-from tensordict import (
-    lazy_stack,
-    NestedKey,
-    TensorDict,
-    TensorDictBase,
-    unravel_key,
-)
+from tensordict import lazy_stack, NestedKey, TensorDict, TensorDictBase, unravel_key
 from tensordict.nn import ProbabilisticTensorDictModule, TensorDictParams
 from tensordict.utils import _zip_strict, is_seq_of_nested_key
 from torch import nn
