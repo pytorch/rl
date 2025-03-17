@@ -244,11 +244,10 @@ def from_vllm(
     )
 
     if generate_kwargs is None:
-        generate_kwargs = {
-            "detokenize": False,
-            "prompt_logprobs": not generate,
-            "logprobs": return_log_probs,
-        }
+        generate_kwargs = {}
+    generate_kwargs.setdefault("detokenize", False)
+    generate_kwargs.setdefault("prompt_logprobs", not generate)
+    generate_kwargs.setdefault("logprobs", return_log_probs)
     if not generate:
         generate_kwargs["max_tokens"] = 1
     sampling_params = SamplingParams(**generate_kwargs)
