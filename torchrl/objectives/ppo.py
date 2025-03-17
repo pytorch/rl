@@ -24,6 +24,7 @@ from tensordict.nn import (
     ProbabilisticTensorDictSequential,
     set_composite_lp_aggregate,
     TensorDictModule,
+    TensorDictModuleBase,
 )
 from tensordict.utils import NestedKey
 from torch import distributions as d
@@ -327,7 +328,7 @@ class PPOLoss(LossModule):
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
         entropy_coef: float = 0.01,
-        critic_coef: float = 1.0,
+        critic_coef: float | None = None,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
         normalize_advantage_exclude_dims: tuple[int] = (),
@@ -349,10 +350,15 @@ class PPOLoss(LossModule):
         if critic is not None:
             critic_network = critic
             del critic
-        if actor_network is None or critic_network is None:
+        if actor_network is None or (
+            critic_network is None and critic_coef not in (None, 0.0)
+        ):
             raise TypeError(
                 "Missing positional arguments actor_network or critic_network."
             )
+        critic_coef = (
+            1.0 if critic_coef is None and critic_network is not None else critic_coef
+        )
         if reduction is None:
             reduction = "mean"
 
@@ -373,7 +379,7 @@ class PPOLoss(LossModule):
             policy_params = list(actor_network.parameters())
         else:
             policy_params = None
-        if functional:
+        if functional and critic_network is not None:
             self.convert_to_functional(
                 critic_network, "critic_network", compare_against=policy_params
             )
@@ -424,12 +430,15 @@ class PPOLoss(LossModule):
                     f"clip_value must be a float or a scalar tensor, got {clip_value}."
                 )
         self.register_buffer("clip_value", clip_value)
-        log_prob_keys = self.actor_network.log_prob_keys
-        action_keys = self.actor_network.dist_sample_keys
-        if len(log_prob_keys) > 1:
-            self.set_keys(sample_log_prob=log_prob_keys, action=action_keys)
-        else:
-            self.set_keys(sample_log_prob=log_prob_keys[0], action=action_keys[0])
+        try:
+            log_prob_keys = self.actor_network.log_prob_keys
+            action_keys = self.actor_network.dist_sample_keys
+            if len(log_prob_keys) > 1:
+                self.set_keys(sample_log_prob=log_prob_keys, action=action_keys)
+            else:
+                self.set_keys(sample_log_prob=log_prob_keys[0], action=action_keys[0])
+        except AttributeError:
+            pass
 
     @property
     def functional(self):
@@ -439,7 +448,8 @@ class PPOLoss(LossModule):
         keys = []
         _maybe_add_or_extend_key(keys, self.actor_network.in_keys)
         _maybe_add_or_extend_key(keys, self.actor_network.in_keys, "next")
-        _maybe_add_or_extend_key(keys, self.critic_network.in_keys)
+        if self.critic_network is not None:
+            _maybe_add_or_extend_key(keys, self.critic_network.in_keys)
         _maybe_add_or_extend_key(keys, self.tensor_keys.action)
         _maybe_add_or_extend_key(keys, self.tensor_keys.sample_log_prob)
         _maybe_add_or_extend_key(keys, self.tensor_keys.reward, "next")
@@ -516,27 +526,49 @@ class PPOLoss(LossModule):
                 entropy.batch_size = adv_shape
         return entropy.unsqueeze(-1)
 
+    def _get_cur_log_prob(self, tensordict):
+
+        if isinstance(
+            self.actor_network,
+            (ProbabilisticTensorDictSequential, ProbabilisticTensorDictModule),
+        ):
+            with self.actor_network_params.to_module(
+                self.actor_network
+            ) if self.functional else contextlib.nullcontext():
+                dist = self.actor_network.get_dist(tensordict)
+
+            is_composite = isinstance(dist, CompositeDistribution)
+
+            if is_composite:
+                action = tensordict.select(
+                    *(
+                        (self.tensor_keys.action,)
+                        if isinstance(self.tensor_keys.action, NestedKey)
+                        else self.tensor_keys.action
+                    )
+                )
+            else:
+                action = _maybe_get_or_select(tensordict, self.tensor_keys.action)
+
+            if action.requires_grad:
+                raise RuntimeError(
+                    f"tensordict stored {self.tensor_keys.action} requires grad."
+                )
+            log_prob = dist.log_prob(action)
+        else:
+            with self.actor_network_params.to_module(
+                self.actor_network
+            ) if self.functional else contextlib.nullcontext():
+                td = self.actor_network(tensordict)
+                log_prob = td.get(self.tensor_keys.sample_log_prob)
+                # TODO: decustomize this
+                dist = torch.distributions.Categorical(td.get("logits"))
+                is_composite = False
+        return log_prob, dist, is_composite
+
     def _log_weight(
         self, tensordict: TensorDictBase, adv_shape: torch.Size
     ) -> tuple[torch.Tensor, d.Distribution, torch.Tensor]:
-
-        with self.actor_network_params.to_module(
-            self.actor_network
-        ) if self.functional else contextlib.nullcontext():
-            dist = self.actor_network.get_dist(tensordict)
-
-        is_composite = isinstance(dist, CompositeDistribution)
-
-        if is_composite:
-            action = tensordict.select(
-                *(
-                    (self.tensor_keys.action,)
-                    if isinstance(self.tensor_keys.action, NestedKey)
-                    else self.tensor_keys.action
-                )
-            )
-        else:
-            action = _maybe_get_or_select(tensordict, self.tensor_keys.action)
 
         prev_log_prob = _maybe_get_or_select(
             tensordict,
@@ -549,11 +581,8 @@ class PPOLoss(LossModule):
                 f"tensordict stored {self.tensor_keys.sample_log_prob} requires grad."
             )
 
-        if action.requires_grad:
-            raise RuntimeError(
-                f"tensordict stored {self.tensor_keys.action} requires grad."
-            )
-        log_prob = dist.log_prob(action)
+        log_prob, dist, is_composite = self._get_cur_log_prob(tensordict)
+
         if is_composite:
             with set_composite_lp_aggregate(False):
                 if log_prob.batch_size != adv_shape:
@@ -570,7 +599,6 @@ class PPOLoss(LossModule):
                     if is_tensor_collection(log_prob):
                         log_prob = _sum_td_features(log_prob)
                         log_prob.view_as(prev_log_prob)
-
         log_weight = (log_prob - prev_log_prob).unsqueeze(-1)
         if is_tensor_collection(log_weight):
             log_weight = _sum_td_features(log_weight)
@@ -1002,7 +1030,7 @@ class ClipPPOLoss(PPOLoss):
                 entropy = _sum_td_features(entropy)
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
-        if self.critic_coef is not None:
+        if self.critic_coef is not None and self.critic_coef > 0:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
             if value_clip_fraction is not None:
@@ -1203,7 +1231,8 @@ class KLPENPPOLoss(PPOLoss):
         keys = []
         _maybe_add_or_extend_key(keys, self.actor_network.in_keys)
         _maybe_add_or_extend_key(keys, self.actor_network.in_keys, "next")
-        _maybe_add_or_extend_key(keys, self.critic_network.in_keys)
+        if self.critic_network is not None:
+            _maybe_add_or_extend_key(keys, self.critic_network.in_keys)
         _maybe_add_or_extend_key(keys, self.tensor_keys.action)
         _maybe_add_or_extend_key(keys, self.tensor_keys.sample_log_prob)
         _maybe_add_or_extend_key(keys, self.tensor_keys.reward, "next")
@@ -1211,21 +1240,24 @@ class KLPENPPOLoss(PPOLoss):
         _maybe_add_or_extend_key(keys, self.tensor_keys.terminated, "next")
 
         # Get the parameter keys from the actor dist
-        actor_dist_module = None
-        for module in self.actor_network.modules():
-            # Ideally we should combine them if there is more than one
-            if isinstance(module, ProbabilisticTensorDictModule):
-                if actor_dist_module is not None:
-                    raise RuntimeError(
-                        "Actors with one and only one distribution are currently supported "
-                        f"in {type(self).__name__}. If you need to use more than one "
-                        f"distributions over the action space please submit an issue "
-                        f"on github."
-                    )
-                actor_dist_module = module
-        if actor_dist_module is None:
-            raise RuntimeError("Could not find the probabilistic module in the actor.")
-        keys += list(actor_dist_module.in_keys)
+        # actor_dist_module = None
+        # for module in self.actor_network.modules():
+        #     # Ideally we should combine them if there is more than one
+        #     if isinstance(module, ProbabilisticTensorDictModule):
+        #         if actor_dist_module is not None:
+        #             raise RuntimeError(
+        #                 "Actors with one and only one distribution are currently supported "
+        #                 f"in {type(self).__name__}. If you need to use more than one "
+        #                 f"distributions over the action space please submit an issue "
+        #                 f"on github."
+        #             )
+        #         actor_dist_module = module
+        # if actor_dist_module is None:
+        #     if hasattr(self.actor_network, "in_keys"):
+        #         actor_dist_module = self.actor_network
+        #     else:
+        #         raise RuntimeError("Could not find the probabilistic module in the actor.")
+        keys += list(self.actor_network.in_keys)
         self._in_keys = list(set(keys))
 
     @property
@@ -1350,3 +1382,20 @@ class KLPENPPOLoss(PPOLoss):
 
     def reset(self) -> None:
         self.beta = self._beta_init
+
+
+class GRPO(ClipPPOLoss):
+    """TODO"""
+    def __init__(
+        self,
+        actor_network: TensorDictModuleBase,
+        # Default value of LLMData
+        log_prob_key="log_probs",
+    ):
+        super().__init__(
+            actor_network=actor_network,
+            critic_network=None,
+            critic_coef=0.0,
+            functional=False,
+        )
+        self.set_keys(log_prob_key=log_prob_key)

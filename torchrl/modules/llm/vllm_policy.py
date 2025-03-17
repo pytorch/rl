@@ -10,6 +10,8 @@ import importlib.util
 import torch
 from tensordict import (
     from_dataclass,
+    lazy_stack,
+    LazyStackedTensorDict,
     maybe_dense_stack,
     NestedKey,
     NonTensorData,
@@ -20,6 +22,7 @@ from tensordict.nn import (
     TensorDictModule as Mod,
     TensorDictModuleBase,
     TensorDictSequential as Seq,
+    WrapModule,
 )
 from tensordict.utils import _zip_strict
 
@@ -61,6 +64,7 @@ def from_vllm(
     generate: bool = True,
     generate_kwargs: dict | None = None,
     tokenizer_kwargs: dict | None = None,
+    pad_output: bool = True,
 ) -> TensorDictModuleBase:
     """Creates a TensorDictModule from a vLLM model.
 
@@ -151,7 +155,7 @@ def from_vllm(
                 out_keys=["tokens_in"],
                 method_kwargs=tokenizer_kwargs,
                 strict=True,
-                inplace=False,
+                inplace="empty",
             )
         else:
             module_dict["encode"] = Mod(
@@ -164,7 +168,7 @@ def from_vllm(
                 in_keys=[text_key, "text_response"],
                 out_keys=["tokens_in", "tokens_response"],
                 strict=True,
-                inplace=False,
+                inplace="empty",
             )
 
             def select(x, y):
@@ -196,7 +200,7 @@ def from_vllm(
                 ("tokens_in", "attention_mask"),
             ],
             strict=False,
-            inplace=False,
+            inplace="empty",
         )
     else:
         module_dict["move_inputs"] = Mod(
@@ -205,7 +209,7 @@ def from_vllm(
             out_keys=[("tokens_in", "input_ids"), ("tokens_in", "attention_mask")],
             # It's ok if there's no mask
             strict=False,
-            inplace=False,
+            inplace="empty",
         )
 
     def to_list(tokens, attention_mask):
@@ -240,11 +244,10 @@ def from_vllm(
     )
 
     if generate_kwargs is None:
-        generate_kwargs = {
-            "detokenize": False,
-            "prompt_logprobs": not generate,
-            "logprobs": return_log_probs,
-        }
+        generate_kwargs = {}
+    generate_kwargs.setdefault("detokenize", False)
+    generate_kwargs.setdefault("prompt_logprobs", not generate)
+    generate_kwargs.setdefault("logprobs", return_log_probs)
     if not generate:
         generate_kwargs["max_tokens"] = 1
     sampling_params = SamplingParams(**generate_kwargs)
@@ -261,13 +264,27 @@ def from_vllm(
         strict=True,
     )
 
-    def get_output_tokens_and_log_probs(td):
+    padding_value = tokenizer(tokenizer.pad_token)["input_ids"][0]
+
+    def get_output_tokens_and_log_probs(td, padding_value=padding_value):
         td["tokens_out"] = _RequestOutput_tc.from_request_output(td["tokens_out"])
+        if pad_output and td.ndim and not isinstance(td, LazyStackedTensorDict):
+            td = lazy_stack(list(td.unbind(0)))
         if generate:
             # When not generate, we don't want to overwrite this
-            td["tokens_response"] = td["tokens_out"].outputs.token_ids
+            tokens_response_td = td["tokens_out"].outputs._tensordict.select(
+                "token_ids", "logprobs", strict=False
+            )
+            if pad_output:
+                tokens_response_td = tokens_response_td.densify(
+                    layout=torch.strided
+                ).to_padded_tensor(padding=padding_value)
+            tokens_response_td.rename_key_("token_ids", "tokens_response")
+            # td["tokens_response"] = outputs.token_ids
             if return_log_probs:
-                td["log_probs"] = td["tokens_out"].outputs.logprobs.unsqueeze(-1)
+                tokens_response_td.rename_key_("logprobs", "log_probs")
+                # td["log_probs"] = outputs.logprobs.unsqueeze(-1)
+            td.update(tokens_response_td)
         elif not generate:
             td["prompt_logprobs"] = td["tokens_out"].prompt_logprobs.unsqueeze(-1)
         return td
@@ -296,32 +313,41 @@ def from_vllm(
         module_dict["to_source_device"] = _maybe_set_device
 
     if generate:
-        module_dict["format"] = Mod(
-            lambda *x: x,
-            in_keys=[
-                "log_probs",
-                "tokens_response",
-                ("tokens_in", "input_ids"),
-                ("tokens_in", "attention_mask"),
-                "text_response",
-            ],
-            out_keys=[
-                "log_probs",
-                "tokens_response",
-                token_key,
-                attention_mask_key,
-                "text_response",
-            ],
-            strict=False,
-            inplace=False,
+        in_keys = [
+            "log_probs",
+            "tokens_response",
+            ("tokens_in", "input_ids"),
+            ("tokens_in", "attention_mask"),
+            "text_response",
+        ]
+        out_keys = [
+            "log_probs",
+            "tokens_response",
+            token_key,
+            attention_mask_key,
+            "text_response",
+        ]
+
+        def format_td(td):
+            td = td.select(*in_keys, strict=False)
+            td.rename_key_(("tokens_in", "input_ids"), token_key)
+            td.rename_key_(("tokens_in", "attention_mask"), attention_mask_key)
+            del td["tokens_in"]
+            return td
+
+        module_dict["format"] = WrapModule(
+            format_td,
+            in_keys=in_keys,
+            out_keys=out_keys,
         )
+
     else:
         module_dict["format"] = Mod(
             lambda *x: x,
             in_keys=["log_probs", "tokens_response"],
             out_keys=["log_probs", "tokens_response"],
             strict=False,
-            inplace=False,
+            inplace="empty",
         )
 
     return Seq(module_dict, inplace=True)
