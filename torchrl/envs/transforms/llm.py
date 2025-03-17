@@ -11,7 +11,7 @@ from typing import Any, Callable, Iterable, Literal
 
 import torch
 from tensordict import (
-    maybe_dense_stack,
+    lazy_stack,
     NestedKey,
     TensorDict,
     TensorDictBase,
@@ -386,7 +386,7 @@ class DataLoadingPrimer(TensorDictPrimer):
         self.endless_dataloader = self._endless_iter(self.dataloader)
 
         if stack_method is None:
-            stack_method = maybe_dense_stack
+            stack_method = lazy_stack
         elif stack_method == "as_nested_tensor":
             stack_method = as_nested_tensor
         elif stack_method == "as_padded_tensor":
@@ -434,10 +434,14 @@ class DataLoadingPrimer(TensorDictPrimer):
         while True:
             yield from obj
 
+    # def _reset_env_preprocess(self, tensordict: TensorDictBase) -> TensorDictBase:
+    #     td = super()._reset_env_preprocess(tensordict)
+    #     return lazy_stack(list(td.unbind(0)))
+    #
     def _load_from_dataloader(self, reset: torch.Tensor | None = None):
         """Loads a single element from the dataloader, or alternatively from the buffer.
 
-        If `reset` is passed, the one element per reset will be loaded.
+        If `reset` is passed, then one element per reset will be loaded.
         """
         if reset is not None:
             if not reset.any():
