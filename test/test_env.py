@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import argparse
 import contextlib
@@ -12,11 +13,11 @@ import os.path
 import pickle
 import random
 import re
-import string
 from collections import defaultdict
+from contextlib import nullcontext
 from functools import partial
 from sys import platform
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import pytest
@@ -33,7 +34,7 @@ from tensordict import (
     TensorDictBase,
 )
 from tensordict.nn import TensorDictModuleBase
-from tensordict.tensorclass import NonTensorStack, TensorClass
+from tensordict.tensorclass import NonTensorData, NonTensorStack, TensorClass
 from tensordict.utils import _unravel_key_to_tuple
 from torch import nn
 
@@ -133,6 +134,8 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         DiscreteActionConvMockEnvNumpy,
         DiscreteActionVecMockEnv,
         DummyModelBasedEnvBase,
+        DummyStrDataLoader,
+        DummyTensorDataLoader,
         EnvThatDoesNothing,
         EnvWithDynamicSpec,
         EnvWithMetadata,
@@ -174,6 +177,8 @@ else:
         DiscreteActionConvMockEnvNumpy,
         DiscreteActionVecMockEnv,
         DummyModelBasedEnvBase,
+        DummyStrDataLoader,
+        DummyTensorDataLoader,
         EnvThatDoesNothing,
         EnvWithDynamicSpec,
         EnvWithMetadata,
@@ -284,7 +289,7 @@ class TestEnvBase:
         ) -> TensorDictBase:
             ...
 
-        def _set_seed(self, seed: Optional[int]):
+        def _set_seed(self, seed: int | None):
             ...
 
     def test_env_lock(self):
@@ -4578,58 +4583,7 @@ class TestLLMEnv:
             yield None
         return
 
-    class DummyDataLoader:
-        def __init__(self, batch_size=0):
-            self.batch_size = batch_size
-
-        def generate_random_string(self, length=10):
-            """Generate a random string of a given length."""
-            return "".join(random.choice(string.ascii_lowercase) for _ in range(length))
-
-        def __iter__(self):
-            return self
-
-        def __next__(self):
-            if self.batch_size == 0:
-                return self.generate_random_string()
-            else:
-                return [self.generate_random_string() for _ in range(self.batch_size)]
-
-    class DummyTensorDataLoader:
-        def __init__(self, batch_size=0, max_length=10, padding=False):
-            self.batch_size = batch_size
-            self.max_length = max_length
-            self.padding = padding
-
-        def generate_random_tensor(self):
-            """Generate a tensor of random int64 values."""
-            length = random.randint(1, self.max_length)
-            return torch.tensor(
-                [random.randint(0, 100) for _ in range(length)], dtype=torch.int64
-            )
-
-        def pad_tensor(self, tensor):
-            """Pad a tensor to the maximum length."""
-            padding_length = self.max_length - len(tensor)
-            return torch.cat((torch.zeros(padding_length, dtype=torch.int64), tensor))
-
-        def __iter__(self):
-            return self
-
-        def __next__(self):
-            if self.batch_size == 0:
-                tensor = self.generate_random_tensor()
-                return self.pad_tensor(tensor) if self.padding else tensor
-            else:
-                tensors = [
-                    self.generate_random_tensor() for _ in range(self.batch_size)
-                ]
-                if self.padding:
-                    tensors = [self.pad_tensor(tensor) for tensor in tensors]
-                    return torch.stack(tensors)
-                else:
-                    return tensors
-
+    @pytest.mark.skipif(not _has_transformers, reason="test requires transformers")
     @pytest.mark.parametrize(
         "str2str,stack_method",
         [
@@ -4649,7 +4603,7 @@ class TestLLMEnv:
         )
         if str2str:
             primer = DataLoadingPrimer(
-                dataloader=self.DummyDataLoader(batch_size=batch_size),
+                dataloader=DummyStrDataLoader(batch_size=batch_size),
                 data_keys=[LLMEnv._DEFAULT_STR_KEY],
                 example_data="a string!",
             )
@@ -4657,9 +4611,7 @@ class TestLLMEnv:
             if stack_method is None:
                 stack_method = as_padded_tensor
             primer = DataLoadingPrimer(
-                dataloader=self.DummyTensorDataLoader(
-                    batch_size=batch_size, padding=True
-                ),
+                dataloader=DummyTensorDataLoader(batch_size=batch_size, padding=True),
                 data_keys=[LLMEnv._DEFAULT_TOKEN_KEY],
                 data_specs=[Unbounded(shape=(-1,), dtype=torch.int64)],
                 stack_method=stack_method,
@@ -4674,25 +4626,39 @@ class TestLLMEnv:
         else:
             env.check_env_specs(break_when_any_done="both")
 
+    @pytest.mark.skipif(not _has_transformers, reason="test requires transformers")
+    @pytest.mark.parametrize("tokenizer", [True, False])
     @pytest.mark.parametrize(
-        "str2str,stack_method",
+        "str2str,no_stack,stack_method",
         [
-            [True, None],
-            [False, "as_padded_tensor"],
-            # TODO: a bit experimental, fails with check_env_specs
-            # [False, "as_nested_tensor"],
-            [False, None],
+            [True, True, None],
+            [True, False, None],
+            [False, False, "as_padded_tensor"],
+            [False, False, None],
         ],
     )
     @pytest.mark.parametrize("batched", [True, False])
     @pytest.mark.parametrize("device", [None, "cpu"])
     @pytest.mark.parametrize("batch_size", [0, 4])
     def test_llm_from_dataloader(
-        self, str2str, batched, stack_method, device, batch_size
+        self,
+        str2str,
+        batched,
+        stack_method,
+        device,
+        batch_size,
+        tokenizer,
+        no_stack,
     ):
+        from transformers import AutoTokenizer
+
+        if tokenizer:
+            tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        else:
+            tokenizer = None
         if str2str:
             kwargs = {
-                "dataloader": self.DummyDataLoader(batch_size=batch_size),
+                "dataloader": DummyStrDataLoader(batch_size=batch_size),
                 "data_keys": [LLMEnv._DEFAULT_STR_KEY],
                 "example_data": "a string!",
             }
@@ -4700,7 +4666,7 @@ class TestLLMEnv:
             if stack_method is None:
                 stack_method = as_padded_tensor
             kwargs = {
-                "dataloader": self.DummyTensorDataLoader(
+                "dataloader": DummyTensorDataLoader(
                     padding=True, batch_size=batch_size
                 ),
                 "data_keys": [LLMEnv._DEFAULT_TOKEN_KEY],
@@ -4712,7 +4678,8 @@ class TestLLMEnv:
                 "str2str": str2str,
                 "device": device,
                 "has_attention": False,
-                "no_stack": False,
+                "no_stack": no_stack,
+                "tokenizer": tokenizer,
             }
         )
         env = LLMEnv.from_dataloader(**kwargs)
@@ -4725,12 +4692,17 @@ class TestLLMEnv:
         if batch_size > 0:
 
             def policy(td):
-                if str2str:
+                if str2str and tokenizer is None:
                     if not td.shape:
-                        td[LLMEnv._DEFAULT_ACTION_STR_KEY] = "<nothing>"
+                        td[LLMEnv._DEFAULT_ACTION_STR_KEY] = NonTensorData(
+                            "<nothing>", device=device
+                        )
                     else:
                         td[LLMEnv._DEFAULT_ACTION_STR_KEY] = NonTensorStack(
-                            *["<nothing>" for _ in range(td.shape[0])]
+                            *[
+                                NonTensorData("<nothing>", device=device)
+                                for _ in range(td.shape[0])
+                            ]
                         )
                 else:
                     td[LLMEnv._DEFAULT_ACTION_TOKENS_KEY] = torch.ones(
@@ -4742,34 +4714,48 @@ class TestLLMEnv:
                 # Tell the env that we want 3 sub-envs
                 r = env.rollout(10, policy, tensordict=TensorDict(batch_size=[3]))
                 assert r.ndim == 2
-                if str2str:
+                if str2str and tokenizer is None:
                     assert isinstance(r[0, 0][LLMEnv._DEFAULT_STR_KEY], str)
                     assert isinstance(r[0, 1][LLMEnv._DEFAULT_STR_KEY], str)
-                    assert (
-                        r[0, 0][LLMEnv._DEFAULT_STR_KEY]
-                        == r[0, 1][LLMEnv._DEFAULT_STR_KEY][
-                            : -len(r[0, 0][LLMEnv._DEFAULT_ACTION_STR_KEY])
-                        ]
-                    )
-                    assert (
-                        r[0, 1][LLMEnv._DEFAULT_STR_KEY]
-                        == r[0, 2][LLMEnv._DEFAULT_STR_KEY][
-                            : -len(r[0, 1][LLMEnv._DEFAULT_ACTION_STR_KEY])
-                        ]
-                    )
-                    assert (
-                        r[-1, 0][LLMEnv._DEFAULT_STR_KEY]
-                        == r[-1, 1][LLMEnv._DEFAULT_STR_KEY][
-                            : -len(r[-1, 0][LLMEnv._DEFAULT_ACTION_STR_KEY])
-                        ]
-                    )
-                    assert (
-                        r[-1, 1][LLMEnv._DEFAULT_STR_KEY]
-                        == r[-1, 2][LLMEnv._DEFAULT_STR_KEY][
-                            : -len(r[-1, 1][LLMEnv._DEFAULT_ACTION_STR_KEY])
-                        ]
-                    )
-                else:
+                    should_fail = no_stack
+                    if should_fail:
+                        ctx = pytest.raises(AssertionError)
+                    else:
+                        ctx = nullcontext()
+                    with ctx:
+                        assert (
+                            r[0, 0][LLMEnv._DEFAULT_STR_KEY]
+                            == r[0, 1][LLMEnv._DEFAULT_STR_KEY][
+                                : -len(r[0, 0][LLMEnv._DEFAULT_ACTION_STR_KEY])
+                            ]
+                        ), (
+                            r[0, 0][LLMEnv._DEFAULT_STR_KEY],
+                            r[0, 0][LLMEnv._DEFAULT_ACTION_STR_KEY],
+                            r[0, 0]["next", LLMEnv._DEFAULT_STR_KEY],
+                            r[0, 1][LLMEnv._DEFAULT_STR_KEY],
+                        )
+                    with ctx:
+                        assert (
+                            r[0, 1][LLMEnv._DEFAULT_STR_KEY]
+                            == r[0, 2][LLMEnv._DEFAULT_STR_KEY][
+                                : -len(r[0, 1][LLMEnv._DEFAULT_ACTION_STR_KEY])
+                            ]
+                        )
+                    with ctx:
+                        assert (
+                            r[-1, 0][LLMEnv._DEFAULT_STR_KEY]
+                            == r[-1, 1][LLMEnv._DEFAULT_STR_KEY][
+                                : -len(r[-1, 0][LLMEnv._DEFAULT_ACTION_STR_KEY])
+                            ]
+                        )
+                    with ctx:
+                        assert (
+                            r[-1, 1][LLMEnv._DEFAULT_STR_KEY]
+                            == r[-1, 2][LLMEnv._DEFAULT_STR_KEY][
+                                : -len(r[-1, 1][LLMEnv._DEFAULT_ACTION_STR_KEY])
+                            ]
+                        )
+                elif tokenizer is None:
                     assert (
                         r[0, 0][LLMEnv._DEFAULT_TOKEN_KEY]
                         == r[0, 1][LLMEnv._DEFAULT_TOKEN_KEY][:-1]
@@ -4809,7 +4795,7 @@ class TestLLMEnv:
     ):
         if str2str:
             kwargs = {
-                "dataloader": self.DummyDataLoader(batch_size=batch_size),
+                "dataloader": DummyStrDataLoader(batch_size=batch_size),
                 "data_keys": [LLMEnv._DEFAULT_STR_KEY],
                 "example_data": "a string!",
                 "repeats": repeats,
@@ -4818,7 +4804,7 @@ class TestLLMEnv:
             if stack_method is None:
                 stack_method = as_padded_tensor
             kwargs = {
-                "dataloader": self.DummyTensorDataLoader(
+                "dataloader": DummyTensorDataLoader(
                     padding=True, batch_size=batch_size
                 ),
                 "data_keys": [LLMEnv._DEFAULT_TOKEN_KEY],
@@ -4951,7 +4937,7 @@ class TestLLMEnv:
         ) if str2str else contextlib.nullcontext():
             if str2str:
                 kwargs = {
-                    "dataloader": self.DummyDataLoader(batch_size=batch_size),
+                    "dataloader": DummyStrDataLoader(batch_size=batch_size),
                     "data_keys": [LLMEnv._DEFAULT_STR_KEY],
                     "example_data": "a string!",
                     "repeats": repeats,
@@ -4962,7 +4948,7 @@ class TestLLMEnv:
                 if stack_method is None:
                     stack_method = as_padded_tensor
                 kwargs = {
-                    "dataloader": self.DummyTensorDataLoader(
+                    "dataloader": DummyTensorDataLoader(
                         padding=True, batch_size=batch_size
                     ),
                     "data_keys": [LLMEnv._DEFAULT_TOKEN_KEY],

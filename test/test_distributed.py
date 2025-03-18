@@ -6,6 +6,8 @@
 Contains distributed tests which are expected to be a considerable burden for the CI
 ====================================================================================
 """
+from __future__ import annotations
+
 import abc
 import argparse
 import os
