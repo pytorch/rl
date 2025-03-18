@@ -153,7 +153,17 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     compiled_policy: bool
     cudagraphed_policy: bool
     local_weights_updater: LocalWeightUpdaterBase | None = None
-    remote_weights_updater: RemoteWeightUpdaterBase | None = None
+    _remote_weights_updater: RemoteWeightUpdaterBase | None = None
+
+    @property
+    def remote_weight_updater(self) -> RemoteWeightUpdaterBase:
+        return self._remote_weight_updater
+
+    @remote_weight_updater.setter
+    def remote_weight_updater(self, value: RemoteWeightUpdaterBase | None):
+        if value is not None:
+            value.register_collector(self)
+        self._remote_weight_updater = value
 
     def _get_policy_and_device(
         self,
@@ -837,9 +847,6 @@ class SyncDataCollector(DataCollectorBase):
             )
 
         self.local_weights_updater = local_weights_updater
-        if remote_weights_updater is not None:
-            remote_weights_updater.register_collector(self)
-
         self.remote_weights_updater = remote_weights_updater
 
     @property
@@ -1830,8 +1837,6 @@ class _MultiDataCollector(DataCollectorBase):
                 "remote_weights_updater cannot be None when policy_factory is provided."
             )
 
-        if remote_weights_updater is not None:
-            remote_weights_updater.register_collector(self)
         self.remote_weights_updater = remote_weights_updater
         self.local_weights_updater = local_weights_updater
 

@@ -104,6 +104,8 @@ class RemoteWeightUpdaterBase(metaclass=abc.ABCMeta):
 
     Methods:
         update_weights: Updates the weights on specified or all remote workers.
+        register_collector: Registers a collector. This should be called automatically by the collector
+            upon registration of the updater.
 
     .. seealso:: :class:`~torchrl.collectors.LocalWeightsUpdaterBase` and
         :meth:`~torchrl.collectors.DataCollectorBase.update_policy_weights_`.
