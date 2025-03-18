@@ -6,26 +6,22 @@ from __future__ import annotations
 
 from collections import deque
 from collections.abc import Mapping
-from copy import copy
+from copy import copy, deepcopy
 from typing import Any, Callable, Iterable, Literal
 
 import torch
-from tensordict import (
-    maybe_dense_stack,
-    NestedKey,
-    TensorDict,
-    TensorDictBase,
-    unravel_key,
-)
+from tensordict import lazy_stack, NestedKey, TensorDict, TensorDictBase, unravel_key
 from tensordict.nn import (
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
+    TensorDictParams,
 )
 from tensordict.utils import _zip_strict, is_seq_of_nested_key
+from torch import nn
 
 from torchrl.data.tensor_specs import Composite, NonTensor, TensorSpec, Unbounded
 from torchrl.envs.transforms.transforms import TensorDictPrimer, Transform
-from torchrl.envs.transforms.utils import _set_missing_tolerance
+from torchrl.envs.transforms.utils import _set_missing_tolerance, _stateless_param
 from torchrl.envs.utils import make_composite_from_td
 
 
@@ -366,14 +362,14 @@ class DataLoadingPrimer(TensorDictPrimer):
         use_buffer: bool | None = None,
         auto_batch_size: bool = True,
         repeats: int | None = None,
+        device: torch.device | None = None,
     ):
         self.dataloader = dataloader
         if repeats is None:
             repeats = 0
         self.repeats = repeats
-        if (
-            getattr(dataloader, "batch_size", 1) > 1 and use_buffer is None
-        ) or repeats > 0:
+        batch_size = getattr(dataloader, "batch_size", 0)
+        if (batch_size > 1 and use_buffer is None) or repeats > 0:
             use_buffer = True
 
         self.use_buffer = use_buffer
@@ -381,13 +377,11 @@ class DataLoadingPrimer(TensorDictPrimer):
             self._queue = deque()
 
         # No auto_batch_size if we know we have a single element
-        self.auto_batch_size = auto_batch_size and (
-            getattr(dataloader, "batch_size", 1) > 0
-        )
+        self.auto_batch_size = auto_batch_size and (batch_size > 0)
         self.endless_dataloader = self._endless_iter(self.dataloader)
 
         if stack_method is None:
-            stack_method = maybe_dense_stack
+            stack_method = lazy_stack
         elif stack_method == "as_nested_tensor":
             stack_method = as_nested_tensor
         elif stack_method == "as_padded_tensor":
@@ -407,12 +401,16 @@ class DataLoadingPrimer(TensorDictPrimer):
                     for data_key, data_spec in _zip_strict(data_keys, data_specs)
                 }
             )
+            if batch_size:
+                primers = batch_size.expand(batch_size)
             self.data_keys = data_keys
         elif primers is None:
             self.data_keys = data_keys
             # We can get the primer from the dataloader itself
             data = self._load_from_dataloader()
             primers = make_composite_from_td(data, dynamic_shape=True)
+            if batch_size:
+                primers = primers.expand(batch_size)
             self._queue.insert(0, data)
             if data_keys is None:
                 self.data_keys = list(primers.keys(True, True))
@@ -426,6 +424,7 @@ class DataLoadingPrimer(TensorDictPrimer):
             expand_specs=None,
             single_default_value=True,
             call_before_env_reset=True,
+            device=device,
         )
         self._reset_key = "_reset"
 
@@ -434,10 +433,14 @@ class DataLoadingPrimer(TensorDictPrimer):
         while True:
             yield from obj
 
+    # def _reset_env_preprocess(self, tensordict: TensorDictBase) -> TensorDictBase:
+    #     td = super()._reset_env_preprocess(tensordict)
+    #     return lazy_stack(list(td.unbind(0)))
+    #
     def _load_from_dataloader(self, reset: torch.Tensor | None = None):
         """Loads a single element from the dataloader, or alternatively from the buffer.
 
-        If `reset` is passed, the one element per reset will be loaded.
+        If `reset` is passed, then one element per reset will be loaded.
         """
         if reset is not None:
             if not reset.any():
@@ -446,8 +449,16 @@ class DataLoadingPrimer(TensorDictPrimer):
                 loaded = [self._load_from_dataloader() for i in range(reset.sum())]
                 return self.stack_method(loaded)
 
+        primers = getattr(self, "primers", None)
+        if primers is not None:
+            device = self.primers.device
+        else:
+            device = None
+
         if self.use_buffer and len(self._queue) > 0:
             result = self._queue.popleft()
+            if result.device != device:
+                result = result.to(device)
             return result
 
         data = next(self.endless_dataloader)
@@ -456,7 +467,10 @@ class DataLoadingPrimer(TensorDictPrimer):
         # TODO: one could rename the keys too
         if isinstance(data, Mapping):
             out = TensorDict.from_dict(
-                data, auto_batch_size=self.auto_batch_size, batch_dims=1
+                data,
+                auto_batch_size=self.auto_batch_size,
+                batch_dims=1,
+                device=device,
             )
         elif self.data_keys is None:
             raise RuntimeError(
@@ -469,12 +483,14 @@ class DataLoadingPrimer(TensorDictPrimer):
                 {k: val for k, val in _zip_strict(self.data_keys, data)},
                 auto_batch_size=self.auto_batch_size,
                 batch_dims=1,
+                device=device,
             )
         elif len(self.data_keys) == 1:
             out = TensorDict.from_dict(
                 {self.data_keys[0]: data},
                 auto_batch_size=self.auto_batch_size,
                 batch_dims=1,
+                device=device,
             )
         else:
             raise ValueError(
@@ -567,6 +583,7 @@ class KLRewardTransform(Transform):
         requires_grad=False,
         log_prob_key: NestedKey = "sample_log_prob",
         action_key: NestedKey = "action",
+        functional: bool = True,
     ):
         if in_keys is None:
             in_keys = self.DEFAULT_IN_KEYS
@@ -592,32 +609,39 @@ class KLRewardTransform(Transform):
         # update the in_keys for dispatch etc
         self.in_keys = self.in_keys + actor.in_keys
 
+        self.functional = functional
         # check that the model has parameters
-        # params = TensorDict.from_module(actor)
-        # with params.apply(
-        #     _stateless_param, device="meta", filter_empty=False
-        # ).to_module(actor):
-        #     # copy a stateless actor
-        #     self.__dict__["functional_actor"] = deepcopy(actor)
-        self.__dict__["functional_actor"] = actor
+        if functional:
+            params = TensorDict.from_module(actor)
+            with params.apply(
+                _stateless_param, device="meta", filter_empty=False
+            ).to_module(actor):
+                # copy a stateless actor
+                self.__dict__["functional_actor"] = deepcopy(actor)
 
-        # we need to register these params as buffer to have `to` and similar
-        # methods work properly
+            # we need to register these params as buffer to have `to` and similar
+            # methods work properly
 
-        # def _make_detached_param(x):
-        #
-        #     if isinstance(x, nn.Parameter):
-        #         # we need an nn.Parameter since some modules (RNN) require nn.Parameters
-        #         return nn.Parameter(x.data.clone(), requires_grad=requires_grad)
-        #     elif x.requires_grad:
-        #         raise ValueError(
-        #             "Encountered a value that requires gradients but is not an nn.Parameter instance."
-        #         )
-        #     return x.clone()
-        # self.frozen_params = params.apply(_make_detached_param, filter_empty=False)
-        # if requires_grad:
-        #     # includes the frozen params/buffers in the module parameters/buffers
-        #     self.frozen_params = TensorDictParams(self.frozen_params, no_convert=True)
+            def _make_detached_param(x):
+
+                if isinstance(x, nn.Parameter):
+                    # we need an nn.Parameter since some modules (RNN) require nn.Parameters
+                    return nn.Parameter(x.data.clone(), requires_grad=requires_grad)
+                elif x.requires_grad:
+                    raise ValueError(
+                        "Encountered a value that requires gradients but is not an nn.Parameter instance."
+                    )
+                return x.clone()
+
+            self.frozen_params = params.apply(_make_detached_param, filter_empty=False)
+            if requires_grad:
+                # includes the frozen params/buffers in the module parameters/buffers
+                self.frozen_params = TensorDictParams(
+                    self.frozen_params, no_convert=True
+                )
+
+        else:
+            self.__dict__["functional_actor"] = actor
 
         # self._buffers["actor_params"] = params.clone().detach()
 
@@ -651,11 +675,17 @@ class KLRewardTransform(Transform):
             if self.out_keys[0] != ("reward",) and self.parent is not None:
                 next_tensordict.set(self.out_keys[0], self.parent.reward_spec.zero())
             return next_tensordict
-        # with self.frozen_params.to_module(self.functional_actor):
-        if isinstance(
+
+        if self.functional:
+            with self.frozen_params.to_module(self.functional_actor):
+                dist = self.functional_actor.get_dist(next_tensordict.clone(False))
+            # get the log_prob given the original model
+            log_prob = dist.log_prob(action)
+        elif isinstance(
             self.functional_actor,
             (ProbabilisticTensorDictModule, ProbabilisticTensorDictSequential),
         ):
+            # with self.frozen_params.to_module(self.functional_actor):
             dist = self.functional_actor.get_dist(next_tensordict.copy())
             # get the log_prob given the original model
             log_prob = dist.log_prob(action)

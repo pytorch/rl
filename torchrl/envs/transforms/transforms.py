@@ -5313,8 +5313,8 @@ class Tokenizer(UnaryTransform):
 
     def __init__(
         self,
-        in_keys: Sequence[NestedKey],
-        out_keys: Sequence[NestedKey],
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
         in_keys_inv: Sequence[NestedKey] | None = None,
         out_keys_inv: Sequence[NestedKey] | None = None,
         *,
@@ -5385,13 +5385,38 @@ class Tokenizer(UnaryTransform):
                     out_key,
                     observation,
                 )
-            elif not self.missing_tolerance or out_key not in next_tensordict.keys(
-                True
+            elif (
+                self.missing_tolerance
+                and self.return_attention_mask
+                and out_key in next_tensordict.keys(True)
             ):
+                attention_key = _replace_last(out_key, "attention_mask")
+                if attention_key not in next_tensordict:
+                    next_tensordict[attention_key] = torch.ones_like(
+                        next_tensordict.get(out_key)
+                    )
+            elif not self.missing_tolerance:
                 raise KeyError(
                     f"{self}: '{in_key}' not found in tensordict {next_tensordict}"
                 )
         return next_tensordict
+
+    @dispatch(source="in_keys", dest="out_keys")
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
+            data = tensordict.get(in_key, None)
+            if data is not None:
+                data = self._apply_transform(data)
+                if self.return_attention_mask:
+                    data, attention_mask = data
+                    tensordict.set(
+                        _replace_last(out_key, "attention_mask"),
+                        attention_mask,
+                    )
+                tensordict.set(out_key, data)
+            elif not self.missing_tolerance:
+                raise KeyError(f"'{in_key}' not found in tensordict {tensordict}")
+        return tensordict
 
     def _reset_env_preprocess(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self.call_before_reset:
@@ -5416,7 +5441,7 @@ class Tokenizer(UnaryTransform):
             out = self.tokenizer.encode(value, return_tensors="pt", **kwargs)[0]
             # TODO: incorporate attention mask
             if self.return_attention_mask:
-                attention_mask = torch.ones_like(out, dtype=torch.bool)
+                attention_mask = torch.ones_like(out, dtype=torch.int64)
         else:
             kwargs["padding"] = (
                 self.padding if self.max_length is None else "max_length"
@@ -5445,9 +5470,32 @@ class Tokenizer(UnaryTransform):
             out = self.tokenizer.batch_decode(
                 value, skip_special_tokens=self.skip_special_tokens
             )
+        device = self._str_device
         if isinstance(out, list):
-            return NonTensorStack(*out)
-        return NonTensorData(out)
+            result = NonTensorStack(*out)
+            if device:
+                result = result.to(device)
+            return result
+        return NonTensorData(out, device=device)
+
+    @property
+    def _str_device(self):
+        parent = self.parent
+        if parent is None:
+            return None
+        if self.in_keys:
+            in_key = self.in_keys[0]
+        elif self.in_keys_inv:
+            in_key = self.in_keys_inv[0]
+        else:
+            return None
+        if in_key in parent.observation_keys:
+            return parent.full_observation_spec[in_key].device
+        if in_key in parent.action_keys:
+            return parent.full_action_spec[in_key].device
+        if in_key in parent.state_keys:
+            return parent.full_state_spec[in_key].device
+        return None
 
     def transform_input_spec(self, input_spec: Composite) -> Composite:
         # We need to cap the spec to generate valid random strings
@@ -5461,6 +5509,9 @@ class Tokenizer(UnaryTransform):
                     f"The input keys {in_key} wasn't found in the env input specs."
                 )
             local_spec = spec.pop(in_key)
+            local_dtype = local_spec.dtype
+            if local_dtype is None or local_dtype.is_floating_point:
+                local_dtype = torch.int64
             new_shape = spec.shape
             if self.max_length is None:
                 # Then we can't tell what the shape will be
@@ -5472,7 +5523,7 @@ class Tokenizer(UnaryTransform):
                 self.tokenizer.vocab_size,
                 shape=new_shape,
                 device=local_spec.device,
-                dtype=local_spec.dtype,
+                dtype=local_dtype,
             )
         return input_spec
 
@@ -5484,12 +5535,24 @@ class Tokenizer(UnaryTransform):
         attention_mask_keys = set()
         for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
             new_shape = observation_spec.shape + torch.Size((-1,))
+            try:
+                in_spec = observation_spec[in_key]
+                obs_dtype = in_spec.dtype
+                device = in_spec.device
+            except KeyError:
+                # In some cases (eg, the tokenizer is applied during reset on data that
+                #  originates from a dataloader) we don't have an in_spec
+                in_spec = None
+                obs_dtype = None
+                device = observation_spec.device
+            if obs_dtype is None or obs_dtype.is_floating_point:
+                obs_dtype = torch.int64
             observation_spec[out_key] = Bounded(
                 0,
                 self.tokenizer.vocab_size,
                 shape=new_shape,
-                device=observation_spec[in_key].device,
-                dtype=observation_spec[in_key].dtype,
+                device=device,
+                dtype=obs_dtype,
             )
             if self.return_attention_mask:
                 attention_mask_key = _replace_last(out_key, "attention_mask")
@@ -5500,12 +5563,15 @@ class Tokenizer(UnaryTransform):
                         "entries are unique."
                     )
                 attention_mask_keys.add(attention_mask_key)
+                attention_dtype = obs_dtype
+                if attention_dtype is None or attention_dtype.is_floating_point:
+                    attention_dtype = torch.int64
                 observation_spec[attention_mask_key] = Bounded(
                     0,
                     2,
                     shape=new_shape,
-                    device=observation_spec[in_key].device,
-                    dtype=observation_spec[in_key].dtype,
+                    device=device,
+                    dtype=attention_dtype,
                 )
         return observation_spec
 
@@ -6124,7 +6190,7 @@ class TensorDictPrimer(Transform):
             kwargs = primers
         if not isinstance(kwargs, Composite):
             shape = kwargs.pop("shape", None)
-            device = kwargs.pop("device", None)
+            device = self.device
             if "batch_size" in kwargs.keys():
                 extra_kwargs = {"batch_size": kwargs.pop("batch_size")}
             else:
@@ -6197,7 +6263,7 @@ class TensorDictPrimer(Transform):
     @property
     def device(self):
         device = self._device
-        if device is None and self.parent is not None:
+        if device is None and hasattr(self, "parent") and self.parent is not None:
             device = self.parent.device
             self._device = device
         return device
