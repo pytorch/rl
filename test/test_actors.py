@@ -949,7 +949,7 @@ class TestLLMActor:
     ):
         from transformers import AutoTokenizer, GPT2Config, GPT2LMHeadModel
 
-        model_name = "distilbert-base-uncased"  # or "minilm" or "albert-tiny"
+        # model_name = "distilbert-base-uncased"  # or "minilm" or "albert-tiny"
         # Load the model and tokenizer
         # model = AutoModel.from_pretrained(model_name)
         # tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -1031,6 +1031,7 @@ class TestLLMActor:
         generate,
         from_text,
         has_logits,
+        batch_size=1,
         text_response=None,
         tokens_response=None,
     ):
@@ -1048,7 +1049,9 @@ class TestLLMActor:
                     else:
                         text_response = NonTensorStack(text_response)
                 lp_kwargs.update({"text_response": text_response})
-            tdin = LLMData(text=NonTensorStack("a text"), **lp_kwargs, batch_size=1)
+            tdin = LLMData(
+                text=NonTensorStack("a text"), **lp_kwargs, batch_size=batch_size
+            )
         else:
             if not generate:
                 if tokens_response is None:
@@ -1057,7 +1060,10 @@ class TestLLMActor:
                     tokens_response = torch.randint(1024, shape_response)
                 lp_kwargs.update({"tokens_response": tokens_response})
             tdin = LLMData(
-                tokens=tokens, attention_mask=attention_mask, **lp_kwargs, batch_size=1
+                tokens=tokens,
+                attention_mask=attention_mask,
+                **lp_kwargs,
+                batch_size=batch_size
             )
         return tdin
 
@@ -1112,6 +1118,41 @@ class TestLLMActor:
                 td.tokens_response[..., : td.tokens.shape[-1]]
                 != td.tokens[..., : td.tokens_response.shape[-1]]
             ).any(), (generate, from_text)
+
+    @pytest.mark.parametrize(
+        "from_text, tokens, attention_mask",
+        [
+            (
+                False,
+                torch.randint(1024, (1, 10)),
+                torch.ones(1, 10, dtype=torch.int64),
+            ),
+            (False, torch.randint(1024, (1, 10)), None),
+            (True, None, None),
+        ],
+    )
+    def test_from_hf_logprobs(self, from_text, tokens, attention_mask):
+        from transformers import AutoTokenizer, GPT2Config, GPT2LMHeadModel
+
+        tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        model = GPT2LMHeadModel(GPT2Config()).eval()
+
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+
+        m_generate = from_hf_transformers(
+            model,
+            tokenizer=tokenizer,
+            from_text=from_text,
+            generate=True,
+            return_log_probs=True,
+        )
+        m_logprobs = from_hf_transformers(
+            model, tokenizer=tokenizer, from_text=from_text, generate=False
+        )
+        self._check_lps(
+            m_generate, m_logprobs, tokens, attention_mask, from_text, has_logits=False
+        )
 
     @pytest.mark.parametrize(
         "from_text, tokens, attention_mask",

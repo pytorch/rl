@@ -24,7 +24,6 @@ from tensordict.nn import (
     ProbabilisticTensorDictSequential,
     set_composite_lp_aggregate,
     TensorDictModule,
-    TensorDictModuleBase,
 )
 from tensordict.utils import NestedKey
 from torch import distributions as d
@@ -350,15 +349,18 @@ class PPOLoss(LossModule):
         if critic is not None:
             critic_network = critic
             del critic
+
+        if critic_coef is None and critic_network is not None:
+            critic_coef = 1.0
+        elif critic_coef in (None, 0) and critic_network is not None:
+            critic_coef = None
+
         if actor_network is None or (
             critic_network is None and critic_coef not in (None, 0.0)
         ):
             raise TypeError(
                 "Missing positional arguments actor_network or critic_network."
             )
-        critic_coef = (
-            1.0 if critic_coef is None and critic_network is not None else critic_coef
-        )
         if reduction is None:
             reduction = "mean"
 
@@ -532,6 +534,8 @@ class PPOLoss(LossModule):
             self.actor_network,
             (ProbabilisticTensorDictSequential, ProbabilisticTensorDictModule),
         ):
+            # assert tensordict['log_probs'].requires_grad
+            # assert tensordict['logits'].requires_grad
             with self.actor_network_params.to_module(
                 self.actor_network
             ) if self.functional else contextlib.nullcontext():
@@ -555,15 +559,21 @@ class PPOLoss(LossModule):
                     f"tensordict stored {self.tensor_keys.action} requires grad."
                 )
             log_prob = dist.log_prob(action)
+            assert log_prob.requires_grad
         else:
-            with self.actor_network_params.to_module(
-                self.actor_network
-            ) if self.functional else contextlib.nullcontext():
-                td = self.actor_network(tensordict)
-                log_prob = td.get(self.tensor_keys.sample_log_prob)
-                # TODO: decustomize this
-                dist = torch.distributions.Categorical(td.get("logits"))
-                is_composite = False
+            raise NotImplementedError(
+                "Only probabilistic modules from tensordict.nn are currently supported. "
+                "If you need to implement a custom logic to retrieve the log-probs (to compute "
+                "the PPO objective) or the distribution (for the PPO entropy), please augment "
+                f"the {type(self).__class__} by implementing your own logic in _get_cur_log_prob."
+            )
+            # with self.actor_network_params.to_module(
+            #     self.actor_network
+            # ) if self.functional else contextlib.nullcontext():
+            #     td = self.actor_network(tensordict)
+            #     log_prob = td.get(self.tensor_keys.sample_log_prob)
+            #     dist = torch.distributions.Categorical(td.get("logits"))
+            #     is_composite = False
         return log_prob, dist, is_composite
 
     def _log_weight(
@@ -913,7 +923,7 @@ class ClipPPOLoss(PPOLoss):
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
         entropy_coef: float = 0.01,
-        critic_coef: float = 1.0,
+        critic_coef: float | None = None,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
         normalize_advantage_exclude_dims: tuple[int] = (),
@@ -980,6 +990,10 @@ class ClipPPOLoss(PPOLoss):
         tensordict = tensordict.clone(False)
         advantage = tensordict.get(self.tensor_keys.advantage, None)
         if advantage is None:
+            if self.critic_network is None:
+                raise RuntimeError(
+                    "Critic network is not specified, cannot compute advantage within forward."
+                )
             self.value_estimator(
                 tensordict,
                 params=self._cached_critic_network_params_detached,
@@ -1184,7 +1198,7 @@ class KLPENPPOLoss(PPOLoss):
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
         entropy_coef: float = 0.01,
-        critic_coef: float = 1.0,
+        critic_coef: float | None = None,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
         normalize_advantage_exclude_dims: tuple[int] = (),
@@ -1240,24 +1254,21 @@ class KLPENPPOLoss(PPOLoss):
         _maybe_add_or_extend_key(keys, self.tensor_keys.terminated, "next")
 
         # Get the parameter keys from the actor dist
-        # actor_dist_module = None
-        # for module in self.actor_network.modules():
-        #     # Ideally we should combine them if there is more than one
-        #     if isinstance(module, ProbabilisticTensorDictModule):
-        #         if actor_dist_module is not None:
-        #             raise RuntimeError(
-        #                 "Actors with one and only one distribution are currently supported "
-        #                 f"in {type(self).__name__}. If you need to use more than one "
-        #                 f"distributions over the action space please submit an issue "
-        #                 f"on github."
-        #             )
-        #         actor_dist_module = module
-        # if actor_dist_module is None:
-        #     if hasattr(self.actor_network, "in_keys"):
-        #         actor_dist_module = self.actor_network
-        #     else:
-        #         raise RuntimeError("Could not find the probabilistic module in the actor.")
-        keys += list(self.actor_network.in_keys)
+        actor_dist_module = None
+        for module in self.actor_network.modules():
+            # Ideally we should combine them if there is more than one
+            if isinstance(module, ProbabilisticTensorDictModule):
+                if actor_dist_module is not None:
+                    raise RuntimeError(
+                        "Actors with one and only one distribution are currently supported "
+                        f"in {type(self).__name__}. If you need to use more than one "
+                        f"distributions over the action space please submit an issue "
+                        f"on github."
+                    )
+                actor_dist_module = module
+        if actor_dist_module is None:
+            raise RuntimeError("Could not find the probabilistic module in the actor.")
+        keys += list(actor_dist_module.in_keys)
         self._in_keys = list(set(keys))
 
     @property
@@ -1382,21 +1393,3 @@ class KLPENPPOLoss(PPOLoss):
 
     def reset(self) -> None:
         self.beta = self._beta_init
-
-
-class GRPO(ClipPPOLoss):
-    """TODO"""
-
-    def __init__(
-        self,
-        actor_network: TensorDictModuleBase,
-        # Default value of LLMData
-        log_prob_key="log_probs",
-    ):
-        super().__init__(
-            actor_network=actor_network,
-            critic_network=None,
-            critic_coef=0.0,
-            functional=False,
-        )
-        self.set_keys(log_prob_key=log_prob_key)
