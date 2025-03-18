@@ -4,8 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import List
-
 from tensordict import NestedKey, TensorDictBase
 from tensordict.nn import (
     ProbabilisticTensorDictModule,
@@ -42,9 +40,9 @@ class CategoricalSequential(ProbabilisticTensorDictSequential):
     log_prob_key = ProbabilisticTensorDictModule.log_prob_key
 
     @property
-    def dist_params_keys(self) -> List[NestedKey]:
+    def dist_params_keys(self) -> list[NestedKey]:
         raise NotImplementedError
 
     @property
-    def dist_sample_keys(self) -> List[NestedKey]:
+    def dist_sample_keys(self) -> list[NestedKey]:
         return ["tokens_response"]

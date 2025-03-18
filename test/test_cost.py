@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import argparse
 import contextlib
 import functools
@@ -12,7 +14,6 @@ import sys
 import warnings
 from copy import deepcopy
 from dataclasses import asdict, dataclass
-from typing import Optional
 
 import numpy as np
 import pytest
@@ -273,7 +274,7 @@ class MARLEnv(EnvBase):
     def _reset(self, tensordic):
         ...
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None):
         ...
 
 

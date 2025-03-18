@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import argparse
 import contextlib
@@ -16,7 +17,7 @@ from collections import defaultdict
 from contextlib import nullcontext
 from functools import partial
 from sys import platform
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import pytest
@@ -288,7 +289,7 @@ class TestEnvBase:
         ) -> TensorDictBase:
             ...
 
-        def _set_seed(self, seed: Optional[int]):
+        def _set_seed(self, seed: int | None):
             ...
 
     def test_env_lock(self):
