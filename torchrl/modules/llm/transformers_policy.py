@@ -100,7 +100,7 @@ def log_probs_from_logits(td: TensorDictBase) -> TensorDictBase:
     torch.testing.assert_close(
         logits.logsumexp(-1), torch.zeros_like(logits.logsumexp(-1))
     )
-    logits = logits[..., -seq_len-1:-1, :]
+    logits = logits[..., -seq_len - 1 : -1, :]
     td["logits"] = logits
     del td["forward"]
     del td["tokens_response"]
@@ -249,7 +249,7 @@ def _from_hf_generate_text(
     if not kwargs:
         kwargs = {}
     if return_log_probs:
-        if not kwargs.setdefault("output_scores", True):
+        if not kwargs.setdefault("output_logits", True):
             raise RuntimeError
     if not kwargs.setdefault("return_dict_in_generate", True):
         raise RuntimeError
@@ -274,8 +274,6 @@ def _from_hf_generate_text(
 
     # Keep only the new tokens
     def remove_input_seq(tokens_in, tokens_out, tokenizer=tokenizer):
-        # TODO: remove this assert
-        assert (tokens_out[..., : tokens_in.shape[-1]] == tokens_in).all()
         result = tokens_out[..., tokens_in.shape[-1] :]
         return result
 

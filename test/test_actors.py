@@ -947,6 +947,7 @@ class TestLLMActor:
     def test_from_hf_transformers(
         self, from_text, generate, return_log_probs, tokens, attention_mask
     ):
+        torch.manual_seed(0)
         from transformers import AutoTokenizer, GPT2Config, GPT2LMHeadModel
 
         # model_name = "distilbert-base-uncased"  # or "minilm" or "albert-tiny"
@@ -1004,6 +1005,7 @@ class TestLLMActor:
     def test_from_vllm(
         self, from_text, generate, return_log_probs, tokens, attention_mask
     ):
+        torch.manual_seed(0)
         from vllm import LLM
 
         model = LLM(model="facebook/opt-125m")
@@ -1132,6 +1134,7 @@ class TestLLMActor:
         ],
     )
     def test_from_hf_logprobs(self, from_text, tokens, attention_mask):
+        torch.manual_seed(0)
         from transformers import AutoTokenizer, GPT2Config, GPT2LMHeadModel
 
         tokenizer = AutoTokenizer.from_pretrained("gpt2")
@@ -1167,6 +1170,7 @@ class TestLLMActor:
         ],
     )
     def test_from_vllm_logprobs(self, from_text, tokens, attention_mask):
+        torch.manual_seed(0)
         from vllm import LLM
 
         model = LLM(model="facebook/opt-125m")
@@ -1203,6 +1207,8 @@ class TestLLMActor:
             text_response=td_generate.text_response,
         )
         td_logprobs = model_logprobs(tdin_logprobs)
+        assert td_generate.log_probs.shape == td_generate.tokens_response.shape
+        assert td_logprobs.log_probs.shape == td_generate.tokens_response.shape
         torch.testing.assert_close(
             td_generate.log_probs, td_logprobs.log_probs, rtol=1e-2, atol=1e-2
         )
