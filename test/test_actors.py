@@ -1092,8 +1092,10 @@ class TestLLMActor:
         assert isinstance(td, LLMData)
         if from_text and generate:
             assert td.text_response is not None
-        if generate and (attention_mask is not None or from_text):
+        if generate:
             assert td.attention_mask is not None, (generate, generate, from_text)
+            if isinstance(td.attention_mask, torch.Tensor):
+                assert td.attention_mask.shape == td.tokens.shape
         else:
             assert td.attention_mask is None, (generate, from_text)
         if not generate:
@@ -1105,7 +1107,7 @@ class TestLLMActor:
         if generate:
             if return_log_probs:
                 assert td.log_probs is not None
-                assert td.log_probs.shape[-2] == td.tokens_response.shape[-1]
+                assert td.log_probs.shape[-1] == td.tokens_response.shape[-1]
             else:
                 assert td.log_probs is None
 

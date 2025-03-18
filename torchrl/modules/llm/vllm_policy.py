@@ -117,7 +117,6 @@ def from_vllm(
         Transformers library.
 
     """
-
     # TODO: Seq should have a return_log_prob and be of ProbabilisticTDSequential type for instance checks
     if tokenizer is None:
         tokenizer = model.get_tokenizer()
