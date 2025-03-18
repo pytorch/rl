@@ -371,6 +371,8 @@ class DataLoadingPrimer(TensorDictPrimer):
         batch_size = getattr(dataloader, "batch_size", 0)
         if (batch_size > 1 and use_buffer is None) or repeats > 0:
             use_buffer = True
+        if repeats:
+            batch_size = batch_size * repeats
 
         self.use_buffer = use_buffer
         if self.use_buffer:

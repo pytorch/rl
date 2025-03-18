@@ -97,7 +97,7 @@ if __name__ == "__main__":
     env.append_transform(ShapedCorrectnessReward(tokenizer=tokenizer))
 
     # Ref model
-    ref_model = GPT2LMHeadModel.from_pretrained("gpt2")
+    ref_model = GPT2LMHeadModel.from_pretrained("gpt2").eval()
     TensorDict.from_module(ref_model).data.to_module(ref_model)
     ref_model = from_hf_transformers(
         ref_model,
@@ -118,7 +118,7 @@ if __name__ == "__main__":
     )
 
     # Collector
-    train_model = GPT2LMHeadModel.from_pretrained("gpt2")
+    train_model = GPT2LMHeadModel.from_pretrained("gpt2").eval()
     collector = SyncDataCollector(
         env,
         policy,
@@ -130,7 +130,7 @@ if __name__ == "__main__":
     )
 
     # Loss module
-    policy_traning = from_hf_transformers(
+    policy_training = from_hf_transformers(
         train_model,
         tokenizer=tokenizer,
         from_text=False,
@@ -138,7 +138,7 @@ if __name__ == "__main__":
         return_log_probs=True,
     )
     loss_fn = ClipPPOLoss(
-        actor_network=policy_traning,
+        actor_network=policy_training,
         critic_network=None,
         critic_coef=0.0,
         functional=False,

@@ -6432,6 +6432,8 @@ class TensorDictPrimer(Transform):
                     resets = self.default_value(reset=_reset)
                     tensordict_reset.update(resets)
 
+                print('self.primers', self.primers)
+                print('tensordict_reset', tensordict_reset)
                 for key, spec in self.primers.items(True, True):
                     if not self._validated:
                         self._validate_value_tensor(tensordict_reset.get(key), spec)
