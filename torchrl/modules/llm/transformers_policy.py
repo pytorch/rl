@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import torch
 
-from tensordict import NestedKey, TensorDictBase
+from tensordict import NestedKey, TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModule as Mod, TensorDictModuleBase, WrapModule
 from tensordict.tensorclass import NonTensorData, NonTensorStack
 from torchrl.data.llm import LLMData
@@ -103,7 +103,7 @@ def log_probs_from_logits(td: TensorDictBase) -> TensorDictBase:
     logits = logits[..., -seq_len - 1 : -1, :]
     td["logits"] = logits
     del td["forward"]
-    del td["tokens_response"]
+    td["tokens_response"] = td["tokens_response", "input_ids"]
 
     log_probs = logits.gather(-1, tokens.unsqueeze(-1))
     td["log_probs"] = log_probs.squeeze(-1)
@@ -430,14 +430,21 @@ def _from_hf_lp_text(
         raise RuntimeError
 
     def encode(input_txt: list[str], output_txt: list[str]):
-        input_tokens = tokenizer(
-            [_x + _y for _x, _y in zip(input_txt, output_txt)],
-            **tokenizer_kwargs,
+        input_tokens = TensorDict.from_dict(
+            tokenizer(
+                [_x + _y for _x, _y in zip(input_txt, output_txt)],
+                **tokenizer_kwargs,
+            )
         )
         # TODO: if not generating, we should use the tokens generates before
         #  because encode-decode isn't strictly a bijection so encoding the response
         #  only may lead to surprises
-        output_tokens = tokenizer(output_txt, **tokenizer_kwargs)
+        input_only_tokens = TensorDict.from_dict(
+            tokenizer(input_txt, **tokenizer_kwargs)
+        )
+        output_tokens = input_tokens.apply(
+            lambda x, y: x[:, y.shape[1] :], input_only_tokens
+        )
         return input_tokens, output_tokens
 
     module_dict["encode"] = Mod(
@@ -493,6 +500,7 @@ def _from_hf_lp_text(
         in_keys=["log_probs", "logits", "tokens_response"],
         out_keys=["log_probs", "logits", "tokens_response"],
         inplace=False,
+        strict=True,
     )
     return module_dict
 
