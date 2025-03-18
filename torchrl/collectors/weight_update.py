@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import abc
 from abc import abstractmethod
-from typing import Callable, TypeVar
+from typing import Any, Callable, TypeVar
 
 import torch
 from tensordict import TensorDictBase
@@ -109,6 +109,21 @@ class RemoteWeightUpdaterBase(metaclass=abc.ABCMeta):
         :meth:`~torchrl.collectors.DataCollectorBase.update_policy_weights_`.
 
     """
+
+    collector: Any = None
+
+    def register_collector(self, collector: DataCollectorBase):  # noqa
+        """Register a collector in the updater.
+
+        Once registered, the updater will not accept another collector.
+
+        Args:
+            collector (DataCollectorBase): The collector to register.
+
+        """
+        if self.collector is not None:
+            raise RuntimeError("Cannot register collector twice.")
+        self.collector = collector
 
     @abstractmethod
     def _sync_weights_with_worker(

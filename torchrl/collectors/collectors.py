@@ -837,6 +837,9 @@ class SyncDataCollector(DataCollectorBase):
             )
 
         self.local_weights_updater = local_weights_updater
+        if remote_weights_updater is not None:
+            remote_weights_updater.register_collector(self)
+
         self.remote_weights_updater = remote_weights_updater
 
     @property
@@ -1827,10 +1830,13 @@ class _MultiDataCollector(DataCollectorBase):
                 "remote_weights_updater cannot be None when policy_factory is provided."
             )
 
+        if remote_weights_updater is not None:
+            remote_weights_updater.register_collector(self)
         self.remote_weights_updater = remote_weights_updater
         self.local_weights_updater = local_weights_updater
 
         self.policy = policy
+        self.policy_factory = policy_factory
 
         remainder = 0
         if total_frames is None or total_frames < 0:
@@ -2012,6 +2018,10 @@ class _MultiDataCollector(DataCollectorBase):
                 env_fun = CloudpickleWrapper(env_fun)
 
             # Create a policy on the right device
+            policy_factory = self.policy_factory
+            if policy_factory is not None:
+                policy_factory = CloudpickleWrapper(policy_factory)
+
             policy_device = self.policy_device[i]
             storing_device = self.storing_device[i]
             env_device = self.env_device[i]
@@ -2020,13 +2030,14 @@ class _MultiDataCollector(DataCollectorBase):
             #  This makes sure that a given set of shared weights for a given device are
             #  shared for all policies that rely on that device.
             policy = self.policy
-            policy_weights = self._policy_weights_dict[policy_device]
+            policy_weights = self._policy_weights_dict.get(policy_device)
             if policy is not None and policy_weights is not None:
                 cm = policy_weights.to_module(policy)
             else:
                 cm = contextlib.nullcontext()
             with cm:
                 kwargs = {
+                    "policy_factory": policy_factory,
                     "pipe_parent": pipe_parent,
                     "pipe_child": pipe_child,
                     "queue_out": queue_out,
@@ -3107,6 +3118,7 @@ def _main_async_collector(
     compile_policy: bool = False,
     cudagraph_policy: bool = False,
     no_cuda_sync: bool = False,
+    policy_factory: Callable | None = None,
 ) -> None:
     pipe_parent.close()
     # init variables that will be cleared when closing
@@ -3116,6 +3128,7 @@ def _main_async_collector(
         create_env_fn,
         create_env_kwargs=create_env_kwargs,
         policy=policy,
+        policy_factory=policy_factory,
         total_frames=-1,
         max_frames_per_traj=max_frames_per_traj,
         frames_per_batch=frames_per_batch,
@@ -3278,7 +3291,7 @@ def _main_async_collector(
                 continue
 
         elif msg == "update":
-            inner_collector.update_policy_weights_()
+            inner_collector.update_policy_weights_(policy_weights=data_in)
             pipe_child.send((j, "updated"))
             has_timed_out = False
             continue

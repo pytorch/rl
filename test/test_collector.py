@@ -39,7 +39,11 @@ from torchrl._utils import (
     prod,
     seed_generator,
 )
-from torchrl.collectors import aSyncDataCollector, SyncDataCollector
+from torchrl.collectors import (
+    aSyncDataCollector,
+    RemoteWeightUpdaterBase,
+    SyncDataCollector,
+)
 from torchrl.collectors.collectors import (
     _Interruptor,
     MultiaSyncDataCollector,
@@ -146,6 +150,7 @@ IS_OSX = sys.platform == "darwin"
 PYTHON_3_10 = sys.version_info.major == 3 and sys.version_info.minor == 10
 PYTHON_3_7 = sys.version_info.major == 3 and sys.version_info.minor == 7
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
+_has_cuda = torch.cuda.is_available()
 
 
 class WrappablePolicy(nn.Module):
@@ -3474,6 +3479,69 @@ class TestCollectorRB:
 
 def __deepcopy_error__(*args, **kwargs):
     raise RuntimeError("deepcopy not allowed")
+
+
+class TestPolicyFactory:
+    class MPSRemoteWeightUpdater(RemoteWeightUpdaterBase):
+        def __init__(self, policy_weights, num_workers):
+            # Weights are on mps device, which cannot be shared
+            self.policy_weights = policy_weights.data
+            self.num_workers = num_workers
+
+        def _sync_weights_with_worker(
+            self, worker_id: int | torch.device, server_weights: TensorDictBase
+        ) -> TensorDictBase:
+            # Send weights on cpu - the local workers will do the cpu->mps copy
+            self.collector.pipes[worker_id].send((server_weights, "update"))
+            val, msg = self.collector.pipes[worker_id].recv()
+            assert msg == "updated"
+            return server_weights
+
+        def _get_server_weights(self) -> TensorDictBase:
+            return self.policy_weights.cpu()
+
+        def _maybe_map_weights(self, server_weights: TensorDictBase) -> TensorDictBase:
+            return server_weights
+
+        def all_worker_ids(self) -> list[int] | list[torch.device]:
+            return list(range(self.num_workers))
+
+    @pytest.mark.skipif(not _has_cuda, reason="requires cuda another device than CPU.")
+    def test_weight_update(self):
+        device = "cuda:0"
+        env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
+        policy_factory = lambda: TensorDictModule(
+            nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"]
+        ).to(device)
+        policy = policy_factory()
+        policy_weights = TensorDict.from_module(policy)
+
+        collector = MultiSyncDataCollector(
+            create_env_fn=[env_maker, env_maker],
+            policy_factory=policy_factory,
+            total_frames=2000,
+            max_frames_per_traj=50,
+            frames_per_batch=200,
+            init_random_frames=-1,
+            reset_at_each_iter=False,
+            device=device,
+            storing_device="cpu",
+            remote_weights_updater=self.MPSRemoteWeightUpdater(policy_weights, 2),
+        )
+
+        collector.update_policy_weights_()
+        try:
+            for i, data in enumerate(collector):
+                if i == 2:
+                    assert (data["action"] != 0).any()
+                    # zero the policy
+                    policy_weights.data.zero_()
+                    collector.update_policy_weights_()
+                elif i == 3:
+                    assert (data["action"] == 0).all(), data["action"]
+                    break
+        finally:
+            collector.shutdown()
 
 
 if __name__ == "__main__":
