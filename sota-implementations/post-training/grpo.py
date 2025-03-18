@@ -15,7 +15,7 @@ from tensordict import TensorDict
 from torch.utils._pytree import tree_map
 from torch.utils.data import DataLoader
 from torchrl.collectors import SyncDataCollector
-from torchrl.data import LazyStackStorage, ReplayBuffer, SamplerWithoutReplacement
+from torchrl.data import LazyStackStorage, RayReplayBuffer, ReplayBuffer, SamplerWithoutReplacement
 from torchrl.envs import DataLoadingPrimer, KLRewardTransform, LLMEnv, StepCounter
 from torchrl.modules import from_hf_transformers, from_vllm
 from torchrl.objectives import ClipPPOLoss
