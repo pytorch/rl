@@ -2488,9 +2488,8 @@ class DummyTensorDataLoader:
     def generate_random_tensor(self):
         """Generate a tensor of random int64 values."""
         length = random.randint(1, self.max_length)
-        return torch.tensor(
-            [random.randint(0, 100) for _ in range(length)], dtype=torch.int64
-        )
+        rt = torch.randint(0, 100, (length,))
+        return rt
 
     def pad_tensor(self, tensor):
         """Pad a tensor to the maximum length."""

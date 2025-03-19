@@ -6294,7 +6294,7 @@ class TensorDictPrimer(Transform):
                 f"observation_spec was expected to be of type Composite. Got {type(observation_spec)} instead."
             )
 
-        if self.primers.shape[:observation_spec.ndim] != observation_spec.shape:
+        if self.primers.shape[: observation_spec.ndim] != observation_spec.shape:
             if self.expand_specs:
                 self.primers = self._expand_shape(self.primers)
             elif self.expand_specs is None:
