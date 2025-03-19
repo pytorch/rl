@@ -410,7 +410,7 @@ class LLMEnv(EnvBase):
             no_stack=no_stack,
             assign_reward=assign_reward,
             assign_done=assign_done,
-            batch_size=batch_size,
+            batch_size=batch_size if batch_size is not None else primer.batch_size,
             has_attention=has_attention,
             as_llm_data=as_llm_data,
         )

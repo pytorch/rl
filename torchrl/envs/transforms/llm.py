@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import warnings
 from collections import deque
 from collections.abc import Mapping
 from copy import copy, deepcopy
@@ -20,6 +21,7 @@ from tensordict.utils import _zip_strict, is_seq_of_nested_key
 from torch import nn
 
 from torchrl.data.tensor_specs import Composite, NonTensor, TensorSpec, Unbounded
+from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms.transforms import TensorDictPrimer, Transform
 from torchrl.envs.transforms.utils import _set_missing_tolerance, _stateless_param
 from torchrl.envs.utils import make_composite_from_td
@@ -380,6 +382,7 @@ class DataLoadingPrimer(TensorDictPrimer):
 
         # No auto_batch_size if we know we have a single element
         self.auto_batch_size = auto_batch_size and (batch_size > 0)
+        self.batch_size = torch.Size((batch_size,)) if self.auto_batch_size and batch_size > 0 else None
         self.endless_dataloader = self._endless_iter(self.dataloader)
 
         if stack_method is None:
@@ -506,6 +509,14 @@ class DataLoadingPrimer(TensorDictPrimer):
             )
             return self._queue.popleft()
         return out
+
+    def set_container(self, container: Transform | EnvBase) -> None:
+        result = super().set_container(container)
+        # Check batch size
+        parent = getattr(self, 'parent', None)
+        if self.batch_size is not None and parent is not None and parent.batch_size != self.batch_size:
+            warnings.warn(f"The parent env has a different batch size than the {type(self).__name__} transform.")
+        return result
 
     def __repr__(self) -> str:
         class_name = self.__class__.__name__
