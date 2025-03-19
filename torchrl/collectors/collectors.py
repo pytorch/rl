@@ -1535,7 +1535,7 @@ class SyncDataCollector(DataCollectorBase):
                 f"\nexploration={self.exploration_type})"
             )
             return string
-        except AttributeError:
+        except Exception:
             return f"{type(self).__name__}(not_init)"
 
 
