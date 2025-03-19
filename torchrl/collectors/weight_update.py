@@ -148,7 +148,7 @@ class RemoteWeightUpdaterBase(metaclass=abc.ABCMeta):
         self._collector_wr = weakref.ref(collector)
 
     @property
-    def collector(self) -> DataCollectorBase:
+    def collector(self) -> torch.collector.DataCollectorBase:  # noqa
         return self._collector_wr() if self._collector_wr is not None else None
 
     @abstractmethod
