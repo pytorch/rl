@@ -4613,16 +4613,17 @@ class TestLLMEnv:
                 stack_method=stack_method,
             )
         env = LLMEnv(
-            str2str=str2str, device=device, has_attention=False, no_stack=False, batch_size=primer.batch_size
+            str2str=str2str,
+            device=device,
+            has_attention=False,
+            no_stack=False,
+            batch_size=primer.batch_size,
         )
         if batched:
             assert not env.batch_locked
         env = env.append_transform(primer)
         if batched:
             assert not env.batch_locked
-        print('batch_size', batch_size)
-        print(env.batch_size)
-        print(primer.primers)
         if batched:
             td = env.reset(TensorDict(batch_size=[3]))
             env.check_env_specs(break_when_any_done="both", tensordict=td)
@@ -4777,7 +4778,9 @@ class TestLLMEnv:
                         == r[-1, 2][LLMEnv._DEFAULT_TOKEN_KEY][:-1]
                     ).all()
             else:
-                r = env.rollout(10, policy, tensordict=TensorDict(batch_size=env.batch_size))
+                r = env.rollout(
+                    10, policy, tensordict=TensorDict(batch_size=env.batch_size)
+                )
                 assert r.ndim == len(env.batch_size) + 1
 
     @pytest.mark.parametrize(
@@ -4825,6 +4828,7 @@ class TestLLMEnv:
         )
         env = LLMEnv.from_dataloader(**kwargs)
         assert env.transform.repeats == repeats
+        assert env.transform.use_buffer
 
         max_steps = 3
         env.append_transform(StepCounter(max_steps=max_steps))
@@ -4917,9 +4921,8 @@ class TestLLMEnv:
             [False, "as_padded_tensor"],
         ],
     )
-    @pytest.mark.parametrize("batched", [True])
     @pytest.mark.parametrize("device", [None])
-    @pytest.mark.parametrize("batch_size", [4])
+    @pytest.mark.parametrize("batch_size,batched", [[0, True], [4, False]])
     @pytest.mark.parametrize("repeats", [3])
     @pytest.mark.parametrize(
         "assign_reward,assign_done", [[True, False], [True, True], [False, True]]
