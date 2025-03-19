@@ -61,7 +61,7 @@ class LocalWeightUpdaterBase(metaclass=abc.ABCMeta):
         self._collector_wr = weakref.ref(collector)
 
     @property
-    def collector(self) -> "torchrl.collectors.DataCollectorBase":  # noqa
+    def collector(self) -> torchrl.collectors.DataCollectorBase:  # noqa
         return self._collector_wr() if self._collector_wr is not None else None
 
     @abstractmethod
