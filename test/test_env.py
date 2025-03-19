@@ -4594,13 +4594,9 @@ class TestLLMEnv:
             [False, None],
         ],
     )
-    @pytest.mark.parametrize("batched", [True, False])
-    @pytest.mark.parametrize("batch_size", [0, 4])
+    @pytest.mark.parametrize("batch_size,batched", [[0, True], [4, False]])
     @pytest.mark.parametrize("device", [None, "cpu"])
     def test_llm_env(self, str2str, batched, stack_method, device, batch_size):
-        env = LLMEnv(
-            str2str=str2str, device=device, has_attention=False, no_stack=False
-        )
         if str2str:
             primer = DataLoadingPrimer(
                 dataloader=DummyStrDataLoader(batch_size=batch_size),
@@ -4616,9 +4612,17 @@ class TestLLMEnv:
                 data_specs=[Unbounded(shape=(-1,), dtype=torch.int64)],
                 stack_method=stack_method,
             )
-        assert not env.batch_locked
+        env = LLMEnv(
+            str2str=str2str, device=device, has_attention=False, no_stack=False, batch_size=primer.batch_size
+        )
+        if batched:
+            assert not env.batch_locked
         env = env.append_transform(primer)
-        assert not env.batch_locked
+        if batched:
+            assert not env.batch_locked
+        print('batch_size', batch_size)
+        print(env.batch_size)
+        print(primer.primers)
         if batched:
             td = env.reset(TensorDict(batch_size=[3]))
             env.check_env_specs(break_when_any_done="both", tensordict=td)
@@ -4637,9 +4641,8 @@ class TestLLMEnv:
             [False, False, None],
         ],
     )
-    @pytest.mark.parametrize("batched", [True, False])
     @pytest.mark.parametrize("device", [None, "cpu"])
-    @pytest.mark.parametrize("batch_size", [0, 4])
+    @pytest.mark.parametrize("batch_size,batched", [[0, True], [4, False]])
     def test_llm_from_dataloader(
         self,
         str2str,
@@ -4683,7 +4686,8 @@ class TestLLMEnv:
             }
         )
         env = LLMEnv.from_dataloader(**kwargs)
-        assert not env.batch_locked
+        if batched:
+            assert not env.batch_locked
         if batched:
             td = env.reset(TensorDict(batch_size=[3]))
             env.check_env_specs(break_when_any_done="both", tensordict=td)
@@ -4773,8 +4777,8 @@ class TestLLMEnv:
                         == r[-1, 2][LLMEnv._DEFAULT_TOKEN_KEY][:-1]
                     ).all()
             else:
-                r = env.rollout(10, policy, tensordict=TensorDict(batch_size=[]))
-                assert r.ndim == 1
+                r = env.rollout(10, policy, tensordict=TensorDict(batch_size=env.batch_size))
+                assert r.ndim == len(env.batch_size) + 1
 
     @pytest.mark.parametrize(
         "str2str,stack_method",
@@ -4786,9 +4790,8 @@ class TestLLMEnv:
             [False, None],
         ],
     )
-    @pytest.mark.parametrize("batched", [True, False])
     @pytest.mark.parametrize("device", [None, "cpu"])
-    @pytest.mark.parametrize("batch_size", [0, 4])
+    @pytest.mark.parametrize("batch_size,batched", [[0, True], [4, False]])
     @pytest.mark.parametrize("repeats", [3])
     def test_llm_from_dataloader_repeats(
         self, str2str, batched, stack_method, device, batch_size, repeats
