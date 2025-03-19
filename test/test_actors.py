@@ -10,7 +10,7 @@ import os
 
 import pytest
 import torch
-from tensordict import NonTensorStack, TensorDict
+from tensordict import LazyStackedTensorDict, NonTensorStack, TensorDict
 from tensordict.nn import CompositeDistribution, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 
@@ -1122,6 +1122,8 @@ class TestLLMActor:
 
         # If from text and not generating, the tokens are not returned for now
         if not (from_text and not generate):
+            assert td.tokens_response is not None
+            assert td.tokens is not None
             assert td.tokens_response.shape[:-1] == td.tokens.shape[:-1]
             # The convention is that the response only has new tokens
             assert (
@@ -1166,26 +1168,34 @@ class TestLLMActor:
         )
 
     @pytest.mark.parametrize(
-        "from_text, tokens, attention_mask",
+        "pad_output, from_text, tokens, attention_mask",
         [
-            (True, None, None),
+            (True, True, None, None),
+            (False, True, None, None),
             (
+                True,
                 False,
                 torch.randint(1024, (1, 10)),
                 torch.ones(1, 10, dtype=torch.int64),
             ),
-            (False, torch.randint(1024, (1, 10)), None),
+            (True, False, torch.randint(1024, (1, 10)), None),
         ],
     )
-    def test_from_vllm_logprobs(self, from_text, tokens, attention_mask):
+    def test_from_vllm_logprobs(self, from_text, tokens, attention_mask, pad_output):
         torch.manual_seed(0)
         from vllm import LLM
 
         model = LLM(model="facebook/opt-125m")
         m_generate = from_vllm(
-            model, from_text=from_text, generate=True, return_log_probs=True
+            model,
+            from_text=from_text,
+            generate=True,
+            return_log_probs=True,
+            pad_output=pad_output,
         )
-        m_logprobs = from_vllm(model, from_text=from_text, generate=False)
+        m_logprobs = from_vllm(
+            model, from_text=from_text, generate=False, pad_output=pad_output
+        )
         self._check_lps(
             m_generate, m_logprobs, tokens, attention_mask, from_text, has_logits=False
         )
@@ -1220,6 +1230,76 @@ class TestLLMActor:
         torch.testing.assert_close(
             td_generate.log_probs, td_logprobs.log_probs, rtol=1e-2, atol=1e-2
         )
+
+    @pytest.fixture(scope="module")
+    def llm_model(self):
+        import vllm
+
+        llm_model = vllm.LLM("gpt2")
+        tokenizer = llm_model.get_tokenizer()
+        tokenizer.pad_token = tokenizer.eos_token
+        return llm_model
+
+    @pytest.mark.parametrize("pad", [True, False])
+    @pytest.mark.parametrize("generate", [True, False])
+    def test_vllm_batch_run(self, pad, generate, llm_model):
+        # Test generate - padding combinations
+        policy = from_vllm(
+            llm_model,
+            from_text=True,
+            generate=generate,
+            return_log_probs=True,
+            pad_output=pad,
+            generate_kwargs={"max_tokens": 10000},
+        )
+        if generate:
+            data = LazyStackedTensorDict(
+                *TensorDict(
+                    text=NonTensorStack("a string", "another very long string"),
+                    batch_size=[2],
+                ).unbind(0)
+            )
+        else:
+            data = LazyStackedTensorDict(
+                *TensorDict(
+                    text=NonTensorStack("a string", "another very long string"),
+                    text_response=NonTensorStack(
+                        " is a string", " is still a very long string"
+                    ),
+                    batch_size=[2],
+                ).unbind(0)
+            )
+        output = policy(data)
+        try:
+            log_probs = output.get("log_probs")
+        except Exception:
+            log_probs = output.get("log_probs", as_list=True)
+        if pad:
+            assert isinstance(log_probs, torch.Tensor)
+        else:
+            assert isinstance(log_probs, list)
+        text = output.get("text", as_list=True)
+        assert isinstance(text, NonTensorStack)
+        text_response = output.get("text_response", as_list=True)
+        assert isinstance(text_response, NonTensorStack)
+        try:
+            tokens_response = output.get("tokens_response")
+        except Exception:
+            tokens_response = output.get("tokens_response", as_list=True)
+        if pad:
+            assert isinstance(tokens_response, torch.Tensor)
+        else:
+            assert isinstance(tokens_response, list)
+        try:
+            tokens = output.get("tokens")
+        except Exception:
+            tokens = output.get("tokens", as_list=True)
+        if not generate:
+            assert tokens is None
+        elif pad:
+            assert isinstance(tokens, torch.Tensor), tokens
+        else:
+            assert isinstance(tokens, list)
 
 
 if __name__ == "__main__":
