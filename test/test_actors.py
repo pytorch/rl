@@ -1242,7 +1242,8 @@ class TestLLMActor:
 
     @pytest.mark.parametrize("pad", [True, False])
     @pytest.mark.parametrize("generate", [True, False])
-    def test_vllm_batch_run(self, pad, generate, llm_model):
+    @pytest.mark.parametrize("use_tensorclass", [True, False])
+    def test_vllm_batch_run(self, pad, generate, use_tensorclass, llm_model):
         # Test generate - padding combinations
         policy = from_vllm(
             llm_model,
@@ -1269,6 +1270,8 @@ class TestLLMActor:
                     batch_size=[2],
                 ).unbind(0)
             )
+        if use_tensorclass:
+            data = LLMData.from_tensordict(data)
         output = policy(data)
         try:
             log_probs = output.get("log_probs")
@@ -1279,9 +1282,16 @@ class TestLLMActor:
         else:
             assert isinstance(log_probs, list)
         text = output.get("text", as_list=True)
-        assert isinstance(text, NonTensorStack)
+        # TODO: this is not ideal...
+        if use_tensorclass:
+            assert isinstance(text, list)
+        else:
+            assert isinstance(text, NonTensorStack)
         text_response = output.get("text_response", as_list=True)
-        assert isinstance(text_response, NonTensorStack)
+        if use_tensorclass:
+            assert isinstance(text_response, list)
+        else:
+            assert isinstance(text_response, NonTensorStack)
         try:
             tokens_response = output.get("tokens_response")
         except Exception:

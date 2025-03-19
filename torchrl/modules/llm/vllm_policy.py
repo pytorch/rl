@@ -61,22 +61,37 @@ def from_vllm(
 ) -> TensorDictModuleBase:
     """Creates a TensorDictModule from a vLLM model.
 
-    This function provides a consistent interface across various LLM engines.
-
-    It supports text generation and log probability computation, similar to the Hugging Face Transformers interface.
+    This function provides a consistent interface across various LLM engines, allowing for text generation and
+    log probability computation, similar to the Hugging Face Transformers interface.
 
     Args:
-        model (LLM): The vLLM model to wrap.
-        return_log_probs (bool, optional): Whether to return log probabilities. Defaults to `False`.
-        tokenizer (transformers.tokenization_utils.PreTrainedTokenizer, optional): The tokenizer to use. Defaults to `None`.
-        from_text (bool, optional): Whether the input is text. Defaults to `False`.
-        device (torch.device, optional): The device to use for computation. Defaults to `None`.
-        generate (bool, optional): Whether to generate text. Defaults to `True`.
-        generate_kwargs (dict, optional): Additional arguments for the model's generate method. Defaults to `None`.
-        tokenizer_kwargs (dict, optional): Additional arguments for the tokenizer. Defaults to `None`.
+        model (vllm.LLM): The vLLM model to wrap.
+        return_log_probs (bool, optional): Whether to return log probabilities of the generated tokens.
+            Defaults to `False`.
+        tokenizer (transformers.tokenization_utils.PreTrainedTokenizer, optional): The tokenizer to use for encoding
+            and decoding text. If `None`, the tokenizer associated with the model will be used. Defaults to `None`.
+        from_text (bool, optional): Indicates whether the input is in text format. If `True`, the input is expected to
+            be text that will be tokenized. If `False`, the input is expected to be token sequences. Defaults to `False`.
+        device (torch.device, optional): The device to use for computation. If `None`, the default device will be used.
+            Defaults to `None`.
+        generate (bool, optional): Whether to enable text generation. If `True`, the model will generate text based on
+            the input. If `False`, only log probabilities will be computed. Defaults to `True`.
+        generate_kwargs (dict, optional): Additional arguments to pass to the model's generate method. These
+            arguments can control aspects of the generation process, such as temperature and top-k sampling.
+            Defaults to `None`.
+        tokenizer_kwargs (dict, optional): Additional arguments to pass to the tokenizer. These arguments can control
+            aspects of the tokenization process, such as padding and truncation. Defaults to `None`.
+        pad_output (bool, optional): Whether to pad the output sequences to a uniform length. If `True`, the output
+            sequences will be padded. If `False`, lists of tokens will be used without padding. Defaults to `True`.
+        inplace (Literal[True, False, "empty"], optional): Determines how the module should handle in-place
+            operations. If `True`, operations will be performed in-place. If `False`, a new TensorDict instance will be
+            created.
+            If `"empty"`, the output data structure will be initialized with `input.empty()` (i.e., it will conserve
+            type, batch-size and device). Defaults to `True`.
 
     Returns:
-        TensorDictModuleBase: A configured TensorDictModule for the specified model.
+        TensorDictModuleBase: A configured TensorDictModule for the specified model, capable of handling text or
+            token inputs and producing generated text or log probabilities.
 
     Input Keys:
 
@@ -92,21 +107,21 @@ def from_vllm(
     Output Keys:
 
         - "tokens_response": The generated token sequences.
-        - "log_probs": The log probabilities of the generated tokens (if `return_log_probs` is True).
-        - "text_response": The generated text (if `from_text` is True and `generate` is True).
+        - "log_probs": The log probabilities of the generated tokens (if `return_log_probs` is `True`).
+        - "text_response": The generated text (if `from_text` is `True` and `generate` is `True`).
 
     Example:
         >>> from vllm import LLM
         >>> from transformers import AutoTokenizer
-        >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        >>> model = LLM(model="facebook/opt-125m")
+        >>> model = LLM("gpt2")
+        >>> tokenizer = model.get_tokenizer()
         >>> module = from_vllm(
         ...     model,
         ...     tokenizer=tokenizer,
         ...     from_text=True,
         ...     generate=True
         ... )
-        >>> input_data = LLMData(text=NonTensorStack("Hello, world!"), batch_size=1)
+        >>> input_data = LLMData(text=NonTensorStack("Hello, world!", "This is another text"), batch_size=1)
         >>> output_data = module(input_data)
         >>> print(output_data.text_response)
 
@@ -217,7 +232,9 @@ def _from_vllm_generate_text(
 
         def tokenize(td):
             out = TensorDict(batch_size=td.batch_size, device=td.device)
-            text = td[text_key]
+            text = td.get(text_key)
+            if not isinstance(text, (list, str)):
+                text = text.tolist()
             tokens_in = TensorDict.from_dict(tokenizer(text, **tokenizer_kwargs))
             out.set("tokens_in", tokens_in)
             return out
