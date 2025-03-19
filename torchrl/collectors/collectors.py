@@ -152,8 +152,18 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     trust_policy: bool
     compiled_policy: bool
     cudagraphed_policy: bool
-    local_weights_updater: LocalWeightUpdaterBase | None = None
+    _local_weights_updater: LocalWeightUpdaterBase | None = None
     _remote_weights_updater: RemoteWeightUpdaterBase | None = None
+
+    @property
+    def local_weight_updater(self) -> LocalWeightUpdaterBase:
+        return self._local_weight_updater
+
+    @local_weight_updater.setter
+    def local_weight_updater(self, value: LocalWeightUpdaterBase | None):
+        if value is not None:
+            value.register_collector(self)
+        self._local_weight_updater = value
 
     @property
     def remote_weight_updater(self) -> RemoteWeightUpdaterBase:
