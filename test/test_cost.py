@@ -40,7 +40,7 @@ from tensordict.nn import (
 )
 from tensordict.nn.distributions.composite import _add_suffix
 from tensordict.nn.utils import Buffer
-from tensordict.utils import unravel_key
+from tensordict.utils import set_capture_non_tensor_stack, unravel_key
 from torch import autograd, nn
 from torchrl._utils import _standardize
 from torchrl.data import Bounded, Categorical, Composite, MultiOneHot, OneHot, Unbounded
@@ -16664,6 +16664,7 @@ def test_loss_exploration():
 
 
 class TestPPO4LLMs:
+    @set_capture_non_tensor_stack(False)
     @pytest.mark.parametrize("from_text", [True, False])
     def test_hf(self, from_text):
         from torchrl.envs import LLMEnv, Transform
