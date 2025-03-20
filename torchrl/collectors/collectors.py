@@ -152,8 +152,8 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     trust_policy: bool
     compiled_policy: bool
     cudagraphed_policy: bool
-    _local_weights_updater: LocalWeightUpdaterBase | None = None
-    _remote_weights_updater: RemoteWeightUpdaterBase | None = None
+    _local_weight_updater: LocalWeightUpdaterBase | None = None
+    _remote_weight_updater: RemoteWeightUpdaterBase | None = None
 
     @property
     def local_weight_updater(self) -> LocalWeightUpdaterBase:
@@ -163,6 +163,8 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     def local_weight_updater(self, value: LocalWeightUpdaterBase | None):
         if value is not None:
             value.register_collector(self)
+        if value.collector is not self:
+            raise RuntimeError("Failed to register collector.")
         self._local_weight_updater = value
 
     @property
@@ -173,6 +175,8 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     def remote_weight_updater(self, value: RemoteWeightUpdaterBase | None):
         if value is not None:
             value.register_collector(self)
+        if value.collector is not self:
+            raise RuntimeError("Failed to register collector.")
         self._remote_weight_updater = value
 
     def _get_policy_and_device(
@@ -288,12 +292,12 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 configured remote weights updater, a TypeError will be raised.
 
         Raises:
-            TypeError: If `worker_ids` is provided but no `remote_weights_updater` is configured.
+            TypeError: If `worker_ids` is provided but no `remote_weight_updater` is configured.
 
         .. note::
 
-            - The method first attempts to update weights locally using `local_weights_updater`, if available.
-            - If a `remote_weights_updater` is configured, it will be used to update the specified remote workers.
+            - The method first attempts to update weights locally using `local_weight_updater`, if available.
+            - If a `remote_weight_updater` is configured, it will be used to update the specified remote workers.
             - Users can extend the `LocalWeightUpdaterBase` and `RemoteWeightUpdaterBase` classes to customize
               the weight update logic for specific use cases. This method should not be overwritten.
 
@@ -301,13 +305,13 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             :meth:`~torchrl.collectors.RemoteWeightsUpdaterBase`.
 
         """
-        if self.local_weights_updater is not None:
-            self.local_weights_updater(policy_weights, **kwargs)
-        if self.remote_weights_updater is not None:
-            self.remote_weights_updater(policy_weights, worker_ids=worker_ids, **kwargs)
+        if self.local_weight_updater is not None:
+            self.local_weight_updater(policy_weights, **kwargs)
+        if self.remote_weight_updater is not None:
+            self.remote_weight_updater(policy_weights, worker_ids=worker_ids, **kwargs)
         elif worker_ids is not None:
             raise TypeError(
-                "worker_ids was passed but remote_weights_updater was None."
+                "worker_ids was passed but remote_weight_updater was None."
             )
 
     def __iter__(self) -> Iterator[TensorDictBase]:
@@ -513,11 +517,11 @@ class SyncDataCollector(DataCollectorBase):
             or `ManiSkills <https://github.com/haosulab/ManiSkill/>`_) cuda synchronization may cause unexpected
             crashes.
             Defaults to ``False``.
-        local_weights_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
+        local_weight_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on the local inference worker.
             If not provided, a :class:`~torchrl.collectors.VanillaLocalWeightUpdater` will be used by default,
             which directly fetches and applies the weights from the server.
-        remote_weights_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
+        remote_weight_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on remote inference workers.
             This is typically not used in :class:`~torchrl.collectors.SyncDataCollector` as it operates in a single-process environment.
 
@@ -610,8 +614,8 @@ class SyncDataCollector(DataCollectorBase):
         compile_policy: bool | dict[str, Any] | None = None,
         cudagraph_policy: bool | dict[str, Any] | None = None,
         no_cuda_sync: bool = False,
-        local_weights_updater: LocalWeightUpdaterBase | None = None,
-        remote_weights_updater: RemoteWeightUpdaterBase | None = None,
+        local_weight_updater: LocalWeightUpdaterBase | None = None,
+        remote_weight_updater: RemoteWeightUpdaterBase | None = None,
         **kwargs,
     ):
         from torchrl.envs.batched_envs import BatchedEnvBase
@@ -851,13 +855,13 @@ class SyncDataCollector(DataCollectorBase):
         self._frames = 0
         self._iter = -1
 
-        if local_weights_updater is None:
-            local_weights_updater = VanillaLocalWeightUpdater(
+        if local_weight_updater is None:
+            local_weight_updater = VanillaLocalWeightUpdater(
                 weight_getter=self.get_weights_fn, policy_weights=self.policy_weights
             )
 
-        self.local_weights_updater = local_weights_updater
-        self.remote_weights_updater = remote_weights_updater
+        self.local_weight_updater = local_weight_updater
+        self.remote_weight_updater = remote_weight_updater
 
     @property
     def _traj_pool(self):
@@ -1711,10 +1715,10 @@ class _MultiDataCollector(DataCollectorBase):
             or `ManiSkills <https://github.com/haosulab/ManiSkill/>`_) cuda synchronization may cause unexpected
             crashes.
             Defaults to ``False``.
-        local_weights_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
+        local_weight_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on each local inference worker.
             If not provided, left unused.
-        remote_weights_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
+        remote_weight_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on remote inference workers.
             If not provided, a :class:`~torchrl.collectors.MultiProcessedRemoteWeightUpdate` will be used by default,
             which handles weight synchronization across multiple processes.
@@ -1755,8 +1759,8 @@ class _MultiDataCollector(DataCollectorBase):
         compile_policy: bool | dict[str, Any] | None = None,
         cudagraph_policy: bool | dict[str, Any] | None = None,
         no_cuda_sync: bool = False,
-        remote_weights_updater: RemoteWeightUpdaterBase | None = None,
-        local_weights_updater: LocalWeightUpdaterBase | None = None,
+        remote_weight_updater: RemoteWeightUpdaterBase | None = None,
+        local_weight_updater: LocalWeightUpdaterBase | None = None,
     ):
         self.closed = True
         self.num_workers = len(create_env_fn)
@@ -1836,19 +1840,19 @@ class _MultiDataCollector(DataCollectorBase):
                 )
                 self._policy_weights_dict[policy_device] = weights
             self._get_weights_fn = get_weights_fn
-            if remote_weights_updater is None:
-                remote_weights_updater = MultiProcessedRemoteWeightUpdate(
+            if remote_weight_updater is None:
+                remote_weight_updater = MultiProcessedRemoteWeightUpdate(
                     get_server_weights=self._get_weights_fn,
                     policy_weights=self._policy_weights_dict,
                 )
-        elif remote_weights_updater is None:
+        elif remote_weight_updater is None:
             # TODO
             raise NotImplementedError(
-                "remote_weights_updater cannot be None when policy_factory is provided."
+                "remote_weight_updater cannot be None when policy_factory is provided."
             )
 
-        self.remote_weights_updater = remote_weights_updater
-        self.local_weights_updater = local_weights_updater
+        self.remote_weight_updater = remote_weight_updater
+        self.local_weight_updater = local_weight_updater
 
         self.policy = policy
         self.policy_factory = policy_factory

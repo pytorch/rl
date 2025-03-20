@@ -266,11 +266,11 @@ class RPCDataCollector(DataCollectorBase):
             device used to pass data to main.
         tensorpipe_options (dict, optional): a dictionary of keyword argument
             to pass to :class:`torch.distributed.rpc.TensorPipeRpcBackendOption`.
-        local_weights_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
+        local_weight_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on the local inference worker. This is
             typically not used in :class:`~torchrl.collectors.distrbibuted.RPCDataCollector` as it focuses on
             distributed environments.
-        remote_weights_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
+        remote_weight_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on remote inference workers using RPC.
             If not provided, an :class:`~torchrl.collectors.distributed.RPCRemoteWeightUpdater` will be used by default, which
             handles weight synchronization via RPC.
@@ -308,8 +308,8 @@ class RPCDataCollector(DataCollectorBase):
         tcp_port=None,
         visible_devices=None,
         tensorpipe_options=None,
-        remote_weights_updater: RemoteWeightUpdaterBase | None = None,
-        local_weights_updater: LocalWeightUpdaterBase | None = None,
+        remote_weight_updater: RemoteWeightUpdaterBase | None = None,
+        local_weight_updater: LocalWeightUpdaterBase | None = None,
     ):
         if collector_class == "async":
             collector_class = MultiaSyncDataCollector
@@ -407,16 +407,16 @@ class RPCDataCollector(DataCollectorBase):
                 tensorpipe_options
             )
         self._init()
-        if remote_weights_updater is None:
-            remote_weights_updater = RPCRemoteWeightUpdater(
+        if remote_weight_updater is None:
+            remote_weight_updater = RPCRemoteWeightUpdater(
                 collector_infos=self.collector_infos,
                 collector_class=self.collector_class,
                 collector_rrefs=self.collector_rrefs,
                 policy_weights=self.policy_weights,
                 num_workers=self.num_workers,
             )
-        self.local_weights_updater = local_weights_updater
-        self.remote_weights_updater = remote_weights_updater
+        self.local_weight_updater = local_weight_updater
+        self.remote_weight_updater = remote_weight_updater
 
     @property
     def device(self) -> list[torch.device]:

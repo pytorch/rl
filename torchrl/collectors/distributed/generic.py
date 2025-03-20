@@ -411,11 +411,11 @@ class DistributedDataCollector(DataCollectorBase):
             to learn more.
             Defaults to ``"submitit"``.
         tcp_port (int, optional): the TCP port to be used. Defaults to 10003.
-        local_weights_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
+        local_weight_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on the local inference worker.
             This is typically not used in :class:`~torchrl.collectors.distributed.DistributedDataCollector` as it
             focuses on distributed environments.
-        remote_weights_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
+        remote_weight_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on distributed inference workers.
             If not provided, a :class:`~torchrl.collectors.distributed.DistributedRemoteWeightUpdater` will be used by
             default, which handles weight synchronization across distributed workers.
@@ -452,8 +452,8 @@ class DistributedDataCollector(DataCollectorBase):
         max_weight_update_interval: int = -1,
         launcher: str = "submitit",
         tcp_port: int = None,
-        remote_weights_updater: RemoteWeightUpdaterBase | None = None,
-        local_weights_updater: LocalWeightUpdaterBase | None = None,
+        remote_weight_updater: RemoteWeightUpdaterBase | None = None,
+        local_weight_updater: LocalWeightUpdaterBase | None = None,
     ):
 
         if collector_class == "async":
@@ -470,9 +470,9 @@ class DistributedDataCollector(DataCollectorBase):
             policy_weights = policy_weights.data.lock_()
         elif policy_factory is not None:
             policy_weights = None
-            if remote_weights_updater is None:
+            if remote_weight_updater is None:
                 raise RuntimeError(
-                    "remote_weights_updater must be passed along with "
+                    "remote_weight_updater must be passed along with "
                     "a policy_factory."
                 )
         else:
@@ -556,15 +556,15 @@ class DistributedDataCollector(DataCollectorBase):
 
         self._init_workers()
         self._make_container()
-        if remote_weights_updater is None:
-            remote_weights_updater = DistributedRemoteWeightUpdater(
+        if remote_weight_updater is None:
+            remote_weight_updater = DistributedRemoteWeightUpdater(
                 store=self._store,
                 policy_weights=self.policy_weights,
                 num_workers=self.num_workers,
                 sync=self._sync,
             )
-        self.remote_weights_updater = remote_weights_updater
-        self.local_weights_updater = local_weights_updater
+        self.remote_weight_updater = remote_weight_updater
+        self.local_weight_updater = local_weight_updater
 
     @property
     def device(self) -> list[torch.device]:
