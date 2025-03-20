@@ -222,7 +222,15 @@ def contains_lazy_spec(spec: TensorSpec) -> bool:
     return False
 
 
-class CloudpickleWrapper:
+class _CloudpickleWrapperMeta(type):
+    def __call__(cls, obj):
+        if isinstance(obj, cls):
+            return obj
+        else:
+            return super().__call__(obj)
+
+
+class CloudpickleWrapper(metaclass=_CloudpickleWrapperMeta):
     """A wrapper for functions that allow for serialization in multiprocessed settings."""
 
     def __init__(self, fn: Callable, **kwargs):

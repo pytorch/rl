@@ -2459,3 +2459,55 @@ class HistoryTransform(Transform):
             self.parent.device,
         )
         return next_tensordict
+
+
+class DummyStrDataLoader:
+    def __init__(self, batch_size=0):
+        self.batch_size = batch_size
+
+    def generate_random_string(self, length=10):
+        """Generate a random string of a given length."""
+        return "".join(random.choice(string.ascii_lowercase) for _ in range(length))
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.batch_size == 0:
+            return self.generate_random_string()
+        else:
+            return [self.generate_random_string() for _ in range(self.batch_size)]
+
+
+class DummyTensorDataLoader:
+    def __init__(self, batch_size=0, max_length=10, padding=False):
+        self.batch_size = batch_size
+        self.max_length = max_length
+        self.padding = padding
+
+    def generate_random_tensor(self):
+        """Generate a tensor of random int64 values."""
+        length = random.randint(1, self.max_length)
+        return torch.tensor(
+            [random.randint(0, 100) for _ in range(length)], dtype=torch.int64
+        )
+
+    def pad_tensor(self, tensor):
+        """Pad a tensor to the maximum length."""
+        padding_length = self.max_length - len(tensor)
+        return torch.cat((torch.zeros(padding_length, dtype=torch.int64), tensor))
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.batch_size == 0:
+            tensor = self.generate_random_tensor()
+            return self.pad_tensor(tensor) if self.padding else tensor
+        else:
+            tensors = [self.generate_random_tensor() for _ in range(self.batch_size)]
+            if self.padding:
+                tensors = [self.pad_tensor(tensor) for tensor in tensors]
+                return torch.stack(tensors)
+            else:
+                return tensors
