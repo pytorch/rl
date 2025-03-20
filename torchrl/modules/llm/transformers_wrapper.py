@@ -423,7 +423,6 @@ class TransformersWrapper(CategoricalSequential):
 
         out.set("logits", logits)
         out.set(self.log_prob_key, log_probs)
-
         return out
 
     @classmethod
