@@ -10,13 +10,7 @@ from copy import copy, deepcopy
 from typing import Any, Callable, Iterable, Literal
 
 import torch
-from tensordict import (
-    maybe_dense_stack,
-    NestedKey,
-    TensorDict,
-    TensorDictBase,
-    unravel_key,
-)
+from tensordict import lazy_stack, NestedKey, TensorDict, TensorDictBase, unravel_key
 from tensordict.nn import ProbabilisticTensorDictModule, TensorDictParams
 from tensordict.utils import _zip_strict, is_seq_of_nested_key
 from torch import nn
@@ -364,6 +358,7 @@ class DataLoadingPrimer(TensorDictPrimer):
         use_buffer: bool | None = None,
         auto_batch_size: bool = True,
         repeats: int | None = None,
+        device: torch.device | None = None,
     ):
         self.dataloader = dataloader
         if repeats is None:
@@ -385,7 +380,7 @@ class DataLoadingPrimer(TensorDictPrimer):
         self.endless_dataloader = self._endless_iter(self.dataloader)
 
         if stack_method is None:
-            stack_method = maybe_dense_stack
+            stack_method = lazy_stack
         elif stack_method == "as_nested_tensor":
             stack_method = as_nested_tensor
         elif stack_method == "as_padded_tensor":
@@ -424,6 +419,7 @@ class DataLoadingPrimer(TensorDictPrimer):
             expand_specs=None,
             single_default_value=True,
             call_before_env_reset=True,
+            device=device,
         )
         self._reset_key = "_reset"
 
@@ -432,10 +428,14 @@ class DataLoadingPrimer(TensorDictPrimer):
         while True:
             yield from obj
 
+    # def _reset_env_preprocess(self, tensordict: TensorDictBase) -> TensorDictBase:
+    #     td = super()._reset_env_preprocess(tensordict)
+    #     return lazy_stack(list(td.unbind(0)))
+    #
     def _load_from_dataloader(self, reset: torch.Tensor | None = None):
         """Loads a single element from the dataloader, or alternatively from the buffer.
 
-        If `reset` is passed, the one element per reset will be loaded.
+        If `reset` is passed, then one element per reset will be loaded.
         """
         if reset is not None:
             if not reset.any():
@@ -444,8 +444,16 @@ class DataLoadingPrimer(TensorDictPrimer):
                 loaded = [self._load_from_dataloader() for i in range(reset.sum())]
                 return self.stack_method(loaded)
 
+        primers = getattr(self, "primers", None)
+        if primers is not None:
+            device = self.primers.device
+        else:
+            device = None
+
         if self.use_buffer and len(self._queue) > 0:
             result = self._queue.popleft()
+            if result.device != device:
+                result = result.to(device)
             return result
 
         data = next(self.endless_dataloader)
@@ -454,7 +462,10 @@ class DataLoadingPrimer(TensorDictPrimer):
         # TODO: one could rename the keys too
         if isinstance(data, Mapping):
             out = TensorDict.from_dict(
-                data, auto_batch_size=self.auto_batch_size, batch_dims=1
+                data,
+                auto_batch_size=self.auto_batch_size,
+                batch_dims=1,
+                device=device,
             )
         elif self.data_keys is None:
             raise RuntimeError(
@@ -467,12 +478,14 @@ class DataLoadingPrimer(TensorDictPrimer):
                 {k: val for k, val in _zip_strict(self.data_keys, data)},
                 auto_batch_size=self.auto_batch_size,
                 batch_dims=1,
+                device=device,
             )
         elif len(self.data_keys) == 1:
             out = TensorDict.from_dict(
                 {self.data_keys[0]: data},
                 auto_batch_size=self.auto_batch_size,
                 batch_dims=1,
+                device=device,
             )
         else:
             raise ValueError(
