@@ -5,8 +5,9 @@
 from __future__ import annotations
 
 import abc
+import weakref
 from abc import abstractmethod
-from typing import Callable, TypeVar
+from typing import Any, Callable, TypeVar
 
 import torch
 from tensordict import TensorDictBase
@@ -43,6 +44,25 @@ class LocalWeightUpdaterBase(metaclass=abc.ABCMeta):
         :meth:`~torchrl.collectors.DataCollectorBase.update_policy_weights_`.
 
     """
+
+    _collector_wr: Any = None
+
+    def register_collector(self, collector: DataCollectorBase):  # noqa
+        """Register a collector in the updater.
+
+        Once registered, the updater will not accept another collector.
+
+        Args:
+            collector (DataCollectorBase): The collector to register.
+
+        """
+        if self._collector_wr is not None:
+            raise RuntimeError("Cannot register collector twice.")
+        self._collector_wr = weakref.ref(collector)
+
+    @property
+    def collector(self) -> torchrl.collectors.DataCollectorBase:  # noqa
+        return self._collector_wr() if self._collector_wr is not None else None
 
     @abstractmethod
     def _get_server_weights(self) -> TensorDictBase:
@@ -104,11 +124,32 @@ class RemoteWeightUpdaterBase(metaclass=abc.ABCMeta):
 
     Methods:
         update_weights: Updates the weights on specified or all remote workers.
+        register_collector: Registers a collector. This should be called automatically by the collector
+            upon registration of the updater.
 
     .. seealso:: :class:`~torchrl.collectors.LocalWeightsUpdaterBase` and
         :meth:`~torchrl.collectors.DataCollectorBase.update_policy_weights_`.
 
     """
+
+    _collector_wr: Any = None
+
+    def register_collector(self, collector: DataCollectorBase):  # noqa
+        """Register a collector in the updater.
+
+        Once registered, the updater will not accept another collector.
+
+        Args:
+            collector (DataCollectorBase): The collector to register.
+
+        """
+        if self._collector_wr is not None:
+            raise RuntimeError("Cannot register collector twice.")
+        self._collector_wr = weakref.ref(collector)
+
+    @property
+    def collector(self) -> torch.collector.DataCollectorBase:  # noqa
+        return self._collector_wr() if self._collector_wr is not None else None
 
     @abstractmethod
     def _sync_weights_with_worker(
