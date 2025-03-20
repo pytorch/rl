@@ -925,6 +925,18 @@ def test_lmhead_actorvalueoperator(device):
 @pytest.mark.skipif(not _has_transformers, reason="missing transformers dependencies")
 @pytest.mark.skipif(not _has_vllm, reason="missing vllm dependencies")
 class TestLLMActor:
+    @pytest.fixture(scope="module")
+    def vllm_instance(self):
+        try:
+            import vllm
+        except ImportError:
+            pytest.skip(reason="missing vllm")
+
+        llm_model = vllm.LLM("gpt2")
+        tokenizer = llm_model.get_tokenizer()
+        tokenizer.pad_token = tokenizer.eos_token
+        return llm_model
+
     @pytest.mark.parametrize(
         "from_text, generate, return_log_probs, tokens, attention_mask",
         [
@@ -1008,12 +1020,17 @@ class TestLLMActor:
         ],
     )
     def test_from_vllm(
-        self, from_text, generate, return_log_probs, tokens, attention_mask
+        self,
+        from_text,
+        generate,
+        return_log_probs,
+        tokens,
+        attention_mask,
+        vllm_instance,
     ):
         torch.manual_seed(0)
-        from vllm import LLM
 
-        model = LLM(model="facebook/opt-125m")
+        model = vllm_instance
         m = from_vllm(
             model,
             from_text=from_text,
@@ -1184,11 +1201,12 @@ class TestLLMActor:
             (True, False, torch.randint(1024, (1, 10)), None),
         ],
     )
-    def test_from_vllm_logprobs(self, from_text, tokens, attention_mask, pad_output):
+    def test_from_vllm_logprobs(
+        self, from_text, tokens, attention_mask, pad_output, vllm_instance
+    ):
         torch.manual_seed(0)
-        from vllm import LLM
 
-        model = LLM(model="facebook/opt-125m")
+        model = vllm_instance
         m_generate = from_vllm(
             model,
             from_text=from_text,
@@ -1234,22 +1252,13 @@ class TestLLMActor:
             td_generate.log_probs, td_logprobs.log_probs, rtol=1e-2, atol=1e-2
         )
 
-    @pytest.fixture(scope="module")
-    def llm_model(self):
-        import vllm
-
-        llm_model = vllm.LLM("gpt2")
-        tokenizer = llm_model.get_tokenizer()
-        tokenizer.pad_token = tokenizer.eos_token
-        return llm_model
-
     @pytest.mark.parametrize("pad", [True, False])
     @pytest.mark.parametrize("generate", [True, False])
     @pytest.mark.parametrize("use_tensorclass", [True, False])
-    def test_vllm_batch_run(self, pad, generate, use_tensorclass, llm_model):
+    def test_vllm_batch_run(self, pad, generate, use_tensorclass, vllm_instance):
         # Test generate - padding combinations
         policy = from_vllm(
-            llm_model,
+            vllm_instance,
             from_text=True,
             generate=generate,
             return_log_probs=True,
@@ -1314,12 +1323,9 @@ class TestLLMActor:
         else:
             assert isinstance(tokens, list)
 
-    def test_vllm_collection(self):
-        from vllm import LLM
-
-        llm = LLM("gpt2")
+    def test_vllm_collection(self, vllm_instance):
         policy = from_vllm(
-            llm,
+            vllm_instance,
             from_text=True,
             generate=True,
             return_log_probs=True,
