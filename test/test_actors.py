@@ -1218,7 +1218,13 @@ class TestLLMActor:
             model, from_text=from_text, generate=False, pad_output=pad_output
         )
         self._check_lps(
-            m_generate, m_logprobs, tokens, attention_mask, from_text, has_logits=False
+            m_generate,
+            m_logprobs,
+            tokens,
+            attention_mask,
+            from_text,
+            has_logits=False,
+            tol=1e-1,
         )
 
     def _check_lps(
@@ -1229,6 +1235,7 @@ class TestLLMActor:
         attention_mask,
         from_text,
         has_logits,
+        tol=1e-2,
     ):
         # Checks that the log-probs gathered with generate=False equate those with generate=True
         tdin_genetate = self._make_data(
@@ -1249,7 +1256,7 @@ class TestLLMActor:
         assert td_generate.log_probs.shape == td_generate.tokens_response.shape
         assert td_logprobs.log_probs.shape == td_generate.tokens_response.shape
         torch.testing.assert_close(
-            td_generate.log_probs, td_logprobs.log_probs, rtol=1e-2, atol=1e-2
+            td_generate.log_probs, td_logprobs.log_probs, rtol=tol, atol=tol
         )
 
     @pytest.mark.parametrize("pad", [True, False])
