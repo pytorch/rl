@@ -89,6 +89,15 @@ class DataLoadingPrimer(TensorDictPrimer):
 
     Args:
         dataloader (Iterable[Any]): The dataloader to load data from.
+            During collection, we will attempt to convert it into a tensordict using
+            :func:`~tensordict.from_dict` or a similar function.
+            If the dataloader has a `batch_size` attribute, it is assumed that the output will have a batch-size (i.e.,
+            that `TensorDict` can figure out how many samples are present through `auto_batch_size=True`). If that is
+            the case, the data collected from the dataloader will be put in a queue and delivered progressively such that
+            the number of samples equates the `batch_size` argument of the Primer (see :attr:`batch_size` argument
+            below).
+            If the dataloader does not have a batch_size argument (or `dataloader.batch_size=0`), we assume that each
+            sample is a single item.
 
     Keyword Args:
         primers (Composite | None, optional): The primers to use for each key in the dataloader. Defaults to None.
@@ -101,12 +110,18 @@ class DataLoadingPrimer(TensorDictPrimer):
             ensures that `next()` is called on the dataloader only when necessary, and that elements of the dataset
             are loaded in order.
             Defaults to ``True`` whenever the batch-size of the dataloader is greater than 1.
-        auto_batch_size (bool, optional): If ``True`` (default if `dataloader.batch_size > 0`), the batch size of the
-            tensordict returned by the transform will be automatically determined assuming that there is a single batch
-            dimension.
         repeats (int, optional): How many times the same sample needs to appear successively. This can be useful in
             situations like GRPO where a single prompt is used multiple times to estimate the advantage using Monte-Carlo
             samples (rather than an advantage module).
+        batch_size (int, torch.Size or None): the batch-size of the data delivered by the transform.
+            This is somewhat unrelated to the batch-size of the dataloader, in the sense that this number may or may
+            not match the DL's batch size.
+            If left empty or 0, the transform will output as many samples as the input tensordict asks for (e.g.,
+            passing a `TensorDict(batch_size=(3,))` to the :meth:`~.reset` method will give 3 sampled out of the
+            dataloader).
+
+            .. note:: The batch-size of the Primer must match the batch-size of the parent environment (typically a
+                wrapper around :class:`~torchrl.envs.LLMEnv`).
 
     Attributes:
         dataloader (Iterable[Any]): The dataloader to load data from.
