@@ -174,7 +174,10 @@ class EnvMetaData:
         specs = env.specs.to("cpu")
 
         batch_size = env.batch_size
-        env_str = str(env)
+        try:
+            env_str = str(env)
+        except Exception:
+            env_str = f"{env.__class__.__name__}()"
         device = env.device
         specs = specs.to("cpu")
         batch_locked = env.batch_locked

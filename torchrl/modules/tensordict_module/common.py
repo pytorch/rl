@@ -120,6 +120,9 @@ class SafeModule(TensorDictModule):
             If this value is out of bounds, it is projected back onto the
             desired space using the :obj:`TensorSpec.project`
             method. Default is ``False``.
+        inplace (bool or str, optional): if `True`, the input tensordict is modified in-place. If `False`, a new empty
+            :class:`~tensordict.TensorDict` instance is created. If `"empty"`, `input.empty()` is used instead (ie, the
+            output preserves type, device and batch-size). Defaults to `True`.
 
     Embedding a neural network in a TensorDictModule only requires to specify the input and output keys. The domain spec can
         be passed along if needed. TensorDictModule support functional and regular :obj:`nn.Module` objects. In the functional
@@ -200,8 +203,9 @@ class SafeModule(TensorDictModule):
         out_keys: Iterable[str],
         spec: TensorSpec | None = None,
         safe: bool = False,
+        inplace: bool | str = True,
     ):
-        super().__init__(module, in_keys, out_keys)
+        super().__init__(module, in_keys, out_keys, inplace=inplace)
         self.register_spec(safe=safe, spec=spec)
 
     def register_spec(self, safe, spec):
