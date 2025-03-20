@@ -101,7 +101,7 @@ if __name__ == "__main__":
         reset_at_each_iter=False,
         device=device,
         storing_device="cpu",
-        remote_weights_updater=MPSRemoteWeightUpdater(policy_weights, 2),
+        remote_weight_updater=MPSRemoteWeightUpdater(policy_weights, 2),
         # use_buffers=False,
         # cat_results="stack",
     )

@@ -3526,7 +3526,7 @@ class TestPolicyFactory:
             reset_at_each_iter=False,
             device=device,
             storing_device="cpu",
-            remote_weights_updater=self.MPSRemoteWeightUpdater(policy_weights, 2),
+            remote_weight_updater=self.MPSRemoteWeightUpdater(policy_weights, 2),
         )
 
         collector.update_policy_weights_()
