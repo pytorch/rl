@@ -6,18 +6,20 @@ from __future__ import annotations
 
 from collections import deque
 from collections.abc import Mapping
-from copy import copy, deepcopy
+from copy import copy
 from typing import Any, Callable, Iterable, Literal
 
 import torch
 from tensordict import lazy_stack, NestedKey, TensorDict, TensorDictBase, unravel_key
-from tensordict.nn import ProbabilisticTensorDictModule, TensorDictParams
+from tensordict.nn import (
+    ProbabilisticTensorDictModule,
+    ProbabilisticTensorDictSequential,
+)
 from tensordict.utils import _zip_strict, is_seq_of_nested_key
-from torch import nn
 
 from torchrl.data.tensor_specs import Composite, NonTensor, TensorSpec, Unbounded
 from torchrl.envs.transforms.transforms import TensorDictPrimer, Transform
-from torchrl.envs.transforms.utils import _set_missing_tolerance, _stateless_param
+from torchrl.envs.transforms.utils import _set_missing_tolerance
 from torchrl.envs.utils import make_composite_from_td
 
 
@@ -499,6 +501,10 @@ class DataLoadingPrimer(TensorDictPrimer):
             )
             return self._queue.popleft()
         return out
+
+    def __repr__(self) -> str:
+        class_name = self.__class__.__name__
+        return f"{class_name}(primers={self.primers}, dataloader={self.dataloader})"
 
 
 class KLRewardTransform(Transform):
