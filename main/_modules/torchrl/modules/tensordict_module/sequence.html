@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+49a8a42) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+7df8317) &#x25BC</span></a>
     </div>
     
 
@@ -449,6 +449,9 @@
 <span class="sd">            Also, if the input tensordict is a lazy stack of tensordicts AND if partial_tolerant is ``True`` AND if the</span>
 <span class="sd">            stack does not have the required keys, then SafeSequential will scan through the sub-tensordicts</span>
 <span class="sd">            looking for those that have the required keys, if any.</span>
+<span class="sd">        inplace (bool or str, optional): if `True`, the input tensordict is modified in-place. If `False`, a new empty</span>
+<span class="sd">            :class:`~tensordict.TensorDict` instance is created. If `&quot;empty&quot;`, `input.empty()` is used instead (ie, the</span>
+<span class="sd">            output preserves type, device and batch-size). Defaults to `None` (relies on sub-modules).</span>
 
 <span class="sd">    TensorDictSequence supports functional, modular and vmap coding:</span>
 <span class="sd">    Examples:</span>
@@ -528,6 +531,7 @@
         <span class="bp">self</span><span class="p">,</span>
         <span class="o">*</span><span class="n">modules</span><span class="p">:</span> <span class="n">TensorDictModule</span><span class="p">,</span>
         <span class="n">partial_tolerant</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">inplace</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">partial_tolerant</span> <span class="o">=</span> <span class="n">partial_tolerant</span>
 
@@ -545,6 +549,7 @@
             <span class="n">module</span><span class="o">=</span><span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">modules</span><span class="p">)),</span>
             <span class="n">in_keys</span><span class="o">=</span><span class="n">in_keys</span><span class="p">,</span>
             <span class="n">out_keys</span><span class="o">=</span><span class="n">out_keys</span><span class="p">,</span>
+            <span class="n">inplace</span><span class="o">=</span><span class="n">inplace</span><span class="p">,</span>
         <span class="p">)</span></div>
 </pre></div>
 
@@ -622,7 +627,7 @@
 	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
 	  if (downloadNote.length >= 1) {
 	      var tutorialUrl = $("#tutorial-type").text();
-	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
 		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
 		  notebookDownloadPath = notebookLink.split('_downloads')[1],
 		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;

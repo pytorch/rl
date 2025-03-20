@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.collectors
+
+
+RayRemoteWeightUpdater
+======================
+
+.. autoclass:: RayRemoteWeightUpdater
+    :members:
+    :inherited-members:

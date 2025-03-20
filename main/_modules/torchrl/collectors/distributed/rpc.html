@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+49a8a42) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+7df8317) &#x25BC</span></a>
     </div>
     
 
@@ -467,6 +467,10 @@
     <span class="n">DEFAULT_EXPLORATION_TYPE</span><span class="p">,</span>
     <span class="n">MultiSyncDataCollector</span><span class="p">,</span>
     <span class="n">SyncDataCollector</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.weight_update</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">LocalWeightUpdaterBase</span><span class="p">,</span>
+    <span class="n">RemoteWeightUpdaterBase</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.env_creator</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvCreator</span>
@@ -683,6 +687,14 @@
 <span class="sd">            device used to pass data to main.</span>
 <span class="sd">        tensorpipe_options (dict, optional): a dictionary of keyword argument</span>
 <span class="sd">            to pass to :class:`torch.distributed.rpc.TensorPipeRpcBackendOption`.</span>
+<span class="sd">        local_weight_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`</span>
+<span class="sd">            or its subclass, responsible for updating the policy weights on the local inference worker. This is</span>
+<span class="sd">            typically not used in :class:`~torchrl.collectors.distrbibuted.RPCDataCollector` as it focuses on</span>
+<span class="sd">            distributed environments.</span>
+<span class="sd">        remote_weight_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`</span>
+<span class="sd">            or its subclass, responsible for updating the policy weights on remote inference workers using RPC.</span>
+<span class="sd">            If not provided, an :class:`~torchrl.collectors.distributed.RPCRemoteWeightUpdater` will be used by default, which</span>
+<span class="sd">            handles weight synchronization via RPC.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
@@ -717,6 +729,8 @@
         <span class="n">tcp_port</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">visible_devices</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">tensorpipe_options</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">remote_weight_updater</span><span class="p">:</span> <span class="n">RemoteWeightUpdaterBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">local_weight_updater</span><span class="p">:</span> <span class="n">LocalWeightUpdaterBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="k">if</span> <span class="n">collector_class</span> <span class="o">==</span> <span class="s2">&quot;async&quot;</span><span class="p">:</span>
             <span class="n">collector_class</span> <span class="o">=</span> <span class="n">MultiaSyncDataCollector</span>
@@ -814,6 +828,16 @@
                 <span class="n">tensorpipe_options</span>
             <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_init</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">remote_weight_updater</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">remote_weight_updater</span> <span class="o">=</span> <span class="n">RPCRemoteWeightUpdater</span><span class="p">(</span>
+                <span class="n">collector_infos</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">collector_infos</span><span class="p">,</span>
+                <span class="n">collector_class</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">collector_class</span><span class="p">,</span>
+                <span class="n">collector_rrefs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">collector_rrefs</span><span class="p">,</span>
+                <span class="n">policy_weights</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span><span class="p">,</span>
+                <span class="n">num_workers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">local_weight_updater</span> <span class="o">=</span> <span class="n">local_weight_updater</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">remote_weight_updater</span> <span class="o">=</span> <span class="n">remote_weight_updater</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">device</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]:</span>
@@ -1076,7 +1100,11 @@
                         <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span><span class="p">[</span><span class="n">j</span><span class="p">]</span>
                         <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_weight_update_interval</span>
                     <span class="p">):</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">([</span><span class="n">j</span><span class="p">],</span> <span class="n">wait</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_VERBOSE</span><span class="p">:</span>
+                            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                                <span class="sa">f</span><span class="s2">&quot;Updating policy of worker </span><span class="si">{</span><span class="n">j</span><span class="si">}</span><span class="s2"> with wait=False&quot;</span>
+                            <span class="p">)</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">worker_ids</span><span class="o">=</span><span class="p">[</span><span class="n">j</span><span class="p">],</span> <span class="n">wait</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
             <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_weight_update_interval</span> <span class="o">&gt;</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
                 <span class="n">ranks</span> <span class="o">=</span> <span class="p">[</span>
                     <span class="mi">1</span>
@@ -1084,29 +1112,11 @@
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span><span class="p">[</span><span class="n">j</span><span class="p">]</span>
                     <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_weight_update_interval</span>
                 <span class="p">]</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">ranks</span><span class="p">,</span> <span class="n">wait</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-
-<div class="viewcode-block" id="RPCDataCollector.update_policy_weights_"><a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RPCDataCollector.html#torchrl.collectors.distributed.RPCDataCollector.update_policy_weights_">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">update_policy_weights_</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">workers</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">wait</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">workers</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">workers</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">))</span>
-        <span class="n">futures</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">workers</span><span class="p">:</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_VERBOSE</span><span class="p">:</span>
-                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;calling update on worker </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-            <span class="n">futures</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                <span class="n">rpc</span><span class="o">.</span><span class="n">rpc_async</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">collector_infos</span><span class="p">[</span><span class="n">i</span><span class="p">],</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">collector_class</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">,</span>
-                    <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">collector_rrefs</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span><span class="o">.</span><span class="n">detach</span><span class="p">()),</span>
-                <span class="p">)</span>
-            <span class="p">)</span>
-        <span class="k">if</span> <span class="n">wait</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">workers</span><span class="p">:</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_VERBOSE</span><span class="p">:</span>
-                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;waiting for worker </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-                <span class="n">futures</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_VERBOSE</span><span class="p">:</span>
-                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;got it!&quot;</span><span class="p">)</span></div>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Updating policy of workers </span><span class="si">{</span><span class="n">ranks</span><span class="si">}</span><span class="s2"> with wait=True&quot;</span>
+                    <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">worker_ids</span><span class="o">=</span><span class="n">ranks</span><span class="p">,</span> <span class="n">wait</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_next_async_rpc</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_VERBOSE</span><span class="p">:</span>
@@ -1119,7 +1129,7 @@
             <span class="n">future</span><span class="p">,</span> <span class="n">i</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
             <span class="k">if</span> <span class="n">future</span><span class="o">.</span><span class="n">done</span><span class="p">():</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">update_after_each_batch</span><span class="p">:</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">workers</span><span class="o">=</span><span class="p">(</span><span class="n">i</span><span class="p">,),</span> <span class="n">wait</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">worker_ids</span><span class="o">=</span><span class="p">(</span><span class="n">i</span><span class="p">,),</span> <span class="n">wait</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_VERBOSE</span><span class="p">:</span>
                     <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;future </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> is done&quot;</span><span class="p">)</span>
                 <span class="n">data</span> <span class="o">=</span> <span class="n">future</span><span class="o">.</span><span class="n">value</span><span class="p">()</span>
@@ -1213,6 +1223,105 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown launcher </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">launcher</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_shutdown</span> <span class="o">=</span> <span class="kc">True</span></div>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">RPCRemoteWeightUpdater</span><span class="p">(</span><span class="n">RemoteWeightUpdaterBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A remote weight updater for synchronizing policy weights across remote workers using RPC.</span>
+
+<span class="sd">    The `RPCRemoteWeightUpdater` class provides a mechanism for updating the weights of a policy</span>
+<span class="sd">    across remote inference workers using RPC. It is designed to work with the :class:`~torchrl.collectors.distributed.RPCDataCollector`</span>
+<span class="sd">    to ensure that each worker receives the latest policy weights.</span>
+<span class="sd">    This class is typically used in distributed data collection scenarios where remote workers</span>
+<span class="sd">    are managed via RPC and need to be kept in sync with the central policy weights.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        collector_infos: Information about the collectors, used for RPC communication.</span>
+<span class="sd">        collector_class: The class of the collectors being used.</span>
+<span class="sd">        collector_rrefs: Remote references to the collectors.</span>
+<span class="sd">        policy_weights (TensorDictBase): The current weights of the policy that need to be distributed</span>
+<span class="sd">            to the workers.</span>
+<span class="sd">        num_workers (int): The number of remote workers that will receive the updated policy weights.</span>
+
+<span class="sd">    Methods:</span>
+<span class="sd">        update_weights: Updates the weights on specified or all remote workers using RPC.</span>
+<span class="sd">        all_worker_ids: Returns a list of all worker identifiers (not implemented in this class).</span>
+<span class="sd">        _sync_weights_with_worker: Synchronizes the server weights with a specific worker (not implemented).</span>
+<span class="sd">        _get_server_weights: Retrieves the latest weights from the server (not implemented).</span>
+<span class="sd">        _maybe_map_weights: Optionally maps server weights before distribution (not implemented).</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        This class assumes that the server weights can be directly applied to the remote workers</span>
+<span class="sd">        without any additional processing. If your use case requires more complex weight mapping or</span>
+<span class="sd">        synchronization logic, consider extending `RemoteWeightUpdaterBase` with a custom implementation.</span>
+
+<span class="sd">    .. seealso:: :class:`~torchrl.collectors.RemoteWeightUpdaterBase` and</span>
+<span class="sd">        :class:`~torchrl.collectors.distributed.RPCDataCollector`.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">_VERBOSE</span> <span class="o">=</span> <span class="n">VERBOSE</span>  <span class="c1"># for debugging</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">collector_infos</span><span class="p">,</span>
+        <span class="n">collector_class</span><span class="p">,</span>
+        <span class="n">collector_rrefs</span><span class="p">,</span>
+        <span class="n">policy_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+        <span class="n">num_workers</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">collector_infos</span> <span class="o">=</span> <span class="n">collector_infos</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">collector_class</span> <span class="o">=</span> <span class="n">collector_class</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">collector_rrefs</span> <span class="o">=</span> <span class="n">collector_rrefs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span> <span class="o">=</span> <span class="n">policy_weights</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">=</span> <span class="n">num_workers</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_sync_weights_with_worker</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">worker_id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_server_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_map_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">all_worker_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">update_weights</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">worker_ids</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="n">workers</span> <span class="o">=</span> <span class="n">worker_ids</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">workers</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="n">workers</span> <span class="o">=</span> <span class="p">[</span><span class="n">workers</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">workers</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">workers</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">workers</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">workers</span><span class="p">)</span>
+        <span class="n">futures</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span> <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">weights</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">workers</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_VERBOSE</span><span class="p">:</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;calling update on worker </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">futures</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">rpc</span><span class="o">.</span><span class="n">rpc_async</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">collector_infos</span><span class="p">[</span><span class="n">i</span><span class="p">],</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">collector_class</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">,</span>
+                    <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">collector_rrefs</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">weights</span><span class="p">),</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;wait&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">workers</span><span class="p">:</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_VERBOSE</span><span class="p">:</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;waiting for worker </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="n">futures</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_VERBOSE</span><span class="p">:</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;got it!&quot;</span><span class="p">)</span>
 </pre></div>
 
              </article>
@@ -1289,7 +1398,7 @@
 	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
 	  if (downloadNote.length >= 1) {
 	      var tutorialUrl = $("#tutorial-type").text();
-	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
 		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
 		  notebookDownloadPath = notebookLink.split('_downloads')[1],
 		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;

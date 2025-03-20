@@ -39,7 +39,7 @@
   <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="DataCollectorBase" href="generated/torchrl.collectors.DataCollectorBase.html" />
+    <link rel="next" title="LocalWeightUpdaterBase" href="generated/torchrl.collectors.LocalWeightUpdaterBase.html" />
     <link rel="prev" title="API Reference" href="index.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.7.0+49a8a42) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.7.0+7df8317) &#x25BC</span></a>
     </div>
     
 
@@ -554,6 +554,79 @@ try to limit the cases where a deepcopy will be executed. The following chart sh
 <p><span class="caption-text">Policy copy decision tree in Collectors.</span><a class="headerlink" href="#id1" title="Permalink to this image">¶</a></p>
 </figcaption>
 </figure>
+<section id="weight-synchronization-in-distributed-environments">
+<h3>Weight Synchronization in Distributed Environments<a class="headerlink" href="#weight-synchronization-in-distributed-environments" title="Permalink to this heading">¶</a></h3>
+<p>In distributed and multiprocessed environments, ensuring that all instances of a policy are synchronized with the
+latest trained weights is crucial for consistent performance. The API introduces a flexible and extensible
+mechanism for updating policy weights across different devices and processes, accommodating various deployment scenarios.</p>
+</section>
+<section id="local-and-remote-weight-updaters">
+<h3>Local and Remote Weight Updaters<a class="headerlink" href="#local-and-remote-weight-updaters" title="Permalink to this heading">¶</a></h3>
+<p>The weight synchronization process is facilitated by two main components: <a class="reference internal" href="generated/torchrl.collectors.LocalWeightUpdaterBase.html#torchrl.collectors.LocalWeightUpdaterBase" title="torchrl.collectors.LocalWeightUpdaterBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">LocalWeightUpdaterBase</span></code></a>
+and <a class="reference internal" href="generated/torchrl.collectors.RemoteWeightUpdaterBase.html#torchrl.collectors.RemoteWeightUpdaterBase" title="torchrl.collectors.RemoteWeightUpdaterBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">RemoteWeightUpdaterBase</span></code></a>. These base classes provide a structured interface for
+implementing custom weight update logic, allowing users to tailor the synchronization process to their specific needs.</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="generated/torchrl.collectors.LocalWeightUpdaterBase.html#torchrl.collectors.LocalWeightUpdaterBase" title="torchrl.collectors.LocalWeightUpdaterBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">LocalWeightUpdaterBase</span></code></a>: This component is responsible for updating the policy weights on
+the local inference worker. It is particularly useful when the training and inference occur on the same machine but on
+different devices. Users can extend this class to define how weights are fetched from a server and applied locally.
+It is also the extension point for collectors where the workers need to ask for weight updates (in contrast with
+situations where the server decides when to update the worker policies).</p></li>
+<li><p><a class="reference internal" href="generated/torchrl.collectors.RemoteWeightUpdaterBase.html#torchrl.collectors.RemoteWeightUpdaterBase" title="torchrl.collectors.RemoteWeightUpdaterBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">RemoteWeightUpdaterBase</span></code></a>: This component handles the distribution of policy weights to
+remote inference workers. It is essential in distributed systems where multiple workers need to be kept in sync with
+the central policy. Users can extend this class to implement custom logic for synchronizing weights across a network of
+devices or processes.</p></li>
+</ul>
+</section>
+<section id="extending-the-updater-classes">
+<h3>Extending the Updater Classes<a class="headerlink" href="#extending-the-updater-classes" title="Permalink to this heading">¶</a></h3>
+<p>To accommodate diverse use cases, the API allows users to extend the updater classes with custom implementations.
+This flexibility is particularly beneficial in scenarios involving complex network architectures or specialized hardware
+setups. By implementing the abstract methods in these base classes, users can define how weights are retrieved,
+transformed, and applied, ensuring seamless integration with their existing infrastructure.</p>
+</section>
+<section id="default-implementations">
+<h3>Default Implementations<a class="headerlink" href="#default-implementations" title="Permalink to this heading">¶</a></h3>
+<p>For common scenarios, the API provides default implementations of these updaters, such as
+<a class="reference internal" href="generated/torchrl.collectors.VanillaLocalWeightUpdater.html#torchrl.collectors.VanillaLocalWeightUpdater" title="torchrl.collectors.VanillaLocalWeightUpdater"><code class="xref py py-class docutils literal notranslate"><span class="pre">VanillaLocalWeightUpdater</span></code></a>, <a class="reference internal" href="generated/torchrl.collectors.MultiProcessedRemoteWeightUpdate.html#torchrl.collectors.MultiProcessedRemoteWeightUpdate" title="torchrl.collectors.MultiProcessedRemoteWeightUpdate"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiProcessedRemoteWeightUpdate</span></code></a>,
+<a class="reference internal" href="generated/torchrl.collectors.RayRemoteWeightUpdater.html#torchrl.collectors.RayRemoteWeightUpdater" title="torchrl.collectors.RayRemoteWeightUpdater"><code class="xref py py-class docutils literal notranslate"><span class="pre">RayRemoteWeightUpdater</span></code></a>, <code class="xref py py-class docutils literal notranslate"><span class="pre">RPCRemoteWeightUpdater</span></code>, and
+<code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedRemoteWeightUpdater</span></code>.
+These implementations cover a range of typical deployment configurations, from single-device setups to large-scale
+distributed systems.</p>
+</section>
+<section id="practical-considerations">
+<h3>Practical Considerations<a class="headerlink" href="#practical-considerations" title="Permalink to this heading">¶</a></h3>
+<p>When designing a system that leverages this API, consider the following:</p>
+<ul class="simple">
+<li><p>Network Latency: In distributed environments, network latency can impact the speed of weight updates. Ensure that your
+implementation accounts for potential delays and optimizes data transfer where possible.</p></li>
+<li><p>Consistency: Ensure that all workers receive the updated weights in a timely manner to maintain consistency across
+the system. This is particularly important in reinforcement learning scenarios where stale weights can lead to
+suboptimal policy performance.</p></li>
+<li><p>Scalability: As your system grows, the weight synchronization mechanism should scale efficiently. Consider the
+overhead of broadcasting weights to a large number of workers and optimize the process to minimize bottlenecks.</p></li>
+</ul>
+<p>By leveraging the API, users can achieve robust and efficient weight synchronization across a variety of deployment
+scenarios, ensuring that their policies remain up-to-date and performant.</p>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.collectors.LocalWeightUpdaterBase.html#torchrl.collectors.LocalWeightUpdaterBase" title="torchrl.collectors.LocalWeightUpdaterBase"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LocalWeightUpdaterBase</span></code></a>()</p></td>
+<td><p>A base class for updating local policy weights from a server.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.collectors.RemoteWeightUpdaterBase.html#torchrl.collectors.RemoteWeightUpdaterBase" title="torchrl.collectors.RemoteWeightUpdaterBase"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RemoteWeightUpdaterBase</span></code></a>()</p></td>
+<td><p>A base class for updating remote policy weights on inference workers.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.collectors.VanillaLocalWeightUpdater.html#torchrl.collectors.VanillaLocalWeightUpdater" title="torchrl.collectors.VanillaLocalWeightUpdater"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VanillaLocalWeightUpdater</span></code></a>(weight_getter, ...)</p></td>
+<td><p>A simple implementation of <cite>LocalWeightUpdaterBase</cite> for updating local policy weights.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.collectors.MultiProcessedRemoteWeightUpdate.html#torchrl.collectors.MultiProcessedRemoteWeightUpdate" title="torchrl.collectors.MultiProcessedRemoteWeightUpdate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiProcessedRemoteWeightUpdate</span></code></a>(...)</p></td>
+<td><p>A remote weight updater for synchronizing policy weights across multiple processes or devices.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.collectors.RayRemoteWeightUpdater.html#torchrl.collectors.RayRemoteWeightUpdater" title="torchrl.collectors.RayRemoteWeightUpdater"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RayRemoteWeightUpdater</span></code></a>(policy_weights, ...)</p></td>
+<td><p>A remote weight updater for synchronizing policy weights across remote workers using Ray.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
 </section>
 <section id="collectors-and-replay-buffers-interoperability">
 <h2>Collectors and replay buffers interoperability<a class="headerlink" href="#collectors-and-replay-buffers-interoperability" title="Permalink to this heading">¶</a></h2>
@@ -720,7 +793,7 @@ see these warnings, they can be displayed by setting <code class="docutils liter
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="generated/torchrl.collectors.DataCollectorBase.html" class="btn btn-neutral float-right" title="DataCollectorBase" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="generated/torchrl.collectors.LocalWeightUpdaterBase.html" class="btn btn-neutral float-right" title="LocalWeightUpdaterBase" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
         <a href="index.html" class="btn btn-neutral" title="API Reference" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
@@ -759,7 +832,14 @@ see these warnings, they can be displayed by setting <code class="docutils liter
               <ul>
 <li><a class="reference internal" href="#">torchrl.collectors package</a><ul>
 <li><a class="reference internal" href="#collectors-and-batch-size">Collectors and batch size</a></li>
-<li><a class="reference internal" href="#collectors-and-policy-copies">Collectors and policy copies</a></li>
+<li><a class="reference internal" href="#collectors-and-policy-copies">Collectors and policy copies</a><ul>
+<li><a class="reference internal" href="#weight-synchronization-in-distributed-environments">Weight Synchronization in Distributed Environments</a></li>
+<li><a class="reference internal" href="#local-and-remote-weight-updaters">Local and Remote Weight Updaters</a></li>
+<li><a class="reference internal" href="#extending-the-updater-classes">Extending the Updater Classes</a></li>
+<li><a class="reference internal" href="#default-implementations">Default Implementations</a></li>
+<li><a class="reference internal" href="#practical-considerations">Practical Considerations</a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#collectors-and-replay-buffers-interoperability">Collectors and replay buffers interoperability</a></li>
 <li><a class="reference internal" href="#single-node-data-collectors">Single node data collectors</a></li>
 <li><a class="reference internal" href="#distributed-data-collectors">Distributed data collectors</a></li>
@@ -807,7 +887,7 @@ see these warnings, they can be displayed by setting <code class="docutils liter
 	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
 	  if (downloadNote.length >= 1) {
 	      var tutorialUrl = $("#tutorial-type").text();
-	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
 		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
 		  notebookDownloadPath = notebookLink.split('_downloads')[1],
 		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;

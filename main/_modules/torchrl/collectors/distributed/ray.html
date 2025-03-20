@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+49a8a42) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+7df8317) &#x25BC</span></a>
     </div>
     
 
@@ -443,6 +443,11 @@
     <span class="n">SyncDataCollector</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_NON_NN_POLICY_WEIGHTS</span><span class="p">,</span> <span class="n">split_trajectories</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.weight_update</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">LocalWeightUpdaterBase</span><span class="p">,</span>
+    <span class="n">RayRemoteWeightUpdater</span><span class="p">,</span>
+    <span class="n">RemoteWeightUpdaterBase</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReplayBuffer</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.env_creator</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvCreator</span>
@@ -676,9 +681,10 @@
 <span class="sd">            all workers will see their weights updated. For ``sync=False``,</span>
 <span class="sd">            only the worker from which the data has been gathered will be</span>
 <span class="sd">            updated.</span>
+<span class="sd">            This is equivalent to `max_weight_update_interval=0`.</span>
 <span class="sd">            Defaults to ``False``, i.e. updates have to be executed manually</span>
 <span class="sd">            through</span>
-<span class="sd">            ``torchrl.collectors.distributed.RayDistributedCollector.update_policy_weights_()``</span>
+<span class="sd">            :meth:`torchrl.collectors.DataCollector.update_policy_weights_`</span>
 <span class="sd">        max_weight_update_interval (int, optional): the maximum number of</span>
 <span class="sd">            batches that can be collected before the policy weights of a worker</span>
 <span class="sd">            is updated.</span>
@@ -692,6 +698,13 @@
 
 <span class="sd">            .. note:: although it is not enfoced (to allow users to implement their own replay buffer class), a</span>
 <span class="sd">                :class:`~torchrl.data.RayReplayBuffer` instance should be used here.</span>
+<span class="sd">        local_weight_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`</span>
+<span class="sd">            or its subclass, responsible for updating the policy weights on the local inference worker.</span>
+<span class="sd">            This is typically not used in :class:`~torchrl.collectors.RayCollector` as it focuses on distributed environments.</span>
+<span class="sd">        remote_weight_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`</span>
+<span class="sd">            or its subclass, responsible for updating the policy weights on remote inference workers managed by Ray.</span>
+<span class="sd">            If not provided, a :class:`~torchrl.collectors.RayRemoteWeightUpdater` will be used by default, leveraging</span>
+<span class="sd">            Ray&#39;s distributed capabilities.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; from torch import nn</span>
@@ -750,6 +763,8 @@
         <span class="n">update_after_each_batch</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="n">max_weight_update_interval</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
         <span class="n">replay_buffer</span><span class="p">:</span> <span class="n">ReplayBuffer</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">remote_weight_updater</span><span class="p">:</span> <span class="n">RemoteWeightUpdaterBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">local_weight_updater</span><span class="p">:</span> <span class="n">LocalWeightUpdaterBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch</span> <span class="o">=</span> <span class="n">frames_per_batch</span>
         <span class="k">if</span> <span class="n">remote_configs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -862,16 +877,19 @@
             <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_local_policy</span><span class="p">)</span>
             <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">policy_weights</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">lock_</span><span class="p">()</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">_NON_NN_POLICY_WEIGHTS</span><span class="p">)</span>
             <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">lock</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">remote_weight_updater</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">_NON_NN_POLICY_WEIGHTS</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span> <span class="o">=</span> <span class="n">policy_weights</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">collector_class</span> <span class="o">=</span> <span class="n">collector_class</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">collected_frames</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">split_trajs</span> <span class="o">=</span> <span class="n">split_trajs</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span> <span class="o">=</span> <span class="n">total_frames</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">num_collectors</span> <span class="o">=</span> <span class="n">num_collectors</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">update_after_each_batch</span> <span class="o">=</span> <span class="n">update_after_each_batch</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">max_weight_update_interval</span> <span class="o">=</span> <span class="n">max_weight_update_interval</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">collector_kwargs</span> <span class="o">=</span> <span class="p">(</span>
             <span class="n">collector_kwargs</span> <span class="k">if</span> <span class="n">collector_kwargs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">[{}]</span>
         <span class="p">)</span>
@@ -928,10 +946,18 @@
                 <span class="n">collector_kwargs</span><span class="p">,</span>
                 <span class="n">remote_configs</span><span class="p">,</span>
             <span class="p">)</span>
+        <span class="k">if</span> <span class="n">remote_weight_updater</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">remote_weight_updater</span> <span class="o">=</span> <span class="n">RayRemoteWeightUpdater</span><span class="p">(</span>
+                <span class="n">policy_weights</span><span class="o">=</span><span class="n">policy_weights</span><span class="p">,</span>
+                <span class="n">remote_collectors</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">,</span>
+                <span class="n">max_interval</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_weight_update_interval</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">remote_weight_updater</span> <span class="o">=</span> <span class="n">remote_weight_updater</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">local_weight_updater</span> <span class="o">=</span> <span class="n">local_weight_updater</span>
 
         <span class="c1"># Print info of all remote workers</span>
         <span class="n">pending_samples</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="n">e</span><span class="o">.</span><span class="n">print_remote_collector_info</span><span class="o">.</span><span class="n">remote</span><span class="p">()</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">()</span>
+            <span class="n">e</span><span class="o">.</span><span class="n">print_remote_collector_info</span><span class="o">.</span><span class="n">remote</span><span class="p">()</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span>
         <span class="p">]</span>
         <span class="n">ray</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">pending_samples</span><span class="p">)</span>
 
@@ -1026,14 +1052,15 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns local collector.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_local_policy</span></div>
 
-<div class="viewcode-block" id="RayCollector.remote_collectors"><a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.remote_collectors">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">remote_collectors</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">remote_collectors</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns list of remote collectors.&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_remote_collectors</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_remote_collectors</span>
 
 <div class="viewcode-block" id="RayCollector.stop_remote_collectors"><a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.stop_remote_collectors">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">stop_remote_collectors</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Stops all remote collectors.&quot;&quot;&quot;</span>
         <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_remote_collectors</span><span class="p">)):</span>
-            <span class="n">collector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">()</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+            <span class="n">collector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
             <span class="c1"># collector.__ray_terminate__.remote()  # This will kill the actor but let pending tasks finish</span>
             <span class="n">ray</span><span class="o">.</span><span class="n">kill</span><span class="p">(</span>
                 <span class="n">collector</span>
@@ -1071,14 +1098,11 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_sync_iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Collects one data batch per remote collector in each iteration.&quot;&quot;&quot;</span>
         <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">collected_frames</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span><span class="p">:</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">update_after_each_batch</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">update_after_each_batch</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_weight_update_interval</span> <span class="o">&gt;</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">()</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_collectors</span><span class="p">):</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
 
             <span class="c1"># Ask for batches to all remote workers.</span>
-            <span class="n">pending_tasks</span> <span class="o">=</span> <span class="p">[</span><span class="n">e</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">remote</span><span class="p">()</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">()]</span>
+            <span class="n">pending_tasks</span> <span class="o">=</span> <span class="p">[</span><span class="n">e</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">remote</span><span class="p">()</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">]</span>
 
             <span class="c1"># Wait for all rollouts</span>
             <span class="n">samples_ready</span> <span class="o">=</span> <span class="p">[]</span>
@@ -1103,15 +1127,6 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">collected_frames</span> <span class="o">+=</span> <span class="n">out_td</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
 
             <span class="k">yield</span> <span class="n">out_td</span>
-
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_weight_update_interval</span> <span class="o">&gt;</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
-                <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_collectors</span><span class="p">):</span>
-                    <span class="n">rank</span> <span class="o">=</span> <span class="n">j</span> <span class="o">+</span> <span class="mi">1</span>
-                    <span class="k">if</span> <span class="p">(</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span><span class="p">[</span><span class="n">j</span><span class="p">]</span>
-                        <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_weight_update_interval</span>
-                    <span class="p">):</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">rank</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_task</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
@@ -1141,19 +1156,19 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_async_iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Collects a data batch from a single remote collector in each iteration.&quot;&quot;&quot;</span>
         <span class="n">pending_tasks</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">collector</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">()):</span>
+        <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">collector</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">):</span>
             <span class="n">future</span> <span class="o">=</span> <span class="n">collector</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">remote</span><span class="p">()</span>
             <span class="n">pending_tasks</span><span class="p">[</span><span class="n">future</span><span class="p">]</span> <span class="o">=</span> <span class="n">index</span>
 
         <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">collected_frames</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span><span class="p">:</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="nb">len</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">pending_tasks</span><span class="o">.</span><span class="n">keys</span><span class="p">()))</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">()):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">len</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">pending_tasks</span><span class="o">.</span><span class="n">keys</span><span class="p">()))</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Missing pending tasks, something went wrong&quot;</span><span class="p">)</span>
 
             <span class="c1"># Wait for first worker to finish</span>
             <span class="n">wait_results</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">pending_tasks</span><span class="o">.</span><span class="n">keys</span><span class="p">()))</span>
             <span class="n">future</span> <span class="o">=</span> <span class="n">wait_results</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
             <span class="n">collector_index</span> <span class="o">=</span> <span class="n">pending_tasks</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">future</span><span class="p">)</span>
-            <span class="n">collector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">()[</span><span class="n">collector_index</span><span class="p">]</span>
+            <span class="n">collector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">[</span><span class="n">collector_index</span><span class="p">]</span>
 
             <span class="c1"># Retrieve single rollouts</span>
             <span class="n">out_td</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">future</span><span class="p">)</span>
@@ -1164,18 +1179,8 @@
 
             <span class="k">yield</span> <span class="n">out_td</span>
 
-            <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_collectors</span><span class="p">):</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">update_after_each_batch</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">worker_rank</span><span class="o">=</span><span class="n">collector_index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_weight_update_interval</span> <span class="o">&gt;</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
-                <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_collectors</span><span class="p">):</span>
-                    <span class="n">rank</span> <span class="o">=</span> <span class="n">j</span> <span class="o">+</span> <span class="mi">1</span>
-                    <span class="k">if</span> <span class="p">(</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span><span class="p">[</span><span class="n">j</span><span class="p">]</span>
-                        <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_weight_update_interval</span>
-                    <span class="p">):</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">rank</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">update_after_each_batch</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_weight_update_interval</span> <span class="o">&gt;</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">worker_ids</span><span class="o">=</span><span class="n">collector_index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
 
             <span class="c1"># Schedule a new collection task</span>
             <span class="n">future</span> <span class="o">=</span> <span class="n">collector</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">remote</span><span class="p">()</span>
@@ -1194,36 +1199,16 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_task</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
 
-<div class="viewcode-block" id="RayCollector.update_policy_weights_"><a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.update_policy_weights_">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">update_policy_weights_</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">worker_rank</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Updates the weights of the worker nodes.</span>
-
-<span class="sd">        Args:</span>
-<span class="sd">            worker_rank (int, optional): if provided, only this worker weights</span>
-<span class="sd">                will be updated.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># Update agent weights</span>
-        <span class="n">policy_weights_local_collector_ref</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span><span class="o">.</span><span class="n">detach</span><span class="p">())</span>
-
-        <span class="k">if</span> <span class="n">worker_rank</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">e</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">()):</span>
-                <span class="n">e</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">policy_weights_local_collector_ref</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">()[</span><span class="n">worker_rank</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
-                <span class="n">policy_weights_local_collector_ref</span>
-            <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span><span class="p">[</span><span class="n">worker_rank</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span></div>
-
 <div class="viewcode-block" id="RayCollector.set_seed"><a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.set_seed">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">static_seed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Calls parent method for each remote collector iteratively and returns final seed.&quot;&quot;&quot;</span>
-        <span class="k">for</span> <span class="n">collector</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">collector</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">:</span>
             <span class="n">seed</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">object_refs</span><span class="o">=</span><span class="n">collector</span><span class="o">.</span><span class="n">set_seed</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">seed</span><span class="p">,</span> <span class="n">static_seed</span><span class="p">))</span>
         <span class="k">return</span> <span class="n">seed</span></div>
 
 <div class="viewcode-block" id="RayCollector.state_dict"><a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.state_dict">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">OrderedDict</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Calls parent method for each remote collector and returns a list of results.&quot;&quot;&quot;</span>
         <span class="n">futures</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="n">collector</span><span class="o">.</span><span class="n">state_dict</span><span class="o">.</span><span class="n">remote</span><span class="p">()</span> <span class="k">for</span> <span class="n">collector</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">()</span>
+            <span class="n">collector</span><span class="o">.</span><span class="n">state_dict</span><span class="o">.</span><span class="n">remote</span><span class="p">()</span> <span class="k">for</span> <span class="n">collector</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span>
         <span class="p">]</span>
         <span class="n">results</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">object_refs</span><span class="o">=</span><span class="n">futures</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">results</span></div>
@@ -1233,8 +1218,8 @@
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">state_dict</span><span class="p">,</span> <span class="n">OrderedDict</span><span class="p">):</span>
             <span class="n">state_dicts</span> <span class="o">=</span> <span class="p">[</span><span class="n">state_dict</span><span class="p">]</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">state_dict</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
-            <span class="n">state_dicts</span> <span class="o">=</span> <span class="n">state_dict</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">())</span>
-        <span class="k">for</span> <span class="n">collector</span><span class="p">,</span> <span class="n">state_dict</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">(),</span> <span class="n">state_dicts</span><span class="p">):</span>
+            <span class="n">state_dicts</span> <span class="o">=</span> <span class="n">state_dict</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">collector</span><span class="p">,</span> <span class="n">state_dict</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">,</span> <span class="n">state_dicts</span><span class="p">):</span>
             <span class="n">collector</span><span class="o">.</span><span class="n">load_state_dict</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">state_dict</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="RayCollector.shutdown"><a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.shutdown">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -1321,7 +1306,7 @@
 	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
 	  if (downloadNote.length >= 1) {
 	      var tutorialUrl = $("#tutorial-type").text();
-	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
 		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
 		  notebookDownloadPath = notebookLink.split('_downloads')[1],
 		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;

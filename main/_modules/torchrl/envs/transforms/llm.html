@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+49a8a42) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+7df8317) &#x25BC</span></a>
     </div>
     
 
@@ -425,24 +425,24 @@
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">deque</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">copy</span><span class="p">,</span> <span class="n">deepcopy</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">Literal</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">maybe_dense_stack</span><span class="p">,</span>
-    <span class="n">NestedKey</span><span class="p">,</span>
-    <span class="n">TensorDict</span><span class="p">,</span>
-    <span class="n">TensorDictBase</span><span class="p">,</span>
-    <span class="n">unravel_key</span><span class="p">,</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">lazy_stack</span><span class="p">,</span> <span class="n">NestedKey</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">unravel_key</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ProbabilisticTensorDictModule</span><span class="p">,</span>
+    <span class="n">ProbabilisticTensorDictSequential</span><span class="p">,</span>
+    <span class="n">TensorDictParams</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProbabilisticTensorDictModule</span><span class="p">,</span> <span class="n">TensorDictParams</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_zip_strict</span><span class="p">,</span> <span class="n">is_seq_of_nested_key</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">NonTensor</span><span class="p">,</span> <span class="n">TensorSpec</span><span class="p">,</span> <span class="n">Unbounded</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictPrimer</span><span class="p">,</span> <span class="n">Transform</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_set_missing_tolerance</span><span class="p">,</span> <span class="n">_stateless_param</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">make_composite_from_td</span>
@@ -510,6 +510,15 @@
 
 <span class="sd">    Args:</span>
 <span class="sd">        dataloader (Iterable[Any]): The dataloader to load data from.</span>
+<span class="sd">            During collection, we will attempt to convert it into a tensordict using</span>
+<span class="sd">            :func:`~tensordict.from_dict` or a similar function.</span>
+<span class="sd">            If the dataloader has a `batch_size` attribute, it is assumed that the output will have a batch-size (i.e.,</span>
+<span class="sd">            that `TensorDict` can figure out how many samples are present through `auto_batch_size=True`). If that is</span>
+<span class="sd">            the case, the data collected from the dataloader will be put in a queue and delivered progressively such that</span>
+<span class="sd">            the number of samples equates the `batch_size` argument of the Primer (see :attr:`batch_size` argument</span>
+<span class="sd">            below).</span>
+<span class="sd">            If the dataloader does not have a batch_size argument (or `dataloader.batch_size=0`), we assume that each</span>
+<span class="sd">            sample is a single item.</span>
 
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        primers (Composite | None, optional): The primers to use for each key in the dataloader. Defaults to None.</span>
@@ -522,12 +531,21 @@
 <span class="sd">            ensures that `next()` is called on the dataloader only when necessary, and that elements of the dataset</span>
 <span class="sd">            are loaded in order.</span>
 <span class="sd">            Defaults to ``True`` whenever the batch-size of the dataloader is greater than 1.</span>
-<span class="sd">        auto_batch_size (bool, optional): If ``True`` (default if `dataloader.batch_size &gt; 0`), the batch size of the</span>
-<span class="sd">            tensordict returned by the transform will be automatically determined assuming that there is a single batch</span>
-<span class="sd">            dimension.</span>
 <span class="sd">        repeats (int, optional): How many times the same sample needs to appear successively. This can be useful in</span>
 <span class="sd">            situations like GRPO where a single prompt is used multiple times to estimate the advantage using Monte-Carlo</span>
 <span class="sd">            samples (rather than an advantage module).</span>
+<span class="sd">        batch_size (int, torch.Size or None): the batch-size of the data delivered by the transform.</span>
+<span class="sd">            This is somewhat unrelated to the batch-size of the dataloader, in the sense that this number may or may</span>
+<span class="sd">            not match the DL&#39;s batch size.</span>
+<span class="sd">            If left empty or 0, the transform will output as many samples as the input tensordict asks for (e.g.,</span>
+<span class="sd">            passing a `TensorDict(batch_size=(3,))` to the :meth:`~.reset` method will give 3 sampled out of the</span>
+<span class="sd">            dataloader).</span>
+
+<span class="sd">            .. note:: The batch-size of the Primer must match the batch-size of the parent environment (typically a</span>
+<span class="sd">                wrapper around :class:`~torchrl.envs.LLMEnv`).</span>
+
+<span class="sd">        group_repeats (bool, optional): if ``True``, the batch-size is multiplied by the number of repeats such that</span>
+<span class="sd">            all repeats are grouped in a single batch collected from the buffer. Defaults to ``False``.</span>
 
 <span class="sd">    Attributes:</span>
 <span class="sd">        dataloader (Iterable[Any]): The dataloader to load data from.</span>
@@ -783,30 +801,74 @@
         <span class="n">stack_method</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]</span>
         <span class="o">|</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;as_nested_tensor&quot;</span><span class="p">,</span> <span class="s2">&quot;as_padded_tensor&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">use_buffer</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">auto_batch_size</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">repeats</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">group_repeats</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dataloader</span> <span class="o">=</span> <span class="n">dataloader</span>
         <span class="k">if</span> <span class="n">repeats</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">repeats</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">repeats</span> <span class="o">=</span> <span class="n">repeats</span>
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="nb">getattr</span><span class="p">(</span><span class="n">dataloader</span><span class="p">,</span> <span class="s2">&quot;batch_size&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">use_buffer</span> <span class="ow">is</span> <span class="kc">None</span>
-        <span class="p">)</span> <span class="ow">or</span> <span class="n">repeats</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+
+        <span class="c1"># Determine batch-size</span>
+        <span class="c1">#  We must distinguish the batch-size of the DL and the batch size of the transform.</span>
+        <span class="c1">#  We may want more or less elements than the DL and the logic is slightly different so we</span>
+        <span class="c1">#  allow to recompose batches on the fly. If the DL has a batch-size, every element will be</span>
+        <span class="c1">#  unbound and stored in a queue. Otherwise, we get as many elements from the DL to fulfill</span>
+        <span class="c1">#  the required batch-size.</span>
+        <span class="c1">#</span>
+        <span class="c1">#  If the batch-size is passed, we will stack as many elements as necessary to fulfill this.</span>
+        <span class="c1">#  If not, we try to get it from the dataloader. Contrary to the dataloader, we will always</span>
+        <span class="c1">#  deliver the same batch-size (we create an infinite dataloader and reset when it&#39;s done),</span>
+        <span class="c1">#  whereas DLs with drop_last=False may return batches of different sizes.</span>
+        <span class="c1">#</span>
+        <span class="c1"># If the batch size passed to the transform is empty (torch.Size(())) or 0, we will consider that</span>
+        <span class="c1">#  the batch-size is determined on-the-fly.</span>
+        <span class="c1">#</span>
+        <span class="c1"># A batch-size of 0 in the dataloader means no batch-size.</span>
+        <span class="c1">#</span>
+        <span class="c1"># If needed, the various repeats can be grouped in a single batch through group_repeats.</span>
+        <span class="c1">#</span>
+        <span class="c1"># If auto_batch_size is on, we call auto_batch_size=True when doing TensorDict.from_dict:</span>
+        <span class="c1">#  That way we get a tensordict of the right batch-size.</span>
+        <span class="c1"># If the dataloader has no batch-size, we&#39;re not sure that we can determine the batch-size</span>
+        <span class="c1">#  automatically so we will consider that each element in the DL has a batch-size of 0 (ie,</span>
+        <span class="c1">#  a single non-batched element is returned at a time).</span>
+
+        <span class="k">if</span> <span class="n">batch_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">batch_size</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">dataloader</span><span class="p">,</span> <span class="s2">&quot;batch_size&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">auto_batch_size</span> <span class="o">=</span> <span class="n">batch_size</span> <span class="o">&gt;</span> <span class="mi">0</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">auto_batch_size</span> <span class="o">=</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">dataloader</span><span class="p">,</span> <span class="s2">&quot;batch_size&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">))</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">batch_size</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;batch_size must be an int, or a list / tuple of length &lt;=1.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">batch_size</span><span class="p">:</span>
+                <span class="n">batch_size</span> <span class="o">=</span> <span class="n">batch_size</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">batch_size</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="k">if</span> <span class="p">(</span><span class="n">batch_size</span> <span class="o">&gt;=</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">use_buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="n">repeats</span><span class="p">:</span>
             <span class="n">use_buffer</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="c1"># We deliver all the repeats in the same batch</span>
+        <span class="k">if</span> <span class="n">repeats</span> <span class="ow">and</span> <span class="n">group_repeats</span><span class="p">:</span>
+            <span class="n">batch_size</span> <span class="o">=</span> <span class="n">batch_size</span> <span class="o">*</span> <span class="n">repeats</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">use_buffer</span> <span class="o">=</span> <span class="n">use_buffer</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_buffer</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_queue</span> <span class="o">=</span> <span class="n">deque</span><span class="p">()</span>
 
-        <span class="c1"># No auto_batch_size if we know we have a single element</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">auto_batch_size</span> <span class="o">=</span> <span class="n">auto_batch_size</span> <span class="ow">and</span> <span class="p">(</span>
-            <span class="nb">getattr</span><span class="p">(</span><span class="n">dataloader</span><span class="p">,</span> <span class="s2">&quot;batch_size&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
-        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">auto_batch_size</span> <span class="o">=</span> <span class="n">auto_batch_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">((</span><span class="n">batch_size</span><span class="p">,))</span> <span class="k">if</span> <span class="n">batch_size</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">endless_dataloader</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_endless_iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataloader</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">stack_method</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">stack_method</span> <span class="o">=</span> <span class="n">maybe_dense_stack</span>
+            <span class="n">stack_method</span> <span class="o">=</span> <span class="n">lazy_stack</span>
         <span class="k">elif</span> <span class="n">stack_method</span> <span class="o">==</span> <span class="s2">&quot;as_nested_tensor&quot;</span><span class="p">:</span>
             <span class="n">stack_method</span> <span class="o">=</span> <span class="n">as_nested_tensor</span>
         <span class="k">elif</span> <span class="n">stack_method</span> <span class="o">==</span> <span class="s2">&quot;as_padded_tensor&quot;</span><span class="p">:</span>
@@ -826,12 +888,16 @@
                     <span class="k">for</span> <span class="n">data_key</span><span class="p">,</span> <span class="n">data_spec</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="n">data_keys</span><span class="p">,</span> <span class="n">data_specs</span><span class="p">)</span>
                 <span class="p">}</span>
             <span class="p">)</span>
+            <span class="k">if</span> <span class="n">batch_size</span><span class="p">:</span>
+                <span class="n">primers</span> <span class="o">=</span> <span class="n">batch_size</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">batch_size</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">data_keys</span> <span class="o">=</span> <span class="n">data_keys</span>
         <span class="k">elif</span> <span class="n">primers</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">data_keys</span> <span class="o">=</span> <span class="n">data_keys</span>
             <span class="c1"># We can get the primer from the dataloader itself</span>
             <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_load_from_dataloader</span><span class="p">()</span>
             <span class="n">primers</span> <span class="o">=</span> <span class="n">make_composite_from_td</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">dynamic_shape</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">batch_size</span><span class="p">:</span>
+                <span class="n">primers</span> <span class="o">=</span> <span class="n">primers</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">batch_size</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_queue</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">data_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">data_keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">primers</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
@@ -845,6 +911,7 @@
             <span class="n">expand_specs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
             <span class="n">single_default_value</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
             <span class="n">call_before_env_reset</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_reset_key</span> <span class="o">=</span> <span class="s2">&quot;_reset&quot;</span>
 
@@ -856,17 +923,25 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_load_from_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reset</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Loads a single element from the dataloader, or alternatively from the buffer.</span>
 
-<span class="sd">        If `reset` is passed, the one element per reset will be loaded.</span>
+<span class="sd">        If `reset` is passed, then one element per reset will be loaded.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">reset</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">reset</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;reset must have at least one True value.&quot;</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">reset</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-                <span class="n">loaded</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_load_from_dataloader</span><span class="p">()</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">reset</span><span class="o">.</span><span class="n">sum</span><span class="p">())]</span>
+                <span class="n">loaded</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_load_from_dataloader</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">reset</span><span class="o">.</span><span class="n">sum</span><span class="p">())]</span>
                 <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack_method</span><span class="p">(</span><span class="n">loaded</span><span class="p">)</span>
+
+        <span class="n">primers</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;primers&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">primers</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">primers</span><span class="o">.</span><span class="n">device</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">device</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_buffer</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_queue</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
             <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_queue</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">device</span><span class="p">:</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">result</span>
 
         <span class="n">data</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">endless_dataloader</span><span class="p">)</span>
@@ -875,7 +950,10 @@
         <span class="c1"># TODO: one could rename the keys too</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
             <span class="n">out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span>
-                <span class="n">data</span><span class="p">,</span> <span class="n">auto_batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">auto_batch_size</span><span class="p">,</span> <span class="n">batch_dims</span><span class="o">=</span><span class="mi">1</span>
+                <span class="n">data</span><span class="p">,</span>
+                <span class="n">auto_batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">auto_batch_size</span><span class="p">,</span>
+                <span class="n">batch_dims</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
@@ -888,12 +966,14 @@
                 <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">val</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_keys</span><span class="p">,</span> <span class="n">data</span><span class="p">)},</span>
                 <span class="n">auto_batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">auto_batch_size</span><span class="p">,</span>
                 <span class="n">batch_dims</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_keys</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
             <span class="n">out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span>
                 <span class="p">{</span><span class="bp">self</span><span class="o">.</span><span class="n">data_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span> <span class="n">data</span><span class="p">},</span>
                 <span class="n">auto_batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">auto_batch_size</span><span class="p">,</span>
                 <span class="n">batch_dims</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -903,10 +983,28 @@
             <span class="k">if</span> <span class="ow">not</span> <span class="n">out</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
                 <span class="n">out</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_queue</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
-                <span class="p">[</span><span class="n">d</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">out</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">repeats</span><span class="p">))]</span>
+                <span class="p">[</span><span class="n">d</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">repeats</span><span class="p">))</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">out</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)]</span>
             <span class="p">)</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_queue</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
-        <span class="k">return</span> <span class="n">out</span></div>
+        <span class="k">return</span> <span class="n">out</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_container</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">container</span><span class="p">:</span> <span class="n">Transform</span> <span class="o">|</span> <span class="n">EnvBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">set_container</span><span class="p">(</span><span class="n">container</span><span class="p">)</span>
+        <span class="c1"># Check batch size</span>
+        <span class="n">parent</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;parent&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="n">parent</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="n">parent</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span>
+        <span class="p">):</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;The parent env has a different batch size than the </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> transform.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="n">class_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">class_name</span><span class="si">}</span><span class="s2">(primers=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">primers</span><span class="si">}</span><span class="s2">, dataloader=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">dataloader</span><span class="si">}</span><span class="s2">)&quot;</span></div>
 
 
 <div class="viewcode-block" id="KLRewardTransform"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.KLRewardTransform.html#torchrl.envs.transforms.KLRewardTransform">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">KLRewardTransform</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
@@ -980,6 +1078,9 @@
         <span class="n">in_keys</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">out_keys</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">requires_grad</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">log_prob_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;sample_log_prob&quot;</span><span class="p">,</span>
+        <span class="n">action_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;action&quot;</span><span class="p">,</span>
+        <span class="n">functional</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="k">if</span> <span class="n">in_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">in_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">DEFAULT_IN_KEYS</span>
@@ -1005,36 +1106,46 @@
         <span class="c1"># update the in_keys for dispatch etc</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span> <span class="o">+</span> <span class="n">actor</span><span class="o">.</span><span class="n">in_keys</span>
 
+        <span class="bp">self</span><span class="o">.</span><span class="n">functional</span> <span class="o">=</span> <span class="n">functional</span>
         <span class="c1"># check that the model has parameters</span>
-        <span class="n">params</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">actor</span><span class="p">)</span>
-        <span class="k">with</span> <span class="n">params</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
-            <span class="n">_stateless_param</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;meta&quot;</span><span class="p">,</span> <span class="n">filter_empty</span><span class="o">=</span><span class="kc">False</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">actor</span><span class="p">):</span>
-            <span class="c1"># copy a stateless actor</span>
-            <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">&quot;functional_actor&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">deepcopy</span><span class="p">(</span><span class="n">actor</span><span class="p">)</span>
-        <span class="c1"># we need to register these params as buffer to have `to` and similar</span>
-        <span class="c1"># methods work properly</span>
+        <span class="k">if</span> <span class="n">functional</span><span class="p">:</span>
+            <span class="n">params</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">actor</span><span class="p">)</span>
+            <span class="k">with</span> <span class="n">params</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
+                <span class="n">_stateless_param</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;meta&quot;</span><span class="p">,</span> <span class="n">filter_empty</span><span class="o">=</span><span class="kc">False</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">actor</span><span class="p">):</span>
+                <span class="c1"># copy a stateless actor</span>
+                <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">&quot;functional_actor&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">deepcopy</span><span class="p">(</span><span class="n">actor</span><span class="p">)</span>
 
-        <span class="k">def</span><span class="w"> </span><span class="nf">_make_detached_param</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+            <span class="c1"># we need to register these params as buffer to have `to` and similar</span>
+            <span class="c1"># methods work properly</span>
 
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">):</span>
-                <span class="c1"># we need an nn.Parameter since some modules (RNN) require nn.Parameters</span>
-                <span class="k">return</span> <span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span> <span class="n">requires_grad</span><span class="o">=</span><span class="n">requires_grad</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="n">x</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="s2">&quot;Encountered a value that requires gradients but is not an nn.Parameter instance.&quot;</span>
+            <span class="k">def</span><span class="w"> </span><span class="nf">_make_detached_param</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">):</span>
+                    <span class="c1"># we need an nn.Parameter since some modules (RNN) require nn.Parameters</span>
+                    <span class="k">return</span> <span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span> <span class="n">requires_grad</span><span class="o">=</span><span class="n">requires_grad</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="n">x</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="s2">&quot;Encountered a value that requires gradients but is not an nn.Parameter instance.&quot;</span>
+                    <span class="p">)</span>
+                <span class="k">return</span> <span class="n">x</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">frozen_params</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">_make_detached_param</span><span class="p">,</span> <span class="n">filter_empty</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">requires_grad</span><span class="p">:</span>
+                <span class="c1"># includes the frozen params/buffers in the module parameters/buffers</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">frozen_params</span> <span class="o">=</span> <span class="n">TensorDictParams</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">frozen_params</span><span class="p">,</span> <span class="n">no_convert</span><span class="o">=</span><span class="kc">True</span>
                 <span class="p">)</span>
-            <span class="k">return</span> <span class="n">x</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">frozen_params</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">_make_detached_param</span><span class="p">,</span> <span class="n">filter_empty</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">requires_grad</span><span class="p">:</span>
-            <span class="c1"># includes the frozen params/buffers in the module parameters/buffers</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">frozen_params</span> <span class="o">=</span> <span class="n">TensorDictParams</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">frozen_params</span><span class="p">,</span> <span class="n">no_convert</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">&quot;functional_actor&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">actor</span>
 
         <span class="c1"># self._buffers[&quot;actor_params&quot;] = params.clone().detach()</span>
 
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_key</span> <span class="o">=</span> <span class="n">action_key</span>
+
         <span class="c1"># find the sample log-prob key</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">sample_log_prob_key</span> <span class="o">=</span> <span class="s2">&quot;sample_log_prob&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sample_log_prob_key</span> <span class="o">=</span> <span class="n">log_prob_key</span>
 
         <span class="k">def</span><span class="w"> </span><span class="nf">find_sample_log_prob</span><span class="p">(</span><span class="n">module</span><span class="p">):</span>
             <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="s2">&quot;log_prob_key&quot;</span><span class="p">):</span>
@@ -1055,16 +1166,31 @@
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="c1"># run the actor on the tensordict</span>
-        <span class="n">action</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;action&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">action</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">action_key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">action</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># being called after reset or without action, skipping</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="p">(</span><span class="s2">&quot;reward&quot;</span><span class="p">,)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">reward_spec</span><span class="o">.</span><span class="n">zero</span><span class="p">())</span>
             <span class="k">return</span> <span class="n">next_tensordict</span>
-        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">frozen_params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">functional_actor</span><span class="p">):</span>
-            <span class="n">dist</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">functional_actor</span><span class="o">.</span><span class="n">get_dist</span><span class="p">(</span><span class="n">next_tensordict</span><span class="o">.</span><span class="n">clone</span><span class="p">(</span><span class="kc">False</span><span class="p">))</span>
-        <span class="c1"># get the log_prob given the original model</span>
-        <span class="n">log_prob</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">action</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">functional</span><span class="p">:</span>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">frozen_params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">functional_actor</span><span class="p">):</span>
+                <span class="n">dist</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">functional_actor</span><span class="o">.</span><span class="n">get_dist</span><span class="p">(</span><span class="n">next_tensordict</span><span class="o">.</span><span class="n">clone</span><span class="p">(</span><span class="kc">False</span><span class="p">))</span>
+            <span class="c1"># get the log_prob given the original model</span>
+            <span class="n">log_prob</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">action</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">functional_actor</span><span class="p">,</span>
+            <span class="p">(</span><span class="n">ProbabilisticTensorDictModule</span><span class="p">,</span> <span class="n">ProbabilisticTensorDictSequential</span><span class="p">),</span>
+        <span class="p">):</span>
+            <span class="c1"># with self.frozen_params.to_module(self.functional_actor):</span>
+            <span class="n">dist</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">functional_actor</span><span class="o">.</span><span class="n">get_dist</span><span class="p">(</span><span class="n">next_tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+            <span class="c1"># get the log_prob given the original model</span>
+            <span class="n">log_prob</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">action</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">log_prob</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">functional_actor</span><span class="p">(</span><span class="n">next_tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">sample_log_prob_key</span>
+            <span class="p">)</span>
+
         <span class="n">reward_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="n">reward</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">reward_key</span><span class="p">)</span>
         <span class="n">curr_log_prob</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sample_log_prob_key</span><span class="p">)</span>
@@ -1087,12 +1213,21 @@
 
         <span class="k">if</span> <span class="n">in_key</span> <span class="o">==</span> <span class="s2">&quot;reward&quot;</span> <span class="ow">and</span> <span class="n">out_key</span> <span class="o">==</span> <span class="s2">&quot;reward&quot;</span><span class="p">:</span>
             <span class="n">parent</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span>
+
+            <span class="n">reward_keys</span> <span class="o">=</span> <span class="n">parent</span><span class="o">.</span><span class="n">reward_keys</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">reward_keys</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">reward_key</span> <span class="o">=</span> <span class="n">reward_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">elif</span> <span class="s2">&quot;reward&quot;</span> <span class="ow">in</span> <span class="n">reward_keys</span><span class="p">:</span>
+                <span class="n">reward_key</span> <span class="o">=</span> <span class="s2">&quot;reward&quot;</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="s2">&quot;Couln&#39;t find the reward key.&quot;</span><span class="p">)</span>
+
             <span class="n">reward_spec</span> <span class="o">=</span> <span class="n">Unbounded</span><span class="p">(</span>
                 <span class="n">device</span><span class="o">=</span><span class="n">output_spec</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
-                <span class="n">shape</span><span class="o">=</span><span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_reward_spec&quot;</span><span class="p">][</span><span class="n">parent</span><span class="o">.</span><span class="n">reward_key</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+                <span class="n">shape</span><span class="o">=</span><span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_reward_spec&quot;</span><span class="p">][</span><span class="n">reward_key</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_reward_spec&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
-                <span class="p">{</span><span class="n">parent</span><span class="o">.</span><span class="n">reward_key</span><span class="p">:</span> <span class="n">reward_spec</span><span class="p">},</span>
+                <span class="p">{</span><span class="n">reward_key</span><span class="p">:</span> <span class="n">reward_spec</span><span class="p">},</span>
                 <span class="n">shape</span><span class="o">=</span><span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_reward_spec&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">elif</span> <span class="n">in_key</span> <span class="o">==</span> <span class="s2">&quot;reward&quot;</span><span class="p">:</span>
@@ -1183,7 +1318,7 @@
 	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
 	  if (downloadNote.length >= 1) {
 	      var tutorialUrl = $("#tutorial-type").text();
-	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
 		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
 		  notebookDownloadPath = notebookLink.split('_downloads')[1],
 		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;

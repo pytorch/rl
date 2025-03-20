@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+49a8a42) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+7df8317) &#x25BC</span></a>
     </div>
     
 
@@ -595,7 +595,10 @@
         <span class="n">specs</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">specs</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
 
         <span class="n">batch_size</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">batch_size</span>
-        <span class="n">env_str</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">env</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">env_str</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">env</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="n">env_str</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">env</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">()&quot;</span>
         <span class="n">device</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">device</span>
         <span class="n">specs</span> <span class="o">=</span> <span class="n">specs</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
         <span class="n">batch_locked</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">batch_locked</span>
@@ -4440,7 +4443,7 @@
 	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
 	  if (downloadNote.length >= 1) {
 	      var tutorialUrl = $("#tutorial-type").text();
-	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
 		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
 		  notebookDownloadPath = notebookLink.split('_downloads')[1],
 		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;

@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+49a8a42) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+7df8317) &#x25BC</span></a>
     </div>
     
 
@@ -447,12 +447,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch.nn</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nn</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">LazyStackedTensorDict</span><span class="p">,</span>
-    <span class="n">TensorDict</span><span class="p">,</span>
-    <span class="n">TensorDictBase</span><span class="p">,</span>
-    <span class="n">TensorDictParams</span><span class="p">,</span>
-<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">LazyStackedTensorDict</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">NO_DEFAULT</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">CudaGraphModule</span><span class="p">,</span> <span class="n">TensorDictModule</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">Buffer</span>
@@ -474,6 +469,12 @@
     <span class="n">VERBOSE</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">split_trajectories</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.weight_update</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">LocalWeightUpdaterBase</span><span class="p">,</span>
+    <span class="n">MultiProcessedRemoteWeightUpdate</span><span class="p">,</span>
+    <span class="n">RemoteWeightUpdaterBase</span><span class="p">,</span>
+    <span class="n">VanillaLocalWeightUpdater</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReplayBuffer</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorSpec</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">CloudpickleWrapper</span><span class="p">,</span> <span class="n">DEVICE_TYPING</span>
@@ -572,6 +573,32 @@
     <span class="n">trust_policy</span><span class="p">:</span> <span class="nb">bool</span>
     <span class="n">compiled_policy</span><span class="p">:</span> <span class="nb">bool</span>
     <span class="n">cudagraphed_policy</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">_local_weight_updater</span><span class="p">:</span> <span class="n">LocalWeightUpdaterBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">_remote_weight_updater</span><span class="p">:</span> <span class="n">RemoteWeightUpdaterBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">local_weight_updater</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LocalWeightUpdaterBase</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_local_weight_updater</span>
+
+    <span class="nd">@local_weight_updater</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">local_weight_updater</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">LocalWeightUpdaterBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">value</span><span class="o">.</span><span class="n">register_collector</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">value</span><span class="o">.</span><span class="n">collector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">self</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Failed to register collector.&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_local_weight_updater</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">remote_weight_updater</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RemoteWeightUpdaterBase</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_remote_weight_updater</span>
+
+    <span class="nd">@remote_weight_updater</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">remote_weight_updater</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">RemoteWeightUpdaterBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">value</span><span class="o">.</span><span class="n">register_collector</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">value</span><span class="o">.</span><span class="n">collector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">self</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Failed to register collector.&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_remote_weight_updater</span> <span class="o">=</span> <span class="n">value</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_get_policy_and_device</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -663,19 +690,48 @@
         <span class="k">return</span> <span class="n">policy</span><span class="p">,</span> <span class="n">get_original_weights</span>
 
 <div class="viewcode-block" id="DataCollectorBase.update_policy_weights_"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase.update_policy_weights_">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">update_policy_weights_</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">policy_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">policy_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">worker_ids</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Updates the policy weights if the policy of the data collector and the trained policy live on different devices.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Updates the policy weights for the data collector, accommodating both local and remote execution contexts.</span>
+
+<span class="sd">        This method ensures that the policy weights used by the data collector are synchronized with the latest</span>
+<span class="sd">        trained weights. It supports both local and remote weight updates, depending on the configuration of the</span>
+<span class="sd">        data collector. The local (download) update is performed before the remote (upload) update, such that weights</span>
+<span class="sd">        can be transferred to the children workers from a server.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            policy_weights (TensorDictBase, optional): if provided, a TensorDict containing</span>
-<span class="sd">                the weights of the policy to be used for the udpdate.</span>
+<span class="sd">            policy_weights (TensorDictBase, optional): A TensorDict containing the weights of the policy to be used</span>
+<span class="sd">                for the update. If not provided, the method will attempt to fetch the weights using the configured</span>
+<span class="sd">                weight updater.</span>
+<span class="sd">            worker_ids (int | List[int] | torch.device | List[torch.device] | None, optional): Identifiers for the</span>
+<span class="sd">                workers that need to be updated. This is relevant when using a remote weights updater, which must</span>
+<span class="sd">                be specified during the data collector&#39;s initialization. If `worker_ids` is provided without a</span>
+<span class="sd">                configured remote weights updater, a TypeError will be raised.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            TypeError: If `worker_ids` is provided but no `remote_weight_updater` is configured.</span>
+
+<span class="sd">        .. note::</span>
+
+<span class="sd">            - The method first attempts to update weights locally using `local_weight_updater`, if available.</span>
+<span class="sd">            - If a `remote_weight_updater` is configured, it will be used to update the specified remote workers.</span>
+<span class="sd">            - Users can extend the `LocalWeightUpdaterBase` and `RemoteWeightUpdaterBase` classes to customize</span>
+<span class="sd">              the weight update logic for specific use cases. This method should not be overwritten.</span>
+
+<span class="sd">        .. seealso:: :class:`~torchrl.collectors.LocalWeightsUpdaterBase` and</span>
+<span class="sd">            :meth:`~torchrl.collectors.RemoteWeightsUpdaterBase`.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">policy_weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">policy_weights</span><span class="p">)</span>
-        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_weights_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">get_weights_fn</span><span class="p">())</span></div>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">local_weight_updater</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">local_weight_updater</span><span class="p">(</span><span class="n">policy_weights</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">remote_weight_updater</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">remote_weight_updater</span><span class="p">(</span><span class="n">policy_weights</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">worker_ids</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;worker_ids was passed but remote_weight_updater was None.&quot;</span><span class="p">)</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">]:</span>
         <span class="k">try</span><span class="p">:</span>
@@ -880,6 +936,13 @@
 <span class="sd">            or `ManiSkills &lt;https://github.com/haosulab/ManiSkill/&gt;`_) cuda synchronization may cause unexpected</span>
 <span class="sd">            crashes.</span>
 <span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        local_weight_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`</span>
+<span class="sd">            or its subclass, responsible for updating the policy weights on the local inference worker.</span>
+<span class="sd">            If not provided, a :class:`~torchrl.collectors.VanillaLocalWeightUpdater` will be used by default,</span>
+<span class="sd">            which directly fetches and applies the weights from the server.</span>
+<span class="sd">        remote_weight_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`</span>
+<span class="sd">            or its subclass, responsible for updating the policy weights on remote inference workers.</span>
+<span class="sd">            This is typically not used in :class:`~torchrl.collectors.SyncDataCollector` as it operates in a single-process environment.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; from torchrl.envs.libs.gym import GymEnv</span>
@@ -970,6 +1033,8 @@
         <span class="n">compile_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">cudagraph_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">no_cuda_sync</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">local_weight_updater</span><span class="p">:</span> <span class="n">LocalWeightUpdaterBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">remote_weight_updater</span><span class="p">:</span> <span class="n">RemoteWeightUpdaterBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.batched_envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">BatchedEnvBase</span>
@@ -1209,6 +1274,14 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_frames</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_iter</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
 
+        <span class="k">if</span> <span class="n">local_weight_updater</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">local_weight_updater</span> <span class="o">=</span> <span class="n">VanillaLocalWeightUpdater</span><span class="p">(</span>
+                <span class="n">weight_getter</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">get_weights_fn</span><span class="p">,</span> <span class="n">policy_weights</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span>
+            <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">local_weight_updater</span> <span class="o">=</span> <span class="n">local_weight_updater</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">remote_weight_updater</span> <span class="o">=</span> <span class="n">remote_weight_updater</span>
+
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_traj_pool</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">pool</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_traj_pool_val&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
@@ -1419,9 +1492,14 @@
 
     <span class="c1"># for RPC</span>
 <div class="viewcode-block" id="SyncDataCollector.update_policy_weights_"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector.update_policy_weights_">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">update_policy_weights_</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">policy_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">policy_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">worker_ids</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">policy_weights</span><span class="p">)</span></div>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span>
+            <span class="n">policy_weights</span><span class="o">=</span><span class="n">policy_weights</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span>
+        <span class="p">)</span></div>
 
 <div class="viewcode-block" id="SyncDataCollector.set_seed"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector.set_seed">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">static_seed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Sets the seeds of the environments stored in the DataCollector.</span>
@@ -1880,7 +1958,7 @@
                 <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">exploration=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">exploration_type</span><span class="si">}</span><span class="s2">)&quot;</span>
             <span class="p">)</span>
             <span class="k">return</span> <span class="n">string</span>
-        <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
             <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(not_init)&quot;</span></div>
 
 
@@ -2056,6 +2134,13 @@
 <span class="sd">            or `ManiSkills &lt;https://github.com/haosulab/ManiSkill/&gt;`_) cuda synchronization may cause unexpected</span>
 <span class="sd">            crashes.</span>
 <span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        local_weight_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`</span>
+<span class="sd">            or its subclass, responsible for updating the policy weights on each local inference worker.</span>
+<span class="sd">            If not provided, left unused.</span>
+<span class="sd">        remote_weight_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`</span>
+<span class="sd">            or its subclass, responsible for updating the policy weights on remote inference workers.</span>
+<span class="sd">            If not provided, a :class:`~torchrl.collectors.MultiProcessedRemoteWeightUpdate` will be used by default,</span>
+<span class="sd">            which handles weight synchronization across multiple processes.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
@@ -2093,6 +2178,8 @@
         <span class="n">compile_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">cudagraph_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">no_cuda_sync</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">remote_weight_updater</span><span class="p">:</span> <span class="n">RemoteWeightUpdaterBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">local_weight_updater</span><span class="p">:</span> <span class="n">LocalWeightUpdaterBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">closed</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">)</span>
@@ -2146,7 +2233,6 @@
             <span class="n">replay_buffer</span><span class="o">.</span><span class="n">share</span><span class="p">()</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_policy_weights_dict</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_get_weights_fn_dict</span> <span class="o">=</span> <span class="p">{}</span>
 
         <span class="k">if</span> <span class="n">trust_policy</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">trust_policy</span> <span class="o">=</span> <span class="n">policy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="n">CudaGraphModule</span><span class="p">)</span>
@@ -2172,14 +2258,23 @@
                     <span class="k">else</span> <span class="n">TensorDict</span><span class="p">()</span>
                 <span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_policy_weights_dict</span><span class="p">[</span><span class="n">policy_device</span><span class="p">]</span> <span class="o">=</span> <span class="n">weights</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_get_weights_fn_dict</span><span class="p">[</span><span class="n">policy_device</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_weights_fn</span>
-        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_get_weights_fn</span> <span class="o">=</span> <span class="n">get_weights_fn</span>
+            <span class="k">if</span> <span class="n">remote_weight_updater</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">remote_weight_updater</span> <span class="o">=</span> <span class="n">MultiProcessedRemoteWeightUpdate</span><span class="p">(</span>
+                    <span class="n">get_server_weights</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_weights_fn</span><span class="p">,</span>
+                    <span class="n">policy_weights</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_policy_weights_dict</span><span class="p">,</span>
+                <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">remote_weight_updater</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># TODO</span>
             <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
-                <span class="s2">&quot;weight syncing is not supported for multiprocessed data collectors at the &quot;</span>
-                <span class="s2">&quot;moment.&quot;</span>
+                <span class="s2">&quot;remote_weight_updater cannot be None when policy_factory is provided.&quot;</span>
             <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">remote_weight_updater</span> <span class="o">=</span> <span class="n">remote_weight_updater</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">local_weight_updater</span> <span class="o">=</span> <span class="n">local_weight_updater</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">policy</span> <span class="o">=</span> <span class="n">policy</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">policy_factory</span> <span class="o">=</span> <span class="n">policy_factory</span>
 
         <span class="n">remainder</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="k">if</span> <span class="n">total_frames</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">total_frames</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
@@ -2334,21 +2429,6 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">frames_per_batch_worker</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">update_policy_weights_</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">policy_weights</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy_weights</span><span class="p">,</span> <span class="n">TensorDictParams</span><span class="p">):</span>
-            <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">policy_weights</span><span class="o">.</span><span class="n">data</span>
-        <span class="k">for</span> <span class="n">_device</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_policy_weights_dict</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">policy_weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_policy_weights_dict</span><span class="p">[</span><span class="n">_device</span><span class="p">]</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">policy_weights</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_weights_fn_dict</span><span class="p">[</span><span class="n">_device</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">original_weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_weights_fn_dict</span><span class="p">[</span><span class="n">_device</span><span class="p">]()</span>
-                <span class="k">if</span> <span class="n">original_weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="c1"># if the weights match in identity, we can spare a call to update_</span>
-                    <span class="k">continue</span>
-                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">original_weights</span><span class="p">,</span> <span class="n">TensorDictParams</span><span class="p">):</span>
-                    <span class="n">original_weights</span> <span class="o">=</span> <span class="n">original_weights</span><span class="o">.</span><span class="n">data</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_policy_weights_dict</span><span class="p">[</span><span class="n">_device</span><span class="p">]</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">original_weights</span><span class="p">)</span>
-
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_queue_len</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span>
@@ -2376,17 +2456,26 @@
                 <span class="n">env_fun</span> <span class="o">=</span> <span class="n">CloudpickleWrapper</span><span class="p">(</span><span class="n">env_fun</span><span class="p">)</span>
 
             <span class="c1"># Create a policy on the right device</span>
+            <span class="n">policy_factory</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_factory</span>
+            <span class="k">if</span> <span class="n">policy_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">policy_factory</span> <span class="o">=</span> <span class="n">CloudpickleWrapper</span><span class="p">(</span><span class="n">policy_factory</span><span class="p">)</span>
+
             <span class="n">policy_device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
             <span class="n">storing_device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
             <span class="n">env_device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env_device</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="c1"># We take the weights, the policy, and locally dispatch the weights to the policy</span>
+            <span class="c1">#  while we send the policy to the remote process.</span>
+            <span class="c1">#  This makes sure that a given set of shared weights for a given device are</span>
+            <span class="c1">#  shared for all policies that rely on that device.</span>
             <span class="n">policy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span>
-            <span class="n">policy_weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_policy_weights_dict</span><span class="p">[</span><span class="n">policy_device</span><span class="p">]</span>
+            <span class="n">policy_weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_policy_weights_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">policy_device</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">policy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">policy_weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">cm</span> <span class="o">=</span> <span class="n">policy_weights</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">policy</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">cm</span> <span class="o">=</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">()</span>
             <span class="k">with</span> <span class="n">cm</span><span class="p">:</span>
                 <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{</span>
+                    <span class="s2">&quot;policy_factory&quot;</span><span class="p">:</span> <span class="n">policy_factory</span><span class="p">,</span>
                     <span class="s2">&quot;pipe_parent&quot;</span><span class="p">:</span> <span class="n">pipe_parent</span><span class="p">,</span>
                     <span class="s2">&quot;pipe_child&quot;</span><span class="p">:</span> <span class="n">pipe_child</span><span class="p">,</span>
                     <span class="s2">&quot;queue_out&quot;</span><span class="p">:</span> <span class="n">queue_out</span><span class="p">,</span>
@@ -2733,9 +2822,14 @@
 
     <span class="c1"># for RPC</span>
 <div class="viewcode-block" id="MultiSyncDataCollector.update_policy_weights_"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector.update_policy_weights_">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">update_policy_weights_</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">policy_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">policy_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">worker_ids</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">policy_weights</span><span class="p">)</span></div>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span>
+            <span class="n">policy_weights</span><span class="o">=</span><span class="n">policy_weights</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span>
+        <span class="p">)</span></div>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">frames_per_batch_worker</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -3097,9 +3191,14 @@
 
     <span class="c1"># for RPC</span>
 <div class="viewcode-block" id="MultiaSyncDataCollector.update_policy_weights_"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector.update_policy_weights_">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">update_policy_weights_</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">policy_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">policy_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">worker_ids</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">policy_weights</span><span class="p">)</span></div>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span>
+            <span class="n">policy_weights</span><span class="o">=</span><span class="n">policy_weights</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span>
+        <span class="p">)</span></div>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">frames_per_batch_worker</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -3457,6 +3556,7 @@
     <span class="n">compile_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">cudagraph_policy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">no_cuda_sync</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">policy_factory</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
     <span class="n">pipe_parent</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
     <span class="c1"># init variables that will be cleared when closing</span>
@@ -3466,6 +3566,7 @@
         <span class="n">create_env_fn</span><span class="p">,</span>
         <span class="n">create_env_kwargs</span><span class="o">=</span><span class="n">create_env_kwargs</span><span class="p">,</span>
         <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
+        <span class="n">policy_factory</span><span class="o">=</span><span class="n">policy_factory</span><span class="p">,</span>
         <span class="n">total_frames</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
         <span class="n">max_frames_per_traj</span><span class="o">=</span><span class="n">max_frames_per_traj</span><span class="p">,</span>
         <span class="n">frames_per_batch</span><span class="o">=</span><span class="n">frames_per_batch</span><span class="p">,</span>
@@ -3628,7 +3729,7 @@
                 <span class="k">continue</span>
 
         <span class="k">elif</span> <span class="n">msg</span> <span class="o">==</span> <span class="s2">&quot;update&quot;</span><span class="p">:</span>
-            <span class="n">inner_collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">()</span>
+            <span class="n">inner_collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">policy_weights</span><span class="o">=</span><span class="n">data_in</span><span class="p">)</span>
             <span class="n">pipe_child</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="n">j</span><span class="p">,</span> <span class="s2">&quot;updated&quot;</span><span class="p">))</span>
             <span class="n">has_timed_out</span> <span class="o">=</span> <span class="kc">False</span>
             <span class="k">continue</span>
@@ -3777,7 +3878,7 @@
 	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
 	  if (downloadNote.length >= 1) {
 	      var tutorialUrl = $("#tutorial-type").text();
-	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
 		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
 		  notebookDownloadPath = notebookLink.split('_downloads')[1],
 		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;

@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+49a8a42) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+7df8317) &#x25BC</span></a>
     </div>
     
 
@@ -748,7 +748,7 @@
         <span class="n">entropy_bonus</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">samples_mc_entropy</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">entropy_coef</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.01</span><span class="p">,</span>
-        <span class="n">critic_coef</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">critic_coef</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">loss_critic_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;smooth_l1&quot;</span><span class="p">,</span>
         <span class="n">normalize_advantage</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">normalize_advantage_exclude_dims</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
@@ -770,7 +770,15 @@
         <span class="k">if</span> <span class="n">critic</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">critic_network</span> <span class="o">=</span> <span class="n">critic</span>
             <span class="k">del</span> <span class="n">critic</span>
-        <span class="k">if</span> <span class="n">actor_network</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">critic_network</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+
+        <span class="k">if</span> <span class="n">critic_coef</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">critic_network</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">critic_coef</span> <span class="o">=</span> <span class="mf">1.0</span>
+        <span class="k">elif</span> <span class="n">critic_coef</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">and</span> <span class="n">critic_network</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">critic_coef</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="n">actor_network</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="p">(</span>
+            <span class="n">critic_network</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">critic_coef</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+        <span class="p">):</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
                 <span class="s2">&quot;Missing positional arguments actor_network or critic_network.&quot;</span>
             <span class="p">)</span>
@@ -794,7 +802,7 @@
             <span class="n">policy_params</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">actor_network</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">policy_params</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="k">if</span> <span class="n">functional</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">functional</span> <span class="ow">and</span> <span class="n">critic_network</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">convert_to_functional</span><span class="p">(</span>
                 <span class="n">critic_network</span><span class="p">,</span> <span class="s2">&quot;critic_network&quot;</span><span class="p">,</span> <span class="n">compare_against</span><span class="o">=</span><span class="n">policy_params</span>
             <span class="p">)</span>
@@ -845,12 +853,15 @@
                     <span class="sa">f</span><span class="s2">&quot;clip_value must be a float or a scalar tensor, got </span><span class="si">{</span><span class="n">clip_value</span><span class="si">}</span><span class="s2">.&quot;</span>
                 <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;clip_value&quot;</span><span class="p">,</span> <span class="n">clip_value</span><span class="p">)</span>
-        <span class="n">log_prob_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">log_prob_keys</span>
-        <span class="n">action_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">dist_sample_keys</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">log_prob_keys</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">set_keys</span><span class="p">(</span><span class="n">sample_log_prob</span><span class="o">=</span><span class="n">log_prob_keys</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="n">action_keys</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">set_keys</span><span class="p">(</span><span class="n">sample_log_prob</span><span class="o">=</span><span class="n">log_prob_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">action</span><span class="o">=</span><span class="n">action_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">log_prob_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">log_prob_keys</span>
+            <span class="n">action_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">dist_sample_keys</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">log_prob_keys</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">set_keys</span><span class="p">(</span><span class="n">sample_log_prob</span><span class="o">=</span><span class="n">log_prob_keys</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="n">action_keys</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">set_keys</span><span class="p">(</span><span class="n">sample_log_prob</span><span class="o">=</span><span class="n">log_prob_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">action</span><span class="o">=</span><span class="n">action_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+            <span class="k">pass</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">functional</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -860,7 +871,8 @@
         <span class="n">keys</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">_maybe_add_or_extend_key</span><span class="p">(</span><span class="n">keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">in_keys</span><span class="p">)</span>
         <span class="n">_maybe_add_or_extend_key</span><span class="p">(</span><span class="n">keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="s2">&quot;next&quot;</span><span class="p">)</span>
-        <span class="n">_maybe_add_or_extend_key</span><span class="p">(</span><span class="n">keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_network</span><span class="o">.</span><span class="n">in_keys</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_network</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">_maybe_add_or_extend_key</span><span class="p">(</span><span class="n">keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_network</span><span class="o">.</span><span class="n">in_keys</span><span class="p">)</span>
         <span class="n">_maybe_add_or_extend_key</span><span class="p">(</span><span class="n">keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">action</span><span class="p">)</span>
         <span class="n">_maybe_add_or_extend_key</span><span class="p">(</span><span class="n">keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">sample_log_prob</span><span class="p">)</span>
         <span class="n">_maybe_add_or_extend_key</span><span class="p">(</span><span class="n">keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">reward</span><span class="p">,</span> <span class="s2">&quot;next&quot;</span><span class="p">)</span>
@@ -937,27 +949,56 @@
                 <span class="n">entropy</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="n">adv_shape</span>
         <span class="k">return</span> <span class="n">entropy</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_cur_log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="p">,</span>
+            <span class="p">(</span><span class="n">ProbabilisticTensorDictSequential</span><span class="p">,</span> <span class="n">ProbabilisticTensorDictModule</span><span class="p">),</span>
+        <span class="p">):</span>
+            <span class="c1"># assert tensordict[&#39;log_probs&#39;].requires_grad</span>
+            <span class="c1"># assert tensordict[&#39;logits&#39;].requires_grad</span>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network_params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span>
+            <span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">functional</span> <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">():</span>
+                <span class="n">dist</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">get_dist</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+
+            <span class="n">is_composite</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">dist</span><span class="p">,</span> <span class="n">CompositeDistribution</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">is_composite</span><span class="p">:</span>
+                <span class="n">action</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
+                    <span class="o">*</span><span class="p">(</span>
+                        <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">action</span><span class="p">,)</span>
+                        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">action</span><span class="p">,</span> <span class="n">NestedKey</span><span class="p">)</span>
+                        <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">action</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">action</span> <span class="o">=</span> <span class="n">_maybe_get_or_select</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">action</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">action</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;tensordict stored </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">action</span><span class="si">}</span><span class="s2"> requires grad.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">log_prob</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">action</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;Only probabilistic modules from tensordict.nn are currently supported. &quot;</span>
+                <span class="s2">&quot;If you need to implement a custom logic to retrieve the log-probs (to compute &quot;</span>
+                <span class="s2">&quot;the PPO objective) or the distribution (for the PPO entropy), please augment &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;the </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__class__</span><span class="si">}</span><span class="s2"> by implementing your own logic in _get_cur_log_prob.&quot;</span>
+            <span class="p">)</span>
+            <span class="c1"># with self.actor_network_params.to_module(</span>
+            <span class="c1">#     self.actor_network</span>
+            <span class="c1"># ) if self.functional else contextlib.nullcontext():</span>
+            <span class="c1">#     td = self.actor_network(tensordict)</span>
+            <span class="c1">#     log_prob = td.get(self.tensor_keys.sample_log_prob)</span>
+            <span class="c1">#     dist = torch.distributions.Categorical(td.get(&quot;logits&quot;))</span>
+            <span class="c1">#     is_composite = False</span>
+        <span class="k">return</span> <span class="n">log_prob</span><span class="p">,</span> <span class="n">dist</span><span class="p">,</span> <span class="n">is_composite</span>
+
     <span class="k">def</span><span class="w"> </span><span class="nf">_log_weight</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">adv_shape</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">d</span><span class="o">.</span><span class="n">Distribution</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
-
-        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network_params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span>
-        <span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">functional</span> <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">():</span>
-            <span class="n">dist</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">get_dist</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
-
-        <span class="n">is_composite</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">dist</span><span class="p">,</span> <span class="n">CompositeDistribution</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="n">is_composite</span><span class="p">:</span>
-            <span class="n">action</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
-                <span class="o">*</span><span class="p">(</span>
-                    <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">action</span><span class="p">,)</span>
-                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">action</span><span class="p">,</span> <span class="n">NestedKey</span><span class="p">)</span>
-                    <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">action</span>
-                <span class="p">)</span>
-            <span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">action</span> <span class="o">=</span> <span class="n">_maybe_get_or_select</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">action</span><span class="p">)</span>
 
         <span class="n">prev_log_prob</span> <span class="o">=</span> <span class="n">_maybe_get_or_select</span><span class="p">(</span>
             <span class="n">tensordict</span><span class="p">,</span>
@@ -970,11 +1011,8 @@
                 <span class="sa">f</span><span class="s2">&quot;tensordict stored </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">sample_log_prob</span><span class="si">}</span><span class="s2"> requires grad.&quot;</span>
             <span class="p">)</span>
 
-        <span class="k">if</span> <span class="n">action</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;tensordict stored </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">action</span><span class="si">}</span><span class="s2"> requires grad.&quot;</span>
-            <span class="p">)</span>
-        <span class="n">log_prob</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">action</span><span class="p">)</span>
+        <span class="n">log_prob</span><span class="p">,</span> <span class="n">dist</span><span class="p">,</span> <span class="n">is_composite</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_cur_log_prob</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+
         <span class="k">if</span> <span class="n">is_composite</span><span class="p">:</span>
             <span class="k">with</span> <span class="n">set_composite_lp_aggregate</span><span class="p">(</span><span class="kc">False</span><span class="p">):</span>
                 <span class="k">if</span> <span class="n">log_prob</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">!=</span> <span class="n">adv_shape</span><span class="p">:</span>
@@ -991,7 +1029,6 @@
                     <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">log_prob</span><span class="p">):</span>
                         <span class="n">log_prob</span> <span class="o">=</span> <span class="n">_sum_td_features</span><span class="p">(</span><span class="n">log_prob</span><span class="p">)</span>
                         <span class="n">log_prob</span><span class="o">.</span><span class="n">view_as</span><span class="p">(</span><span class="n">prev_log_prob</span><span class="p">)</span>
-
         <span class="n">log_weight</span> <span class="o">=</span> <span class="p">(</span><span class="n">log_prob</span> <span class="o">-</span> <span class="n">prev_log_prob</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">log_weight</span><span class="p">):</span>
             <span class="n">log_weight</span> <span class="o">=</span> <span class="n">_sum_td_features</span><span class="p">(</span><span class="n">log_weight</span><span class="p">)</span>
@@ -1306,7 +1343,7 @@
         <span class="n">entropy_bonus</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">samples_mc_entropy</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">entropy_coef</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.01</span><span class="p">,</span>
-        <span class="n">critic_coef</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">critic_coef</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">loss_critic_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;smooth_l1&quot;</span><span class="p">,</span>
         <span class="n">normalize_advantage</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">normalize_advantage_exclude_dims</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
@@ -1373,6 +1410,10 @@
         <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">clone</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
         <span class="n">advantage</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">advantage</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">advantage</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_network</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;Critic network is not specified, cannot compute advantage within forward.&quot;</span>
+                <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">value_estimator</span><span class="p">(</span>
                 <span class="n">tensordict</span><span class="p">,</span>
                 <span class="n">params</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_cached_critic_network_params_detached</span><span class="p">,</span>
@@ -1423,7 +1464,7 @@
                 <span class="n">entropy</span> <span class="o">=</span> <span class="n">_sum_td_features</span><span class="p">(</span><span class="n">entropy</span><span class="p">)</span>
             <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;entropy&quot;</span><span class="p">,</span> <span class="n">entropy</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>  <span class="c1"># for logging</span>
             <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;loss_entropy&quot;</span><span class="p">,</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">entropy_coef</span> <span class="o">*</span> <span class="n">entropy</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_coef</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_coef</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_coef</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
             <span class="n">loss_critic</span><span class="p">,</span> <span class="n">value_clip_fraction</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_critic</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
             <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;loss_critic&quot;</span><span class="p">,</span> <span class="n">loss_critic</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">value_clip_fraction</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -1577,7 +1618,7 @@
         <span class="n">entropy_bonus</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">samples_mc_entropy</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">entropy_coef</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.01</span><span class="p">,</span>
-        <span class="n">critic_coef</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">critic_coef</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">loss_critic_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;smooth_l1&quot;</span><span class="p">,</span>
         <span class="n">normalize_advantage</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">normalize_advantage_exclude_dims</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
@@ -1624,7 +1665,8 @@
         <span class="n">keys</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">_maybe_add_or_extend_key</span><span class="p">(</span><span class="n">keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">in_keys</span><span class="p">)</span>
         <span class="n">_maybe_add_or_extend_key</span><span class="p">(</span><span class="n">keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="s2">&quot;next&quot;</span><span class="p">)</span>
-        <span class="n">_maybe_add_or_extend_key</span><span class="p">(</span><span class="n">keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_network</span><span class="o">.</span><span class="n">in_keys</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_network</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">_maybe_add_or_extend_key</span><span class="p">(</span><span class="n">keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_network</span><span class="o">.</span><span class="n">in_keys</span><span class="p">)</span>
         <span class="n">_maybe_add_or_extend_key</span><span class="p">(</span><span class="n">keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">action</span><span class="p">)</span>
         <span class="n">_maybe_add_or_extend_key</span><span class="p">(</span><span class="n">keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">sample_log_prob</span><span class="p">)</span>
         <span class="n">_maybe_add_or_extend_key</span><span class="p">(</span><span class="n">keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">reward</span><span class="p">,</span> <span class="s2">&quot;next&quot;</span><span class="p">)</span>
@@ -1847,7 +1889,7 @@
 	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
 	  if (downloadNote.length >= 1) {
 	      var tutorialUrl = $("#tutorial-type").text();
-	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
 		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
 		  notebookDownloadPath = notebookLink.split('_downloads')[1],
 		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;

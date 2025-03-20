@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+49a8a42) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+7df8317) &#x25BC</span></a>
     </div>
     
 
@@ -5734,8 +5734,8 @@
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">in_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">],</span>
-        <span class="n">out_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">],</span>
+        <span class="n">in_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">out_keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">in_keys_inv</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">out_keys_inv</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
@@ -5746,6 +5746,9 @@
         <span class="n">add_special_tokens</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">padding</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">max_length</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">return_attention_mask</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">missing_tolerance</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">call_before_reset</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="k">if</span> <span class="n">tokenizer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="kn">from</span><span class="w"> </span><span class="nn">transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutoTokenizer</span>
@@ -5761,6 +5764,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">skip_special_tokens</span> <span class="o">=</span> <span class="n">skip_special_tokens</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">padding</span> <span class="o">=</span> <span class="n">padding</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">max_length</span> <span class="o">=</span> <span class="n">max_length</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">return_attention_mask</span> <span class="o">=</span> <span class="n">return_attention_mask</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">call_before_reset</span> <span class="o">=</span> <span class="n">call_before_reset</span>
         <span class="k">if</span> <span class="n">additional_tokens</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">add_tokens</span><span class="p">(</span><span class="n">additional_tokens</span><span class="p">)</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
@@ -5772,6 +5777,7 @@
             <span class="n">inv_fn</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">call_tokenizer_inv_fn</span><span class="p">,</span>
             <span class="n">use_raw_nontensor</span><span class="o">=</span><span class="n">use_raw_nontensor</span><span class="p">,</span>
         <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_missing_tolerance</span> <span class="o">=</span> <span class="n">missing_tolerance</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">device</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -5784,6 +5790,68 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_device</span> <span class="o">=</span> <span class="n">device</span>
         <span class="k">return</span> <span class="n">device</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="c1"># Specialized for attention mask</span>
+        <span class="k">for</span> <span class="n">in_key</span><span class="p">,</span> <span class="n">out_key</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">):</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">in_key</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">observation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_transform</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_attention_mask</span><span class="p">:</span>
+                    <span class="n">observation</span><span class="p">,</span> <span class="n">attention_mask</span> <span class="o">=</span> <span class="n">observation</span>
+                    <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                        <span class="n">_replace_last</span><span class="p">(</span><span class="n">out_key</span><span class="p">,</span> <span class="s2">&quot;attention_mask&quot;</span><span class="p">),</span>
+                        <span class="n">attention_mask</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                    <span class="n">out_key</span><span class="p">,</span>
+                    <span class="n">observation</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">elif</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">missing_tolerance</span>
+                <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_attention_mask</span>
+                <span class="ow">and</span> <span class="n">out_key</span> <span class="ow">in</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+            <span class="p">):</span>
+                <span class="n">attention_key</span> <span class="o">=</span> <span class="n">_replace_last</span><span class="p">(</span><span class="n">out_key</span><span class="p">,</span> <span class="s2">&quot;attention_mask&quot;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">attention_key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">next_tensordict</span><span class="p">:</span>
+                    <span class="n">next_tensordict</span><span class="p">[</span><span class="n">attention_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span>
+                        <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">out_key</span><span class="p">)</span>
+                    <span class="p">)</span>
+            <span class="k">elif</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">missing_tolerance</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="si">}</span><span class="s2">: &#39;</span><span class="si">{</span><span class="n">in_key</span><span class="si">}</span><span class="s2">&#39; not found in tensordict </span><span class="si">{</span><span class="n">next_tensordict</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+        <span class="k">return</span> <span class="n">next_tensordict</span>
+
+<div class="viewcode-block" id="Tokenizer.forward"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.Tokenizer.html#torchrl.envs.transforms.Tokenizer.forward">[docs]</a>    <span class="nd">@dispatch</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">&quot;in_keys&quot;</span><span class="p">,</span> <span class="n">dest</span><span class="o">=</span><span class="s2">&quot;out_keys&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">in_key</span><span class="p">,</span> <span class="n">out_key</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">):</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">in_key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_transform</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_attention_mask</span><span class="p">:</span>
+                    <span class="n">data</span><span class="p">,</span> <span class="n">attention_mask</span> <span class="o">=</span> <span class="n">data</span>
+                    <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                        <span class="n">_replace_last</span><span class="p">(</span><span class="n">out_key</span><span class="p">,</span> <span class="s2">&quot;attention_mask&quot;</span><span class="p">),</span>
+                        <span class="n">attention_mask</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">out_key</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">missing_tolerance</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="n">in_key</span><span class="si">}</span><span class="s2">&#39; not found in tensordict </span><span class="si">{</span><span class="n">tensordict</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tensordict</span></div>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reset_env_preprocess</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">call_before_reset</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">_set_missing_tolerance</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+                <span class="n">tensordict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_call</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tensordict</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reset</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">call_before_reset</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">tensordict_reset</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_reset</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">)</span>
+
     <span class="k">def</span><span class="w"> </span><span class="nf">call_tokenizer_fn</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]):</span>
         <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
         <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;add_special_tokens&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">add_special_tokens</span><span class="p">}</span>
@@ -5793,19 +5861,25 @@
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
             <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">return_tensors</span><span class="o">=</span><span class="s2">&quot;pt&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
             <span class="c1"># TODO: incorporate attention mask</span>
-            <span class="c1"># attention_mask = torch.ones_like(out, dtype=torch.bool)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_attention_mask</span><span class="p">:</span>
+                <span class="n">attention_mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;padding&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">padding</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_length</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;max_length&quot;</span>
             <span class="p">)</span>
-            <span class="c1"># kwargs[&quot;return_attention_mask&quot;] = False</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;return_attention_mask&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_attention_mask</span>
             <span class="c1"># kwargs[&quot;return_token_type_ids&quot;] = False</span>
             <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">batch_encode_plus</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">return_tensors</span><span class="o">=</span><span class="s2">&quot;pt&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-            <span class="c1"># attention_mask = out[&quot;attention_mask&quot;]</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_attention_mask</span><span class="p">:</span>
+                <span class="n">attention_mask</span> <span class="o">=</span> <span class="n">out</span><span class="p">[</span><span class="s2">&quot;attention_mask&quot;</span><span class="p">]</span>
             <span class="n">out</span> <span class="o">=</span> <span class="n">out</span><span class="p">[</span><span class="s2">&quot;input_ids&quot;</span><span class="p">]</span>
 
         <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">out</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">device</span><span class="p">:</span>
             <span class="n">out</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_attention_mask</span><span class="p">:</span>
+                <span class="n">attention_mask</span> <span class="o">=</span> <span class="n">attention_mask</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_attention_mask</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">out</span><span class="p">,</span> <span class="n">attention_mask</span>
         <span class="k">return</span> <span class="n">out</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">call_tokenizer_inv_fn</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">):</span>
@@ -5817,81 +5891,110 @@
             <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">batch_decode</span><span class="p">(</span>
                 <span class="n">value</span><span class="p">,</span> <span class="n">skip_special_tokens</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">skip_special_tokens</span>
             <span class="p">)</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_str_device</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
-            <span class="k">return</span> <span class="n">NonTensorStack</span><span class="p">(</span><span class="o">*</span><span class="n">out</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">NonTensorData</span><span class="p">(</span><span class="n">out</span><span class="p">)</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">NonTensorStack</span><span class="p">(</span><span class="o">*</span><span class="n">out</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">device</span><span class="p">:</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">result</span>
+        <span class="k">return</span> <span class="n">NonTensorData</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_str_device</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">parent</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span>
+        <span class="k">if</span> <span class="n">parent</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">:</span>
+            <span class="n">in_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys_inv</span><span class="p">:</span>
+            <span class="n">in_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys_inv</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">in_key</span> <span class="ow">in</span> <span class="n">parent</span><span class="o">.</span><span class="n">observation_keys</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">parent</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="p">[</span><span class="n">in_key</span><span class="p">]</span><span class="o">.</span><span class="n">device</span>
+        <span class="k">if</span> <span class="n">in_key</span> <span class="ow">in</span> <span class="n">parent</span><span class="o">.</span><span class="n">action_keys</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">parent</span><span class="o">.</span><span class="n">full_action_spec</span><span class="p">[</span><span class="n">in_key</span><span class="p">]</span><span class="o">.</span><span class="n">device</span>
+        <span class="k">if</span> <span class="n">in_key</span> <span class="ow">in</span> <span class="n">parent</span><span class="o">.</span><span class="n">state_keys</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">parent</span><span class="o">.</span><span class="n">full_state_spec</span><span class="p">[</span><span class="n">in_key</span><span class="p">]</span><span class="o">.</span><span class="n">device</span>
+        <span class="k">return</span> <span class="kc">None</span>
 
 <div class="viewcode-block" id="Tokenizer.transform_input_spec"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.Tokenizer.html#torchrl.envs.transforms.Tokenizer.transform_input_spec">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">transform_input_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_spec</span><span class="p">:</span> <span class="n">Composite</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Composite</span><span class="p">:</span>
-        <span class="n">input_spec</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">transform_input_spec</span><span class="p">(</span><span class="n">input_spec</span><span class="p">)</span>
         <span class="c1"># We need to cap the spec to generate valid random strings</span>
-        <span class="k">for</span> <span class="n">out_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys_inv</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">out_key</span> <span class="ow">in</span> <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_state_spec&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
-                <span class="n">new_shape</span> <span class="o">=</span> <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_state_spec&quot;</span><span class="p">][</span><span class="n">out_key</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_length</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="c1"># Then we can&#39;t tell what the shape will be</span>
-                    <span class="n">new_shape</span> <span class="o">=</span> <span class="n">new_shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,))</span>
-                <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_state_spec&quot;</span><span class="p">][</span><span class="n">out_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">Bounded</span><span class="p">(</span>
-                    <span class="mi">0</span><span class="p">,</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">vocab_size</span><span class="p">,</span>
-                    <span class="n">shape</span><span class="o">=</span><span class="n">new_shape</span><span class="p">,</span>
-                    <span class="n">device</span><span class="o">=</span><span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_state_spec&quot;</span><span class="p">][</span><span class="n">out_key</span><span class="p">]</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
-                    <span class="n">dtype</span><span class="o">=</span><span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_state_spec&quot;</span><span class="p">][</span><span class="n">out_key</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+        <span class="k">for</span> <span class="n">in_key</span><span class="p">,</span> <span class="n">out_key</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys_inv</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys_inv</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">in_key</span> <span class="ow">in</span> <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_state_spec&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+                <span class="n">spec</span> <span class="o">=</span> <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_state_spec&quot;</span><span class="p">]</span>
+            <span class="k">elif</span> <span class="n">in_key</span> <span class="ow">in</span> <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_action_spec&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+                <span class="n">spec</span> <span class="o">=</span> <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_action_spec&quot;</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;The input keys </span><span class="si">{</span><span class="n">in_key</span><span class="si">}</span><span class="s2"> wasn&#39;t found in the env input specs.&quot;</span>
                 <span class="p">)</span>
-            <span class="k">elif</span> <span class="n">out_key</span> <span class="ow">in</span> <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_action_spec&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
-                <span class="n">new_shape</span> <span class="o">=</span> <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_action_spec&quot;</span><span class="p">][</span><span class="n">out_key</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_length</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="c1"># Then we can&#39;t tell what the shape will be</span>
-                    <span class="n">new_shape</span> <span class="o">=</span> <span class="n">new_shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,))</span>
-                <span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_action_spec&quot;</span><span class="p">][</span><span class="n">out_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">Bounded</span><span class="p">(</span>
-                    <span class="mi">0</span><span class="p">,</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">vocab_size</span><span class="p">,</span>
-                    <span class="n">shape</span><span class="o">=</span><span class="n">new_shape</span><span class="p">,</span>
-                    <span class="n">device</span><span class="o">=</span><span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_action_spec&quot;</span><span class="p">][</span><span class="n">out_key</span><span class="p">]</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
-                    <span class="n">dtype</span><span class="o">=</span><span class="n">input_spec</span><span class="p">[</span><span class="s2">&quot;full_action_spec&quot;</span><span class="p">][</span><span class="n">out_key</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
-                <span class="p">)</span>
+            <span class="n">local_spec</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">in_key</span><span class="p">)</span>
+            <span class="n">local_dtype</span> <span class="o">=</span> <span class="n">local_spec</span><span class="o">.</span><span class="n">dtype</span>
+            <span class="k">if</span> <span class="n">local_dtype</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">local_dtype</span><span class="o">.</span><span class="n">is_floating_point</span><span class="p">:</span>
+                <span class="n">local_dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span>
+            <span class="n">new_shape</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">shape</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_length</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># Then we can&#39;t tell what the shape will be</span>
+                <span class="n">new_shape</span> <span class="o">=</span> <span class="n">new_shape</span> <span class="o">+</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">new_shape</span> <span class="o">=</span> <span class="n">new_shape</span> <span class="o">+</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">max_length</span><span class="p">,))</span>
+            <span class="n">spec</span><span class="p">[</span><span class="n">out_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">Bounded</span><span class="p">(</span>
+                <span class="mi">0</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">vocab_size</span><span class="p">,</span>
+                <span class="n">shape</span><span class="o">=</span><span class="n">new_shape</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">local_spec</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="n">local_dtype</span><span class="p">,</span>
+            <span class="p">)</span>
         <span class="k">return</span> <span class="n">input_spec</span></div>
 
-<div class="viewcode-block" id="Tokenizer.transform_output_spec"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.Tokenizer.html#torchrl.envs.transforms.Tokenizer.transform_output_spec">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">transform_output_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output_spec</span><span class="p">:</span> <span class="n">Composite</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Composite</span><span class="p">:</span>
-        <span class="n">output_spec</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">transform_output_spec</span><span class="p">(</span><span class="n">output_spec</span><span class="p">)</span>
-        <span class="c1"># We need to cap the spec to generate valid random strings</span>
-        <span class="k">for</span> <span class="n">out_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">out_key</span> <span class="ow">in</span> <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_observation_spec&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
-                <span class="n">new_shape</span> <span class="o">=</span> <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_observation_spec&quot;</span><span class="p">][</span><span class="n">out_key</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_length</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="c1"># Then we can&#39;t tell what the shape will be</span>
-                    <span class="n">new_shape</span> <span class="o">=</span> <span class="n">new_shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,))</span>
-                <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_observation_spec&quot;</span><span class="p">][</span><span class="n">out_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">Bounded</span><span class="p">(</span>
+    <span class="n">transform_output_spec</span> <span class="o">=</span> <span class="n">Transform</span><span class="o">.</span><span class="n">transform_output_spec</span>
+    <span class="n">transform_reward_spec</span> <span class="o">=</span> <span class="n">Transform</span><span class="o">.</span><span class="n">transform_reward_spec</span>
+    <span class="n">transform_done_spec</span> <span class="o">=</span> <span class="n">Transform</span><span class="o">.</span><span class="n">transform_done_spec</span>
+
+<div class="viewcode-block" id="Tokenizer.transform_observation_spec"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.Tokenizer.html#torchrl.envs.transforms.Tokenizer.transform_observation_spec">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">transform_observation_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+        <span class="n">attention_mask_keys</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">in_key</span><span class="p">,</span> <span class="n">out_key</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">):</span>
+            <span class="n">new_shape</span> <span class="o">=</span> <span class="n">observation_spec</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,))</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">in_spec</span> <span class="o">=</span> <span class="n">observation_spec</span><span class="p">[</span><span class="n">in_key</span><span class="p">]</span>
+                <span class="n">obs_dtype</span> <span class="o">=</span> <span class="n">in_spec</span><span class="o">.</span><span class="n">dtype</span>
+                <span class="n">device</span> <span class="o">=</span> <span class="n">in_spec</span><span class="o">.</span><span class="n">device</span>
+            <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+                <span class="c1"># In some cases (eg, the tokenizer is applied during reset on data that</span>
+                <span class="c1">#  originates from a dataloader) we don&#39;t have an in_spec</span>
+                <span class="n">in_spec</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="n">obs_dtype</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="n">device</span> <span class="o">=</span> <span class="n">observation_spec</span><span class="o">.</span><span class="n">device</span>
+            <span class="k">if</span> <span class="n">obs_dtype</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">obs_dtype</span><span class="o">.</span><span class="n">is_floating_point</span><span class="p">:</span>
+                <span class="n">obs_dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span>
+            <span class="n">observation_spec</span><span class="p">[</span><span class="n">out_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">Bounded</span><span class="p">(</span>
+                <span class="mi">0</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">vocab_size</span><span class="p">,</span>
+                <span class="n">shape</span><span class="o">=</span><span class="n">new_shape</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="n">obs_dtype</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_attention_mask</span><span class="p">:</span>
+                <span class="n">attention_mask_key</span> <span class="o">=</span> <span class="n">_replace_last</span><span class="p">(</span><span class="n">out_key</span><span class="p">,</span> <span class="s2">&quot;attention_mask&quot;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">attention_mask_key</span> <span class="ow">in</span> <span class="n">attention_mask_keys</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                        <span class="s2">&quot;Conflicting attention_mask keys. Make sure the token tensors are &quot;</span>
+                        <span class="s2">&quot;nested at different places in the tensordict such that `(*root, &#39;attention_mask&#39;)` &quot;</span>
+                        <span class="s2">&quot;entries are unique.&quot;</span>
+                    <span class="p">)</span>
+                <span class="n">attention_mask_keys</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">attention_mask_key</span><span class="p">)</span>
+                <span class="n">attention_dtype</span> <span class="o">=</span> <span class="n">obs_dtype</span>
+                <span class="k">if</span> <span class="n">attention_dtype</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">attention_dtype</span><span class="o">.</span><span class="n">is_floating_point</span><span class="p">:</span>
+                    <span class="n">attention_dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span>
+                <span class="n">observation_spec</span><span class="p">[</span><span class="n">attention_mask_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">Bounded</span><span class="p">(</span>
                     <span class="mi">0</span><span class="p">,</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">vocab_size</span><span class="p">,</span>
+                    <span class="mi">2</span><span class="p">,</span>
                     <span class="n">shape</span><span class="o">=</span><span class="n">new_shape</span><span class="p">,</span>
-                    <span class="n">device</span><span class="o">=</span><span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_observation_spec&quot;</span><span class="p">][</span><span class="n">out_key</span><span class="p">]</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
-                    <span class="n">dtype</span><span class="o">=</span><span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_observation_spec&quot;</span><span class="p">][</span><span class="n">out_key</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+                    <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+                    <span class="n">dtype</span><span class="o">=</span><span class="n">attention_dtype</span><span class="p">,</span>
                 <span class="p">)</span>
-            <span class="k">elif</span> <span class="n">out_key</span> <span class="ow">in</span> <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_reward_spec&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
-                <span class="n">new_shape</span> <span class="o">=</span> <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_reward_spec&quot;</span><span class="p">][</span><span class="n">out_key</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_length</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="c1"># Then we can&#39;t tell what the shape will be</span>
-                    <span class="n">new_shape</span> <span class="o">=</span> <span class="n">new_shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,))</span>
-                <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_reward_spec&quot;</span><span class="p">][</span><span class="n">out_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">Bounded</span><span class="p">(</span>
-                    <span class="mi">0</span><span class="p">,</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">vocab_size</span><span class="p">,</span>
-                    <span class="n">shape</span><span class="o">=</span><span class="n">new_shape</span><span class="p">,</span>
-                    <span class="n">device</span><span class="o">=</span><span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_reward_spec&quot;</span><span class="p">][</span><span class="n">out_key</span><span class="p">]</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
-                    <span class="n">dtype</span><span class="o">=</span><span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_reward_spec&quot;</span><span class="p">][</span><span class="n">out_key</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
-                <span class="p">)</span>
-            <span class="k">elif</span> <span class="n">out_key</span> <span class="ow">in</span> <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_done_spec&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
-                <span class="n">new_shape</span> <span class="o">=</span> <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_done_spec&quot;</span><span class="p">][</span><span class="n">out_key</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_length</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="c1"># Then we can&#39;t tell what the shape will be</span>
-                    <span class="n">new_shape</span> <span class="o">=</span> <span class="n">new_shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,))</span>
-                <span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_done_spec&quot;</span><span class="p">][</span><span class="n">out_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">Bounded</span><span class="p">(</span>
-                    <span class="mi">0</span><span class="p">,</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">vocab_size</span><span class="p">,</span>
-                    <span class="n">shape</span><span class="o">=</span><span class="n">new_shape</span><span class="p">,</span>
-                    <span class="n">device</span><span class="o">=</span><span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_done_spec&quot;</span><span class="p">][</span><span class="n">out_key</span><span class="p">]</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
-                    <span class="n">dtype</span><span class="o">=</span><span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_done_spec&quot;</span><span class="p">][</span><span class="n">out_key</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
-                <span class="p">)</span>
-        <span class="k">return</span> <span class="n">output_spec</span></div></div>
+        <span class="k">return</span> <span class="n">observation_spec</span></div></div>
 
 
 <div class="viewcode-block" id="Stack"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.Stack.html#torchrl.envs.transforms.Stack">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">Stack</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
@@ -6508,7 +6611,7 @@
             <span class="n">kwargs</span> <span class="o">=</span> <span class="n">primers</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">kwargs</span><span class="p">,</span> <span class="n">Composite</span><span class="p">):</span>
             <span class="n">shape</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;shape&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-            <span class="n">device</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
             <span class="k">if</span> <span class="s2">&quot;batch_size&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
                 <span class="n">extra_kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;batch_size&quot;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;batch_size&quot;</span><span class="p">)}</span>
             <span class="k">else</span><span class="p">:</span>
@@ -6581,7 +6684,7 @@
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">device</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_device</span>
-        <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;parent&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">device</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_device</span> <span class="o">=</span> <span class="n">device</span>
         <span class="k">return</span> <span class="n">device</span>
@@ -6612,7 +6715,7 @@
                 <span class="sa">f</span><span class="s2">&quot;observation_spec was expected to be of type Composite. Got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">observation_spec</span><span class="p">)</span><span class="si">}</span><span class="s2"> instead.&quot;</span>
             <span class="p">)</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">primers</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">observation_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">primers</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span> <span class="n">observation_spec</span><span class="o">.</span><span class="n">ndim</span><span class="p">]</span> <span class="o">!=</span> <span class="n">observation_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">expand_specs</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">primers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_expand_shape</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">primers</span><span class="p">)</span>
             <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">expand_specs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -11514,7 +11617,7 @@
 	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
 	  if (downloadNote.length >= 1) {
 	      var tutorialUrl = $("#tutorial-type").text();
-	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
 		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
 		  notebookDownloadPath = notebookLink.split('_downloads')[1],
 		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;

@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.7.0+49a8a42) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.7.0+7df8317) &#x25BC</span></a>
     </div>
     
 
@@ -845,7 +845,7 @@ etc.), but one can not use an arbitrary TorchRL environment, as it is possible w
 <td><p>A Tic-Tac-Toe implementation.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.LLMEnv.html#torchrl.envs.LLMEnv" title="torchrl.envs.LLMEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LLMEnv</span></code></a>(*args, **kwargs)</p></td>
-<td><p>A text generation environment.</p></td>
+<td><p>A text generation environment for language models.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.LLMHashingEnv.html#torchrl.envs.LLMHashingEnv" title="torchrl.envs.LLMHashingEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LLMHashingEnv</span></code></a>(*args, **kwargs)</p></td>
 <td><p>A text generation environment that uses a hashing module to identify unique observations.</p></td>
@@ -1559,7 +1559,7 @@ to be able to create this other composition:</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.Timer.html#torchrl.envs.transforms.Timer" title="torchrl.envs.transforms.Timer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Timer</span></code></a>([out_keys, time_key])</p></td>
 <td><p>A transform that measures the time intervals between <cite>inv</cite> and <cite>call</cite> operations in an environment.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.Tokenizer.html#torchrl.envs.transforms.Tokenizer" title="torchrl.envs.transforms.Tokenizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Tokenizer</span></code></a>(in_keys, out_keys[, in_keys_inv, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.Tokenizer.html#torchrl.envs.transforms.Tokenizer" title="torchrl.envs.transforms.Tokenizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Tokenizer</span></code></a>([in_keys, out_keys, in_keys_inv, ...])</p></td>
 <td><p>Applies a tokenization operation on the specified inputs.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.transforms.ToTensorImage.html#torchrl.envs.transforms.ToTensorImage" title="torchrl.envs.transforms.ToTensorImage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToTensorImage</span></code></a>([from_int, unsqueeze, dtype, ...])</p></td>
@@ -2067,7 +2067,7 @@ the following function will return <code class="docutils literal notranslate"><s
 	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
 	  if (downloadNote.length >= 1) {
 	      var tutorialUrl = $("#tutorial-type").text();
-	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
 		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
 		  notebookDownloadPath = notebookLink.split('_downloads')[1],
 		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;

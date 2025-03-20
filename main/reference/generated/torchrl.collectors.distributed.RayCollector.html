@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+49a8a42) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+7df8317) &#x25BC</span></a>
     </div>
     
 
@@ -431,7 +431,7 @@
 <h1>RayCollector<a class="headerlink" href="#raycollector" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.collectors.distributed.RayCollector">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.collectors.distributed.</span></span><span class="sig-name descname"><span class="pre">RayCollector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">create_env_fn:</span> <span class="pre">Callable</span> <span class="pre">|</span> <span class="pre">EnvBase</span> <span class="pre">|</span> <span class="pre">list[Callable]</span> <span class="pre">|</span> <span class="pre">list[EnvBase],</span> <span class="pre">policy:</span> <span class="pre">Callable[[TensorDictBase],</span> <span class="pre">TensorDictBase]</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">*,</span> <span class="pre">policy_factory:</span> <span class="pre">Callable[[],</span> <span class="pre">Callable]</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">frames_per_batch:</span> <span class="pre">int,</span> <span class="pre">total_frames:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">-1,</span> <span class="pre">device:</span> <span class="pre">torch.device</span> <span class="pre">|</span> <span class="pre">list[torch.device]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">storing_device:</span> <span class="pre">torch.device</span> <span class="pre">|</span> <span class="pre">list[torch.device]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">env_device:</span> <span class="pre">torch.device</span> <span class="pre">|</span> <span class="pre">list[torch.device]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">policy_device:</span> <span class="pre">torch.device</span> <span class="pre">|</span> <span class="pre">list[torch.device]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">max_frames_per_traj=-1,</span> <span class="pre">init_random_frames=-1,</span> <span class="pre">reset_at_each_iter=False,</span> <span class="pre">postproc=None,</span> <span class="pre">split_trajs=False,</span> <span class="pre">exploration_type=InteractionType.RANDOM,</span> <span class="pre">collector_class:</span> <span class="pre">Callable[[TensorDict],</span> <span class="pre">TensorDict]</span> <span class="pre">=</span> <span class="pre">&lt;class</span> <span class="pre">'torchrl.collectors.collectors.SyncDataCollector'&gt;,</span> <span class="pre">collector_kwargs:</span> <span class="pre">dict</span> <span class="pre">|</span> <span class="pre">list[dict]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">num_workers_per_collector:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">1,</span> <span class="pre">sync:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False,</span> <span class="pre">ray_init_config:</span> <span class="pre">dict</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">remote_configs:</span> <span class="pre">dict</span> <span class="pre">|</span> <span class="pre">list[dict]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">num_collectors:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">update_after_each_batch=False,</span> <span class="pre">max_weight_update_interval=-1,</span> <span class="pre">replay_buffer:</span> <span class="pre">ReplayBuffer</span> <span class="pre">=</span> <span class="pre">None</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/distributed/ray.html#RayCollector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.distributed.RayCollector" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.collectors.distributed.</span></span><span class="sig-name descname"><span class="pre">RayCollector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">create_env_fn:</span> <span class="pre">Callable</span> <span class="pre">|</span> <span class="pre">EnvBase</span> <span class="pre">|</span> <span class="pre">list[Callable]</span> <span class="pre">|</span> <span class="pre">list[EnvBase],</span> <span class="pre">policy:</span> <span class="pre">Callable[[TensorDictBase],</span> <span class="pre">TensorDictBase]</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">*,</span> <span class="pre">policy_factory:</span> <span class="pre">Callable[[],</span> <span class="pre">Callable]</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">frames_per_batch:</span> <span class="pre">int,</span> <span class="pre">total_frames:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">-1,</span> <span class="pre">device:</span> <span class="pre">torch.device</span> <span class="pre">|</span> <span class="pre">list[torch.device]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">storing_device:</span> <span class="pre">torch.device</span> <span class="pre">|</span> <span class="pre">list[torch.device]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">env_device:</span> <span class="pre">torch.device</span> <span class="pre">|</span> <span class="pre">list[torch.device]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">policy_device:</span> <span class="pre">torch.device</span> <span class="pre">|</span> <span class="pre">list[torch.device]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">max_frames_per_traj=-1,</span> <span class="pre">init_random_frames=-1,</span> <span class="pre">reset_at_each_iter=False,</span> <span class="pre">postproc=None,</span> <span class="pre">split_trajs=False,</span> <span class="pre">exploration_type=InteractionType.RANDOM,</span> <span class="pre">collector_class:</span> <span class="pre">Callable[[TensorDict],</span> <span class="pre">TensorDict]</span> <span class="pre">=</span> <span class="pre">&lt;class</span> <span class="pre">'torchrl.collectors.collectors.SyncDataCollector'&gt;,</span> <span class="pre">collector_kwargs:</span> <span class="pre">dict</span> <span class="pre">|</span> <span class="pre">list[dict]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">num_workers_per_collector:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">1,</span> <span class="pre">sync:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False,</span> <span class="pre">ray_init_config:</span> <span class="pre">dict</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">remote_configs:</span> <span class="pre">dict</span> <span class="pre">|</span> <span class="pre">list[dict]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">num_collectors:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">update_after_each_batch=False,</span> <span class="pre">max_weight_update_interval=-1,</span> <span class="pre">replay_buffer:</span> <span class="pre">ReplayBuffer</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">remote_weight_updater:</span> <span class="pre">RemoteWeightUpdaterBase</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">local_weight_updater:</span> <span class="pre">LocalWeightUpdaterBase</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/distributed/ray.html#RayCollector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.distributed.RayCollector" title="Permalink to this definition">¶</a></dt>
 <dd><p>Distributed data collector with <a class="reference external" href="https://docs.ray.io/">Ray</a> backend.</p>
 <p>This Python class serves as a ray-based solution to instantiate and coordinate multiple
 data collectors in a distributed cluster. Like TorchRL non-distributed collectors, this
@@ -600,9 +600,10 @@ be updated after each collection. For <code class="docutils literal notranslate"
 all workers will see their weights updated. For <code class="docutils literal notranslate"><span class="pre">sync=False</span></code>,
 only the worker from which the data has been gathered will be
 updated.
+This is equivalent to <cite>max_weight_update_interval=0</cite>.
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>, i.e. updates have to be executed manually
 through
-<code class="docutils literal notranslate"><span class="pre">torchrl.collectors.distributed.RayDistributedCollector.update_policy_weights_()</span></code></p></li>
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">torchrl.collectors.DataCollector.update_policy_weights_()</span></code></p></li>
 <li><p><strong>max_weight_update_interval</strong> (<em>int</em><em>, </em><em>optional</em>) – the maximum number of
 batches that can be collected before the policy weights of a worker
 is updated.
@@ -619,6 +620,13 @@ but populate the buffer instead. Defaults to <code class="docutils literal notra
 <a class="reference internal" href="torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer" title="torchrl.data.RayReplayBuffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">RayReplayBuffer</span></code></a> instance should be used here.</p>
 </div>
 </p></li>
+<li><p><strong>local_weight_updater</strong> (<a class="reference internal" href="torchrl.collectors.LocalWeightUpdaterBase.html#torchrl.collectors.LocalWeightUpdaterBase" title="torchrl.collectors.LocalWeightUpdaterBase"><em>LocalWeightUpdaterBase</em></a><em>, </em><em>optional</em>) – An instance of <a class="reference internal" href="torchrl.collectors.LocalWeightUpdaterBase.html#torchrl.collectors.LocalWeightUpdaterBase" title="torchrl.collectors.LocalWeightUpdaterBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">LocalWeightUpdaterBase</span></code></a>
+or its subclass, responsible for updating the policy weights on the local inference worker.
+This is typically not used in <code class="xref py py-class docutils literal notranslate"><span class="pre">RayCollector</span></code> as it focuses on distributed environments.</p></li>
+<li><p><strong>remote_weight_updater</strong> (<a class="reference internal" href="torchrl.collectors.RemoteWeightUpdaterBase.html#torchrl.collectors.RemoteWeightUpdaterBase" title="torchrl.collectors.RemoteWeightUpdaterBase"><em>RemoteWeightUpdaterBase</em></a><em>, </em><em>optional</em>) – An instance of <a class="reference internal" href="torchrl.collectors.RemoteWeightUpdaterBase.html#torchrl.collectors.RemoteWeightUpdaterBase" title="torchrl.collectors.RemoteWeightUpdaterBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">RemoteWeightUpdaterBase</span></code></a>
+or its subclass, responsible for updating the policy weights on remote inference workers managed by Ray.
+If not provided, a <a class="reference internal" href="torchrl.collectors.RayRemoteWeightUpdater.html#torchrl.collectors.RayRemoteWeightUpdater" title="torchrl.collectors.RayRemoteWeightUpdater"><code class="xref py py-class docutils literal notranslate"><span class="pre">RayRemoteWeightUpdater</span></code></a> will be used by default, leveraging
+Ray’s distributed capabilities.</p></li>
 </ul>
 </dd>
 </dl>
@@ -675,9 +683,9 @@ but populate the buffer instead. Defaults to <code class="docutils literal notra
 <dd><p>Returns local collector.</p>
 </dd></dl>
 
-<dl class="py method">
+<dl class="py property">
 <dt class="sig sig-object py" id="torchrl.collectors.distributed.RayCollector.remote_collectors">
-<span class="sig-name descname"><span class="pre">remote_collectors</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/distributed/ray.html#RayCollector.remote_collectors"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.distributed.RayCollector.remote_collectors" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">remote_collectors</span></span><a class="headerlink" href="#torchrl.collectors.distributed.RayCollector.remote_collectors" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns list of remote collectors.</p>
 </dd></dl>
 
@@ -713,14 +721,42 @@ but populate the buffer instead. Defaults to <code class="docutils literal notra
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.collectors.distributed.RayCollector.update_policy_weights_">
-<span class="sig-name descname"><span class="pre">update_policy_weights_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">worker_rank</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/collectors/distributed/ray.html#RayCollector.update_policy_weights_"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.distributed.RayCollector.update_policy_weights_" title="Permalink to this definition">¶</a></dt>
-<dd><p>Updates the weights of the worker nodes.</p>
+<span class="sig-name descname"><span class="pre">update_policy_weights_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">policy_weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">worker_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.6)"><span class="pre">torch.device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.6)"><span class="pre">torch.device</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.collectors.distributed.RayCollector.update_policy_weights_" title="Permalink to this definition">¶</a></dt>
+<dd><p>Updates the policy weights for the data collector, accommodating both local and remote execution contexts.</p>
+<p>This method ensures that the policy weights used by the data collector are synchronized with the latest
+trained weights. It supports both local and remote weight updates, depending on the configuration of the
+data collector. The local (download) update is performed before the remote (upload) update, such that weights
+can be transferred to the children workers from a server.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>worker_rank</strong> (<em>int</em><em>, </em><em>optional</em>) – if provided, only this worker weights
-will be updated.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>policy_weights</strong> (<em>TensorDictBase</em><em>, </em><em>optional</em>) – A TensorDict containing the weights of the policy to be used
+for the update. If not provided, the method will attempt to fetch the weights using the configured
+weight updater.</p></li>
+<li><p><strong>worker_ids</strong> (<em>int</em><em> | </em><em>List</em><em>[</em><em>int</em><em>] </em><em>| </em><a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.6)"><em>torch.device</em></a><em> | </em><em>List</em><em>[</em><a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.6)"><em>torch.device</em></a><em>] </em><em>| </em><em>None</em><em>, </em><em>optional</em>) – Identifiers for the
+workers that need to be updated. This is relevant when using a remote weights updater, which must
+be specified during the data collector’s initialization. If <cite>worker_ids</cite> is provided without a
+configured remote weights updater, a TypeError will be raised.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>TypeError</strong> – If <cite>worker_ids</cite> is provided but no <cite>remote_weight_updater</cite> is configured.</p>
 </dd>
 </dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<ul class="simple">
+<li><p>The method first attempts to update weights locally using <cite>local_weight_updater</cite>, if available.</p></li>
+<li><p>If a <cite>remote_weight_updater</cite> is configured, it will be used to update the specified remote workers.</p></li>
+<li><p>Users can extend the <cite>LocalWeightUpdaterBase</cite> and <cite>RemoteWeightUpdaterBase</cite> classes to customize
+the weight update logic for specific use cases. This method should not be overwritten.</p></li>
+</ul>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><code class="xref py py-class docutils literal notranslate"><span class="pre">LocalWeightsUpdaterBase</span></code> and
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">RemoteWeightsUpdaterBase()</span></code>.</p>
+</div>
 </dd></dl>
 
 </dd></dl>
@@ -814,7 +850,7 @@ will be updated.</p>
 	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
 	  if (downloadNote.length >= 1) {
 	      var tutorialUrl = $("#tutorial-type").text();
-	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
 		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
 		  notebookDownloadPath = notebookLink.split('_downloads')[1],
 		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;

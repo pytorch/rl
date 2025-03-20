@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+49a8a42) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+7df8317) &#x25BC</span></a>
     </div>
     
 
@@ -541,6 +541,9 @@
 <span class="sd">            If this value is out of bounds, it is projected back onto the</span>
 <span class="sd">            desired space using the :obj:`TensorSpec.project`</span>
 <span class="sd">            method. Default is ``False``.</span>
+<span class="sd">        inplace (bool or str, optional): if `True`, the input tensordict is modified in-place. If `False`, a new empty</span>
+<span class="sd">            :class:`~tensordict.TensorDict` instance is created. If `&quot;empty&quot;`, `input.empty()` is used instead (ie, the</span>
+<span class="sd">            output preserves type, device and batch-size). Defaults to `True`.</span>
 
 <span class="sd">    Embedding a neural network in a TensorDictModule only requires to specify the input and output keys. The domain spec can</span>
 <span class="sd">        be passed along if needed. TensorDictModule support functional and regular :obj:`nn.Module` objects. In the functional</span>
@@ -621,8 +624,9 @@
         <span class="n">out_keys</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
         <span class="n">spec</span><span class="p">:</span> <span class="n">TensorSpec</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">safe</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">inplace</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="p">):</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">in_keys</span><span class="p">,</span> <span class="n">out_keys</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">in_keys</span><span class="p">,</span> <span class="n">out_keys</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="n">inplace</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">register_spec</span><span class="p">(</span><span class="n">safe</span><span class="o">=</span><span class="n">safe</span><span class="p">,</span> <span class="n">spec</span><span class="o">=</span><span class="n">spec</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">register_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">safe</span><span class="p">,</span> <span class="n">spec</span><span class="p">):</span>
@@ -1020,7 +1024,7 @@
 	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
 	  if (downloadNote.length >= 1) {
 	      var tutorialUrl = $("#tutorial-type").text();
-	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
 		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
 		  notebookDownloadPath = notebookLink.split('_downloads')[1],
 		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;

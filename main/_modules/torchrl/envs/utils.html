@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+49a8a42) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+7df8317) &#x25BC</span></a>
     </div>
     
 
@@ -929,6 +929,7 @@
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
         <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="n">key</span><span class="p">,)</span>
     <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">key</span><span class="p">:</span>
+        <span class="c1"># TODO: we can do better than try/except by leveraging the as_list / as_nested_tensor feature</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">val</span> <span class="o">=</span> <span class="n">source</span><span class="o">.</span><span class="n">_get_str</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">val</span><span class="p">):</span>
@@ -949,7 +950,7 @@
         <span class="c1"># This is a temporary solution to understand if a key is heterogeneous</span>
         <span class="c1"># while not having performance impact when the exception is not raised</span>
         <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;Found more than one unique shape in the tensors&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">err</span><span class="p">)):</span>
+            <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;Failed to stack tensors within a tensordict&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">err</span><span class="p">)):</span>
                 <span class="c1"># this is a het key</span>
                 <span class="k">for</span> <span class="n">s_td</span><span class="p">,</span> <span class="n">d_td</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">source</span><span class="o">.</span><span class="n">tensordicts</span><span class="p">,</span> <span class="n">dest</span><span class="o">.</span><span class="n">tensordicts</span><span class="p">):</span>
                     <span class="n">_set_single_key</span><span class="p">(</span><span class="n">s_td</span><span class="p">,</span> <span class="n">d_td</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">clone</span><span class="o">=</span><span class="n">clone</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
@@ -962,6 +963,7 @@
     <span class="n">total_key</span> <span class="o">=</span> <span class="n">total_key</span> <span class="o">+</span> <span class="p">(</span><span class="n">key</span><span class="p">,)</span>
     <span class="n">non_empty</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="k">if</span> <span class="n">unravel_key</span><span class="p">(</span><span class="n">total_key</span><span class="p">)</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">excluded</span><span class="p">:</span>
+        <span class="c1"># TODO: we can do better than try/except by leveraging the as_list / as_nested_tensor feature</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">val</span> <span class="o">=</span> <span class="n">source</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">val</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span>
@@ -992,7 +994,7 @@
         <span class="c1"># This is a temporary solution to understand if a key is heterogeneous</span>
         <span class="c1"># while not having performance impact when the exception is not raised</span>
         <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;Found more than one unique shape in the tensors&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">err</span><span class="p">)):</span>
+            <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;Failed to stack tensors within a tensordict&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">err</span><span class="p">)):</span>
                 <span class="c1"># this is a het key</span>
                 <span class="n">non_empty_local</span> <span class="o">=</span> <span class="kc">False</span>
                 <span class="k">for</span> <span class="n">s_td</span><span class="p">,</span> <span class="n">d_td</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">source</span><span class="o">.</span><span class="n">tensordicts</span><span class="p">,</span> <span class="n">dest</span><span class="o">.</span><span class="n">tensordicts</span><span class="p">):</span>
@@ -2213,7 +2215,7 @@
 	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
 	  if (downloadNote.length >= 1) {
 	      var tutorialUrl = $("#tutorial-type").text();
-	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
 		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
 		  notebookDownloadPath = notebookLink.split('_downloads')[1],
 		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;

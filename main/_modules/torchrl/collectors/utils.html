@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+49a8a42) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+7df8317) &#x25BC</span></a>
     </div>
     
 
@@ -434,7 +434,8 @@
 
 <span class="n">_NON_NN_POLICY_WEIGHTS</span> <span class="o">=</span> <span class="p">(</span>
     <span class="s2">&quot;The policy is not an nn.Module. TorchRL will assume that the parameter set is empty and &quot;</span>
-    <span class="s2">&quot;update_policy_weights_ will be a no-op.&quot;</span>
+    <span class="s2">&quot;update_policy_weights_ will be a no-op. Consider passing a local/remote_weight_updater object &quot;</span>
+    <span class="s2">&quot;to your collector to handle the weight updates.&quot;</span>
 <span class="p">)</span>
 
 
@@ -753,7 +754,7 @@
 	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
 	  if (downloadNote.length >= 1) {
 	      var tutorialUrl = $("#tutorial-type").text();
-	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
 		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
 		  notebookDownloadPath = notebookLink.split('_downloads')[1],
 		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;

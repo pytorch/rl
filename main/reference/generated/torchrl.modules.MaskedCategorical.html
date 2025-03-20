@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+49a8a42) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+7df8317) &#x25BC</span></a>
     </div>
     
 
@@ -456,27 +456,32 @@ must be taken into account. Exclusive with <code class="docutils literal notrans
 invalid (out-of-mask) indices. Defaults to -inf.</p></li>
 <li><p><strong>padding_value</strong> – The padding value in the mask tensor. When
 sparse_mask == True, the padding_value will be ignored.</p></li>
-<li><p><strong>torch.manual_seed</strong> (<em>&gt;&gt;&gt;</em>) – </p></li>
-<li><p><strong>torch.randn</strong> (<em>&gt;&gt;&gt; logits =</em>) – </p></li>
-<li><p><strong>torch.tensor</strong> (<em>&gt;&gt;&gt; mask =</em>) – </p></li>
-<li><p><strong>MaskedCategorical</strong> (<em>&gt;&gt;&gt; dist =</em>) – </p></li>
-<li><p><strong>dist.sample</strong> (<em>&gt;&gt;&gt; sample =</em>) – </p></li>
-<li><p><strong>print</strong> (<em>&gt;&gt;&gt;</em>) – </p></li>
-<li><p><strong>tensor</strong> (<em>[</em><em>-inf</em><em>, </em><em>-inf</em><em>, </em><em>-inf</em><em>, </em><em>-inf</em><em>, </em><em>-inf</em><em>, </em><em>-inf</em><em>, </em><em>-inf</em><em>, </em><em>-inf</em><em>, </em><em>-inf</em><em>, </em><em>-inf</em><em>]</em>) – </p></li>
-<li><p><strong>print</strong> – </p></li>
-<li><p><strong>-1.0831</strong><strong>,</strong> (<em>tensor</em><em>(</em><em>[</em><em>-1.1203</em><em>, </em><em>-1.0928</em><em>, </em><em>-1.0831</em><em>, </em><em>-1.1203</em><em>, </em><em>-1.1203</em><em>, </em><em>-1.0831</em><em>, </em><em>-1.1203</em><em>,</em>) – -1.1203, -1.1203])</p></li>
-<li><p><strong>print</strong> – </p></li>
-<li><p><strong>tensor</strong> – </p></li>
-<li><p><strong>probabilities</strong> (<em>&gt;&gt;&gt; # with</em>) – </p></li>
-<li><p><strong>torch.ones</strong> (<em>&gt;&gt;&gt; prob =</em>) – </p></li>
-<li><p><strong>prob.sum</strong><strong>(</strong><strong>)</strong> (<em>&gt;&gt;&gt; prob = prob /</em>) – </p></li>
-<li><p><strong>torch.tensor</strong> – </p></li>
-<li><p><strong>MaskedCategorical</strong> – </p></li>
-<li><p><strong>print</strong> – </p></li>
-<li><p><strong>-2.1972</strong><strong>,</strong> (<em>tensor</em><em>(</em><em>[   </em><em>-inf</em><em>, </em><em>-2.1972</em><em>, </em><em>-2.1972</em><em>, </em><em>-2.1972</em><em>, </em><em>-2.1972</em><em>, </em><em>-2.1972</em><em>, </em><em>-2.1972</em><em>,</em>) – -2.1972, -2.1972])</p></li>
 </ul>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">logits</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span> <span class="o">/</span> <span class="mi">100</span>  <span class="c1"># almost equal probabilities</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dist</span> <span class="o">=</span> <span class="n">MaskedCategorical</span><span class="p">(</span><span class="n">logits</span><span class="o">=</span><span class="n">logits</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="n">mask</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">sample</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">sample</span><span class="p">((</span><span class="mi">10</span><span class="p">,))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">sample</span><span class="p">)</span>  <span class="c1"># no `1` in the sample</span>
+<span class="go">tensor([2, 3, 0, 2, 2, 0, 2, 0, 2, 2])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">dist</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">sample</span><span class="p">))</span>
+<span class="go">tensor([-1.1203, -1.0928, -1.0831, -1.1203, -1.1203, -1.0831, -1.1203, -1.0831,</span>
+<span class="go">        -1.1203, -1.1203])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">dist</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">sample</span><span class="p">)))</span>
+<span class="go">tensor([-inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># with probabilities</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">prob</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">prob</span> <span class="o">=</span> <span class="n">prob</span> <span class="o">/</span> <span class="n">prob</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="kc">False</span><span class="p">]</span> <span class="o">+</span> <span class="mi">9</span> <span class="o">*</span> <span class="p">[</span><span class="kc">True</span><span class="p">])</span>  <span class="c1"># first outcome is masked</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dist</span> <span class="o">=</span> <span class="n">MaskedCategorical</span><span class="p">(</span><span class="n">probs</span><span class="o">=</span><span class="n">prob</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="n">mask</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">dist</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">10</span><span class="p">)))</span>
+<span class="go">tensor([   -inf, -2.1972, -2.1972, -2.1972, -2.1972, -2.1972, -2.1972, -2.1972,</span>
+<span class="go">        -2.1972, -2.1972])</span>
+</pre></div>
+</div>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.modules.MaskedCategorical.log_prob">
 <span class="sig-name descname"><span class="pre">log_prob</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.6)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.6)"><span class="pre">Tensor</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/modules/distributions/discrete.html#MaskedCategorical.log_prob"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.MaskedCategorical.log_prob" title="Permalink to this definition">¶</a></dt>
@@ -587,7 +592,7 @@ samples if the distribution parameters are batched.</p>
 	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
 	  if (downloadNote.length >= 1) {
 	      var tutorialUrl = $("#tutorial-type").text();
-	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
 		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
 		  notebookDownloadPath = notebookLink.split('_downloads')[1],
 		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;

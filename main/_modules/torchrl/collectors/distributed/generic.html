@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+49a8a42) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+7df8317) &#x25BC</span></a>
     </div>
     
 
@@ -452,6 +452,10 @@
     <span class="n">TCP_PORT</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_NON_NN_POLICY_WEIGHTS</span><span class="p">,</span> <span class="n">split_trajectories</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.weight_update</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">LocalWeightUpdaterBase</span><span class="p">,</span>
+    <span class="n">RemoteWeightUpdaterBase</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">CloudpickleWrapper</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.env_creator</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvCreator</span>
@@ -648,7 +652,7 @@
                 <span class="c1"># been updated</span>
                 <span class="n">policy_weights</span><span class="o">.</span><span class="n">irecv</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
             <span class="c1"># the policy has been updated: we can simply update the weights</span>
-            <span class="n">collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">policy_weights</span><span class="p">)</span>
+            <span class="n">collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">policy_weights</span><span class="o">=</span><span class="n">policy_weights</span><span class="p">)</span>
             <span class="n">_store</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;NODE_</span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">_out&quot;</span><span class="p">,</span> <span class="sa">b</span><span class="s2">&quot;updated&quot;</span><span class="p">)</span>
         <span class="k">elif</span> <span class="n">instruction</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;seeding&quot;</span><span class="p">):</span>
             <span class="n">seed</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">instruction</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;seeding_&quot;</span><span class="p">))</span>
@@ -828,6 +832,15 @@
 <span class="sd">            to learn more.</span>
 <span class="sd">            Defaults to ``&quot;submitit&quot;``.</span>
 <span class="sd">        tcp_port (int, optional): the TCP port to be used. Defaults to 10003.</span>
+<span class="sd">        local_weight_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`</span>
+<span class="sd">            or its subclass, responsible for updating the policy weights on the local inference worker.</span>
+<span class="sd">            This is typically not used in :class:`~torchrl.collectors.distributed.DistributedDataCollector` as it</span>
+<span class="sd">            focuses on distributed environments.</span>
+<span class="sd">        remote_weight_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`</span>
+<span class="sd">            or its subclass, responsible for updating the policy weights on distributed inference workers.</span>
+<span class="sd">            If not provided, a :class:`~torchrl.collectors.distributed.DistributedRemoteWeightUpdater` will be used by</span>
+<span class="sd">            default, which handles weight synchronization across distributed workers.</span>
+
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">_VERBOSE</span> <span class="o">=</span> <span class="n">VERBOSE</span>  <span class="c1"># for debugging</span>
@@ -860,6 +873,8 @@
         <span class="n">max_weight_update_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
         <span class="n">launcher</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;submitit&quot;</span><span class="p">,</span>
         <span class="n">tcp_port</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">remote_weight_updater</span><span class="p">:</span> <span class="n">RemoteWeightUpdaterBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">local_weight_updater</span><span class="p">:</span> <span class="n">LocalWeightUpdaterBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
 
         <span class="k">if</span> <span class="n">collector_class</span> <span class="o">==</span> <span class="s2">&quot;async&quot;</span><span class="p">:</span>
@@ -874,6 +889,13 @@
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
             <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">policy</span><span class="p">)</span>
             <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">policy_weights</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">lock_</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="n">policy_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">policy_weights</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">remote_weight_updater</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;remote_weight_updater must be passed along with &quot;</span>
+                    <span class="s2">&quot;a policy_factory.&quot;</span>
+                <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">_NON_NN_POLICY_WEIGHTS</span><span class="p">)</span>
             <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">lock</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -955,6 +977,15 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_init_workers</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_make_container</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">remote_weight_updater</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">remote_weight_updater</span> <span class="o">=</span> <span class="n">DistributedRemoteWeightUpdater</span><span class="p">(</span>
+                <span class="n">store</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="p">,</span>
+                <span class="n">policy_weights</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span><span class="p">,</span>
+                <span class="n">num_workers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">,</span>
+                <span class="n">sync</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_sync</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">remote_weight_updater</span> <span class="o">=</span> <span class="n">remote_weight_updater</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">local_weight_updater</span> <span class="o">=</span> <span class="n">local_weight_updater</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">device</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]:</span>
@@ -1238,7 +1269,9 @@
                         <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span><span class="p">[</span><span class="n">j</span><span class="p">]</span>
                         <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_weight_update_interval</span>
                     <span class="p">):</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">rank</span><span class="p">)</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span>
+                            <span class="n">policy_weights</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">rank</span>
+                        <span class="p">)</span>
 
         <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">):</span>
             <span class="n">rank</span> <span class="o">=</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span>
@@ -1287,7 +1320,7 @@
                         <span class="n">_tracker</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
                     <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tensordict_out</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">update_after_each_batch</span><span class="p">:</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">rank</span><span class="p">)</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">worker_ids</span><span class="o">=</span><span class="n">rank</span><span class="p">)</span>
                     <span class="n">total_frames</span> <span class="o">+=</span> <span class="n">data</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
                     <span class="k">if</span> <span class="n">total_frames</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span><span class="p">:</span>
                         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_VERBOSE</span><span class="p">:</span>
@@ -1300,31 +1333,6 @@
                         <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="o">+=</span> <span class="n">j</span> <span class="o">!=</span> <span class="n">i</span>
                     <span class="k">break</span>
         <span class="k">return</span> <span class="n">data</span><span class="p">,</span> <span class="n">total_frames</span>
-
-<div class="viewcode-block" id="DistributedDataCollector.update_policy_weights_"><a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.DistributedDataCollector.html#torchrl.collectors.distributed.DistributedDataCollector.update_policy_weights_">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">update_policy_weights_</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">worker_rank</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Updates the weights of the worker nodes.</span>
-
-<span class="sd">        Args:</span>
-<span class="sd">            worker_rank (int, optional): if provided, only this worker weights</span>
-<span class="sd">                will be updated.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">worker_rank</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">worker_rank</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;worker_rank must be greater than 1&quot;</span><span class="p">)</span>
-        <span class="n">workers</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">)</span> <span class="k">if</span> <span class="n">worker_rank</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">[</span><span class="n">worker_rank</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
-        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">workers</span><span class="p">:</span>
-            <span class="n">rank</span> <span class="o">=</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_VERBOSE</span><span class="p">:</span>
-                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;updating weights of </span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;NODE_</span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">_in&quot;</span><span class="p">,</span> <span class="sa">b</span><span class="s2">&quot;update_weights&quot;</span><span class="p">)</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">rank</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span><span class="o">.</span><span class="n">isend</span><span class="p">(</span><span class="n">rank</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
-            <span class="n">status</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;NODE_</span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">_out&quot;</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">status</span> <span class="o">!=</span> <span class="sa">b</span><span class="s2">&quot;updated&quot;</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected &#39;updated&#39; but got status </span><span class="si">{</span><span class="n">status</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="o">.</span><span class="n">delete_key</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;NODE_</span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">_out&quot;</span><span class="p">)</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">static_seed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
         <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">):</span>
@@ -1371,6 +1379,101 @@
                 <span class="k">pass</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_VERBOSE</span><span class="p">:</span>
             <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;collector shut down&quot;</span><span class="p">)</span></div>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">DistributedRemoteWeightUpdater</span><span class="p">(</span><span class="n">RemoteWeightUpdaterBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A remote weight updater for synchronizing policy weights across distributed workers.</span>
+
+<span class="sd">    The `DistributedRemoteWeightUpdater` class provides a mechanism for updating the weights</span>
+<span class="sd">    of a policy across distributed inference workers. It is designed to work with the</span>
+<span class="sd">    :class:`~torchrl.collectors.distributed.DistributedDataCollector` to ensure that each worker receives the latest policy weights.</span>
+<span class="sd">    This class is typically used in distributed data collection scenarios where multiple workers</span>
+<span class="sd">    need to be kept in sync with the central policy weights.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        store (dict[str, str]): A dictionary-like store used for communication between the server</span>
+<span class="sd">            and the distributed workers.</span>
+<span class="sd">        policy_weights (TensorDictBase): The current weights of the policy that need to be distributed</span>
+<span class="sd">            to the workers.</span>
+<span class="sd">        num_workers (int): The number of distributed workers that will receive the updated policy weights.</span>
+<span class="sd">        sync (bool): if ``True``, the sync happens synchronously (the server waits for the worker to have completed</span>
+<span class="sd">            the update to restart the run).</span>
+
+<span class="sd">    Methods:</span>
+<span class="sd">        update_weights: Updates the weights on specified or all distributed workers.</span>
+<span class="sd">        all_worker_ids: Returns a list of all worker identifiers (not implemented in this class).</span>
+<span class="sd">        _sync_weights_with_worker: Synchronizes the server weights with a specific worker (not implemented).</span>
+<span class="sd">        _get_server_weights: Retrieves the latest weights from the server (not implemented).</span>
+<span class="sd">        _maybe_map_weights: Optionally maps server weights before distribution (not implemented).</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        This class assumes that the server weights can be directly applied to the distributed workers</span>
+<span class="sd">        without any additional processing. If your use case requires more complex weight mapping or</span>
+<span class="sd">        synchronization logic, consider extending `RemoteWeightUpdaterBase` with a custom implementation.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        RuntimeError: If the worker rank is less than 1 or if the status returned by the store is not &quot;updated&quot;.</span>
+
+<span class="sd">    .. seealso:: :class:`~torchrl.collectors.RemoteWeightUpdaterBase` and</span>
+<span class="sd">        :class:`~torchrl.collectors.distributed.DistributedDataCollector`.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">_VERBOSE</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">store</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span>
+        <span class="n">policy_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+        <span class="n">num_workers</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">sync</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_store</span> <span class="o">=</span> <span class="n">store</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span> <span class="o">=</span> <span class="n">policy_weights</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">=</span> <span class="n">num_workers</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span> <span class="o">=</span> <span class="n">sync</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">)]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_sync_weights_with_worker</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">worker_id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_server_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_map_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">all_worker_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">update_weights</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">worker_ids</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="n">worker_rank</span> <span class="o">=</span> <span class="n">worker_ids</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">worker_ids</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">worker_rank</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">worker_rank</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;worker_rank must be greater than 1&quot;</span><span class="p">)</span>
+            <span class="n">worker_rank</span> <span class="o">=</span> <span class="p">[</span><span class="n">worker_rank</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="n">workers</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">)</span> <span class="k">if</span> <span class="n">worker_rank</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">worker_rank</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span> <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">weights</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">workers</span><span class="p">:</span>
+            <span class="n">rank</span> <span class="o">=</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_VERBOSE</span><span class="p">:</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;updating weights of </span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;NODE_</span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">_in&quot;</span><span class="p">,</span> <span class="sa">b</span><span class="s2">&quot;update_weights&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span><span class="p">:</span>
+                <span class="n">weights</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">rank</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">weights</span><span class="o">.</span><span class="n">isend</span><span class="p">(</span><span class="n">rank</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="n">status</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;NODE_</span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">_out&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">status</span> <span class="o">!=</span> <span class="sa">b</span><span class="s2">&quot;updated&quot;</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected &#39;updated&#39; but got status </span><span class="si">{</span><span class="n">status</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="o">.</span><span class="n">delete_key</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;NODE_</span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">_out&quot;</span><span class="p">)</span>
 </pre></div>
 
              </article>
@@ -1447,7 +1550,7 @@
 	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
 	  if (downloadNote.length >= 1) {
 	      var tutorialUrl = $("#tutorial-type").text();
-	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
 		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
 		  notebookDownloadPath = notebookLink.split('_downloads')[1],
 		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;

@@ -40,7 +40,7 @@
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="SyncDataCollector" href="torchrl.collectors.SyncDataCollector.html" />
-    <link rel="prev" title="torchrl.collectors package" href="../collectors.html" />
+    <link rel="prev" title="RayRemoteWeightUpdater" href="torchrl.collectors.RayRemoteWeightUpdater.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+49a8a42) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+7df8317) &#x25BC</span></a>
     </div>
     
 
@@ -435,14 +435,42 @@
 <dd><p>Base class for data collectors.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.collectors.DataCollectorBase.update_policy_weights_">
-<span class="sig-name descname"><span class="pre">update_policy_weights_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">policy_weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/collectors/collectors.html#DataCollectorBase.update_policy_weights_"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.DataCollectorBase.update_policy_weights_" title="Permalink to this definition">¶</a></dt>
-<dd><p>Updates the policy weights if the policy of the data collector and the trained policy live on different devices.</p>
+<span class="sig-name descname"><span class="pre">update_policy_weights_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">policy_weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">worker_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.6)"><span class="pre">torch.device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.6)"><span class="pre">torch.device</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/collectors/collectors.html#DataCollectorBase.update_policy_weights_"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.DataCollectorBase.update_policy_weights_" title="Permalink to this definition">¶</a></dt>
+<dd><p>Updates the policy weights for the data collector, accommodating both local and remote execution contexts.</p>
+<p>This method ensures that the policy weights used by the data collector are synchronized with the latest
+trained weights. It supports both local and remote weight updates, depending on the configuration of the
+data collector. The local (download) update is performed before the remote (upload) update, such that weights
+can be transferred to the children workers from a server.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>policy_weights</strong> (<em>TensorDictBase</em><em>, </em><em>optional</em>) – if provided, a TensorDict containing
-the weights of the policy to be used for the udpdate.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>policy_weights</strong> (<em>TensorDictBase</em><em>, </em><em>optional</em>) – A TensorDict containing the weights of the policy to be used
+for the update. If not provided, the method will attempt to fetch the weights using the configured
+weight updater.</p></li>
+<li><p><strong>worker_ids</strong> (<em>int</em><em> | </em><em>List</em><em>[</em><em>int</em><em>] </em><em>| </em><a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.6)"><em>torch.device</em></a><em> | </em><em>List</em><em>[</em><a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.6)"><em>torch.device</em></a><em>] </em><em>| </em><em>None</em><em>, </em><em>optional</em>) – Identifiers for the
+workers that need to be updated. This is relevant when using a remote weights updater, which must
+be specified during the data collector’s initialization. If <cite>worker_ids</cite> is provided without a
+configured remote weights updater, a TypeError will be raised.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>TypeError</strong> – If <cite>worker_ids</cite> is provided but no <cite>remote_weight_updater</cite> is configured.</p>
 </dd>
 </dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<ul class="simple">
+<li><p>The method first attempts to update weights locally using <cite>local_weight_updater</cite>, if available.</p></li>
+<li><p>If a <cite>remote_weight_updater</cite> is configured, it will be used to update the specified remote workers.</p></li>
+<li><p>Users can extend the <cite>LocalWeightUpdaterBase</cite> and <cite>RemoteWeightUpdaterBase</cite> classes to customize
+the weight update logic for specific use cases. This method should not be overwritten.</p></li>
+</ul>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><code class="xref py py-class docutils literal notranslate"><span class="pre">LocalWeightsUpdaterBase</span></code> and
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">RemoteWeightsUpdaterBase()</span></code>.</p>
+</div>
 </dd></dl>
 
 </dd></dl>
@@ -460,7 +488,7 @@ the weights of the policy to be used for the udpdate.</p>
         <a href="torchrl.collectors.SyncDataCollector.html" class="btn btn-neutral float-right" title="SyncDataCollector" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="../collectors.html" class="btn btn-neutral" title="torchrl.collectors package" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="torchrl.collectors.RayRemoteWeightUpdater.html" class="btn btn-neutral" title="RayRemoteWeightUpdater" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -536,7 +564,7 @@ the weights of the policy to be used for the udpdate.</p>
 	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
 	  if (downloadNote.length >= 1) {
 	      var tutorialUrl = $("#tutorial-type").text();
-	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
 		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
 		  notebookDownloadPath = notebookLink.split('_downloads')[1],
 		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
