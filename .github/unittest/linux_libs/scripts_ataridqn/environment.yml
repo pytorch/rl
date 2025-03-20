@@ -7,7 +7,7 @@ dependencies:
   - gsutil
   - pip:
     - hypothesis
-    - setuptools<77.0.3
+    - setuptools<77
     - future
     - cloudpickle
     - pytest

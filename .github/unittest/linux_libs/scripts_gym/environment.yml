@@ -8,7 +8,7 @@ dependencies:
     # Initial version is required to install Atari ROMS in setup_env.sh
     - gym[atari]==0.13
     - hypothesis
-    - setuptools<77.0.3
+    - setuptools<77
     - future
     - cloudpickle
     - pygame
