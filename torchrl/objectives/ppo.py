@@ -559,7 +559,6 @@ class PPOLoss(LossModule):
                     f"tensordict stored {self.tensor_keys.action} requires grad."
                 )
             log_prob = dist.log_prob(action)
-            assert log_prob.requires_grad
         else:
             raise NotImplementedError(
                 "Only probabilistic modules from tensordict.nn are currently supported. "

@@ -6294,7 +6294,7 @@ class TensorDictPrimer(Transform):
                 f"observation_spec was expected to be of type Composite. Got {type(observation_spec)} instead."
             )
 
-        if self.primers.shape != observation_spec.shape:
+        if self.primers.shape[: observation_spec.ndim] != observation_spec.shape:
             if self.expand_specs:
                 self.primers = self._expand_shape(self.primers)
             elif self.expand_specs is None:
@@ -6432,8 +6432,6 @@ class TensorDictPrimer(Transform):
                     resets = self.default_value(reset=_reset)
                     tensordict_reset.update(resets)
 
-                print('self.primers', self.primers)
-                print('tensordict_reset', tensordict_reset)
                 for key, spec in self.primers.items(True, True):
                     if not self._validated:
                         self._validate_value_tensor(tensordict_reset.get(key), spec)

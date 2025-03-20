@@ -34,18 +34,16 @@ from torchrl.envs.utils import _StepMDP
 
 
 class LLMEnv(EnvBase):
-    """A text generation environment.
+    """A text generation environment for language models.
 
     This environment is designed to work with language models, where the observation is a string or a tensor of
-    integers representing a sequence of tokens.
-    The action is also a string or a tensor of integers, which is concatenated to the previous observation to form the
-    new observation.
+    integers representing a sequence of tokens. The action is also a string or a tensor of integers, which is
+    concatenated to the previous observation to form the new observation.
 
     By default, this environment is meant to track history for a prompt. Users can append transforms to tailor
     this to their use case, such as Chain of Thought (CoT) reasoning or other custom processing.
 
     Users must append a transform to set the "done" condition, which would trigger the loading of the next prompt.
-
     Prompts to the language model can be loaded when the environment is ``reset`` if the environment is created via
     :meth:`~from_dataloader`.
 
@@ -57,7 +55,7 @@ class LLMEnv(EnvBase):
         attention_key (NestedKey, optional): The key in the tensordict where the attention mask is stored.
             Defaults to ``"attention_mask"``.
         action_key (NestedKey, optional): The key in the tensordict where the action is stored. Defaults to
-            ``tokens_response`` or ``"text_response"``.
+            ``"tokens_response"`` or ``"text_response"``.
         reward_key (NestedKey, optional): The key in the tensordict where the reward is stored if `assign_reward=True`.
             Defaults to  ``"reward"``.
         str2str (bool, optional): Whether the environment should expect strings as input and output. Defaults to ``False``.
@@ -66,22 +64,21 @@ class LLMEnv(EnvBase):
             unbounded vocabulary. Defaults to ``None``.
         no_stack (bool, optional): If ``False`` (default), the environment should stack the action with the past
             observation, each action being a new, unseen part of a conversation. Otherwise, the action is assumed
-            to be the plain output of the LLM, including the input tokens / strings.
-        has_attention (bool, optional): if ``True``, an attention mask is to be used under the key indicated by
+            to be the plain output of the LLM, including the input tokens/strings.
+        has_attention (bool, optional): If ``True``, an attention mask is to be used under the key indicated by
             :attr:`attention_key`. Defaults to ``True``.
-        assign_reward (bool, optional): if ``True``, a zero-valued reward of shape equal to to the action shape
+        assign_reward (bool, optional): If ``True``, a zero-valued reward of shape equal to the action shape
             is written during calls to `step()`. Defaults to ``False``.
-        assign_done (bool, optional): if ``True``, a zero-valued done and terminated state of shape equal to to the
+        assign_done (bool, optional): If ``True``, a zero-valued done and terminated state of shape equal to the
             action shape is written during calls to `step()`. Defaults to ``False``.
-
-            .. note:: regardless of the value assigned to `assign_done`, a done state will be written at the root
+            .. note:: Regardless of the value assigned to `assign_done`, a done state will be written at the root
                 as it is a requirement for all TorchRL environments.
-
         batch_size (int or torch.Size, optional): Batch size of the environment. If left empty, the environment
             is batchless (or batch-unlocked), meaning that it can accept tensordicts of any batch size.
             Defaults to ``None`` (batch-unlocked).
-        as_llm_data (bool, optional): If ``True``, the data will be of type :class:`~torchrl.data.LLMData`.
-            Defaults to ``False``.
+
+            .. note:: When using a :class:`~torchrl.envs.DataLoadingPrimer` transform, the batch-size of the env
+                and the transform should match.
 
     .. seealso:: :class:`~torchrl.envs.DataLoadingPrimer` for examples.
 
@@ -112,6 +109,7 @@ class LLMEnv(EnvBase):
         assign_done: bool = False,
         batch_size: int | torch.Size | None = None,
         has_attention: bool = True,
+        # Experimental
         as_llm_data: bool = False,
     ) -> None:
         self.as_llm_data = as_llm_data
@@ -255,6 +253,7 @@ class LLMEnv(EnvBase):
         device: torch.device | None = None,
         vocab_size: int | None = None,
         no_stack: bool = False,
+        # Experimental
         as_llm_data: bool = False,
         batch_size: int | torch.Size | None = None,
         has_attention: bool = True,
@@ -316,6 +315,10 @@ class LLMEnv(EnvBase):
             batch_size (int or torch.Size, optional): Batch size of the environment. If left empty, the environment
                 is batchless (or batch-unlocked), meaning that it can accept tensordicts of any batch size.
                 Defaults to ``None`` (batch-unlocked).
+
+                .. note:: When using a :class:`~torchrl.envs.DataLoadingPrimer` transform, the batch-size of the env
+                    and the transform should match.
+
             primers (Composite | None, optional): The primers to use for each key in the dataloader.
                 Defaults to ``None``.
             data_keys (list[NestedKey] | None, optional): The keys to use for each item in the dataloader. If not passed ``observation_key`` will be populated with the data.
@@ -328,8 +331,6 @@ class LLMEnv(EnvBase):
             repeats (int, optional): How many times the same sample needs to appear successively. This can be useful in
                 situations like GRPO where a single prompt is used multiple times to estimate the advantage using Monte-Carlo
                 samples (rather than an advantage module).
-            as_llm_data (bool, optional): If ``True``, the data will be of type :class:`~torchrl.data.LLMData`.
-                Defaults to ``False``.
 
         Returns:
             LLMEnv: The created LLMEnv instance.
@@ -410,7 +411,7 @@ class LLMEnv(EnvBase):
             no_stack=no_stack,
             assign_reward=assign_reward,
             assign_done=assign_done,
-            batch_size=batch_size,
+            batch_size=batch_size if batch_size is not None else primer.batch_size,
             has_attention=has_attention,
             as_llm_data=as_llm_data,
         )

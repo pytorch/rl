@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from typing import List
+from __future__ import annotations
 
 from tensordict import NestedKey, TensorDictBase
 from tensordict.nn import (
@@ -40,9 +40,9 @@ class CategoricalSequential(ProbabilisticTensorDictSequential):
     log_prob_key = ProbabilisticTensorDictModule.log_prob_key
 
     @property
-    def dist_params_keys(self) -> List[NestedKey]:
+    def dist_params_keys(self) -> list[NestedKey]:
         raise NotImplementedError
 
     @property
-    def dist_sample_keys(self) -> List[NestedKey]:
+    def dist_sample_keys(self) -> list[NestedKey]:
         return ["tokens_response"]

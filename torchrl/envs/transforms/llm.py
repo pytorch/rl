@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import warnings
 from collections import deque
 from collections.abc import Mapping
 from copy import copy, deepcopy
@@ -20,6 +21,7 @@ from tensordict.utils import _zip_strict, is_seq_of_nested_key
 from torch import nn
 
 from torchrl.data.tensor_specs import Composite, NonTensor, TensorSpec, Unbounded
+from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms.transforms import TensorDictPrimer, Transform
 from torchrl.envs.transforms.utils import _set_missing_tolerance, _stateless_param
 from torchrl.envs.utils import make_composite_from_td
@@ -87,6 +89,15 @@ class DataLoadingPrimer(TensorDictPrimer):
 
     Args:
         dataloader (Iterable[Any]): The dataloader to load data from.
+            During collection, we will attempt to convert it into a tensordict using
+            :func:`~tensordict.from_dict` or a similar function.
+            If the dataloader has a `batch_size` attribute, it is assumed that the output will have a batch-size (i.e.,
+            that `TensorDict` can figure out how many samples are present through `auto_batch_size=True`). If that is
+            the case, the data collected from the dataloader will be put in a queue and delivered progressively such that
+            the number of samples equates the `batch_size` argument of the Primer (see :attr:`batch_size` argument
+            below).
+            If the dataloader does not have a batch_size argument (or `dataloader.batch_size=0`), we assume that each
+            sample is a single item.
 
     Keyword Args:
         primers (Composite | None, optional): The primers to use for each key in the dataloader. Defaults to None.
@@ -99,12 +110,18 @@ class DataLoadingPrimer(TensorDictPrimer):
             ensures that `next()` is called on the dataloader only when necessary, and that elements of the dataset
             are loaded in order.
             Defaults to ``True`` whenever the batch-size of the dataloader is greater than 1.
-        auto_batch_size (bool, optional): If ``True`` (default if `dataloader.batch_size > 0`), the batch size of the
-            tensordict returned by the transform will be automatically determined assuming that there is a single batch
-            dimension.
         repeats (int, optional): How many times the same sample needs to appear successively. This can be useful in
             situations like GRPO where a single prompt is used multiple times to estimate the advantage using Monte-Carlo
             samples (rather than an advantage module).
+        batch_size (int, torch.Size or None): the batch-size of the data delivered by the transform.
+            This is somewhat unrelated to the batch-size of the dataloader, in the sense that this number may or may
+            not match the DL's batch size.
+            If left empty or 0, the transform will output as many samples as the input tensordict asks for (e.g.,
+            passing a `TensorDict(batch_size=(3,))` to the :meth:`~.reset` method will give 3 sampled out of the
+            dataloader).
+
+            .. note:: The batch-size of the Primer must match the batch-size of the parent environment (typically a
+                wrapper around :class:`~torchrl.envs.LLMEnv`).
 
     Attributes:
         dataloader (Iterable[Any]): The dataloader to load data from.
@@ -360,26 +377,70 @@ class DataLoadingPrimer(TensorDictPrimer):
         stack_method: Callable[[Any], Any]
         | Literal["as_nested_tensor", "as_padded_tensor"] = None,
         use_buffer: bool | None = None,
-        auto_batch_size: bool = True,
+        batch_size: int | torch.Size | None = None,
         repeats: int | None = None,
         device: torch.device | None = None,
+        group_repeats: bool = False,
     ):
         self.dataloader = dataloader
         if repeats is None:
             repeats = 0
         self.repeats = repeats
-        batch_size = getattr(dataloader, "batch_size", 0)
-        if (batch_size > 1 and use_buffer is None) or repeats > 0:
+
+        # Determine batch-size
+        #  We must distinguish the batch-size of the DL and the batch size of the transform.
+        #  We may want more or less elements than the DL and the logic is slightly different so we
+        #  allow to recompose batches on the fly. If the DL has a batch-size, every element will be
+        #  unbound and stored in a queue. Otherwise, we get as many elements from the DL to fulfill
+        #  the required batch-size.
+        #
+        #  If the batch-size is passed, we will stack as many elements as necessary to fulfill this.
+        #  If not, we try to get it from the dataloader. Contrary to the dataloader, we will always
+        #  deliver the same batch-size (we create an infinite dataloader and reset when it's done),
+        #  whereas DLs with drop_last=False may return batches of different sizes.
+        #
+        # If the batch size passed to the transform is empty (torch.Size(())) or 0, we will consider that
+        #  the batch-size is determined on-the-fly.
+        #
+        # A batch-size of 0 in the dataloader means no batch-size.
+        #
+        # If needed, the various repeats can be grouped in a single batch through group_repeats.
+        #
+        # If auto_batch_size is on, we call auto_batch_size=True when doing TensorDict.from_dict:
+        #  That way we get a tensordict of the right batch-size.
+        # If the dataloader has no batch-size, we're not sure that we can determine the batch-size
+        #  automatically so we will consider that each element in the DL has a batch-size of 0 (ie,
+        #  a single non-batched element is returned at a time).
+
+        if batch_size is None:
+            batch_size = getattr(dataloader, "batch_size", 0)
+            auto_batch_size = batch_size > 0
+        else:
+            auto_batch_size = hasattr(dataloader, "batch_size")
+
+        if not isinstance(batch_size, int):
+            if not isinstance(batch_size, (list, tuple)) or len(batch_size) > 1:
+                raise ValueError(
+                    "batch_size must be an int, or a list / tuple of length <=1."
+                )
+            if batch_size:
+                batch_size = batch_size[0]
+            else:
+                batch_size = 0
+
+        if (batch_size >= 1 and use_buffer is None) or repeats:
             use_buffer = True
-        if repeats:
+
+        # We deliver all the repeats in the same batch
+        if repeats and group_repeats:
             batch_size = batch_size * repeats
 
         self.use_buffer = use_buffer
         if self.use_buffer:
             self._queue = deque()
 
-        # No auto_batch_size if we know we have a single element
-        self.auto_batch_size = auto_batch_size and (batch_size > 0)
+        self.auto_batch_size = auto_batch_size
+        self.batch_size = torch.Size((batch_size,)) if batch_size > 0 else None
         self.endless_dataloader = self._endless_iter(self.dataloader)
 
         if stack_method is None:
@@ -435,10 +496,6 @@ class DataLoadingPrimer(TensorDictPrimer):
         while True:
             yield from obj
 
-    # def _reset_env_preprocess(self, tensordict: TensorDictBase) -> TensorDictBase:
-    #     td = super()._reset_env_preprocess(tensordict)
-    #     return lazy_stack(list(td.unbind(0)))
-    #
     def _load_from_dataloader(self, reset: torch.Tensor | None = None):
         """Loads a single element from the dataloader, or alternatively from the buffer.
 
@@ -448,7 +505,7 @@ class DataLoadingPrimer(TensorDictPrimer):
             if not reset.any():
                 raise RuntimeError("reset must have at least one True value.")
             if reset.ndim > 0:
-                loaded = [self._load_from_dataloader() for i in range(reset.sum())]
+                loaded = [self._load_from_dataloader() for _ in range(reset.sum())]
                 return self.stack_method(loaded)
 
         primers = getattr(self, "primers", None)
@@ -502,10 +559,24 @@ class DataLoadingPrimer(TensorDictPrimer):
             if not out.ndim:
                 out = out.unsqueeze(0)
             self._queue.extend(
-                [d for d in out.unbind(0) for _ in range(max(1, self.repeats))]
+                [d for _ in range(max(1, self.repeats)) for d in out.unbind(0)]
             )
             return self._queue.popleft()
         return out
+
+    def set_container(self, container: Transform | EnvBase) -> None:
+        result = super().set_container(container)
+        # Check batch size
+        parent = getattr(self, "parent", None)
+        if (
+            self.batch_size is not None
+            and parent is not None
+            and parent.batch_size != self.batch_size
+        ):
+            warnings.warn(
+                f"The parent env has a different batch size than the {type(self).__name__} transform."
+            )
+        return result
 
     def __repr__(self) -> str:
         class_name = self.__class__.__name__
