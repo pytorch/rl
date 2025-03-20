@@ -190,7 +190,12 @@ def to_list(tokens, attention_mask):
 
 
 def _prepare(td):
-    out = TensorDict(batch_size=td.batch_size, device=td.device)
+    out = LazyStackedTensorDict(
+        *[
+            TensorDict(batch_size=td.batch_size[1:], device=td.device)
+            for _ in range(td.batch_size[0])
+        ]
+    )
     return out.update(td)
 
 
@@ -383,6 +388,7 @@ def _from_vllm_generate_tokens(
         module_dict["clear_device"] = _maybe_clear_device
 
     def move_input(td):
+        # TODO: Use a lazy stack?
         result = TensorDict(batch_size=td.batch_size, device=td.device)
         result["tokens_in"] = result.new_empty()
         result["tokens_in", "input_ids"] = td.get("tokens")
@@ -520,6 +526,7 @@ def _from_vllm_logprobs_text(
     #  We need to do this rather than tokenizing the response because we want to ensure that there is no
     #  additional tokens, but there is defo room for improvement.
     def tokenize(td):
+        # TODO: Use a lazy stack?
         out = TensorDict(batch_size=td.batch_size, device=td.device)
         text_prompt = td.get(text_key)
         if not isinstance(text_prompt, list):

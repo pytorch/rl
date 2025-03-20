@@ -10,6 +10,7 @@ import torch
 
 from tensordict import (
     is_leaf_nontensor,
+    LazyStackedTensorDict,
     NestedKey,
     TensorDict,
     TensorDictBase,
@@ -266,6 +267,7 @@ class LLMEnv(EnvBase):
         stack_method: Callable[[Any], Any]
         | Literal["as_nested_tensor", "as_padded_tensor"] = None,
         repeats: int | None = None,
+        group_repeats: bool = False,
     ) -> LLMEnv:
         """Creates an LLMEnv instance from a dataloader.
 
@@ -331,6 +333,8 @@ class LLMEnv(EnvBase):
             repeats (int, optional): How many times the same sample needs to appear successively. This can be useful in
                 situations like GRPO where a single prompt is used multiple times to estimate the advantage using Monte-Carlo
                 samples (rather than an advantage module).
+            group_repeats (bool, optional): if ``True``, the batch-size is multiplied by the number of repeats such that
+                all repeats are grouped in a single batch collected from the buffer. Defaults to ``False``.
 
         Returns:
             LLMEnv: The created LLMEnv instance.
@@ -398,6 +402,8 @@ class LLMEnv(EnvBase):
             stack_method=stack_method,
             repeats=repeats,
             device=device,
+            group_repeats=group_repeats,
+            batch_size=batch_size,
         )
         env = LLMEnv(
             str2str=str2str,
@@ -411,7 +417,7 @@ class LLMEnv(EnvBase):
             no_stack=no_stack,
             assign_reward=assign_reward,
             assign_done=assign_done,
-            batch_size=batch_size if batch_size is not None else primer.batch_size,
+            batch_size=primer.batch_size,
             has_attention=has_attention,
             as_llm_data=as_llm_data,
         )
@@ -565,6 +571,8 @@ class LLMEnv(EnvBase):
                 f"{list(tensordict.keys(True, True, is_leaf=is_leaf_nontensor))}. Make sure a TensorDictPrimer (eg, "
                 f"torchrl.envs.DataLoadingPrimer) is appended to the env transforms."
             )
+        if not isinstance(tensordict, LazyStackedTensorDict):
+            tensordict = LazyStackedTensorDict(*tensordict.unbind(0))
         td_reset = tensordict.copy()
         if td_reset.device != self.device:
             if self.device is None:

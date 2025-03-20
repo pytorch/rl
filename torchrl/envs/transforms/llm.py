@@ -123,6 +123,9 @@ class DataLoadingPrimer(TensorDictPrimer):
             .. note:: The batch-size of the Primer must match the batch-size of the parent environment (typically a
                 wrapper around :class:`~torchrl.envs.LLMEnv`).
 
+        group_repeats (bool, optional): if ``True``, the batch-size is multiplied by the number of repeats such that
+            all repeats are grouped in a single batch collected from the buffer. Defaults to ``False``.
+
     Attributes:
         dataloader (Iterable[Any]): The dataloader to load data from.
         endless_dataloader (Iterable[Any]): An endless iterator over the dataloader.

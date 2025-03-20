@@ -15,9 +15,12 @@ from tensordict.nn import CompositeDistribution, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 
 from torch import distributions as dist, nn
+
+from torchrl.collectors import SyncDataCollector
 from torchrl.data import Binary, Bounded, Categorical, Composite, MultiOneHot, OneHot
 from torchrl.data.llm import LLMData
 from torchrl.data.llm.dataset import _has_transformers
+from torchrl.envs import LLMEnv
 from torchrl.modules import (
     from_hf_transformers,
     from_vllm,
@@ -42,10 +45,10 @@ from torchrl.modules.tensordict_module.actors import (
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import get_default_devices
-    from pytorch.rl.test.mocking_classes import NestedCountingEnv
+    from pytorch.rl.test.mocking_classes import DummyStrDataLoader, NestedCountingEnv
 else:
     from _utils_internal import get_default_devices
-    from mocking_classes import NestedCountingEnv
+    from mocking_classes import DummyStrDataLoader, NestedCountingEnv
 
 _has_vllm = importlib.util.find_spec("vllm") is not None
 
@@ -1310,6 +1313,44 @@ class TestLLMActor:
             assert isinstance(tokens, torch.Tensor), tokens
         else:
             assert isinstance(tokens, list)
+
+    def test_vllm_collection(self):
+        from vllm import LLM
+
+        llm = LLM("gpt2")
+        policy = from_vllm(
+            llm,
+            from_text=True,
+            generate=True,
+            return_log_probs=True,
+            pad_output=False,
+            generate_kwargs={"max_tokens": 10},
+        )
+        self._run_check_collector(policy)
+
+    def test_transformers_collection(self):
+        ...
+
+    @classmethod
+    def env_constructor(cls):
+        dl = DummyStrDataLoader(batch_size=32)
+        env = LLMEnv.from_dataloader(
+            dl, batch_size=16, repeats=4, str2str=True, group_repeats=True
+        )
+        assert env.batch_size == (64,)
+        return env
+
+    def _run_check_collector(self, policy):
+        collector = SyncDataCollector(
+            self.env_constructor,
+            policy=policy,
+            frames_per_batch=128,
+            total_frames=512,
+            use_buffers=False,
+        )
+        for data in collector:
+            assert isinstance(data, LazyStackedTensorDict)
+            assert isinstance(data.reshape(-1).get("text_response"), NonTensorStack)
 
 
 if __name__ == "__main__":
