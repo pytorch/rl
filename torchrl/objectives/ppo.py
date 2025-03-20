@@ -533,7 +533,7 @@ class PPOLoss(LossModule):
         if isinstance(
             self.actor_network,
             (ProbabilisticTensorDictSequential, ProbabilisticTensorDictModule),
-        ):
+        ) or hasattr(self.actor_network, "get_dist"):
             # assert tensordict['log_probs'].requires_grad
             # assert tensordict['logits'].requires_grad
             with self.actor_network_params.to_module(

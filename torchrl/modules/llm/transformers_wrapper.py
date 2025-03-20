@@ -315,9 +315,25 @@ class TransformersWrapper(CategoricalSequential):
         return out
 
     def _from_transformers_logprobs_tokens(self, td, out):
-        prompt_input_ids = td[self.token_key]
-        response_input_ids = td[self.token_response_key]
-        prompt_attention_mask = td[self.attention_mask_key]
+        pad_val = self.tokenizer.encode(self.tokenizer.pad_token)[0]
+        prompt_input_ids = td.get(
+            self.token_key,
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=pad_val,
+        )
+        response_input_ids = td.get(
+            self.token_response_key,
+            as_padded_tensor=True,
+            padding_side="right",
+            padding_value=pad_val,
+        )
+        prompt_attention_mask = td.get(
+            self.attention_mask_key,
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=0,
+        )
         total_input_ids = torch.cat([prompt_input_ids, response_input_ids], -1)
 
         if prompt_attention_mask is not None:
@@ -328,6 +344,8 @@ class TransformersWrapper(CategoricalSequential):
                 ],
                 -1,
             )
+        else:
+            total_attention_mask = (total_input_ids != pad_val).to(torch.int64)
 
         total_tokens_out = self.model(
             total_input_ids, attention_mask=total_attention_mask, **self.generate_kwargs
