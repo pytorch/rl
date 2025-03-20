@@ -163,8 +163,8 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     def local_weight_updater(self, value: LocalWeightUpdaterBase | None):
         if value is not None:
             value.register_collector(self)
-        if value.collector is not self:
-            raise RuntimeError("Failed to register collector.")
+            if value.collector is not self:
+                raise RuntimeError("Failed to register collector.")
         self._local_weight_updater = value
 
     @property
@@ -175,8 +175,8 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     def remote_weight_updater(self, value: RemoteWeightUpdaterBase | None):
         if value is not None:
             value.register_collector(self)
-        if value.collector is not self:
-            raise RuntimeError("Failed to register collector.")
+            if value.collector is not self:
+                raise RuntimeError("Failed to register collector.")
         self._remote_weight_updater = value
 
     def _get_policy_and_device(
@@ -310,9 +310,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         if self.remote_weight_updater is not None:
             self.remote_weight_updater(policy_weights, worker_ids=worker_ids, **kwargs)
         elif worker_ids is not None:
-            raise TypeError(
-                "worker_ids was passed but remote_weight_updater was None."
-            )
+            raise TypeError("worker_ids was passed but remote_weight_updater was None.")
 
     def __iter__(self) -> Iterator[TensorDictBase]:
         try:
