@@ -5,7 +5,6 @@ dependencies:
   - pip
   - pip:
     - hypothesis
-    - setuptools<77
     - future
     - cloudpickle
     - pytest

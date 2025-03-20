@@ -6,7 +6,6 @@ dependencies:
   - protobuf
   - pip:
     - hypothesis
-    - setuptools<77
     - future
     - cloudpickle
     - gym[atari]==0.13

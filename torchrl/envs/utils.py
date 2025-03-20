@@ -508,6 +508,7 @@ def _set_single_key(
     if isinstance(key, str):
         key = (key,)
     for k in key:
+        # TODO: we can do better than try/except by leveraging the as_list / as_nested_tensor feature
         try:
             val = source._get_str(k, None)
             if is_tensor_collection(val):
@@ -528,7 +529,7 @@ def _set_single_key(
         # This is a temporary solution to understand if a key is heterogeneous
         # while not having performance impact when the exception is not raised
         except RuntimeError as err:
-            if re.match(r"Found more than one unique shape in the tensors", str(err)):
+            if re.match(r"Failed to stack tensors within a tensordict", str(err)):
                 # this is a het key
                 for s_td, d_td in zip(source.tensordicts, dest.tensordicts):
                     _set_single_key(s_td, d_td, k, clone=clone, device=device)
@@ -541,6 +542,7 @@ def _set(source, dest, key, total_key, excluded):
     total_key = total_key + (key,)
     non_empty = False
     if unravel_key(total_key) not in excluded:
+        # TODO: we can do better than try/except by leveraging the as_list / as_nested_tensor feature
         try:
             val = source.get(key)
             if is_tensor_collection(val) and not isinstance(
@@ -571,7 +573,7 @@ def _set(source, dest, key, total_key, excluded):
         # This is a temporary solution to understand if a key is heterogeneous
         # while not having performance impact when the exception is not raised
         except RuntimeError as err:
-            if re.match(r"Found more than one unique shape in the tensors", str(err)):
+            if re.match(r"Failed to stack tensors within a tensordict", str(err)):
                 # this is a het key
                 non_empty_local = False
                 for s_td, d_td in zip(source.tensordicts, dest.tensordicts):

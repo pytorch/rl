@@ -2,11 +2,11 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import argparse
 import importlib.util
 import os
-from typing import Tuple
 
 import pytest
 import torch
@@ -691,7 +691,7 @@ class TestOrdinal:
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("logit_shape", [(10,), (1, 1), (10, 10), (5, 10, 20)])
     def test_correct_sampling_shape(
-        self, logit_shape: Tuple[int, ...], dtype: torch.dtype, device: str
+        self, logit_shape: tuple[int, ...], dtype: torch.dtype, device: str
     ) -> None:
         logits = torch.testing.make_tensor(logit_shape, dtype=dtype, device=device)
 
@@ -759,7 +759,7 @@ class TestOneHotOrdinal:
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("logit_shape", [(10,), (10, 10), (5, 10, 20)])
     def test_correct_sampling_shape(
-        self, logit_shape: Tuple[int, ...], dtype: torch.dtype, device: str
+        self, logit_shape: tuple[int, ...], dtype: torch.dtype, device: str
     ) -> None:
         logits = torch.testing.make_tensor(logit_shape, dtype=dtype, device=device)
 

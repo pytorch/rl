@@ -2,9 +2,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import abc
+import weakref
 from abc import abstractmethod
-from typing import Callable, Dict, List, TypeVar
+from typing import Any, Callable, TypeVar
 
 import torch
 from tensordict import TensorDictBase
@@ -41,6 +44,25 @@ class LocalWeightUpdaterBase(metaclass=abc.ABCMeta):
         :meth:`~torchrl.collectors.DataCollectorBase.update_policy_weights_`.
 
     """
+
+    _collector_wr: Any = None
+
+    def register_collector(self, collector: DataCollectorBase):  # noqa
+        """Register a collector in the updater.
+
+        Once registered, the updater will not accept another collector.
+
+        Args:
+            collector (DataCollectorBase): The collector to register.
+
+        """
+        if self._collector_wr is not None:
+            raise RuntimeError("Cannot register collector twice.")
+        self._collector_wr = weakref.ref(collector)
+
+    @property
+    def collector(self) -> torchrl.collectors.DataCollectorBase:  # noqa
+        return self._collector_wr() if self._collector_wr is not None else None
 
     @abstractmethod
     def _get_server_weights(self) -> TensorDictBase:
@@ -102,11 +124,32 @@ class RemoteWeightUpdaterBase(metaclass=abc.ABCMeta):
 
     Methods:
         update_weights: Updates the weights on specified or all remote workers.
+        register_collector: Registers a collector. This should be called automatically by the collector
+            upon registration of the updater.
 
     .. seealso:: :class:`~torchrl.collectors.LocalWeightsUpdaterBase` and
         :meth:`~torchrl.collectors.DataCollectorBase.update_policy_weights_`.
 
     """
+
+    _collector_wr: Any = None
+
+    def register_collector(self, collector: DataCollectorBase):  # noqa
+        """Register a collector in the updater.
+
+        Once registered, the updater will not accept another collector.
+
+        Args:
+            collector (DataCollectorBase): The collector to register.
+
+        """
+        if self._collector_wr is not None:
+            raise RuntimeError("Cannot register collector twice.")
+        self._collector_wr = weakref.ref(collector)
+
+    @property
+    def collector(self) -> torch.collector.DataCollectorBase:  # noqa
+        return self._collector_wr() if self._collector_wr is not None else None
 
     @abstractmethod
     def _sync_weights_with_worker(
@@ -123,7 +166,7 @@ class RemoteWeightUpdaterBase(metaclass=abc.ABCMeta):
         ...
 
     @abstractmethod
-    def all_worker_ids(self) -> list[int] | List[torch.device]:
+    def all_worker_ids(self) -> list[int] | list[torch.device]:
         ...
 
     def _skip_update(self, worker_id: int | torch.device) -> bool:
@@ -132,14 +175,14 @@ class RemoteWeightUpdaterBase(metaclass=abc.ABCMeta):
     def __call__(
         self,
         weights: TensorDictBase | None = None,
-        worker_ids: torch.device | int | List[int] | List[torch.device] | None = None,
+        worker_ids: torch.device | int | list[int] | list[torch.device] | None = None,
     ):
         return self.update_weights(weights=weights, worker_ids=worker_ids)
 
     def update_weights(
         self,
         weights: TensorDictBase | None = None,
-        worker_ids: torch.device | int | List[int] | List[torch.device] | None = None,
+        worker_ids: torch.device | int | list[int] | list[torch.device] | None = None,
     ):
         if weights is None:
             # Get the weights on server (local)
@@ -257,12 +300,12 @@ class MultiProcessedRemoteWeightUpdate(RemoteWeightUpdaterBase):
     def __init__(
         self,
         get_server_weights: Callable[[], TensorDictBase] | None,
-        policy_weights: Dict[torch.device, TensorDictBase],
+        policy_weights: dict[torch.device, TensorDictBase],
     ):
         self.weights_getter = get_server_weights
         self._policy_weights = policy_weights
 
-    def all_worker_ids(self) -> list[int] | List[torch.device]:
+    def all_worker_ids(self) -> list[int] | list[torch.device]:
         return list(self._policy_weights)
 
     def _sync_weights_with_worker(
@@ -321,7 +364,7 @@ class RayRemoteWeightUpdater(RemoteWeightUpdaterBase):
     def __init__(
         self,
         policy_weights: TensorDictBase,
-        remote_collectors: List,
+        remote_collectors: list,
         max_interval: int = 0,
     ):
         self.policy_weights = policy_weights
@@ -329,7 +372,7 @@ class RayRemoteWeightUpdater(RemoteWeightUpdaterBase):
         self.max_interval = max(0, max_interval)
         self._batches_since_weight_update = [0] * len(self.remote_collectors)
 
-    def all_worker_ids(self) -> list[int] | List[torch.device]:
+    def all_worker_ids(self) -> list[int] | list[torch.device]:
         return list(range(len(self.remote_collectors)))
 
     def _get_server_weights(self) -> TensorDictBase:

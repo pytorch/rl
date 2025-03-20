@@ -277,10 +277,10 @@ class RayCollector(DataCollectorBase):
 
             .. note:: although it is not enfoced (to allow users to implement their own replay buffer class), a
                 :class:`~torchrl.data.RayReplayBuffer` instance should be used here.
-        local_weights_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
+        local_weight_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on the local inference worker.
             This is typically not used in :class:`~torchrl.collectors.RayCollector` as it focuses on distributed environments.
-        remote_weights_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
+        remote_weight_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on remote inference workers managed by Ray.
             If not provided, a :class:`~torchrl.collectors.RayRemoteWeightUpdater` will be used by default, leveraging
             Ray's distributed capabilities.
@@ -342,8 +342,8 @@ class RayCollector(DataCollectorBase):
         update_after_each_batch=False,
         max_weight_update_interval=-1,
         replay_buffer: ReplayBuffer = None,
-        remote_weights_updater: RemoteWeightUpdaterBase | None = None,
-        local_weights_updater: LocalWeightUpdaterBase | None = None,
+        remote_weight_updater: RemoteWeightUpdaterBase | None = None,
+        local_weight_updater: LocalWeightUpdaterBase | None = None,
     ):
         self.frames_per_batch = frames_per_batch
         if remote_configs is None:
@@ -457,7 +457,7 @@ class RayCollector(DataCollectorBase):
             policy_weights = policy_weights.data.lock_()
         else:
             policy_weights = TensorDict(lock=True)
-            if remote_weights_updater is None:
+            if remote_weight_updater is None:
                 warnings.warn(_NON_NN_POLICY_WEIGHTS)
         self.policy_weights = policy_weights
         self.collector_class = collector_class
@@ -525,14 +525,14 @@ class RayCollector(DataCollectorBase):
                 collector_kwargs,
                 remote_configs,
             )
-        if remote_weights_updater is None:
-            remote_weights_updater = RayRemoteWeightUpdater(
+        if remote_weight_updater is None:
+            remote_weight_updater = RayRemoteWeightUpdater(
                 policy_weights=policy_weights,
                 remote_collectors=self.remote_collectors,
                 max_interval=self.max_weight_update_interval,
             )
-        self.remote_weights_updater = remote_weights_updater
-        self.local_weights_updater = local_weights_updater
+        self.remote_weight_updater = remote_weight_updater
+        self.local_weight_updater = local_weight_updater
 
         # Print info of all remote workers
         pending_samples = [

@@ -7,7 +7,6 @@ dependencies:
   - pip:
     - mlagents_envs==1.0.0
     - hypothesis
-    - setuptools<77
     - future
     - cloudpickle
     - pytest
