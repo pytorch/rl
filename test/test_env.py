@@ -42,6 +42,7 @@ from torchrl import set_auto_unwrap_transformed_env
 from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
 from torchrl.data.tensor_specs import Categorical, Composite, NonTensor, Unbounded
 from torchrl.envs import (
+    AsyncEnvPool,
     CatFrames,
     CatTensors,
     ChessEnv,
@@ -4994,6 +4995,58 @@ class TestLLMEnv:
             if assign_done:
                 assert "terminated" in r
                 assert "done" in r
+
+
+class TestAsyncEnvPool:
+    def make_env(self, *, makers, backend):
+        return AsyncEnvPool(makers, backend=backend)
+
+    @pytest.fixture(scope="module")
+    def make_envs(self):
+        yield [
+            partial(CountingEnv),
+            partial(CountingEnv),
+            partial(CountingEnv),
+            partial(CountingEnv),
+        ]
+
+    @pytest.mark.parametrize("backend", ["multiprocessing", "threading"])
+    def test_specs(self, backend, make_envs):
+        env = self.make_env(makers=make_envs, backend=backend)
+        try:
+            r = env.reset()
+            assert r.shape == env.shape
+            s = env.rand_step(r)
+            assert s.shape == env.shape
+            env.check_env_specs(break_when_any_done="both")
+        finally:
+            env._maybe_shutdown()
+
+    @pytest.mark.parametrize("backend", ["multiprocessing", "threading"])
+    @pytest.mark.parametrize("min_get", [None, 1, 2])
+    @set_capture_non_tensor_stack(False)
+    def test_async_reset_and_step(self, backend, make_envs, min_get):
+        env = self.make_env(makers=make_envs, backend=backend)
+        try:
+            env.async_reset_send(
+                TensorDict(
+                    {env._env_idx_key: NonTensorStack(*range(env.batch_size.numel()))},
+                    batch_size=env.batch_size,
+                )
+            )
+            r = env.async_reset_recv(min_get=min_get)
+            if min_get is not None:
+                assert r.numel() >= min_get
+            assert env._env_idx_key in r
+            # take an action
+            r.set("action", torch.ones(r.shape + (1,)))
+            env.async_step_send(r)
+            s = env.async_step_recv(min_get=min_get)
+            if min_get is not None:
+                assert s.numel() >= min_get
+            assert env._env_idx_key in s
+        finally:
+            env._maybe_shutdown()
 
 
 if __name__ == "__main__":
