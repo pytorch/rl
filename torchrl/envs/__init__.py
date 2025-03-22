@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from .async_envs import AsyncEnvPool, ProcessorAsyncEnvPool, ThreadingAsyncEnvPool
 from .batched_envs import ParallelEnv, SerialEnv
 from .common import EnvBase, EnvMetaData, make_tensordict
 from .custom import ChessEnv, LLMEnv, LLMHashingEnv, PendulumEnv, TicTacToeEnv
@@ -133,6 +134,9 @@ __all__ = [
     "ActionMask",
     "AutoResetEnv",
     "AutoResetTransform",
+    "AsyncEnvPool",
+    "ProcessorAsyncEnvPool",
+    "ThreadingAsyncEnvPool",
     "BatchSizeTransform",
     "BinarizeReward",
     "BraxEnv",
