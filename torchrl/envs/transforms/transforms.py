@@ -6673,8 +6673,8 @@ class VecNorm(Transform):
             )
 
         mean = _sum / _count
-        std = (_ssq / _count - mean.pow(2)).clamp_min(self.eps).sqrt()
-        return (value - mean) / std.clamp_min(self.eps)
+        std = (_ssq / _count - mean.pow(2)).sqrt().clamp_min(self.eps)
+        return (value - mean) / std
 
     def to_observation_norm(self) -> Compose | ObservationNorm:
         """Converts VecNorm into an ObservationNorm class that can be used at inference time.
