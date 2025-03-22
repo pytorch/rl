@@ -13,8 +13,6 @@ import torch
 from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 
-# from torchrl.collectors import DataCollectorBase
-
 Policy = TypeVar("Policy", bound=TensorDictModuleBase)
 
 
@@ -49,7 +47,7 @@ class LocalWeightUpdaterBase(metaclass=abc.ABCMeta):
 
     _collector_wr: Any = None
 
-    def register_collector(self, collector):  # noqa
+    def register_collector(self, collector: DataCollectorBase):  # noqa
         """Register a collector in the updater.
 
         Once registered, the updater will not accept another collector.
@@ -63,7 +61,7 @@ class LocalWeightUpdaterBase(metaclass=abc.ABCMeta):
         self._collector_wr = weakref.ref(collector)
 
     @property
-    def collector(self):  # noqa
+    def collector(self) -> torchrl.collectors.DataCollectorBase:  # noqa
         return self._collector_wr() if self._collector_wr is not None else None
 
     @abstractmethod
@@ -136,7 +134,7 @@ class RemoteWeightUpdaterBase(metaclass=abc.ABCMeta):
 
     _collector_wr: Any = None
 
-    def register_collector(self, collector):  # noqa
+    def register_collector(self, collector: DataCollectorBase):  # noqa
         """Register a collector in the updater.
 
         Once registered, the updater will not accept another collector.
@@ -186,13 +184,11 @@ class RemoteWeightUpdaterBase(metaclass=abc.ABCMeta):
         weights: TensorDictBase | None = None,
         worker_ids: torch.device | int | list[int] | list[torch.device] | None = None,
     ):
-        print(f"in update_weights {worker_ids}")
         if weights is None:
             # Get the weights on server (local)
             server_weights = self._get_server_weights()
         else:
             server_weights = weights
-
 
         self._maybe_map_weights(server_weights)
 

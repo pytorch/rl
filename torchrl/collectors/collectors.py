@@ -320,8 +320,10 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         if self.local_weight_updater is not None:
             self.local_weight_updater(policy_weights, **kwargs)
         if self.remote_weight_updater is not None:
-            import ray
-            ray.get(self.remote_weight_updater.__call__.remote(policy_weights, worker_ids=worker_ids, **kwargs))
+            if _has_ray and isinstance(self.remote_weight_updater, ray.actor.ActorHandle):
+                ray.get(self.remote_weight_updater.__call__.remote(policy_weights, worker_ids=worker_ids, **kwargs))
+            else:
+                self.remote_weight_updater(policy_weights, worker_ids=worker_ids, **kwargs)
         elif worker_ids is not None:
             raise TypeError("worker_ids was passed but remote_weight_updater was None.")
 
@@ -873,13 +875,6 @@ class SyncDataCollector(DataCollectorBase):
 
         self.local_weight_updater = local_weight_updater
         self.remote_weight_updater = remote_weight_updater
-
-    def call_policy_method(self, method: str, args, kwargs):
-        # I want  world where I don't have to do this to call a method on the
-        # vllm policy that is owned by the remote collector
-
-        result = getattr(self.policy['generate'].module, method)(*args, **kwargs)
-        return result
     
     @property
     def _traj_pool(self):

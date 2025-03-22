@@ -415,13 +415,6 @@ def _from_vllm_generate_tokens(
     generate_kwargs.setdefault("logprobs", return_log_probs)
     sampling_params = SamplingParams(**generate_kwargs)
 
-    # def print_weights(td):
-    #     for i, (name, param) in enumerate(model.llm_engine.model_executor.driver_worker.worker.model_runner.model.named_parameters()):
-    #         if i == 0:
-    #             print(f"Model parameters: {name} {param[0]}")
-    #     return td
-
-    # module_dict["print_weights"] = print_weights
     module_dict["generate"] = Mod(
         model,
         method="generate",
