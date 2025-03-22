@@ -23,10 +23,10 @@ from tensordict import (
     TensorDictBase,
 )
 
-from tensordict.tensorclass import NonTensorData
+from tensordict.tensorclass import NonTensorData, NonTensorStack
 from tensordict.utils import _zip_strict
 
-from torchrl.data import NonTensor
+from torchrl.data.tensor_specs import NonTensor
 from torchrl.envs.common import _EnvPostInit, EnvBase
 
 
@@ -291,8 +291,42 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
     def _setup(self) -> None:
         raise NotImplementedError
 
+    def _maybe_make_tensordict(self, tensordict, env_index, make_if_none):
+        if env_index is None:
+            env_idx = tensordict[self._env_idx_key]
+            if isinstance(env_idx, torch.Tensor):
+                env_idx = env_idx.tolist()
+            if isinstance(env_idx, int):
+                env_idx = [env_idx]
+                tensordict = tensordict.unsqueeze(0)
+        elif isinstance(env_index, int):
+            if make_if_none:
+                if tensordict is None:
+                    tensordict = TensorDict(batch_size=(), device=self.device)
+                if self.stack in ("lazy_stack", "maybe_dense"):
+                    tensordict = tensordict.unsqueeze(0)
+                else:
+                    tensordict = LazyStackedTensorDict(tensordict)
+            tensordict[self._env_idx_key] = NonTensorStack(env_index)
+            env_idx = [env_index]
+        else:
+            if make_if_none and tensordict is None:
+                if self.stack in ("lazy_stack", "maybe_dense"):
+                    tensordict = LazyStackedTensorDict(
+                        *[TensorDict(device=self.device) for _ in env_index]
+                    )
+                else:
+                    tensordict = TensorDict(
+                        batch_size=(len(env_index),), device=self.device
+                    )
+            tensordict[self._env_idx_key] = NonTensorStack(*env_index)
+            env_idx = env_index
+        return tensordict, env_idx
+
     @abc.abstractmethod
-    def async_step_send(self, tensordict: TensorDictBase) -> None:
+    def async_step_send(
+        self, tensordict: TensorDictBase, env_index: int | list[int] | None = None
+    ) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -300,17 +334,25 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def async_step_and_maybe_reset_send(self, tensordict: TensorDictBase) -> None:
+    def async_step_and_maybe_reset_send(
+        self, tensordict: TensorDictBase, env_index: int | list[int] | None = None
+    ) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod
     def async_step_and_maybe_reset_recv(
-        self, min_get: int | None = None
+        self,
+        min_get: int | None = None,
+        env_index: int | list[int] | None = None,
     ) -> tuple[TensorDictBase, TensorDictBase]:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def async_reset_send(self, tensordict: TensorDictBase) -> None:
+    def async_reset_send(
+        self,
+        tensordict: TensorDictBase | None = None,
+        env_index: int | list[int] | None = None,
+    ) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -394,15 +436,11 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         input_spec = specs["input_spec"]
         return output_spec, input_spec
 
-    def async_step_send(self, tensordict: TensorDictBase) -> None:
+    def async_step_send(
+        self, tensordict: TensorDictBase, env_index: int | list[int] | None = None
+    ) -> None:
         # puts tds in a queue and ask for env.step
-        # puts tds in a queue and ask for env.reset
-        env_idx = tensordict[self._env_idx_key]
-        if isinstance(env_idx, torch.Tensor):
-            env_idx = env_idx.tolist()
-        if isinstance(env_idx, int):
-            env_idx = [env_idx]
-            tensordict = tensordict.unsqueeze(0)
+        tensordict, env_idx = self._maybe_make_tensordict(tensordict, env_index, False)
 
         if self._busy.intersection(env_idx):
             raise RuntimeError(
@@ -430,15 +468,12 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         self._busy.difference_update(idx)
         return self._stack_func(r)
 
-    def async_step_and_maybe_reset_send(self, tensordict: TensorDictBase) -> None:
+    def async_step_and_maybe_reset_send(
+        self, tensordict: TensorDictBase, env_index: int | list[int] | None = None
+    ) -> None:
         # puts tds in a queue and ask for env.step
-        # puts tds in a queue and ask for env.reset
-        env_idx = tensordict[self._env_idx_key]
-        if isinstance(env_idx, torch.Tensor):
-            env_idx = env_idx.tolist()
-        if isinstance(env_idx, int):
-            env_idx = [env_idx]
-            tensordict = tensordict.unsqueeze(0)
+        tensordict, env_idx = self._maybe_make_tensordict(tensordict, env_index, False)
+
         if self._busy.intersection(env_idx):
             raise RuntimeError(
                 f"Some envs are still processing a step: envs that are busy: {self._busy}, queried: {env_idx}."
@@ -464,14 +499,14 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         self._busy.difference_update(idx)
         return self._stack_func(r), self._stack_func(r_)
 
-    def async_reset_send(self, tensordict: TensorDictBase) -> None:
+    def async_reset_send(
+        self,
+        tensordict: TensorDictBase | None = None,
+        env_index: int | list[int] | None = None,
+    ) -> None:
         # puts tds in a queue and ask for env.reset
-        env_idx = tensordict[self._env_idx_key]
-        if isinstance(env_idx, torch.Tensor):
-            env_idx = env_idx.tolist()
-        if isinstance(env_idx, int):
-            env_idx = [env_idx]
-            tensordict = tensordict.unsqueeze(0)
+        tensordict, env_idx = self._maybe_make_tensordict(tensordict, env_index, True)
+
         if self._busy.intersection(env_idx):
             raise RuntimeError(
                 f"Some envs are still processing a step: envs that are busy: {self._busy}, queried: {env_idx}."
@@ -621,13 +656,10 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
         idx = NonTensorData(idx)
         return td.set(cls._env_idx_key, idx), td_.set(cls._env_idx_key, idx)
 
-    def async_step_send(self, tensordict: TensorDictBase) -> None:
-        env_idx = tensordict[self._env_idx_key]
-        if isinstance(env_idx, torch.Tensor):
-            env_idx = env_idx.tolist()
-        if isinstance(env_idx, int):
-            env_idx = [env_idx]
-            tensordict = tensordict.unsqueeze(0)
+    def async_step_send(
+        self, tensordict: TensorDictBase, env_index: int | list[int] | None = None
+    ) -> None:
+        tensordict, env_idx = self._maybe_make_tensordict(tensordict, env_index, False)
 
         if self._busy.intersection(env_idx):
             raise RuntimeError(
@@ -667,13 +699,10 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
         self._busy.difference_update(idx)
         return self._stack_func(results)
 
-    def async_step_and_maybe_reset_send(self, tensordict: TensorDictBase) -> None:
-        env_idx = tensordict[self._env_idx_key]
-        if isinstance(env_idx, torch.Tensor):
-            env_idx = env_idx.tolist()
-        if isinstance(env_idx, int):
-            env_idx = [env_idx]
-            tensordict = tensordict.unsqueeze(0)
+    def async_step_and_maybe_reset_send(
+        self, tensordict: TensorDictBase, env_index: int | list[int] | None = None
+    ) -> None:
+        tensordict, env_idx = self._maybe_make_tensordict(tensordict, env_index, False)
 
         if self._busy.intersection(env_idx):
             raise RuntimeError(
@@ -716,13 +745,12 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
         self._busy.difference_update(idx)
         return self._stack_func(results), self._stack_func(results_)
 
-    def async_reset_send(self, tensordict: TensorDictBase) -> None:
-        env_idx = tensordict[self._env_idx_key]
-        if isinstance(env_idx, torch.Tensor):
-            env_idx = env_idx.tolist()
-        if isinstance(env_idx, int):
-            env_idx = [env_idx]
-            tensordict = tensordict.unsqueeze(0)
+    def async_reset_send(
+        self,
+        tensordict: TensorDictBase | None = None,
+        env_index: int | list[int] | None = None,
+    ) -> None:
+        tensordict, env_idx = self._maybe_make_tensordict(tensordict, env_index, True)
 
         if self._busy.intersection(env_idx):
             raise RuntimeError(

@@ -5013,6 +5013,7 @@ class TestAsyncEnvPool:
     @pytest.mark.parametrize("backend", ["multiprocessing", "threading"])
     def test_specs(self, backend, make_envs):
         env = self.make_env(makers=make_envs, backend=backend)
+        assert env.batch_size == (4,)
         try:
             r = env.reset()
             assert r.shape == env.shape
