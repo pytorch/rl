@@ -218,16 +218,18 @@ if __name__ == "__main__":
 
     model = "facebook/opt-125m"
 
-    ray.init(num_cpus=4, num_gpus=4)
+    ray.init(num_cpus=5, num_gpus=5)
 
-    vllm_master_address, vllm_update_port = get_ip(), get_open_port()
+    vllm_addresses = [get_ip()] * 2
+    vllm_ports = [get_open_port() for i in range(2)]
+    print(vllm_ports)
 
     trainer_workers, parameter_server = _create_trainer_group(
                                             TrainerActor,
                                             vLLMParameterServer,
                                             3,
-                                            vllm_master_address,
-                                            vllm_update_port,
+                                            vllm_addresses,
+                                            vllm_ports,
                                             model,
                                         )
 
@@ -236,19 +238,28 @@ if __name__ == "__main__":
         handles.append(trainer_worker.train.remote())
 
     model_metadata = ray.get(parameter_server.get_model_metadata.remote())
-    local_weight_updater = vLLMHFLocalWeightUpdater(vllm_master_address, vllm_update_port, model_metadata)
+    local_weight_updaters = [
+        vLLMHFLocalWeightUpdater(vllm_master_address, vllm_update_port, model_metadata) for
+        vllm_master_address, vllm_update_port in zip(vllm_addresses, vllm_ports)
+    ]
 
     make_env_parsed = partial(make_env, batch_size=args.batch_size, dataset=args.dataset)
     collector = RayCollector(
-        [make_env_parsed],
+        [make_env_parsed, make_env_parsed],
         policy_factory=make_policy,
         frames_per_batch=40,
         total_frames=200,
         remote_configs=remote_configs,
         remote_weight_updater=parameter_server,
-        collector_kwargs={
-            "local_weight_updater": local_weight_updater,
-        },
+        num_collectors=2,
+        collector_kwargs=[
+            {
+                "local_weight_updater": local_weight_updaters[0],
+            },
+            {
+                "local_weight_updater": local_weight_updaters[1],
+            }
+        ],
         update_after_each_batch=True,
     )
     print("done collector init")
@@ -258,6 +269,6 @@ if __name__ == "__main__":
     for i, data in enumerate(collector):
         print(tokenizer.decode(data["tokens"][0].squeeze()))
         print(tokenizer.decode(data["tokens_response"][0].squeeze()))
-        if i == 1:
+        if i == 3:
             break
     collector.shutdown()

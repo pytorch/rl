@@ -56,7 +56,8 @@ if _has_vllm:
         def init_weight_update_group(self, master_address, master_port,
                                     rank_offset, world_size):
             from vllm.distributed.parallel_state import get_world_group
-            rank = get_world_group().rank + rank_offset
+            # rank = get_world_group().rank + rank_offset
+            rank = rank_offset
             self.model_update_group = stateless_init_process_group(
                 master_address,
                 master_port,
@@ -91,10 +92,11 @@ else:
 
 class vLLMHFLocalWeightUpdater(LocalWeightUpdaterBase):
     def __init__(self, master_address, master_port, model_metadata):
+        print(f"{master_address=}, {master_port=}")
         self.master_address = master_address
         self.master_port = master_port
         self.model_metadata = model_metadata
-        self.model_update_group = None
+        self.initialized_group = None
 
     def _get_server_weights(self):
         return None
@@ -110,13 +112,13 @@ class vLLMHFLocalWeightUpdater(LocalWeightUpdaterBase):
     
     def _update_local_weights(self, local_weights, mapped_weights):
         llm = self.collector.policy["generate"].module
-        if self.model_update_group is None:
-            # FIXME: hardcoded
+        if self.initialized_group is None:
             weight_sync_world_size = llm.llm_engine.parallel_config.tensor_parallel_size + 1
             llm.collective_rpc(
                 "init_weight_update_group",
                 args=(self.master_address, self.master_port, 1, weight_sync_world_size)
             )
+            self.initialized_group = True
         
         for k, (dtype, shape) in self.model_metadata.items():
             llm.collective_rpc(
@@ -125,11 +127,11 @@ class vLLMHFLocalWeightUpdater(LocalWeightUpdaterBase):
             )
 
 class vLLMRemoteWeightUpdaterBase(RemoteWeightUpdaterBase):
-    def __init__(self, model, vllm_master_address, vllm_master_port):
+    def __init__(self, model, vllm_master_addresses, vllm_master_ports):
         super().__init__()
         from transformers import AutoModel
-        self.vllm_master_address = vllm_master_address
-        self.vllm_master_port = vllm_master_port
+        self.vllm_master_addresses = vllm_master_addresses
+        self.vllm_master_ports = vllm_master_ports
         self.state_dict = AutoModel.from_pretrained(model).cuda().eval().state_dict()
         self.state_dict_lock = threading.Lock()
         self.vllm_comm_groups = dict()
@@ -160,8 +162,8 @@ class vLLMRemoteWeightUpdaterBase(RemoteWeightUpdaterBase):
         vllm_tp_size = 1
         weight_sync_world_size = vllm_tp_size + 1
         model_update_group = stateless_init_process_group(
-            self.vllm_master_address,
-            self.vllm_master_port,
+            self.vllm_master_addresses[worker_id],
+            self.vllm_master_ports[worker_id],
             0,
             weight_sync_world_size,
             torch.device("cuda:0"),
