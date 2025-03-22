@@ -646,7 +646,6 @@ class RayCollector(DataCollectorBase):
             )  # This will interrupt any running tasks on the actor, causing them to fail immediately
 
     def iterator(self):
-        print(f"{self._sync=}")
         def proc(data):
             if self.split_trajs:
                 data = split_trajectories(data)
@@ -762,7 +761,6 @@ class RayCollector(DataCollectorBase):
             if self.update_after_each_batch or self.max_weight_update_interval > -1:
                 self.update_policy_weights_(worker_ids=collector_index)
 
-            print("done updating policy weights")
             # Schedule a new collection task
             future = collector.next.remote()
             pending_tasks[future] = collector_index

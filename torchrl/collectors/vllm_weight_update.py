@@ -112,7 +112,7 @@ class vLLMHFLocalWeightUpdater(LocalWeightUpdaterBase):
         llm = self.collector.policy["generate"].module
         if self.model_update_group is None:
             # FIXME: hardcoded
-            weight_sync_world_size = 2
+            weight_sync_world_size = llm.llm_engine.parallel_config.tensor_parallel_size + 1
             llm.collective_rpc(
                 "init_weight_update_group",
                 args=(self.master_address, self.master_port, 1, weight_sync_world_size)
@@ -146,7 +146,7 @@ class vLLMRemoteWeightUpdaterBase(RemoteWeightUpdaterBase):
         return {k: (v.dtype, v.shape) for k, v in self.state_dict.items()}
     
     def all_worker_ids(self):
-        return [0]
+        return [i for i in range(len(self.collector._remote_collectors))]
         
     def _get_server_weights(self):
         return self.state_dict

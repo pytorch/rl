@@ -875,7 +875,7 @@ class SyncDataCollector(DataCollectorBase):
 
         self.local_weight_updater = local_weight_updater
         self.remote_weight_updater = remote_weight_updater
-    
+
     @property
     def _traj_pool(self):
         pool = getattr(self, "_traj_pool_val", None)
