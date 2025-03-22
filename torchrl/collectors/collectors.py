@@ -76,6 +76,15 @@ except ImportError:
         """Placeholder for missing cudagraph_mark_step_begin method."""
         raise NotImplementedError("cudagraph_mark_step_begin not implemented.")
 
+try:
+    import ray
+    from ray.actor import ActorHandle
+
+    _has_ray = True
+except ImportError as err:
+    _has_ray = False
+    RAY_ERR = err
+
 
 _TIMEOUT = 1.0
 INSTANTIATE_TIMEOUT = 20
@@ -174,9 +183,12 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     @remote_weight_updater.setter
     def remote_weight_updater(self, value: RemoteWeightUpdaterBase | None):
         if value is not None:
-            value.register_collector(self)
-            if value.collector is not self:
-                raise RuntimeError("Failed to register collector.")
+            if _has_ray and isinstance(value, ray.actor.ActorHandle):
+                value.register_collector.remote(self)
+            else:
+                value.register_collector(self)
+                if value.collector is not self:
+                    raise RuntimeError("Failed to register collector.")
         self._remote_weight_updater = value
 
     def _get_policy_and_device(
@@ -306,7 +318,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
 
         """
         if self.local_weight_updater is not None:
-            self.local_weights_updater(policy_weights, **kwargs)
+            self.local_weight_updater(policy_weights, **kwargs)
         if self.remote_weight_updater is not None:
             import ray
             ray.get(self.remote_weight_updater.__call__.remote(policy_weights, worker_ids=worker_ids, **kwargs))
