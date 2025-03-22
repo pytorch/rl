@@ -6725,7 +6725,7 @@ class VecNorm(Transform):
             _ssq = self._td.get(_append_last(key, "_ssq"))
             _count = self._td.get(_append_last(key, "_count"))
             loc[key] = _sum / _count
-            scale[key] = (_ssq / _count - loc[key].pow(2)).clamp_min(self.eps).sqrt()
+            scale[key] = (_ssq / _count - loc[key].pow(2)).sqrt().clamp_min(self.eps)
         if not scale_only:
             loc = TensorDict(loc)
         else:
