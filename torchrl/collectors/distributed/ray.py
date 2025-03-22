@@ -759,7 +759,7 @@ class RayCollector(DataCollectorBase):
             yield out_td
 
             if self.update_after_each_batch or self.max_weight_update_interval > -1:
-                self.update_policy_weights_(worker_ids=collector_index + 1)
+                self.update_policy_weights_(worker_ids=collector_index)
 
             # Schedule a new collection task
             future = collector.next.remote()
