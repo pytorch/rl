@@ -74,6 +74,7 @@ from .transforms import (
     VecNorm,
 )
 from .vc1 import VC1Transform
+from .vecnorm import VecNormV2
 from .vip import VIPRewardTransform, VIPTransform
 
 __all__ = [
@@ -88,6 +89,7 @@ __all__ = [
     "CatTensors",
     "CenterCrop",
     "ClipTransform",
+    "VecNormV2",
     "Compose",
     "ConditionalSkip",
     "Crop",
