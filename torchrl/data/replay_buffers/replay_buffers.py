@@ -447,6 +447,10 @@ class ReplayBuffer:
         with self._replay_lock:
             return len(self._storage)
 
+    def _getattr(self, attr):
+        # To access properties in remote settings, see RayReplayBuffer.write_count for instance
+        return getattr(self, attr)
+
     @property
     def write_count(self):
         """The total number of items written so far in the buffer through add and extend."""
