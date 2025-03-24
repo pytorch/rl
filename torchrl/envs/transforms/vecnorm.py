@@ -4,13 +4,15 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import math
+import uuid
 import warnings
 from copy import copy
 
-from typing import OrderedDict, Sequence, Any
+from typing import Any, OrderedDict, Sequence
 
 import torch
-from tensordict import assert_close, NestedKey, TensorDict, TensorDictBase
+from tensordict import NestedKey, TensorDict, TensorDictBase, unravel_key
 from tensordict.utils import _zip_strict
 from torch import multiprocessing as mp
 from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
@@ -41,12 +43,11 @@ class VecNormV2(Transform):
         shapes: list[torch.Size] = None,
         shared_data: TensorDictBase | None = None,
     ) -> None:
+        self.stateful = stateful
         if lock is None:
             lock = mp.Lock()
         if out_keys is None:
             out_keys = copy(in_keys)
-        if not stateful:
-            in_keys = in_keys + ["_vecnorm_count", "_vecnorm_loc", "_vecnorm_var"]
         super().__init__(in_keys=in_keys, out_keys=out_keys)
 
         self.lock = lock
@@ -54,8 +55,9 @@ class VecNormV2(Transform):
         self.shapes = shapes
         self.eps = eps
         self.frozen = False
-        self.stateful = stateful
+        self._cast_int_to_float = False
         if self.stateful:
+            self.register_buffer("initialized", torch.zeros((), dtype=torch.bool))
             if shared_data:
                 self._loc = shared_data["loc"]
                 self._var = shared_data["var"]
@@ -64,18 +66,47 @@ class VecNormV2(Transform):
                 self._loc = None
                 self._var = None
                 self._count = None
-        elif shared_data:
-            # FIXME
-            raise NotImplementedError
+        else:
+            self.initialized = False
+            if shared_data:
+                # FIXME
+                raise NotImplementedError
+
+    @property
+    def in_keys(self) -> Sequence[NestedKey]:
+        in_keys = self._in_keys
+        if not self.stateful:
+            in_keys = in_keys + [
+                f"{self.prefix}_count",
+                f"{self.prefix}_loc",
+                f"{self.prefix}_var",
+            ]
+        return in_keys
+
+    @in_keys.setter
+    def in_keys(self, in_keys: Sequence[NestedKey]):
+        self._in_keys = in_keys
 
     def set_container(self, container: Transform | EnvBase) -> None:
         super().set_container(container)
         if self.stateful:
             parent = getattr(self, "parent", None)
             if parent is not None and isinstance(parent, EnvBase):
+                if not parent.batch_locked:
+                    warnings.warn(
+                        f"Support of {type(self).__name__} for unbatched container is experimental and subject to change."
+                    )
+                if parent.batch_size:
+                    warnings.warn(
+                        f"Support of {type(self).__name__} for containers with non-empty batch-size is experimental and subject to change."
+                    )
                 # init
                 data = parent.fake_tensordict().get("next")
-                self._maybe_stateful_init(data.select(*self.in_keys))
+                self._maybe_stateful_init(data)
+        else:
+            parent = getattr(self, "parent", None)
+            if parent is not None and isinstance(parent, EnvBase):
+                self._make_prefix(parent.output_spec)
 
     def freeze(self) -> VecNormV2:
         """Freezes the VecNorm, avoiding the stats to be updated when called.
@@ -110,6 +141,18 @@ class VecNormV2(Transform):
         # freeze
         return clone.freeze()
 
+    def clone(self) -> VecNormV2:
+        other = super().clone()
+        if self.stateful:
+            delattr(other, "initialized")
+            other.register_buffer("initialized", self.initialized.clone())
+            if self._loc is not None:
+                other.initialized.fill_(True)
+                other._loc = self._loc.clone()
+                other._var = self._var.clone()
+                other._count = self._count.clone()
+        return other
+
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
@@ -125,10 +168,14 @@ class VecNormV2(Transform):
             self.lock.acquire()
 
         if self.stateful:
+            self._maybe_stateful_init(next_tensordict)
             next_tensordict_select = next_tensordict.select(
                 *self.in_keys, strict=not self.missing_tolerance
             )
-            self._maybe_stateful_init(next_tensordict_select)
+            if self.missing_tolerance and next_tensordict_select.is_empty():
+                if self.lock is not None:
+                    self.lock.release()
+                return next_tensordict
             next_tensordict_norm = self._stateful_norm(next_tensordict_select)
             self._stateful_update(next_tensordict_select)
         else:
@@ -136,10 +183,13 @@ class VecNormV2(Transform):
             next_tensordict_select = next_tensordict.select(
                 *self._in_keys_safe, strict=not self.missing_tolerance
             )
-
-            loc = tensordict.get("_vecnorm_loc")
-            var = tensordict.get("_vecnorm_var")
-            count = tensordict["_vecnorm_count"]
+            if self.missing_tolerance and next_tensordict_select.is_empty():
+                if self.lock is not None:
+                    self.lock.release()
+                return next_tensordict
+            loc = tensordict[f"{self.prefix}_loc"]
+            var = tensordict[f"{self.prefix}_var"]
+            count = tensordict[f"{self.prefix}_count"]
 
             next_tensordict_norm = self._stateless_norm(
                 next_tensordict_select, loc, var, count
@@ -148,9 +198,9 @@ class VecNormV2(Transform):
                 next_tensordict_select, loc, var, count
             )
             # updates have been done in-place, we're good
-            next_tensordict_norm.set("_vecnorm_loc", loc)
-            next_tensordict_norm.set("_vecnorm_var", var)
-            next_tensordict_norm.set("_vecnorm_count", count)
+            next_tensordict_norm.set(f"{self.prefix}_loc", loc)
+            next_tensordict_norm.set(f"{self.prefix}_var", var)
+            next_tensordict_norm.set(f"{self.prefix}_count", count)
 
         next_tensordict.update(next_tensordict_norm)
         if self.lock is not None:
@@ -158,15 +208,46 @@ class VecNormV2(Transform):
 
         return next_tensordict
 
+    def _maybe_cast_to_float(self, data):
+        dtype = torch.get_default_dtype()
+        if self._cast_int_to_float:
+            data = data.apply(lambda x: x.to(dtype))
+        return data
+
+    @staticmethod
+    def _maybe_make_float(x):
+        if x.dtype.is_floating_point:
+            return x
+        return x.to(torch.get_default_dtype())
+
     def _maybe_stateful_init(self, data):
-        if self._loc is None:
-            self._count = torch.tensor(0, dtype=torch.int64)
+        if not self.initialized:
+            self.initialized.copy_(True)
+            #  Some keys (specifically rewards) may be missing, but we can use the
+            #  specs for them
+            try:
+                data_select = data.select(*self._in_keys_safe, strict=True)
+            except KeyError:
+                data_select = self.parent.full_observation_spec.zero().update(
+                    self.parent.full_reward_spec.zero()
+                )
+                data_select = data_select.update(data)
+                data_select = data_select.select(*self._in_keys_safe, strict=True)
+
+            # For the count, we must use a TD because some keys (eg Reward) may be missing at some steps (eg, reset)
+            #  We use mean() to eliminate all dims - since it's local we don't need to expand the shape
+            count = (
+                torch.zeros_like(data_select, dtype=torch.float32)
+                .mean()
+                .to(torch.int64)
+            )
             # create loc
-            loc = torch.zeros_like(data)
+            loc = torch.zeros_like(data_select.apply(self._maybe_make_float))
             # create var
-            var = torch.zeros_like(data)
+            var = torch.zeros_like(data_select.apply(self._maybe_make_float))
             self._loc = loc
             self._var = var
+            self._count = count
 
     @property
     def _in_keys_safe(self):
@@ -175,14 +256,14 @@ class VecNormV2(Transform):
         return self.in_keys
 
     def _norm(self, data, loc, var):
-        var = var - loc.pow(2)
-        scale = var.sqrt().clamp_min(self.eps)
-
-        # print(data, loc, var)
-        # data_update = data.sub(loc).div(var.sqrt().clamp_min(self.eps))
         if self.missing_tolerance:
             loc = loc.select(*data.keys(True, True))
-            scale = scale.select(*data.keys(True, True))
+            var = var.select(*data.keys(True, True))
+            if loc.is_empty():
+                return data
+
+        var = var - loc.pow(2)
+        scale = var.sqrt().clamp_min(self.eps)
 
         data_update = (data - loc) / scale
         if self.out_keys[: len(self.in_keys)] != self.in_keys:
@@ -199,54 +280,108 @@ class VecNormV2(Transform):
     def _stateful_update(self, data):
         if self.frozen:
             return
-        self._count += 1
-        if self.decay < 1.0:
-            bias_correction = 1 - self.decay**self._count
-        else:
-            bias_correction = 1
-        weight = (1 - self.decay) / bias_correction
         if self.missing_tolerance:
             var = self._var.select(*data.keys(True, True))
             loc = self._loc.select(*data.keys(True, True))
+            count = self._count.select(*data.keys(True, True))
         else:
             var = self._var
             loc = self._loc
-        var.lerp_(end=data.pow(2), weight=weight)
+            count = self._count
+        count += 1
+        if self.decay < 1.0:
+            bias_correction = 1 - (count * math.log(self.decay)).exp()
+            bias_correction = bias_correction.apply(lambda x, y: x.to(y.dtype), loc)
+        else:
+            bias_correction = 1
+        weight = (1 - self.decay) / bias_correction
+        data = self._maybe_cast_to_float(data)
         loc.lerp_(end=data, weight=weight)
+        var.lerp_(end=data.pow(2), weight=weight)
 
     def _maybe_stateless_init(self, data):
-        if "_vecnorm_loc" not in data:
+        if not self.initialized or f"{self.prefix}_loc" not in data.keys():
+            self.initialized = True
             # select all except vecnorm
-            data_select = data.select(*self._in_keys_safe)
-            data["_vecnorm_count"] = torch.zeros((), dtype=torch.int64)
+            #  Some keys (specifically rewards) may be missing, but we can use the
+            #  specs for them
+            try:
+                data_select = data.select(*self._in_keys_safe, strict=True)
+            except KeyError:
+                data_select = self.parent.full_observation_spec.zero().update(
+                    self.parent.full_reward_spec.zero()
+                )
+                data_select = data_select.update(data)
+                data_select = data_select.select(*self._in_keys_safe, strict=True)
+
+            data[f"{self.prefix}_count"] = torch.zeros_like(
+                data_select, dtype=torch.int64
+            )
             # create loc
-            loc = torch.zeros_like(data_select)
+            loc = torch.zeros_like(data_select.apply(self._maybe_make_float))
             # create var
-            var = torch.zeros_like(data_select)
-            data["_vecnorm_loc"] = loc
-            data["_vecnorm_var"] = var
+            var = torch.zeros_like(data_select.apply(self._maybe_make_float))
+            data[f"{self.prefix}_loc"] = loc
+            data[f"{self.prefix}_var"] = var
 
     def _stateless_norm(self, data, loc, var, count):
-        return self._norm(data, loc, var)
+        data = self._norm(data, loc, var)
+        return data
 
     def _stateless_update(self, data, loc, var, count):
         if self.frozen:
             return loc, var, count
         count = count + 1
         if self.decay < 1.0:
-            bias_correction = 1 - self.decay**count
+            bias_correction = 1 - (count * math.log(self.decay)).exp()
+            bias_correction = bias_correction.apply(lambda x, y: x.to(y.dtype), loc)
         else:
             bias_correction = 1
         weight = (1 - self.decay) / bias_correction
-        var = var.lerp(end=data.pow(2), weight=weight)
+        data = self._maybe_cast_to_float(data)
         loc = loc.lerp(end=data, weight=weight)
+        var = var.lerp(end=data.pow(2), weight=weight)
         return loc, var, count
 
     def transform_observation_spec(self, observation_spec: Composite) -> Composite:
         return self._transform_spec(observation_spec)
 
-    def transform_reward_spec(self, reward_spec: Composite) -> Composite:
-        return self._transform_spec(reward_spec)
+    def transform_reward_spec(
+        self, reward_spec: Composite, observation_spec
+    ) -> Composite:
+        return self._transform_spec(reward_spec, observation_spec)
+
+    def transform_output_spec(self, output_spec: Composite) -> Composite:
+        # This is a copy-paste of the parent methd to ensure that we correct the reward spec properly
+        output_spec = output_spec.clone()
+        observation_spec = self.transform_observation_spec(
+            output_spec["full_observation_spec"]
+        )
+        if "full_reward_spec" in output_spec.keys():
+            output_spec["full_reward_spec"] = self.transform_reward_spec(
+                output_spec["full_reward_spec"], observation_spec
+            )
+        output_spec["full_observation_spec"] = observation_spec
+        if "full_done_spec" in output_spec.keys():
+            output_spec["full_done_spec"] = self.transform_done_spec(
+                output_spec["full_done_spec"]
+            )
+        output_spec_keys = [
+            unravel_key(k[1:]) for k in output_spec.keys(True) if isinstance(k, tuple)
+        ]
+        out_keys = {unravel_key(k) for k in self.out_keys}
+        in_keys = {unravel_key(k) for k in self.in_keys}
+        for key in out_keys - in_keys:
+            if unravel_key(key) not in output_spec_keys:
+                warnings.warn(
+                    f"The key '{key}' is unaccounted for by the transform (expected keys {output_spec_keys}). "
+                    f"Every new entry in the tensordict resulting from a call to a transform must be "
+                    f"registered in the specs for torchrl rollouts to be consistently built. "
+                    f"Make sure transform_output_spec/transform_observation_spec/... is coded correctly. "
+                    "This warning will trigger a KeyError in v0.9, make sure to adapt your code accordingly.",
+                    category=FutureWarning,
+                )
+        return output_spec
 
     def _maybe_convert_bounded(self, in_spec):
         if isinstance(in_spec, Composite):
@@ -256,34 +391,78 @@ class VecNormV2(Transform):
                     for key, value in in_spec.items()
                 }
             )
+        dtype = in_spec.dtype
+        if dtype is not None and not dtype.is_floating_point:
+            # we need to cast the tensor and spec to a float type
+            in_spec = in_spec.clone()
+            in_spec.dtype = torch.get_default_dtype()
+            self._cast_int_to_float = True
+
         if isinstance(in_spec, Bounded):
             in_spec = Unbounded(
                 shape=in_spec.shape, device=in_spec.device, dtype=in_spec.dtype
             )
         return in_spec
 
-    def _transform_spec(self, spec: Composite) -> Composite:
+    @property
+    def prefix(self):
+        prefix = getattr(self, "_prefix", "_vecnorm")
+        return prefix
+
+    def _make_prefix(self, output_spec):
+        prefix = getattr(self, "_prefix", None)
+        if prefix is not None:
+            return prefix
+        if (
+            "_vecnorm_loc" in output_spec["full_observation_spec"].keys()
+            or "_vecnorm_loc" in output_spec["full_reward_spec"].keys()
+        ):
+            prefix = "_vecnorm" + str(uuid.uuid1())
+        else:
+            prefix = "_vecnorm"
+        self._prefix = prefix
+        return prefix
+
+    def _proc_count_spec(self, count_spec, parent_shape=None):
+        if isinstance(count_spec, Composite):
+            for key, spec in count_spec.items():
+                spec = self._proc_count_spec(spec, parent_shape=count_spec.shape)
+                count_spec[key] = spec
+            return count_spec
+        if count_spec.dtype:
+            count_spec = Unbounded(
+                shape=count_spec.shape, dtype=torch.int64, device=count_spec.device
+            )
+        return count_spec
+
+    def _transform_spec(
+        self, spec: Composite, obs_spec: Composite | None = None
+    ) -> Composite:
         in_specs = {}
-        for in_key, out_key in zip(self.in_keys, self.out_keys):
-            if in_key in spec.keys(True, True):
+        for in_key, out_key in zip(self._in_keys_safe, self.out_keys):
+            if unravel_key(in_key) in spec.keys(True):
                 in_spec = spec.get(in_key).clone()
                 in_spec = self._maybe_convert_bounded(in_spec)
                 spec.set(out_key, in_spec)
                 in_specs[in_key] = in_spec
-
         if not self.stateful and in_specs:
-            loc_spec = spec.get("_vecnorm_loc", default=None)
-            var_spec = spec.get("_vecnorm_var", default=None)
+            if obs_spec is None:
+                obs_spec = spec
+            loc_spec = obs_spec.get(f"{self.prefix}_loc", default=None)
+            var_spec = obs_spec.get(f"{self.prefix}_var", default=None)
+            count_spec = obs_spec.get(f"{self.prefix}_count", default=None)
             if loc_spec is None:
-                loc_spec = Composite(shape=spec.shape, device=spec.device)
-                var_spec = Composite(shape=spec.shape, device=spec.device)
+                loc_spec = Composite(shape=obs_spec.shape, device=obs_spec.device)
+                var_spec = Composite(shape=obs_spec.shape, device=obs_spec.device)
+                count_spec = Composite(shape=obs_spec.shape, device=obs_spec.device)
             loc_spec.update(in_specs)
             # should we clone?
             var_spec.update(in_specs)
-            spec["_vecnorm_loc"] = loc_spec
-            spec["_vecnorm_var"] = var_spec
-            spec["_vecnorm_count"] = Unbounded(dtype=torch.int64, shape=())
-
+            count_spec = count_spec.update(in_specs)
+            count_spec = self._proc_count_spec(count_spec)
+            obs_spec[f"{self.prefix}_loc"] = loc_spec
+            obs_spec[f"{self.prefix}_var"] = var_spec
+            obs_spec[f"{self.prefix}_count"] = count_spec
         return spec
 
     def to_observation_norm(self) -> Compose | ObservationNorm:
@@ -406,4 +585,3 @@ class VecNormV2(Transform):
         Always returns ``True``.
         """
         return True
-

@@ -1097,10 +1097,7 @@ class CountingEnv(EnvBase):
         self.done_spec = Categorical(
             2,
             dtype=torch.bool,
-            shape=(
-                *self.batch_size,
-                1,
-            ),
+            shape=(*self.batch_size, 1),
             device=self.device,
         )
         self.action_spec = Binary(n=1, shape=[*self.batch_size, 1], device=self.device)
@@ -1146,7 +1143,9 @@ class CountingEnv(EnvBase):
                 "observation": self.count.clone(),
                 "done": self.count > self.max_steps,
                 "terminated": self.count > self.max_steps,
-                "reward": torch.zeros_like(self.count, dtype=torch.float),
+                "reward": torch.zeros_like(
+                    self.count, dtype=self.full_reward_spec["reward"].dtype
+                ),
             },
             batch_size=self.batch_size,
             device=self.device,

@@ -667,6 +667,14 @@ class Transform(nn.Module):
     def clone(self) -> T:
         self_copy = copy(self)
         state = copy(self.__dict__)
+        # modules, params, buffers
+        buffers = state.pop("_buffers")
+        modules = state.pop("_modules")
+        parameters = state.pop("_parameters")
+        state["_parameters"] = copy(parameters)
+        state["_modules"] = copy(modules)
+        state["_buffers"] = copy(buffers)
+
         state["_container"] = None
         state["_parent"] = None
         self_copy.__dict__.update(state)

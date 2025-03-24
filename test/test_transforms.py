@@ -9491,19 +9491,17 @@ class TestVecNormV2:
         torch.set_default_dtype(def_dtype)
 
     @pytest.mark.skipif(not _has_gym, reason="gym not available")
-    def test_stateful_and_stateless_specs(self):
-        for stateful in [True, False]:
-            torch.manual_seed(0)
-            env = GymEnv("Pendulum-v1")
-            env.set_seed(0)
-            env = env.append_transform(
-                VecNormV2(
-                    in_keys=["observation"], out_keys=["obs_norm"], stateful=stateful
-                )
-            )
-            # check that transform output spec runs
-            env.transform.transform_output_spec(env.base_env.output_spec)
-            env.check_env_specs()
+    @pytest.mark.parametrize("stateful", [True, False])
+    def test_stateful_and_stateless_specs(self, stateful):
+        torch.manual_seed(0)
+        env = GymEnv("Pendulum-v1")
+        env.set_seed(0)
+        env = env.append_transform(
+            VecNormV2(in_keys=["observation"], out_keys=["obs_norm"], stateful=stateful)
+        )
+        # check that transform output spec runs
+        env.transform.transform_output_spec(env.base_env.output_spec)
+        env.check_env_specs()
 
     @pytest.mark.skipif(not _has_gym, reason="gym not available")
     def test_stateful_vs_stateless(self, set_dtype):
@@ -9534,10 +9532,21 @@ class TestVecNormV2:
             env.close()
             vals.append(r)
             del env
-        torch.testing.assert_close(counts[0], counts[1])
+        torch.testing.assert_close(
+            counts[0].apply(lambda c1, c2: c1.expand_as(c2), counts[1]), counts[1]
+        )
         torch.testing.assert_close(locs[0], locs[1])
         torch.testing.assert_close(vars[0], vars[1])
         assert_close(vals[0], vals[1], intersection=True)
+
+    @pytest.mark.parametrize("stateful", [True, False])
+    def test_vecnorm_stack(self, stateful):
+        env = CountingEnv()
+        env = env.append_transform(
+            VecNormV2(in_keys=["observation"], stateful=stateful)
+        )
+        env = env.append_transform(VecNormV2(in_keys=["reward"], stateful=stateful))
+        env.check_env_specs(break_when_any_done="both")
 
     def test_init_stateful(self):
         env = CountingEnv()
@@ -9634,7 +9643,12 @@ class TestVecNormV2:
             _var = td["var"]
             _count = td["count"]
 
-            assert _count == nprc * 11 + 2  # 10 steps + reset + init
+            assert (_count == nprc * 11 + 2)[
+                "some", "obs"
+            ].all()  # 10 steps + reset + init
+            assert (_count == nprc * 10 + 1)["reward"].all(), _count[
+                "reward"
+            ]  # 10 steps + init
 
             for idx in range(nprc):
                 tup = queues[idx][0].get(timeout=TIMEOUT)
@@ -9783,7 +9797,8 @@ class TestVecNormV2:
 
     def test_pickable(self):
         transform = VecNormV2(in_keys=["observation"])
-        CountingEnv().append_transform(transform)
+        env = CountingEnv()
+        env = env.append_transform(transform)
         serialized = pickle.dumps(transform)
         transform2 = pickle.loads(serialized)
         assert transform.__dict__.keys() == transform2.__dict__.keys()
@@ -9797,11 +9812,13 @@ class TestVecNormV2:
         td = TensorDict({"a": torch.randn(3, 4), ("b", "c"): torch.randn(3, 4)}, [3, 4])
         with pytest.warns(UserWarning, match="Querying state_dict on an uninitialized"):
             sd_empty = transform0.state_dict()
+        assert not transform0[0].initialized
 
         transform1 = transform0.clone()
         # works fine
         transform1.load_state_dict(sd_empty)
         transform1._step(td, td)
+        assert not transform0[0].initialized
         with pytest.raises(
             RuntimeError,
             match=r"called with a void state-dict while the instance is initialized.",
@@ -9814,10 +9831,18 @@ class TestVecNormV2:
         transform1 = transform0.clone()
         assert transform0[0]._loc.is_shared() is transform1[0]._loc.is_shared()
 
+        # A clone does not have hte the same data ptr
         def assert_differs(a, b):
-            assert a.untyped_storage().data_ptr() == b.untyped_storage().data_ptr()
+            assert a.untyped_storage().data_ptr() != b.untyped_storage().data_ptr()
 
         transform1[0]._loc.apply(assert_differs, transform0[0]._loc, filter_empty=True)
+
+        transform1.load_state_dict(transform0.state_dict())
+
+        def assert_same(a, b):
+            assert a.untyped_storage().data_ptr() == b.untyped_storage().data_ptr()
+
+        transform1[0]._loc.apply(assert_same, transform0[0]._loc, filter_empty=True)
 
         transform1 = Compose(
             VecNormV2(in_keys=["a", ("b", "c")], out_keys=["a_avg", ("b", "c_avg")])
