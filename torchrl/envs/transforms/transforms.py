@@ -6540,6 +6540,8 @@ class gSDENoise(TensorDictPrimer):
 class VecNorm(Transform):
     """Moving average normalization layer for torchrl environments.
 
+    .. warning:: This class is to be deprecated in favor of :class:`~torchrl.envs.VecNormV2`.
+
     VecNorm keeps track of the summary statistics of a dataset to standardize
     it on-the-fly. If the transform is in 'eval' mode, the running
     statistics are not updated.
@@ -6605,6 +6607,12 @@ class VecNorm(Transform):
         eps: float = 1e-4,
         shapes: list[torch.Size] = None,
     ) -> None:
+
+        warnings.warn(
+            "This class is to be deprecated in favor of :class:`~torchrl.envs.VecNormV2`.",
+            category=FutureWarning,
+        )
+
         if lock is None:
             lock = mp.Lock()
         if in_keys is None:

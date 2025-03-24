@@ -26,6 +26,77 @@ torch.set_default_dtype(torch.double)
 
 
 class VecNormV2(Transform):
+    """A class for normalizing vectorized observations and rewards in reinforcement learning environments.
+
+    `VecNormV2` can operate in either a stateful or stateless mode. In stateful mode, it maintains
+    internal statistics (mean and variance) to normalize inputs. In stateless mode, it requires
+    external statistics to be provided for normalization.
+
+    Stateful vs. Stateless:
+        Stateful Mode (`stateful=True`):
+
+            - Maintains internal statistics (`loc`, `var`, `count`) for normalization.
+            - Updates statistics with each call unless frozen.
+            - `state_dict` returns the current statistics.
+            - `load_state_dict` updates the internal statistics with the provided state.
+
+        Stateless Mode (`stateful=False`):
+
+            - Requires external statistics to be provided for normalization.
+            - Does not maintain or update internal statistics.
+            - `state_dict` returns an empty dictionary.
+            - `load_state_dict` does not affect internal state.
+
+    Args:
+        in_keys (Sequence[NestedKey]): The input keys for the data to be normalized.
+        out_keys (Sequence[NestedKey] | None): The output keys for the normalized data. Defaults to `in_keys` if
+            not provided.
+        lock (mp.Lock, optional): A lock for thread safety.
+        stateful (bool, optional): Whether the `VecNorm` is stateful. Defaults to `True`.
+        decay (float, optional): The decay rate for updating statistics. Defaults to `0.9999`.
+        eps (float, optional): A small value to prevent division by zero. Defaults to `1e-4`.
+        shapes (list[torch.Size], optional): The shapes of the inputs. Defaults to `None`.
+        shared_data (TensorDictBase | None, optional): Shared data for initialization. Defaults to `None`.
+
+    Attributes:
+        stateful (bool): Indicates whether the VecNormV2 is stateful or stateless.
+        lock (mp.Lock): A multiprocessing lock to ensure thread safety when updating statistics.
+        decay (float): The decay rate for updating statistics.
+        eps (float): A small value to prevent division by zero during normalization.
+        shapes (list[torch.Size]): The shapes of the inputs to be normalized.
+        frozen (bool): Indicates whether the VecNormV2 is frozen, preventing updates to statistics.
+        _cast_int_to_float (bool): Indicates whether integer inputs should be cast to float.
+
+    Methods:
+        freeze(): Freezes the VecNorm, preventing updates to statistics.
+        unfreeze(): Unfreezes the VecNorm, allowing updates to statistics.
+        frozen_copy(): Returns a frozen copy of the VecNorm.
+        clone(): Returns a clone of the VecNorm.
+        transform_observation_spec(observation_spec): Transforms the observation specification.
+        transform_reward_spec(reward_spec, observation_spec): Transforms the reward specification.
+        transform_output_spec(output_spec): Transforms the output specification.
+        to_observation_norm(): Converts the VecNorm to an ObservationNorm transform.
+        set_extra_state(state): Sets the extra state for the VecNorm.
+        get_extra_state(): Gets the extra state of the VecNorm.
+        loc: Returns the location (mean) for normalization.
+        scale: Returns the scale (standard deviation) for normalization.
+        standard_normal: Indicates whether the normalization follows the standard normal distribution.
+
+    State Dict Behavior:
+
+        - In stateful mode, `state_dict` returns a dictionary containing the current `loc`, `var`, and `count`.
+          These can be used to share the tensors across processes (this method is automatically triggered by
+          :class:`~torchrl.envs.VecNorm` to share the VecNorm states across processes).
+        - In stateless mode, `state_dict` returns an empty dictionary as no internal state is maintained.
+
+    Load State Dict Behavior:
+
+        - In stateful mode, `load_state_dict` updates the internal `loc`, `var`, and `count` with the provided state.
+        - In stateless mode, `load_state_dict` does not modify any internal state as there is none to update.
+
+    .. seealso:: :class:`~torchrl.envs.transforms.VecNorm` for the first version of this transform.
+
+    """
 
     # TODO:
     # - test 2 different vecnorms, one for reward one for obs and that they don't collide
