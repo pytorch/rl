@@ -278,9 +278,9 @@ class VecNormV2(Transform):
         return next_tensordict
 
     def _maybe_cast_to_float(self, data):
-        dtype = torch.get_default_dtype()
         if self._cast_int_to_float:
-            data = data.apply(lambda x: x.to(dtype))
+            dtype = torch.get_default_dtype()
+            data = data.apply(lambda x: x.to(dtype) if not x.dtype.is_floating_point else x)
         return data
 
     @staticmethod
@@ -358,13 +358,14 @@ class VecNormV2(Transform):
             loc = self._loc
             count = self._count
         count += 1
+        data = self._maybe_cast_to_float(data)
         if self.decay < 1.0:
             bias_correction = 1 - (count * math.log(self.decay)).exp()
-            bias_correction = bias_correction.apply(lambda x, y: x.to(y.dtype), loc)
+            bias_correction = bias_correction.apply(lambda x, y: x.to(y.dtype), data)
         else:
             bias_correction = 1
         weight = (1 - self.decay) / bias_correction
-        data = self._maybe_cast_to_float(data)
+        print(loc, data, weight)
         loc.lerp_(end=data, weight=weight)
         var.lerp_(end=data.pow(2), weight=weight)
 
@@ -401,13 +402,14 @@ class VecNormV2(Transform):
         if self.frozen:
             return loc, var, count
         count = count + 1
+        data = self._maybe_cast_to_float(data)
         if self.decay < 1.0:
             bias_correction = 1 - (count * math.log(self.decay)).exp()
-            bias_correction = bias_correction.apply(lambda x, y: x.to(y.dtype), loc)
+            bias_correction = bias_correction.apply(lambda x, y: x.to(y.dtype), data)
         else:
             bias_correction = 1
         weight = (1 - self.decay) / bias_correction
-        data = self._maybe_cast_to_float(data)
+        print(loc, data, weight)
         loc = loc.lerp(end=data, weight=weight)
         var = var.lerp(end=data.pow(2), weight=weight)
         return loc, var, count
