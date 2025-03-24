@@ -22,8 +22,6 @@ from torchrl.envs.transforms.transforms import Compose, ObservationNorm, Transfo
 
 from torchrl.envs.transforms.utils import _set_missing_tolerance
 
-torch.set_default_dtype(torch.double)
-
 
 class VecNormV2(Transform):
     """A class for normalizing vectorized observations and rewards in reinforcement learning environments.
