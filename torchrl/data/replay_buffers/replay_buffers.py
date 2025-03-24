@@ -447,6 +447,10 @@ class ReplayBuffer:
         with self._replay_lock:
             return len(self._storage)
 
+    def getattr(self, attr):
+        # To access properties
+        return getattr(self, attr)
+
     @property
     def write_count(self):
         """The total number of items written so far in the buffer through add and extend."""
