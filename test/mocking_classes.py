@@ -1144,7 +1144,7 @@ class CountingEnv(EnvBase):
                 "done": self.count > self.max_steps,
                 "terminated": self.count > self.max_steps,
                 "reward": torch.zeros_like(
-                    self.count, dtype=self.full_reward_spec["reward"].dtype
+                    self.count, dtype=self.full_reward_spec[self.reward_keys[0]].dtype
                 ),
             },
             batch_size=self.batch_size,
@@ -1299,7 +1299,11 @@ class MultiAgentCountingEnv(EnvBase):
                 source[group_name][agent_name] = TensorDict(
                     source={
                         "observation": torch.rand(
-                            (*self.batch_size, 3, 4), device=self.device
+                            (*self.batch_size, 3, 4),
+                            device=self.device,
+                            dtype=self.full_observation_spec[
+                                group_name, agent_name, "observation"
+                            ].dtype,
                         ),
                         "done": self.count > self.max_steps,
                         "terminated": self.count > self.max_steps,
@@ -1323,11 +1327,20 @@ class MultiAgentCountingEnv(EnvBase):
                 source[group_name][agent_name] = TensorDict(
                     source={
                         "observation": torch.rand(
-                            (*self.batch_size, 3, 4), device=self.device
+                            (*self.batch_size, 3, 4),
+                            device=self.device,
+                            dtype=self.full_observation_spec[
+                                group_name, agent_name, "observation"
+                            ].dtype,
                         ),
                         "done": self.count > self.max_steps,
                         "terminated": self.count > self.max_steps,
-                        "reward": torch.zeros_like(self.count, dtype=torch.float),
+                        "reward": torch.zeros_like(
+                            self.count,
+                            dtype=self.full_reward_spec[
+                                group_name, agent_name, "reward"
+                            ].dtype,
+                        ),
                     },
                     batch_size=self.batch_size,
                     device=self.device,
