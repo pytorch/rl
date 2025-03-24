@@ -210,6 +210,8 @@ class RayReplayBuffer(ReplayBuffer):
 
     @property
     def write_count(self):
-        return ray.get(self._rb.getattr.remote("write_count"))
+        return ray.get(self._rb._getattr.remote("write_count"))
 
-
+    @property
+    def dim_extend(self):
+        return ray.get(self._rb._getattr.remote("dim_extend"))

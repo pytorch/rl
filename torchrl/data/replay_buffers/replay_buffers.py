@@ -447,8 +447,8 @@ class ReplayBuffer:
         with self._replay_lock:
             return len(self._storage)
 
-    def getattr(self, attr):
-        # To access properties
+    def _getattr(self, attr):
+        # To access properties in remote settings, see RayReplayBuffer.write_count for instance
         return getattr(self, attr)
 
     @property
