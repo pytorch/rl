@@ -5,6 +5,7 @@
 
 from .common import CategoricalSequential
 from .transformers_policy import from_hf_transformers
-from .vllm_policy import from_vllm
 
-__all__ = ["from_hf_transformers", "from_vllm", "CategoricalSequential"]
+from .vllm_wrapper import vLLMWrapper
+
+__all__ = ["from_hf_transformers", "vLLMWrapper", "CategoricalSequential"]

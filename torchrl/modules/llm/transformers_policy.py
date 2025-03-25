@@ -181,7 +181,7 @@ def from_hf_transformers(
         >>> print(output_data.text_response)
         [' heritageillon rooft rooft Pear Tes grantingalde 58ocrocrocrocrcubecubecubecubecubecubecube']
 
-    .. seealso:: :func:`~torchrl.modules.from_vllm` for a similar interface using the vLLM library.
+    .. seealso:: :func:`~torchrl.modules.vLLMWrapper` for a similar interface using the vLLM library.
 
     """
     # TODO: Seq should have a return_log_prob and be of ProbabilisticTDSequential type for instance checks
