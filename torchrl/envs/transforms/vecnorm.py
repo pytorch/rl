@@ -235,52 +235,55 @@ class VecNormV2(Transform):
     ) -> TensorDictBase:
         if self.lock is not None:
             self.lock.acquire()
+        try:
+            if self.stateful:
+                self._maybe_stateful_init(next_tensordict)
+                next_tensordict_select = next_tensordict.select(
+                    *self.in_keys, strict=not self.missing_tolerance
+                )
+                if self.missing_tolerance and next_tensordict_select.is_empty():
+                    if self.lock is not None:
+                        self.lock.release()
+                    return next_tensordict
+                next_tensordict_norm = self._stateful_norm(next_tensordict_select)
+                self._stateful_update(next_tensordict_select)
+            else:
+                self._maybe_stateless_init(tensordict)
+                next_tensordict_select = next_tensordict.select(
+                    *self._in_keys_safe, strict=not self.missing_tolerance
+                )
+                if self.missing_tolerance and next_tensordict_select.is_empty():
+                    if self.lock is not None:
+                        self.lock.release()
+                    return next_tensordict
+                loc = tensordict[f"{self.prefix}_loc"]
+                var = tensordict[f"{self.prefix}_var"]
+                count = tensordict[f"{self.prefix}_count"]
 
-        if self.stateful:
-            self._maybe_stateful_init(next_tensordict)
-            next_tensordict_select = next_tensordict.select(
-                *self.in_keys, strict=not self.missing_tolerance
-            )
-            if self.missing_tolerance and next_tensordict_select.is_empty():
-                if self.lock is not None:
-                    self.lock.release()
-                return next_tensordict
-            next_tensordict_norm = self._stateful_norm(next_tensordict_select)
-            self._stateful_update(next_tensordict_select)
-        else:
-            self._maybe_stateless_init(tensordict)
-            next_tensordict_select = next_tensordict.select(
-                *self._in_keys_safe, strict=not self.missing_tolerance
-            )
-            if self.missing_tolerance and next_tensordict_select.is_empty():
-                if self.lock is not None:
-                    self.lock.release()
-                return next_tensordict
-            loc = tensordict[f"{self.prefix}_loc"]
-            var = tensordict[f"{self.prefix}_var"]
-            count = tensordict[f"{self.prefix}_count"]
+                next_tensordict_norm = self._stateless_norm(
+                    next_tensordict_select, loc, var, count
+                )
+                loc, var, count = self._stateless_update(
+                    next_tensordict_select, loc, var, count
+                )
+                # updates have been done in-place, we're good
+                next_tensordict_norm.set(f"{self.prefix}_loc", loc)
+                next_tensordict_norm.set(f"{self.prefix}_var", var)
+                next_tensordict_norm.set(f"{self.prefix}_count", count)
 
-            next_tensordict_norm = self._stateless_norm(
-                next_tensordict_select, loc, var, count
-            )
-            loc, var, count = self._stateless_update(
-                next_tensordict_select, loc, var, count
-            )
-            # updates have been done in-place, we're good
-            next_tensordict_norm.set(f"{self.prefix}_loc", loc)
-            next_tensordict_norm.set(f"{self.prefix}_var", var)
-            next_tensordict_norm.set(f"{self.prefix}_count", count)
-
-        next_tensordict.update(next_tensordict_norm)
-        if self.lock is not None:
-            self.lock.release()
+            next_tensordict.update(next_tensordict_norm)
+        finally:
+            if self.lock is not None:
+                self.lock.release()
 
         return next_tensordict
 
     def _maybe_cast_to_float(self, data):
         if self._cast_int_to_float:
             dtype = torch.get_default_dtype()
-            data = data.apply(lambda x: x.to(dtype) if not x.dtype.is_floating_point else x)
+            data = data.apply(
+                lambda x: x.to(dtype) if not x.dtype.is_floating_point else x
+            )
         return data
 
     @staticmethod
@@ -365,7 +368,6 @@ class VecNormV2(Transform):
         else:
             bias_correction = 1
         weight = (1 - self.decay) / bias_correction
-        print(loc, data, weight)
         loc.lerp_(end=data, weight=weight)
         var.lerp_(end=data.pow(2), weight=weight)
 
@@ -409,7 +411,6 @@ class VecNormV2(Transform):
         else:
             bias_correction = 1
         weight = (1 - self.decay) / bias_correction
-        print(loc, data, weight)
         loc = loc.lerp(end=data, weight=weight)
         var = var.lerp(end=data.pow(2), weight=weight)
         return loc, var, count

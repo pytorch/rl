@@ -9484,11 +9484,11 @@ class TestVC1(TransformBase):
 class TestVecNormV2:
     SEED = -1
 
-    @pytest.fixture(scope="class")
-    def set_dtype(self):
-        def_dtype = torch.get_default_dtype()
-        yield torch.set_default_dtype(torch.double)
-        torch.set_default_dtype(def_dtype)
+    # @pytest.fixture(scope="class")
+    # def set_dtype(self):
+    #     def_dtype = torch.get_default_dtype()
+    #     yield torch.set_default_dtype(torch.double)
+    #     torch.set_default_dtype(def_dtype)
 
     @pytest.mark.skipif(not _has_gym, reason="gym not available")
     @pytest.mark.parametrize("stateful", [True, False])
@@ -9504,7 +9504,7 @@ class TestVecNormV2:
         env.check_env_specs()
 
     @pytest.mark.skipif(not _has_gym, reason="gym not available")
-    def test_stateful_vs_stateless(self, set_dtype):
+    def test_stateful_vs_stateless(self):
         vals = []
         locs = []
         vars = []
