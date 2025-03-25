@@ -60,9 +60,6 @@ def log_probs_generate(td: TensorDictBase) -> TensorDictBase:
     )  # shape (B, seq-len, vocab_size)
     # logits = logits - logits.logsumexp(dim=-1, keepdim=True)
     logits = logits.log_softmax(dim=-1)
-    torch.testing.assert_close(
-        logits.logsumexp(-1), torch.zeros_like(logits.logsumexp(-1))
-    )
     td["logits"] = logits[..., -seq_len:, :]
     del td["tokens_out", "logits"]
 
@@ -97,9 +94,6 @@ def log_probs_from_logits(td: TensorDictBase) -> TensorDictBase:
     logits = td["forward", "logits"]
     # logits = logits - logits.logsumexp(dim=-1, keepdim=True)
     logits = logits.log_softmax(dim=-1)
-    torch.testing.assert_close(
-        logits.logsumexp(-1), torch.zeros_like(logits.logsumexp(-1))
-    )
     logits = logits[..., -seq_len - 1 : -1, :]
     td["logits"] = logits
     del td["forward"]
@@ -130,34 +124,57 @@ def from_hf_transformers(
 
     Args:
         model (transformers.modeling_utils.PreTrainedModel): The Hugging Face model to wrap.
-        generate (bool, optional): Whether to generate text. Defaults to `True`.
-        return_log_probs (bool, optional): Whether to return log probabilities. Defaults to `True`.
-        tokenizer (transformers.tokenization_utils.PreTrainedTokenizer, optional): The tokenizer to use. Defaults to `None`.
-        from_text (bool, optional): Whether the input is text. Defaults to `False`.
-        device (torch.device, optional): The device to use for computation. Defaults to `None`.
-        kwargs (dict, optional): Additional arguments for the model's generate method. Defaults to `None`.
-        tokenizer_kwargs (dict, optional): Additional arguments for the tokenizer. Defaults to `None`.
+
+    Keyword Args:
+        return_log_probs (bool | None, optional): Whether to return log probabilities of the generated tokens.
+            Defaults to `None`.
+        tokenizer (transformers.tokenization_utils.PreTrainedTokenizer | None, optional): The tokenizer to use for
+            encoding and decoding text. If `None`, the tokenizer associated with the model will be used. Defaults to
+            `None`.
+        from_text (bool, optional): Indicates whether the input is in text format. If `True`, the input is expected to
+            be text that will be tokenized. If `False`, the input is expected to be token sequences. Defaults to `False`.
+        device (torch.device | None, optional): The device to use for computation. If `None`, the default device will
+            be used. Defaults to `None`.
+        generate (bool, optional): Whether to enable text generation. If `True`, the model will generate text based on
+            the input. If `False`, only log probabilities will be computed for the response tokens/text. Defaults to `True`.
+        generate_kwargs (dict | None, optional): Additional arguments to pass to the model's generate method. These
+            arguments can control aspects of the generation process, such as temperature and top-k sampling. Defaults
+            to `None`.
+        tokenizer_kwargs (dict | None, optional): Additional arguments to pass to the tokenizer. These arguments can
+            control aspects of the tokenization process, such as padding and truncation. Defaults to `None`.
+        inplace (Literal[True, False, "empty"] | None, optional): Determines how the module should handle in-place
+            operations. If `True`, operations will be performed in-place. If `False`, a new TensorDict instance will be
+            created. If `"empty"`, the output data structure will be initialized with `input.empty()` (i.e., it will
+            conserve type, batch-size, and device). Defaults to `True`.
+        pad_output (bool, optional): Whether to pad the output sequences to a uniform length. If `True`, the output
+            sequences will be padded and represented as tensors. If `False`, lists of tokens will be used without
+            padding. Defaults to `True`.
+
+            .. warning:: Only `pad_output=True` is currently supported for transformers models.
 
     Returns:
         TensorDictModuleBase: A configured TensorDictModule for the specified model.
 
     Input Keys:
 
-        - If `from_text` is `True`:
+    - If `from_text` is `True`:
 
-            - "text": The input text to be tokenized.
+        - "text": The input text to be tokenized.
+        - `"text_response"`: the response text (if `generate=False` as the log probabilities are computed for the response.)
 
-        - If `from_text` is `False`:
+    - If `from_text` is `False`:
 
-            - "tokens": The input token sequences.
-            - "attention_mask": The attention mask for the tokens.
+        - "tokens": The input token sequences.
+        - "attention_mask": The attention mask for the tokens.
+        - "tokens_response": The response token sequences (if `generate=False` as the log probabilities are
+          computed for the response.)
 
     Output Keys:
 
-        - "tokens_response": The generated token sequences.
-        - "log_probs": The log probabilities of the generated tokens (if `return_log_probs` is `True`).
-        - "logits": The logits of the generated tokens (if applicable).
-        - "text_response": The generated text (if `from_text` is `True` and `generate` is `True`).
+    - "tokens_response": The generated token sequences.
+    - "log_probs": The log probabilities of the generated tokens (if `return_log_probs` is `True`).
+    - "logits": The logits of the generated tokens (if applicable).
+    - "text_response": The generated text (if `from_text` is `True` and `generate` is `True`).
 
     Example:
         >>> from tensordict.tensorclass import NonTensorStack
@@ -380,8 +397,6 @@ def _from_hf_generate_tokens(
 
     # Keep only the new tokens
     def remove_input_seq(tokens_in, tokens_out):
-        # TODO: remove this assert
-        assert (tokens_out[..., : tokens_in.shape[-1]] == tokens_in).all()
         result = tokens_out[..., tokens_in.shape[-1] :]
         return result
 

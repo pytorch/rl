@@ -30,6 +30,8 @@ class vLLMWrapper(CategoricalSequential):
 
     Args:
         model (vllm.LLM): The vLLM model to wrap.
+
+    Keyword Args:
         return_log_probs (bool | None, optional): Whether to return log probabilities of the generated tokens.
             Defaults to `None`.
         tokenizer (transformers.tokenization_utils.PreTrainedTokenizer | None, optional): The tokenizer to use for
@@ -40,7 +42,7 @@ class vLLMWrapper(CategoricalSequential):
         device (torch.device | None, optional): The device to use for computation. If `None`, the default device will
             be used. Defaults to `None`.
         generate (bool, optional): Whether to enable text generation. If `True`, the model will generate text based on
-            the input. If `False`, only log probabilities will be computed. Defaults to `True`.
+            the input. If `False`, only log probabilities will be computed for the response tokens/text. Defaults to `True`.
         generate_kwargs (dict | None, optional): Additional arguments to pass to the model's generate method. These
             arguments can control aspects of the generation process, such as temperature and top-k sampling. Defaults
             to `None`.
@@ -74,9 +76,9 @@ class vLLMWrapper(CategoricalSequential):
 
     Output Keys:
 
-        - `"tokens_response"`: The generated token sequences.
-        - `"log_probs"`: The log probabilities of the generated tokens (if `return_log_probs` is `True`).
-        - `"text_response"`: The generated text (if `from_text` is `True` and `generate` is `True`).
+    - `"tokens_response"`: The generated token sequences.
+    - `"log_probs"`: The log probabilities of the generated tokens (if `return_log_probs` is `True`).
+    - `"text_response"`: The generated text (if `from_text` is `True` and `generate` is `True`).
 
     Example:
         >>> from vllm import LLM
@@ -168,6 +170,8 @@ class vLLMWrapper(CategoricalSequential):
 
         if generate_kwargs is None:
             generate_kwargs = {}
+        else:
+            generate_kwargs = dict(generate_kwargs)
 
         prompt_logprobs = False
 

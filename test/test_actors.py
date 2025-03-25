@@ -22,11 +22,11 @@ from torchrl.data.llm import LLMData
 from torchrl.data.llm.dataset import _has_transformers
 from torchrl.envs import LLMEnv
 from torchrl.modules import (
-    from_hf_transformers,
     MLP,
     SafeModule,
     TanhDelta,
     TanhNormal,
+    TransformersWrapper,
     vLLMWrapper,
 )
 from torchrl.modules.tensordict_module.actors import (
@@ -961,7 +961,7 @@ class TestLLMActor:
             (False, True, False, torch.randint(1024, (1, 10)), None),
         ],
     )
-    def test_from_hf_transformers(
+    def test_TransformersWrapper(
         self, from_text, generate, return_log_probs, tokens, attention_mask
     ):
         torch.manual_seed(0)
@@ -978,7 +978,7 @@ class TestLLMActor:
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
 
-        m = from_hf_transformers(
+        m = TransformersWrapper(
             model,
             tokenizer=tokenizer,
             from_text=from_text,
@@ -1173,14 +1173,14 @@ class TestLLMActor:
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
 
-        m_generate = from_hf_transformers(
+        m_generate = TransformersWrapper(
             model,
             tokenizer=tokenizer,
             from_text=from_text,
             generate=True,
             return_log_probs=True,
         )
-        m_logprobs = from_hf_transformers(
+        m_logprobs = TransformersWrapper(
             model, tokenizer=tokenizer, from_text=from_text, generate=False
         )
         self._check_lps(
