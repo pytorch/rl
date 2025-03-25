@@ -111,6 +111,7 @@ from .transforms import (
     VC1Transform,
     VecGymEnvTransform,
     VecNorm,
+    VecNormV2,
     VIPRewardTransform,
     VIPTransform,
 )
@@ -131,6 +132,7 @@ from .utils import (
 __all__ = [
     "ActionDiscretizer",
     "ActionMask",
+    "VecNormV2",
     "AutoResetEnv",
     "AutoResetTransform",
     "BatchSizeTransform",
