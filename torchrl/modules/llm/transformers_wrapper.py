@@ -23,6 +23,8 @@ class TransformersWrapper(CategoricalSequential):
 
     Args:
         model (transformers.LLM): The Hugging Face Transformers model to wrap.
+
+    Keyword Args:
         return_log_probs (bool | None, optional): Whether to return log probabilities of the generated tokens.
             Defaults to `None`.
         tokenizer (transformers.tokenization_utils.PreTrainedTokenizer | None, optional): The tokenizer to use for
@@ -33,7 +35,7 @@ class TransformersWrapper(CategoricalSequential):
         device (torch.device | None, optional): The device to use for computation. If `None`, the default device will
             be used. Defaults to `None`.
         generate (bool, optional): Whether to enable text generation. If `True`, the model will generate text based on
-            the input. If `False`, only log probabilities will be computed. Defaults to `True`.
+            the input. If `False`, only log probabilities will be computed for the response tokens/text. Defaults to `True`.
         generate_kwargs (dict | None, optional): Additional arguments to pass to the model's generate method. These
             arguments can control aspects of the generation process, such as temperature and top-k sampling. Defaults
             to `None`.
