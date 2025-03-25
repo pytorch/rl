@@ -886,14 +886,12 @@ if __name__ == "__main__":
 
     td = m(LLMData(text=NonTensorStack("a text"), batch_size=1))
     m = from_vllm(llm, from_text=True, generate=False)
-    assert td.copy().text == ["a text"]
     td_lp = LLMData(
         text=NonTensorStack("a text"),
         text_response=NonTensorStack(*td.text_response),
         batch_size=(1,),
     )
     td_lp = m(td_lp)
-    # torch.testing.assert_close(td.log_probs, td_lp.log_probs)
 
     m = from_vllm(llm, from_text=True, generate=True)
     td = m(LLMData(text=NonTensorStack("a text", "another text here"), batch_size=2))

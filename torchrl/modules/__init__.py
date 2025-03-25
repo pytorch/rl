@@ -93,7 +93,7 @@ from .tensordict_module import (
 )
 from .utils import get_primers_from_module
 from .planners import CEMPlanner, MPCPlannerBase, MPPIPlanner  # usort:skip
-from .llm import from_hf_transformers, from_vllm
+from .llm import TransformersWrapper, vLLMWrapper
 
 __all__ = [
     "Actor",
@@ -177,8 +177,8 @@ __all__ = [
     "VmapModule",
     "WorldModelWrapper",
     "distributions_maps",
-    "from_hf_transformers",
-    "from_vllm",
+    "TransformersWrapper",
+    "vLLMWrapper",
     "get_primers_from_module",
     "recurrent_mode",
     "reset_noise",

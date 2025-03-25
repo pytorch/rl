@@ -1159,6 +1159,7 @@ to be able to create this other composition:
     VIPTransform
     VecGymEnvTransform
     VecNorm
+    VecNormV2
     gSDENoise
 
 Environments with masked actions

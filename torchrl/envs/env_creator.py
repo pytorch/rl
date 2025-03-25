@@ -37,7 +37,7 @@ class EnvCreator:
 
     Examples:
         >>> # We create the same environment on 2 processes using VecNorm
-        >>> # and check that the discounted count of observations match on
+        >>> # and check that the discounted count of observations matches on
         >>> # both workers, even if one has not executed any step
         >>> import time
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -103,7 +103,7 @@ class EnvCreator:
         Examples:
             >>> from torchrl.envs import GymEnv
             >>> env_creator_pendulum = EnvCreator(GymEnv, env_name="Pendulum-v1")
-            >>> env_creator_cartpole = env_creator_pendulum(env_name="CartPole-v1")
+            >>> env_creator_cartpole = env_creator_pendulum.make_variant(env_name="CartPole-v1")
 
         """
         # Copy self
