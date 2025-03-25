@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+586a541) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+5d72561) &#x25BC</span></a>
     </div>
     
 
@@ -627,7 +627,15 @@
         <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rb</span><span class="o">.</span><span class="n">state_dict</span><span class="o">.</span><span class="n">remote</span><span class="p">())</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rb</span><span class="o">.</span><span class="fm">__len__</span><span class="o">.</span><span class="n">remote</span><span class="p">())</span></div>
+        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rb</span><span class="o">.</span><span class="fm">__len__</span><span class="o">.</span><span class="n">remote</span><span class="p">())</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">write_count</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rb</span><span class="o">.</span><span class="n">_getattr</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="s2">&quot;write_count&quot;</span><span class="p">))</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dim_extend</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rb</span><span class="o">.</span><span class="n">_getattr</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="s2">&quot;dim_extend&quot;</span><span class="p">))</span></div>
 </pre></div>
 
              </article>
