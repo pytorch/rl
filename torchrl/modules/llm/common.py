@@ -7,14 +7,14 @@ from __future__ import annotations
 from tensordict import NestedKey, TensorDictBase
 from tensordict.nn import (
     ProbabilisticTensorDictModule,
-    ProbabilisticTensorDictSequential,
+    TensorDictModuleBase,
     TensorDictSequential,
 )
 from torch import distributions as D
 from torch.distributions import Categorical
 
 
-class CategoricalSequential(ProbabilisticTensorDictSequential):
+class CategoricalSequential(TensorDictModuleBase):
     """A ProbabilisticTensorDictSequential subclass meant to work with LLMs.
 
     .. seealso:: :class:`~tensordict.nn.ProbabilisticTensorDictSequential` class.
