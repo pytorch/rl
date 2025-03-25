@@ -30,6 +30,11 @@ class VecNormV2(Transform):
     internal statistics (mean and variance) to normalize inputs. In stateless mode, it requires
     external statistics to be provided for normalization.
 
+    .. note:: This class is designed to be an almost drop-in replacement for :class:`~torchrl.envs.transforms.VecNorm`.
+        It should not be constructed directly, but rather with the :class:`~torchrl.envs.transforms.VecNorm`
+        transform using the `new_api=True` keyword argument. In v0.10, the :class:`~torchrl.envs.transforms.VecNorm`
+        transform will be switched to the new api by default.
+
     Stateful vs. Stateless:
         Stateful Mode (`stateful=True`):
 

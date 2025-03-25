@@ -4257,7 +4257,7 @@ class TestChessEnv:
             if stateful:
                 all_actions = env.all_actions()
             else:
-                # Reset the the initial state first, just to make sure
+                # Reset theinitial state first, just to make sure
                 # `all_actions` knows how to get the board state from the input.
                 env.reset()
                 all_actions = env.all_actions(td.clone())

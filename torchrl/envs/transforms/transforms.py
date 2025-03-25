@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import abc
+
 import functools
 import hashlib
 import importlib.util
@@ -6537,10 +6539,30 @@ class gSDENoise(TensorDictPrimer):
         super().__init__(primers=primers, random=random, **kwargs)
 
 
-class VecNorm(Transform):
+class _VecNormMeta(abc.ABCMeta):
+    def __call__(cls, *args, **kwargs):
+        new_api = kwargs.pop("new_api", None)
+        if new_api is None:
+            warnings.warn(
+                "The VecNorm class is to be deprecated in favor of `torchrl.envs.VecNormV2` and will be replaced by "
+                "that class in v0.10. You can adapt to these changes by using the `new_api` argument or importing "
+                "the `VecNormV2` class from `torchrl.envs`.",
+                category=FutureWarning,
+            )
+            new_api = False
+        if new_api:
+            from torchrl.envs import VecNormV2
+
+            return VecNormV2(*args, **kwargs)
+        return super().__call__(*args, **kwargs)
+
+
+class VecNorm(Transform, metaclass=_VecNormMeta):
     """Moving average normalization layer for torchrl environments.
 
-    .. warning:: This class is to be deprecated in favor of :class:`~torchrl.envs.VecNormV2`.
+    .. warning:: This class is to be deprecated in favor of :class:`~torchrl.envs.VecNormV2` and will be replaced by
+        that class in v0.10. You can adapt to these changes by using the `new_api` argument or importing the
+        `VecNormV2` class from `torchrl.envs`.
 
     VecNorm keeps track of the summary statistics of a dataset to standardize
     it on-the-fly. If the transform is in 'eval' mode, the running
@@ -6577,6 +6599,9 @@ class VecNorm(Transform):
             If not, the feature dimensions of the entry (ie all dims that do
             not belong to the tensordict batch-size) will be considered as
             feature dimension.
+        new_api (bool or None, optional): if ``True``, an instance of VecNormV2 will be returned.
+            If not passed, a warning will be raised.
+            Defaults to ``False``.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -6606,6 +6631,7 @@ class VecNorm(Transform):
         decay: float = 0.9999,
         eps: float = 1e-4,
         shapes: list[torch.Size] = None,
+        new_api: bool | None = None,
     ) -> None:
 
         warnings.warn(

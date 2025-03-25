@@ -206,6 +206,12 @@ TIMEOUT = 100.0
 _has_gymnasium = importlib.util.find_spec("gymnasium") is not None
 _has_transformers = importlib.util.find_spec("transformers") is not None
 
+pytestmark = [
+    pytest.mark.filterwarnings(
+        "ignore:The VecNorm class is to be deprecated in favor of"
+    ),
+]
+
 
 class TransformBase:
     """A base class for transform test.
