@@ -19,6 +19,7 @@ import tensordict
 import torch
 from tensordict import (
     is_tensor_collection,
+    lazy_stack,
     LazyStackedTensorDict,
     TensorDict,
     TensorDictBase,
@@ -430,7 +431,7 @@ class LazyStackStorage(ListStorage):
             stack_dim = self.stack_dim
             if stack_dim < 0:
                 stack_dim = out[0].ndim + 1 + stack_dim
-            out = LazyStackedTensorDict(*out, stack_dim=stack_dim)
+            out = lazy_stack(list(out), stack_dim=stack_dim)
             return out
         return out
 
