@@ -242,8 +242,6 @@ class VecNormV2(Transform):
                     *self.in_keys, strict=not self.missing_tolerance
                 )
                 if self.missing_tolerance and next_tensordict_select.is_empty():
-                    if self.lock is not None:
-                        self.lock.release()
                     return next_tensordict
                 next_tensordict_norm = self._stateful_norm(next_tensordict_select)
                 self._stateful_update(next_tensordict_select)
@@ -253,8 +251,6 @@ class VecNormV2(Transform):
                     *self._in_keys_safe, strict=not self.missing_tolerance
                 )
                 if self.missing_tolerance and next_tensordict_select.is_empty():
-                    if self.lock is not None:
-                        self.lock.release()
                     return next_tensordict
                 loc = tensordict[f"{self.prefix}_loc"]
                 var = tensordict[f"{self.prefix}_var"]
