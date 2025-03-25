@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../versions.html"><span style="font-size:110%">main (0.7.0+5d72561) &#x25BC</span></a>
+      <a href="../versions.html"><span style="font-size:110%">main (0.7.0+40fcdb6) &#x25BC</span></a>
     </div>
     
 
@@ -1375,6 +1375,8 @@
         <li><a href="reference/generated/torchrl.data.UnboundedDiscreteTensorSpec.html#torchrl.data.UnboundedDiscreteTensorSpec.clone">(torchrl.data.UnboundedDiscreteTensorSpec method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform.clone">(torchrl.envs.transforms.Transform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#torchrl.envs.transforms.VecNormV2.clone">(torchrl.envs.transforms.VecNormV2 method)</a>
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.envs.GymLikeEnv.html#torchrl.envs.GymLikeEnv.close">close() (torchrl.envs.GymLikeEnv method)</a>
@@ -2862,7 +2864,11 @@
       <li><a href="reference/generated/torchrl.envs.transforms.FrameSkipTransform.html#torchrl.envs.transforms.FrameSkipTransform">FrameSkipTransform (class in torchrl.envs.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.VecNorm.html#torchrl.envs.transforms.VecNorm.freeze">freeze() (torchrl.envs.transforms.VecNorm method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#id0">(torchrl.envs.transforms.VecNormV2 method)</a>, <a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#torchrl.envs.transforms.VecNormV2.freeze">[1]</a>
 </li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.envs.LLMEnv.html#id0">from_dataloader() (torchrl.envs.LLMEnv class method)</a>
 
       <ul>
@@ -2900,7 +2906,11 @@
       <li><a href="reference/generated/torchrl.data.TensorDictMap.html#torchrl.data.TensorDictMap.from_tensordict_pair">from_tensordict_pair() (torchrl.data.TensorDictMap class method)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.VecNorm.html#torchrl.envs.transforms.VecNorm.frozen_copy">frozen_copy() (torchrl.envs.transforms.VecNorm method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#id1">(torchrl.envs.transforms.VecNormV2 method)</a>, <a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#torchrl.envs.transforms.VecNormV2.frozen_copy">[1]</a>
 </li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.data.Tree.html#torchrl.data.Tree.full_action_spec">full_action_spec (torchrl.data.Tree property)</a>
 
       <ul>
@@ -3229,6 +3239,8 @@
         <li><a href="reference/generated/torchrl.envs.transforms.rb_transforms.MultiStepTransform.html#torchrl.envs.transforms.rb_transforms.MultiStepTransform.get_extra_state">(torchrl.envs.transforms.rb_transforms.MultiStepTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.VecNorm.html#torchrl.envs.transforms.VecNorm.get_extra_state">(torchrl.envs.transforms.VecNorm method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#id2">(torchrl.envs.transforms.VecNormV2 method)</a>, <a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#torchrl.envs.transforms.VecNormV2.get_extra_state">[1]</a>
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.envs.transforms.Hash.html#torchrl.envs.transforms.Hash.get_input_from_hash">get_input_from_hash() (torchrl.envs.transforms.Hash method)</a>
@@ -4054,6 +4066,12 @@
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.envs.transforms.VecNorm.html#torchrl.envs.transforms.VecNorm.loc">loc (torchrl.envs.transforms.VecNorm property)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#id3">(torchrl.envs.transforms.VecNormV2 property)</a>
+</li>
+      </ul></li>
+      <li><a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#torchrl.envs.transforms.VecNormV2.loc">loc() (torchrl.envs.transforms.VecNormV2 method)</a>
 </li>
       <li><a href="reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.local_policy">local_policy() (torchrl.collectors.distributed.RayCollector method)</a>
 </li>
@@ -6430,6 +6448,12 @@
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.envs.transforms.VecNorm.html#torchrl.envs.transforms.VecNorm.scale">scale (torchrl.envs.transforms.VecNorm property)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#id4">(torchrl.envs.transforms.VecNormV2 property)</a>
+</li>
+      </ul></li>
+      <li><a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#torchrl.envs.transforms.VecNormV2.scale">scale() (torchrl.envs.transforms.VecNormV2 method)</a>
 </li>
       <li><a href="reference/generated/torchrl.data.DensifyReward.html#torchrl.data.DensifyReward.select_out_keys">select_out_keys() (torchrl.data.DensifyReward method)</a>
 
@@ -6525,6 +6549,8 @@
         <li><a href="reference/generated/torchrl.envs.transforms.rb_transforms.MultiStepTransform.html#torchrl.envs.transforms.rb_transforms.MultiStepTransform.set_extra_state">(torchrl.envs.transforms.rb_transforms.MultiStepTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.VecNorm.html#torchrl.envs.transforms.VecNorm.set_extra_state">(torchrl.envs.transforms.VecNorm method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#id5">(torchrl.envs.transforms.VecNormV2 method)</a>, <a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#torchrl.envs.transforms.VecNormV2.set_extra_state">[1]</a>
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.envs.set_gym_backend.html#torchrl.envs.set_gym_backend">set_gym_backend() (in module torchrl.envs)</a>
@@ -6880,6 +6906,12 @@
       <li><a href="reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite">StackedComposite (class in torchrl.data)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.VecNorm.html#torchrl.envs.transforms.VecNorm.standard_normal">standard_normal (torchrl.envs.transforms.VecNorm property)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#id6">(torchrl.envs.transforms.VecNormV2 property)</a>
+</li>
+      </ul></li>
+      <li><a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#torchrl.envs.transforms.VecNormV2.standard_normal">standard_normal() (torchrl.envs.transforms.VecNormV2 method)</a>
 </li>
       <li><a href="reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.start">start() (torchrl.collectors.distributed.RayCollector method)</a>
 </li>
@@ -7442,7 +7474,11 @@
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.envs.transforms.VecNorm.html#torchrl.envs.transforms.VecNorm.to_observation_norm">to_observation_norm() (torchrl.envs.transforms.VecNorm method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#torchrl.envs.transforms.VecNormV2.to_observation_norm">(torchrl.envs.transforms.VecNormV2 method)</a>
 </li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.data.Binary.html#torchrl.data.Binary.to_one_hot">to_one_hot() (torchrl.data.Binary method)</a>
 
       <ul>
@@ -7513,10 +7549,10 @@
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.Tokenizer.html#torchrl.envs.transforms.Tokenizer">Tokenizer (class in torchrl.envs.transforms)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.envs.transforms.ToTensorImage.html#torchrl.envs.transforms.ToTensorImage">ToTensorImage (class in torchrl.envs.transforms)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.data.BinaryToDecimal.html#torchrl.data.BinaryToDecimal.train">train() (torchrl.data.BinaryToDecimal method)</a>
 
       <ul>
@@ -7724,6 +7760,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.VecNorm.html#torchrl.envs.transforms.VecNorm.transform_observation_spec">(torchrl.envs.transforms.VecNorm method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#id7">(torchrl.envs.transforms.VecNormV2 method)</a>, <a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#torchrl.envs.transforms.VecNormV2.transform_observation_spec">[1]</a>
+</li>
       </ul></li>
       <li><a href="reference/generated/torchrl.envs.transforms.BatchSizeTransform.html#torchrl.envs.transforms.BatchSizeTransform.transform_output_spec">transform_output_spec() (torchrl.envs.transforms.BatchSizeTransform method)</a>
 
@@ -7756,6 +7794,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.UnaryTransform.html#torchrl.envs.transforms.UnaryTransform.transform_output_spec">(torchrl.envs.transforms.UnaryTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#id8">(torchrl.envs.transforms.VecNormV2 method)</a>, <a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#torchrl.envs.transforms.VecNormV2.transform_output_spec">[1]</a>
+</li>
       </ul></li>
       <li><a href="reference/generated/torchrl.envs.transforms.BinarizeReward.html#torchrl.envs.transforms.BinarizeReward.transform_reward_spec">transform_reward_spec() (torchrl.envs.transforms.BinarizeReward method)</a>
 
@@ -7787,6 +7827,8 @@
         <li><a href="reference/generated/torchrl.envs.transforms.UnaryTransform.html#torchrl.envs.transforms.UnaryTransform.transform_reward_spec">(torchrl.envs.transforms.UnaryTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.UnsqueezeTransform.html#torchrl.envs.transforms.UnsqueezeTransform.transform_reward_spec">(torchrl.envs.transforms.UnsqueezeTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#id9">(torchrl.envs.transforms.VecNormV2 method)</a>, <a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#torchrl.envs.transforms.VecNormV2.transform_reward_spec">[1]</a>
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.envs.transforms.Compose.html#torchrl.envs.transforms.Compose.transform_state_spec">transform_state_spec() (torchrl.envs.transforms.Compose method)</a>
@@ -7994,7 +8036,11 @@
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.envs.transforms.VecNorm.html#torchrl.envs.transforms.VecNorm.unfreeze">unfreeze() (torchrl.envs.transforms.VecNorm method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#id10">(torchrl.envs.transforms.VecNormV2 method)</a>, <a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#torchrl.envs.transforms.VecNormV2.unfreeze">[1]</a>
 </li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.envs.UnityMLAgentsEnv.html#torchrl.envs.UnityMLAgentsEnv">UnityMLAgentsEnv() (in module torchrl.envs)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.UnityMLAgentsWrapper.html#torchrl.envs.UnityMLAgentsWrapper">UnityMLAgentsWrapper() (in module torchrl.envs)</a>
@@ -8188,6 +8234,8 @@
       <li><a href="reference/generated/torchrl.envs.transforms.VecGymEnvTransform.html#torchrl.envs.transforms.VecGymEnvTransform">VecGymEnvTransform (class in torchrl.envs.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.VecNorm.html#torchrl.envs.transforms.VecNorm">VecNorm (class in torchrl.envs.transforms)</a>
+</li>
+      <li><a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#torchrl.envs.transforms.VecNormV2">VecNormV2 (class in torchrl.envs.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.data.Tree.html#torchrl.data.Tree.vertices">vertices() (torchrl.data.Tree method)</a>
 </li>
