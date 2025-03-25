@@ -9503,7 +9503,12 @@ class TestVecNormV2:
         env = GymEnv("Pendulum-v1")
         env.set_seed(0)
         env = env.append_transform(
-            VecNormV2(in_keys=["observation"], out_keys=["obs_norm"], stateful=stateful)
+            VecNorm(
+                in_keys=["observation"],
+                out_keys=["obs_norm"],
+                stateful=stateful,
+                new_api=True,
+            )
         )
         # check that transform output spec runs
         env.transform.transform_output_spec(env.base_env.output_spec)
@@ -9520,8 +9525,11 @@ class TestVecNormV2:
             env = GymEnv("Pendulum-v1")
             env.set_seed(0)
             env = env.append_transform(
-                VecNormV2(
-                    in_keys=["observation"], out_keys=["obs_norm"], stateful=stateful
+                VecNorm(
+                    in_keys=["observation"],
+                    out_keys=["obs_norm"],
+                    stateful=stateful,
+                    new_api=True,
                 )
             )
             # check that transform output spec runs
@@ -9549,15 +9557,17 @@ class TestVecNormV2:
     def test_vecnorm_stack(self, stateful):
         env = CountingEnv()
         env = env.append_transform(
-            VecNormV2(in_keys=["observation"], stateful=stateful)
+            VecNorm(in_keys=["observation"], stateful=stateful, new_api=True)
         )
-        env = env.append_transform(VecNormV2(in_keys=["reward"], stateful=stateful))
+        env = env.append_transform(
+            VecNorm(in_keys=["reward"], stateful=stateful, new_api=True)
+        )
         env.check_env_specs(break_when_any_done="both")
 
     def test_init_stateful(self):
         env = CountingEnv()
-        vecnorm = VecNormV2(
-            in_keys=["observation"], out_keys=["obs_norm"], stateful=True
+        vecnorm = VecNorm(
+            in_keys=["observation"], out_keys=["obs_norm"], stateful=True, new_api=True
         )
         assert vecnorm._loc is None
         env = env.append_transform(vecnorm)
@@ -9602,7 +9612,9 @@ class TestVecNormV2:
                 GymEnv(PENDULUM_VERSIONED()),
                 Compose(
                     self.rename_t,
-                    VecNormV2(decay=0.9, in_keys=[("some", "obs"), "reward"]),
+                    VecNorm(
+                        decay=0.9, in_keys=[("some", "obs"), "reward"], new_api=True
+                    ),
                 ),
             )
             check_env_specs(maker())
@@ -9612,7 +9624,9 @@ class TestVecNormV2:
                 ContinuousActionVecMockEnv(),
                 Compose(
                     self.rename_t,
-                    VecNormV2(decay=0.9, in_keys=[("some", "obs"), "reward"]),
+                    VecNorm(
+                        decay=0.9, in_keys=[("some", "obs"), "reward"], new_api=True
+                    ),
                 ),
             )
             check_env_specs(maker())
@@ -9707,7 +9721,7 @@ class TestVecNormV2:
                     GymEnv(PENDULUM_VERSIONED()),
                     Compose(
                         self.rename_t,
-                        VecNormV2(in_keys=[("some", "obs"), "reward"]),
+                        VecNorm(in_keys=[("some", "obs"), "reward"], new_api=True),
                     ),
                 )
             )
@@ -9717,7 +9731,7 @@ class TestVecNormV2:
                     ContinuousActionVecMockEnv(),
                     Compose(
                         self.rename_t,
-                        VecNormV2(in_keys=[("some", "obs"), "reward"]),
+                        VecNorm(in_keys=[("some", "obs"), "reward"], new_api=True),
                     ),
                 )
             )
@@ -9782,7 +9796,7 @@ class TestVecNormV2:
             )
         try:
             env.set_seed(self.SEED)
-            t = VecNormV2(decay=0.9, in_keys=["observation", "reward"])
+            t = VecNorm(decay=0.9, in_keys=["observation", "reward"], new_api=True)
             env_t = TransformedEnv(env, t)
             td = env_t.reset()
             tds = []
@@ -9802,7 +9816,7 @@ class TestVecNormV2:
             env.close(raise_if_closed=False)
 
     def test_pickable(self):
-        transform = VecNormV2(in_keys=["observation"])
+        transform = VecNorm(in_keys=["observation"], new_api=True)
         env = CountingEnv()
         env = env.append_transform(transform)
         serialized = pickle.dumps(transform)
@@ -9813,7 +9827,11 @@ class TestVecNormV2:
 
     def test_state_dict_vecnorm(self):
         transform0 = Compose(
-            VecNormV2(in_keys=["a", ("b", "c")], out_keys=["a_avg", ("b", "c_avg")])
+            VecNorm(
+                in_keys=["a", ("b", "c")],
+                out_keys=["a_avg", ("b", "c_avg")],
+                new_api=True,
+            )
         )
         td = TensorDict({"a": torch.randn(3, 4), ("b", "c"): torch.randn(3, 4)}, [3, 4])
         with pytest.warns(UserWarning, match="Querying state_dict on an uninitialized"):
@@ -9851,7 +9869,11 @@ class TestVecNormV2:
         transform1[0]._loc.apply(assert_same, transform0[0]._loc, filter_empty=True)
 
         transform1 = Compose(
-            VecNormV2(in_keys=["a", ("b", "c")], out_keys=["a_avg", ("b", "c_avg")])
+            VecNorm(
+                in_keys=["a", ("b", "c")],
+                out_keys=["a_avg", ("b", "c_avg")],
+                new_api=True,
+            )
         )
         assert transform1[0]._loc is None
         with pytest.warns(
@@ -9862,14 +9884,22 @@ class TestVecNormV2:
         transform1._step(td, td)
 
         transform1 = Compose(
-            VecNormV2(in_keys=["a", ("b", "c")], out_keys=["a_avg", ("b", "c_avg")])
+            VecNorm(
+                in_keys=["a", ("b", "c")],
+                out_keys=["a_avg", ("b", "c_avg")],
+                new_api=True,
+            )
         )
         transform1._step(td, td)
         transform1.load_state_dict(sd)
 
     def test_to_obsnorm_multikeys(self):
         transform0 = Compose(
-            VecNormV2(in_keys=["a", ("b", "c")], out_keys=["a_avg", ("b", "c_avg")])
+            VecNorm(
+                in_keys=["a", ("b", "c")],
+                out_keys=["a_avg", ("b", "c_avg")],
+                new_api=True,
+            )
         )
         for _ in range(10):
             td = TensorDict(
@@ -9889,8 +9919,8 @@ class TestVecNormV2:
         assert_allclose_td(td0.select(*td2.keys(True, True)), td2)
 
     def test_frozen(self):
-        transform0 = VecNormV2(
-            in_keys=["a", ("b", "c")], out_keys=["a_avg", ("b", "c_avg")]
+        transform0 = VecNorm(
+            in_keys=["a", ("b", "c")], out_keys=["a_avg", ("b", "c_avg")], new_api=True
         )
         with pytest.raises(
             RuntimeError, match="Make sure the VecNorm has been initialized"
