@@ -31,7 +31,7 @@ class TransformersWrapper(CategoricalSequential):
             encoding and decoding text. If `None`, the tokenizer associated with the model will be used. Defaults to
             `None`.
         from_text (bool, optional): Indicates whether the input is in text format. If `True`, the input is expected to
-            be text that will be tokenized. If `False`, the input is expected to be token sequences. Defaults to `False`.
+            be text that will be tokenized. If `False`, the input is expected to be token sequences. Defaults to `True`.
         device (torch.device | None, optional): The device to use for computation. If `None`, the default device will
             be used. Defaults to `None`.
         generate (bool, optional): Whether to enable text generation. If `True`, the model will generate text based on
@@ -86,8 +86,8 @@ class TransformersWrapper(CategoricalSequential):
         >>> output_data = wrapper(input_data)
         >>> print(output_data["text_response"])
 
-    .. seealso:: :func:`~torchrl.modules.from_hf_transformers` for a similar interface using the Hugging Face
-        Transformers library.
+    .. seealso:: :func:`~torchrl.modules.vLLMWrapper` for a similar interface using vLLM.
+
     """
 
     text_key: NestedKey = ("text",)
@@ -105,7 +105,7 @@ class TransformersWrapper(CategoricalSequential):
         tokenizer: transformers.tokenization_utils.PreTrainedTokenizer  # noqa
         | None = None,
         # noqa
-        from_text: bool = False,
+        from_text: bool = True,
         device: torch.device | None = None,
         generate: bool = True,
         generate_kwargs: dict | None = None,

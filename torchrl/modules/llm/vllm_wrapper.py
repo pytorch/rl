@@ -28,6 +28,9 @@ class vLLMWrapper(CategoricalSequential):
     This class allows for handling both text and token inputs, enabling text generation and log probability
     computation based on the specified configuration.
 
+    .. note:: The default arguments of the `vLLMWrapper` class are set to make it easy to run this backend with
+        the :class:`~torchrl.envs.custom.llm.LLMEnv` class.
+
     Args:
         model (vllm.LLM): The vLLM model to wrap.
 
@@ -38,7 +41,7 @@ class vLLMWrapper(CategoricalSequential):
             encoding and decoding text. If `None`, the tokenizer associated with the model will be used. Defaults to
             `None`.
         from_text (bool, optional): Indicates whether the input is in text format. If `True`, the input is expected to
-            be text that will be tokenized. If `False`, the input is expected to be token sequences. Defaults to `False`.
+            be text that will be tokenized. If `False`, the input is expected to be token sequences. Defaults to `True`.
         device (torch.device | None, optional): The device to use for computation. If `None`, the default device will
             be used. Defaults to `None`.
         generate (bool, optional): Whether to enable text generation. If `True`, the model will generate text based on
@@ -50,7 +53,11 @@ class vLLMWrapper(CategoricalSequential):
             control aspects of the tokenization process, such as padding and truncation. Defaults to `None`.
         pad_output (bool, optional): Whether to pad the output sequences to a uniform length. If `True`, the output
             sequences will be padded and represented as tensors. If `False`, lists of tokens will be used without
-            padding. Defaults to `True`.
+            padding. Defaults to `False`.
+
+            .. warning:: The default value of `pad_output` differs from :func:`~torchrl.modules.TransformersWrapper`
+                which does not handle non-padded inputs.
+
         inplace (Literal[True, False, "empty"] | None, optional): Determines how the module should handle in-place
             operations. If `True`, operations will be performed in-place. If `False`, a new TensorDict instance will be
             created. If `"empty"`, the output data structure will be initialized with `input.empty()` (i.e., it will
@@ -93,7 +100,7 @@ class vLLMWrapper(CategoricalSequential):
         >>> output_data = wrapper(input_data)
         >>> print(output_data.text_response)
 
-    .. seealso:: :func:`~torchrl.modules.from_hf_transformers` for a similar interface using the Hugging Face
+    .. seealso:: :func:`~torchrl.modules.TransformersWrapper` for a similar interface using the Hugging Face
         Transformers library.
     """
 
@@ -112,12 +119,12 @@ class vLLMWrapper(CategoricalSequential):
         tokenizer: transformers.tokenization_utils.PreTrainedTokenizer  # noqa
         | None = None,
         # noqa
-        from_text: bool = False,
+        from_text: bool = True,
         device: torch.device | None = None,
         generate: bool = True,
         generate_kwargs: dict | None = None,
         tokenizer_kwargs: dict | None = None,
-        pad_output: bool = True,
+        pad_output: bool = False,
         inplace: Literal[True, False, "empty"] | None = True,
     ):
         super().__init__()
