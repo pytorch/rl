@@ -4,8 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 
 from .common import CategoricalSequential
-from .transformers_policy import from_hf_transformers
+from .transformers_wrapper import TransformersWrapper
 
 from .vllm_wrapper import vLLMWrapper
 
-__all__ = ["from_hf_transformers", "vLLMWrapper", "CategoricalSequential"]
+__all__ = ["TransformersWrapper", "vLLMWrapper", "CategoricalSequential"]
