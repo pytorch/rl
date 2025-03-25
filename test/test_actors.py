@@ -23,11 +23,11 @@ from torchrl.data.llm.dataset import _has_transformers
 from torchrl.envs import LLMEnv
 from torchrl.modules import (
     from_hf_transformers,
-    from_vllm,
     MLP,
     SafeModule,
     TanhDelta,
     TanhNormal,
+    vLLMWrapper,
 )
 from torchrl.modules.tensordict_module.actors import (
     _process_action_space_spec,
@@ -1031,7 +1031,7 @@ class TestLLMActor:
         torch.manual_seed(0)
 
         model = vllm_instance
-        m = from_vllm(
+        m = vLLMWrapper(
             model,
             from_text=from_text,
             generate=generate,
@@ -1207,14 +1207,14 @@ class TestLLMActor:
         torch.manual_seed(0)
 
         model = vllm_instance
-        m_generate = from_vllm(
+        m_generate = vLLMWrapper(
             model,
             from_text=from_text,
             generate=True,
             return_log_probs=True,
             pad_output=pad_output,
         )
-        m_logprobs = from_vllm(
+        m_logprobs = vLLMWrapper(
             model, from_text=from_text, generate=False, pad_output=pad_output
         )
         self._check_lps(
@@ -1264,7 +1264,7 @@ class TestLLMActor:
     @pytest.mark.parametrize("use_tensorclass", [True, False])
     def test_vllm_batch_run(self, pad, generate, use_tensorclass, vllm_instance):
         # Test generate - padding combinations
-        policy = from_vllm(
+        policy = vLLMWrapper(
             vllm_instance,
             from_text=True,
             generate=generate,
@@ -1331,7 +1331,7 @@ class TestLLMActor:
             assert isinstance(tokens, list)
 
     def test_vllm_collection(self, vllm_instance):
-        policy = from_vllm(
+        policy = vLLMWrapper(
             vllm_instance,
             from_text=True,
             generate=True,
