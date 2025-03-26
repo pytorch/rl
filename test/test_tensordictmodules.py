@@ -187,7 +187,7 @@ class TestTDModule:
 
         # test bounds
         if not safe and spec_type == "bounded":
-            assert ((td.get("out") > 0.1) | (td.get("out") < -0.1)).any()
+            assert ((td.get("out") > 0.1) | (td.get("out") < -0.1)).any(), td.get("out")
         elif safe and spec_type == "bounded":
             assert ((td.get("out") < 0.1) | (td.get("out") > -0.1)).all()
 

@@ -776,7 +776,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 "To set an environment spec, please use `env.observation_spec = obs_spec` (without the leading"
                 " underscore)."
             )
-        return super().__setattr__(key, value)
+        super().__setattr__(key, value)
 
     @property
     def batch_locked(self) -> bool:
