@@ -448,6 +448,11 @@ the output of others.
 This family of classes is particularly interesting when dealing with environments that have a high (and/or variable)
 latency.
 
+.. note:: This class and its subclasses should work when nested in with :class:`~torchrl.envs.TransformedEnv` and
+    batched environments, but users won't currently be able to use the async features of the base environment when
+    it's nested in these classes. One should prefer nested transformed envs within an `AsyncEnvPool` instead.
+    If this is not possible, please raise an issue.
+
 Classes
 ~~~~~~~
 

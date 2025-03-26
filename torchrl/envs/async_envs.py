@@ -61,6 +61,11 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
     and multiprocessing, and provides methods for asynchronous stepping and resetting
     of environments.
 
+    .. note:: This class and its subclasses should work when nested in with :class:`~torchrl.envs.TransformedEnv` and
+        batched environments, but users won't currently be able to use the async features of the base environment when
+        it's nested in these classes. One should prefer nested transformed envs within an `AsyncEnvPool` instead.
+        If this is not possible, please raise an issue.
+
     Args:
         env_makers (Callable[[], EnvBase] | EnvBase | list[EnvBase] | list[Callable[[], EnvBase]]):
             A callable or list of callables that create environment instances, or
@@ -221,18 +226,34 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         super().__init__(batch_size=[self.num_envs])
         self._busy = set()
 
-    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
-        if self._current_reset > 0:
-            raise RuntimeError("Some envs are still processing a reset.")
-        raise NotImplementedError
-
-    def _step(
+    def _reset(
         self,
-        tensordict: TensorDictBase,
+        tensordict: TensorDictBase | None = None,
+        **kwargs,
     ) -> TensorDictBase:
-        if self._current_step > 0 or self._current_step_reset > 0:
+        if self._current_step > 0:
             raise RuntimeError("Some envs are still processing a step.")
-        raise NotImplementedError
+        if tensordict is None:
+            if self._stack_func in ("lazy_stack", "maybe_dense"):
+                tensordict = LazyStackedTensorDict(
+                    *[TensorDict() for _ in range(self.num_envs)]
+                )
+            else:
+                tensordict = TensorDict(batch_size=self.num_envs)
+        tensordict.set(self._env_idx_key, torch.arange(tensordict.shape[0]))
+        self._async_private_reset_send(tensordict)
+        tensordict = self._async_private_reset_recv(min_get=self.num_envs)
+        return tensordict
+
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self._current_step > 0:
+            raise RuntimeError("Some envs are still processing a step.")
+        tensordict.set(self._env_idx_key, torch.arange(tensordict.shape[0]))
+        self._async_private_step_send(tensordict)
+        tensordict = self._async_private_step_recv(min_get=self.num_envs)
+        # Using pop instead of del to account for tensorclasses
+        tensordict.pop(self._env_idx_key)
+        return tensordict
 
     def step_and_maybe_reset(
         self, tensordict: TensorDictBase
@@ -386,6 +407,11 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
     provides methods for asynchronous stepping and resetting of environments using
     inter-process communication.
 
+    .. note:: This class and its subclasses should work when nested in with :class:`~torchrl.envs.TransformedEnv` and
+        batched environments, but users won't currently be able to use the async features of the base environment when
+        it's nested in these classes. One should prefer nested transformed envs within an `AsyncEnvPool` instead.
+        If this is not possible, please raise an issue.
+
     Methods:
         _setup(): Initializes the multiprocessing queues and processes for each
             environment.
@@ -468,6 +494,25 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         self._busy.difference_update(idx)
         return self._stack_func(r)
 
+    def _async_private_step_send(
+        self, tensordict: TensorDictBase, env_index: int | list[int] | None = None
+    ) -> None:
+        # puts tds in a queue and ask for env.step
+        tensordict, env_idx = self._maybe_make_tensordict(tensordict, env_index, False)
+
+        if self._busy.intersection(env_idx):
+            raise RuntimeError(
+                f"Some envs are still processing a step: envs that are busy: {self._busy}, queried: {env_idx}."
+            )
+        self._busy.update(env_idx)
+
+        local_tds = tensordict.unbind(0)
+        for _env_idx, local_td in _zip_strict(env_idx, local_tds):
+            self.input_queue[_env_idx].put(("_step", local_td))
+        self._current_step = self._current_step + len(env_idx)
+
+    _async_private_step_recv = async_step_recv
+
     def async_step_and_maybe_reset_send(
         self, tensordict: TensorDictBase, env_index: int | list[int] | None = None
     ) -> None:
@@ -531,6 +576,26 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         self._busy.difference_update(idx)
         return self._stack_func(r)
 
+    def _async_private_reset_send(
+        self,
+        tensordict: TensorDictBase | None = None,
+        env_index: int | list[int] | None = None,
+    ) -> None:
+        # puts tds in a queue and ask for env.reset
+        tensordict, env_idx = self._maybe_make_tensordict(tensordict, env_index, True)
+
+        if self._busy.intersection(env_idx):
+            raise RuntimeError(
+                f"Some envs are still processing a step: envs that are busy: {self._busy}, queried: {env_idx}."
+            )
+        self._busy.update(env_idx)
+        local_tds = tensordict.unbind(0)
+        for _env_idx, local_td in _zip_strict(env_idx, local_tds):
+            self._current_reset = self._current_reset + 1
+            self.input_queue[_env_idx].put(("_reset", local_td))
+
+    _async_private_reset_recv = async_reset_recv
+
     def _wait_for_one_and_get(self, q, min_get):
         items = [q.get()]
 
@@ -580,6 +645,10 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                 data = env.reset(data.copy())
                 data.set(cls._env_idx_key, NonTensorData(i))
                 reset_queue.put(data)
+            elif msg == "_reset":
+                data = env._reset(data.copy())
+                data.set(cls._env_idx_key, NonTensorData(i))
+                reset_queue.put(data)
             elif msg == "step_and_maybe_reset":
                 data, data_ = env.step_and_maybe_reset(data.copy())
                 data.set(cls._env_idx_key, NonTensorData(i))
@@ -587,6 +656,10 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                 step_reset_queue.put((data, data_))
             elif msg == "step":
                 data = env.step(data.copy())
+                data.set(cls._env_idx_key, NonTensorData(i))
+                step_queue.put(data)
+            elif msg == "_step":
+                data = env._step(data.copy())
                 data.set(cls._env_idx_key, NonTensorData(i))
                 step_queue.put(data)
             elif msg == "shutdown":
@@ -603,6 +676,11 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
     This class manages a pool of environments, each running in its own thread, and
     provides methods for asynchronous stepping and resetting of environments using
     a thread pool executor.
+
+    .. note:: This class and its subclasses should work when nested in with :class:`~torchrl.envs.TransformedEnv` and
+        batched environments, but users won't currently be able to use the async features of the base environment when
+        it's nested in these classes. One should prefer nested transformed envs within an `AsyncEnvPool` instead.
+        If this is not possible, please raise an issue.
 
     Methods:
         _setup(): Initializes the thread pool and environment instances.
@@ -621,7 +699,9 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
             for env_factory in self.env_makers
         ]
         self._reset_futures = []
+        self._private_reset_futures = []
         self._step_futures = []
+        self._private_step_futures = []
         self._step_and_maybe_reset_futures = []
         self._current_step = 0
         self._current_step_reset = 0
@@ -636,18 +716,24 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
         return env.specs
 
     @classmethod
-    def _step_func(
-        cls, env_td: tuple[EnvBase, TensorDictBase, int], private: bool = False
-    ):
+    def _step_func(cls, env_td: tuple[EnvBase, TensorDictBase, int]):
         env, td, idx = env_td
-        if private:
-            return env._step(td)
         return env.step(td).set(cls._env_idx_key, NonTensorData(idx))
+
+    @classmethod
+    def _private_step_func(cls, env_td: tuple[EnvBase, TensorDictBase, int]):
+        env, td, idx = env_td
+        return env._step(td).set(cls._env_idx_key, NonTensorData(idx))
 
     @classmethod
     def _reset_func(cls, env_td: tuple[EnvBase, TensorDictBase]):
         env, td, idx = env_td
         return env.reset(td).set(cls._env_idx_key, NonTensorData(idx))
+
+    @classmethod
+    def _private_reset_func(cls, env_td: tuple[EnvBase, TensorDictBase]):
+        env, td, idx = env_td
+        return env._reset(td).set(cls._env_idx_key, NonTensorData(idx))
 
     @classmethod
     def _step_and_maybe_reset_func(cls, env_td: tuple[EnvBase, TensorDictBase]):
@@ -694,6 +780,49 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
                 break
         self._step_futures = [
             f for f in self._step_futures if f not in completed_futures
+        ]
+        results, idx = self._sort_results(results)
+        self._busy.difference_update(idx)
+        return self._stack_func(results)
+
+    def _async_private_step_send(
+        self, tensordict: TensorDictBase, env_index: int | list[int] | None = None
+    ) -> None:
+        tensordict, env_idx = self._maybe_make_tensordict(tensordict, env_index, False)
+
+        if self._busy.intersection(env_idx):
+            raise RuntimeError(
+                f"Some envs are still processing a step: envs that are busy: {self._busy}, queried: {env_idx}."
+            )
+        self._busy.update(env_idx)
+
+        tds = tensordict.unbind(0)
+        envs = [self.envs[idx] for idx in env_idx]
+        futures = [
+            self._pool.submit(self._private_step_func, (env, td, idx))
+            for env, td, idx in zip(envs, tds, env_idx)
+        ]
+        self._private_step_futures.extend(futures)
+        self._current_step = self._current_step + len(futures)
+
+    def _async_private_step_recv(self, min_get: int | None = None) -> TensorDictBase:
+        if min_get is None:
+            min_get = self.min_get
+        if min_get > self._current_step:
+            raise RuntimeError(
+                f"Cannot await {min_get} step when only {self._current_step_reset} are being stepped."
+            )
+        results = []
+        futures = self._private_step_futures
+        completed_futures = []
+        for future in as_completed(futures):
+            results.append(future.result())
+            completed_futures.append(future)
+            self._current_step = self._current_step - 1
+            if len(results) >= min_get and sum([f.done() for f in futures]) == 0:
+                break
+        self._private_step_futures = [
+            f for f in self._private_step_futures if f not in completed_futures
         ]
         results, idx = self._sort_results(results)
         self._busy.difference_update(idx)
@@ -785,6 +914,51 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
                 break
         self._reset_futures = [
             f for f in self._reset_futures if f not in completed_futures
+        ]
+        results, idx = self._sort_results(results)
+        self._busy.difference_update(idx)
+        return self._stack_func(results)
+
+    def _async_private_reset_send(
+        self,
+        tensordict: TensorDictBase | None = None,
+        env_index: int | list[int] | None = None,
+    ) -> None:
+        tensordict, env_idx = self._maybe_make_tensordict(tensordict, env_index, True)
+
+        if self._busy.intersection(env_idx):
+            raise RuntimeError(
+                f"Some envs are still processing a step: envs that are busy: {self._busy}, queried: {env_idx}."
+            )
+        self._busy.update(env_idx)
+
+        tds = tensordict.unbind(0)
+        envs = [self.envs[idx] for idx in env_idx]
+        futures = [
+            self._pool.submit(self._private_reset_func, (env, td, idx))
+            for env, td, idx in zip(envs, tds, env_idx)
+        ]
+        self._current_reset = self._current_reset + len(futures)
+        self._private_reset_futures.extend(futures)
+
+    def _async_private_reset_recv(self, min_get: int | None = None) -> TensorDictBase:
+        if min_get is None:
+            min_get = self.min_get
+        if min_get > self._current_reset:
+            raise RuntimeError(
+                f"Cannot await {min_get} reset when only {self._current_step_reset} are being reset."
+            )
+        results = []
+        futures = self._private_reset_futures
+        completed_futures = []
+        for future in as_completed(futures):
+            results.append(future.result())
+            completed_futures.append(future)
+            self._current_reset = self._current_reset - 1
+            if len(results) >= min_get and sum([f.done() for f in futures]) == 0:
+                break
+        self._private_reset_futures = [
+            f for f in self._private_reset_futures if f not in completed_futures
         ]
         results, idx = self._sort_results(results)
         self._busy.difference_update(idx)

@@ -5049,6 +5049,15 @@ class TestAsyncEnvPool:
         finally:
             env._maybe_shutdown()
 
+    @pytest.mark.parametrize("backend", ["multiprocessing", "threading"])
+    def test_async_transformed(self, backend, make_envs):
+        base_env = self.make_env(makers=make_envs, backend=backend)
+        try:
+            env = TransformedEnv(base_env, StepCounter())
+            env.check_env_specs(break_when_any_done="both")
+        finally:
+            base_env._maybe_shutdown()
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
