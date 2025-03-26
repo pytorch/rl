@@ -10,7 +10,7 @@ from typing import Literal
 import torch
 from tensordict import (
     lazy_stack,
-    LazyStackedTensorDict,
+    maybe_dense_stack,
     NestedKey,
     TensorDict,
     TensorDictBase,
@@ -28,6 +28,9 @@ class vLLMWrapper(CategoricalSequential):
     This class allows for handling both text and token inputs, enabling text generation and log probability
     computation based on the specified configuration.
 
+    .. note:: The default arguments of the `vLLMWrapper` class are set to make it easy to run this backend with
+        the :class:`~torchrl.envs.custom.llm.LLMEnv` class.
+
     Args:
         model (vllm.LLM): The vLLM model to wrap.
 
@@ -38,7 +41,7 @@ class vLLMWrapper(CategoricalSequential):
             encoding and decoding text. If `None`, the tokenizer associated with the model will be used. Defaults to
             `None`.
         from_text (bool, optional): Indicates whether the input is in text format. If `True`, the input is expected to
-            be text that will be tokenized. If `False`, the input is expected to be token sequences. Defaults to `False`.
+            be text that will be tokenized. If `False`, the input is expected to be token sequences. Defaults to `True`.
         device (torch.device | None, optional): The device to use for computation. If `None`, the default device will
             be used. Defaults to `None`.
         generate (bool, optional): Whether to enable text generation. If `True`, the model will generate text based on
@@ -50,11 +53,16 @@ class vLLMWrapper(CategoricalSequential):
             control aspects of the tokenization process, such as padding and truncation. Defaults to `None`.
         pad_output (bool, optional): Whether to pad the output sequences to a uniform length. If `True`, the output
             sequences will be padded and represented as tensors. If `False`, lists of tokens will be used without
-            padding. Defaults to `True`.
+            padding. Defaults to `False`.
+
+            .. warning:: The default value of `pad_output` differs from :func:`~torchrl.modules.TransformersWrapper`
+                which does not handle non-padded inputs.
+
         inplace (Literal[True, False, "empty"] | None, optional): Determines how the module should handle in-place
             operations. If `True`, operations will be performed in-place. If `False`, a new TensorDict instance will be
             created. If `"empty"`, the output data structure will be initialized with `input.empty()` (i.e., it will
-            conserve type, batch-size, and device). Defaults to `True`.
+            conserve type, batch-size, and device). Defaults to `True` when generating a single sample, `False`
+            otherwise.
 
     .. note:: The tokenizer is used when `from_text` is `True` to convert input text into token sequences. It is also
         required (or retrieved) when `pad_output` is `True` or when using text inputs with `generate=False` to ensure proper
@@ -93,7 +101,7 @@ class vLLMWrapper(CategoricalSequential):
         >>> output_data = wrapper(input_data)
         >>> print(output_data.text_response)
 
-    .. seealso:: :func:`~torchrl.modules.from_hf_transformers` for a similar interface using the Hugging Face
+    .. seealso:: :func:`~torchrl.modules.TransformersWrapper` for a similar interface using the Hugging Face
         Transformers library.
     """
 
@@ -112,13 +120,13 @@ class vLLMWrapper(CategoricalSequential):
         tokenizer: transformers.tokenization_utils.PreTrainedTokenizer  # noqa
         | None = None,
         # noqa
-        from_text: bool = False,
+        from_text: bool = True,
         device: torch.device | None = None,
         generate: bool = True,
         generate_kwargs: dict | None = None,
         tokenizer_kwargs: dict | None = None,
-        pad_output: bool = True,
-        inplace: Literal[True, False, "empty"] | None = True,
+        pad_output: bool = False,
+        inplace: Literal[True, False, "empty"] | None = None,
     ):
         super().__init__()
 
@@ -128,7 +136,6 @@ class vLLMWrapper(CategoricalSequential):
         self.from_text = from_text
         self._device = device
         self.generate = generate
-        self.inplace = inplace
         self.pad_output = pad_output
         padding_value = None
 
@@ -172,6 +179,18 @@ class vLLMWrapper(CategoricalSequential):
             generate_kwargs = {}
         else:
             generate_kwargs = dict(generate_kwargs)
+
+        if generate_kwargs.get("n", 1) > 1:
+            if inplace in (True, "empty"):
+                raise ValueError(
+                    "inplace must be False (or None) when generating more than one sample."
+                )
+            if inplace is None:
+                inplace = False
+        elif inplace is None:
+            inplace = True
+
+        self.inplace = inplace
 
         prompt_logprobs = False
 
@@ -218,24 +237,16 @@ class vLLMWrapper(CategoricalSequential):
         if tensordict.device:
             tensordict = tensordict.copy().clear_device_()
 
-        out = LazyStackedTensorDict(
-            *[
-                TensorDict(
-                    device=tensordict.device, batch_size=tensordict.batch_size[1:]
-                )
-                for _ in range(tensordict.shape[0])
-            ]
-        )
         if self.from_text:
             if self.generate:
-                out = self._from_vllm_generate_text(tensordict, out=out)
+                out = self._from_vllm_generate_text(tensordict)
             else:
-                out = self._from_vllm_logprobs_text(tensordict, out=out)
+                out = self._from_vllm_logprobs_text(tensordict)
         else:
             if self.generate:
-                out = self._from_vllm_generate_tokens(tensordict, out=out)
+                out = self._from_vllm_generate_tokens(tensordict)
             else:
-                out = self._from_vllm_logprobs_tokens(tensordict, out=out)
+                out = self._from_vllm_logprobs_tokens(tensordict)
         if _source_device:
             out = out.to(_source_device)
 
@@ -243,20 +254,22 @@ class vLLMWrapper(CategoricalSequential):
             if self.inplace is True:
                 tensordict_out = tensordict
             elif self.inplace is False:
-                tensordict_out = TensorDict()
+                tensordict_out = out
             elif self.inplace == "empty":
                 tensordict_out = tensordict.empty()
 
-        if tensordict_out is not None:
+        if tensordict_out is not None and tensordict_out is not out:
             result = tensordict_out
             result.update(out, keys_to_update=self.out_keys)
-        else:
+        elif tensordict_out is not out:
             result = out
             keys = list(set(self.out_keys + list(tensordict.keys(True, True))))
             return tensordict.update(result, keys_to_update=keys)
+        else:
+            result = out
         return result
 
-    def _from_vllm_generate_text(self, td, out):
+    def _from_vllm_generate_text(self, td):
         kwargs = {"sampling_params": self.sampling_params}
         args = ()
         input_ids = None
@@ -294,16 +307,22 @@ class vLLMWrapper(CategoricalSequential):
             self.token_response_key,
             self.text_response_key,
             self.token_key,
+            self.attention_mask_key,
         ]
-        out.update(tokens_out, keys_to_update=in_keys)
+        out = tokens_out.select(*in_keys, strict=False)
         # We might already have the tokens
-        if input_ids is not None:
+        if input_ids is not None and self.token_key not in out:
             out[self.token_key] = input_ids
-        if attention_mask is not None:
+        if attention_mask is not None and self.attention_mask_key not in out:
             out[self.attention_mask_key] = attention_mask
+        inputs = td.select(*self.in_keys, strict=False)
+        if inputs.ndim < out.ndim:
+            # This happens when n > 1
+            inputs = inputs.unsqueeze(-1).expand(out.shape)
+        out.update(inputs)
         return out
 
-    def _from_vllm_logprobs_text(self, td, out):
+    def _from_vllm_logprobs_text(self, td):
         text_prompt = td.get(self.text_key)
         if not isinstance(text_prompt, list):
             text_prompt = text_prompt.tolist()
@@ -351,7 +370,7 @@ class vLLMWrapper(CategoricalSequential):
         tokens_out = _RequestOutput_tc.from_request_output(tokens_out)
         tokens_out = tokens_out.select(
             "prompt_token_ids", "prompt_logprobs", strict=False
-        )
+        )._tensordict
 
         # we disregard the tokens from the prompt to focus on those of the response
         if self.pad_output:
@@ -371,13 +390,19 @@ class vLLMWrapper(CategoricalSequential):
                 [lp[..., -len(tr) :] for lp, tr in zip(lps, input_ids_response)]
             )
 
+        out = tokens_out.empty(recurse=True)
         if isinstance(input_ids_response, list):
             input_ids_response = torch.nested.nested_tensor(input_ids_response)
         out["tokens_response"] = input_ids_response
         out["log_probs"] = lps
+        inputs = td.select(*self.in_keys, strict=False)
+        if inputs.ndim < out.ndim:
+            # This happens when n > 1
+            inputs = inputs.unsqueeze(-1).expand(out.shape)
+        out.update(inputs)
         return out
 
-    def _from_vllm_generate_tokens(self, td, out):
+    def _from_vllm_generate_tokens(self, td):
         input_ids = td.get(self.token_key)
         attention_mask = td.get(self.attention_mask_key)
         input_ids_list = self._to_list(input_ids, attention_mask)
@@ -407,12 +432,18 @@ class vLLMWrapper(CategoricalSequential):
                     lps = tokens_response_td["log_probs"]
                     lps = torch.where(expand_as_right(~padded_values, lps), lps, 0.0)
                     tokens_response_td["log_probs"] = lps
+        out = tokens_response_td.empty(recurse=True)
         out.update(
             tokens_response_td, keys_to_update=(self.token_response_key, "log_probs")
         )
+        inputs = td.select(*self.in_keys, strict=False)
+        if inputs.ndim < out.ndim:
+            # This happens when n > 1
+            inputs = inputs.unsqueeze(-1).expand(out.shape)
+        out.update(inputs)
         return out
 
-    def _from_vllm_logprobs_tokens(self, td, out):
+    def _from_vllm_logprobs_tokens(self, td):
 
         tokens = td.get(self.token_key)
         tokens_response = td.get(self.token_response_key)
@@ -435,8 +466,14 @@ class vLLMWrapper(CategoricalSequential):
         prompt_logprobs = prompt_logprobs[..., -tokens_response.shape[-1] :]
         padded = tokens_response == self.padding_value
         prompt_logprobs = torch.where(~padded, prompt_logprobs, 0.0)
+        out = tokens_out._tensordict.empty(recurse=True)
         out.set("log_probs", prompt_logprobs)
         out.set(self.token_response_key, tokens_response)
+        inputs = td.select(*self.in_keys, strict=False)
+        if inputs.ndim < out.ndim:
+            # This happens when n > 1
+            inputs = inputs.unsqueeze(-1).expand(out.shape)
+        out.update(inputs)
         return out
 
     def _get_output_tokens_and_log_probs(self, tokens_out):
@@ -456,11 +493,14 @@ class vLLMWrapper(CategoricalSequential):
         if not self.pad_output:
             # Then we can safely move the input tokens, but otherwise they
             #  may need padding
-            tokens_response_td.update(
-                tokens_out.select("prompt_token_ids")
-            ).rename_key_("prompt_token_ids", self.token_key)
+            tokens_out = tokens_out.select("prompt_token_ids")
+            if tokens_out.ndim < tokens_response_td.ndim:
+                tokens_out = tokens_out.unsqueeze(1).expand(tokens_response_td.shape)
+            tokens_response_td.update(tokens_out).rename_key_(
+                "prompt_token_ids", self.token_key
+            )
 
-        if self.return_log_probs:
+        if self.return_log_probs or "logprobs" in tokens_response_td:
             tokens_response_td.rename_key_("logprobs", "log_probs")
             if self.pad_output:
                 padded_values = tokens_response_td["tokens_response"] == padding_value
@@ -468,7 +508,6 @@ class vLLMWrapper(CategoricalSequential):
                     lps = tokens_response_td["log_probs"]
                     lps = torch.where(expand_as_right(~padded_values, lps), lps, 0.0)
                     tokens_response_td["log_probs"] = lps
-
         return tokens_response_td
 
     def _to_list(self, tokens, attention_mask):
@@ -545,15 +584,16 @@ class _RequestOutput_tc(TensorClass["nocast"]):
             if len(outputs) == 1:
                 self.outputs = outputs[0]
             else:
-                self.outputs = torch.stack(outputs)
-            self.prompt_logprobs = torch.tensor(
-                [
-                    v[tid].logprob if v is not None else 0.0
-                    for v, tid in _zip_strict(
-                        self.prompt_logprobs, self.prompt_token_ids
-                    )
-                ]
-            )
+                self.outputs = maybe_dense_stack(outputs)
+            if self.prompt_logprobs is not None:
+                self.prompt_logprobs = torch.tensor(
+                    [
+                        v[tid].logprob if v is not None else 0.0
+                        for v, tid in _zip_strict(
+                            self.prompt_logprobs, self.prompt_token_ids
+                        )
+                    ]
+                )
             self.prompt_token_ids = torch.tensor(self.prompt_token_ids)
             self.num_cached_tokens = torch.tensor(self.num_cached_tokens)
 

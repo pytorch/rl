@@ -48,6 +48,9 @@ class LLMEnv(EnvBase):
     Prompts to the language model can be loaded when the environment is ``reset`` if the environment is created via
     :meth:`~from_dataloader`.
 
+    .. note:: The default arguments of the `LLMEnv` class are set to make it easy to run this environment with
+        the vllm backend (:class:`~torchrl.modules.vLLMWrapper`).
+
     Keyword Args:
         token_key (NestedKey, optional): The key in the tensordict where the tokens are stored (when `str2str=False`).
             Defaults to ``"tokens"``.
@@ -59,7 +62,7 @@ class LLMEnv(EnvBase):
             ``"tokens_response"`` or ``"text_response"``.
         reward_key (NestedKey, optional): The key in the tensordict where the reward is stored if `assign_reward=True`.
             Defaults to  ``"reward"``.
-        str2str (bool, optional): Whether the environment should expect strings as input and output. Defaults to ``False``.
+        str2str (bool, optional): Whether the environment should expect strings as input and output. Defaults to ``True``.
         device (torch.device | None, optional): The device on which the environment should run. Defaults to ``None``.
         vocab_size (int | None, optional): The size of the vocabulary. If None, the environment will assume an
             unbounded vocabulary. Defaults to ``None``.
@@ -102,7 +105,7 @@ class LLMEnv(EnvBase):
         attention_key: NestedKey | None = None,
         action_key: NestedKey | None = None,
         reward_key: NestedKey = "reward",
-        str2str: bool = False,
+        str2str: bool = True,
         device: torch.device | None = None,
         vocab_size: int | None = None,
         no_stack: bool = True,
@@ -250,7 +253,7 @@ class LLMEnv(EnvBase):
         attention_key: NestedKey | None = None,
         action_key: NestedKey | None = None,
         reward_key: NestedKey = "reward",
-        str2str: bool = False,
+        str2str: bool = True,
         device: torch.device | None = None,
         vocab_size: int | None = None,
         no_stack: bool = False,
@@ -267,7 +270,7 @@ class LLMEnv(EnvBase):
         stack_method: Callable[[Any], Any]
         | Literal["as_nested_tensor", "as_padded_tensor"] = None,
         repeats: int | None = None,
-        group_repeats: bool = False,
+        group_repeats: bool = True,
     ) -> LLMEnv:
         """Creates an LLMEnv instance from a dataloader.
 
@@ -297,7 +300,7 @@ class LLMEnv(EnvBase):
                 ``("tokens_out", "sequences")``.
             reward_key (NestedKey, optional): The key in the tensordict where the reward is stored if `assign_reward=True`.
                 Defaults to  ``"reward"``.
-            str2str (bool, optional): Whether the environment should expect strings as input and output. Defaults to ``False``.
+            str2str (bool, optional): Whether the environment should expect strings as input and output. Defaults to ``True``.
             device (torch.device | None, optional): The device on which the environment should run. Defaults to ``None``.
             vocab_size (int | None, optional): The size of the vocabulary. If None, the environment will assume an
                 unbounded vocabulary. Defaults to ``None``.
@@ -334,7 +337,7 @@ class LLMEnv(EnvBase):
                 situations like GRPO where a single prompt is used multiple times to estimate the advantage using Monte-Carlo
                 samples (rather than an advantage module).
             group_repeats (bool, optional): if ``True``, the batch-size is multiplied by the number of repeats such that
-                all repeats are grouped in a single batch collected from the buffer. Defaults to ``False``.
+                all repeats are grouped in a single batch collected from the buffer. Defaults to ``True``.
 
         Returns:
             LLMEnv: The created LLMEnv instance.
