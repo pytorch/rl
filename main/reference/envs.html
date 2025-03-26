@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.7.0+70f5c06) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.7.0+4f00025) &#x25BC</span></a>
     </div>
     
 
@@ -829,6 +829,90 @@ etc.), but one can not use an arbitrary TorchRL environment, as it is possible w
 </tr>
 </tbody>
 </table>
+</section>
+<section id="async-environments">
+<h2>Async environments<a class="headerlink" href="#async-environments" title="Permalink to this heading">¶</a></h2>
+<p>Asynchronous environments allow for parallel execution of multiple environments, which can significantly speed up the
+data collection process in reinforcement learning.</p>
+<p>The <cite>AsyncEnvPool</cite> class and its subclasses provide a flexible interface for managing these environments using different
+backends, such as threading and multiprocessing.</p>
+<p>The <cite>AsyncEnvPool</cite> class serves as a base class for asynchronous environment pools, providing a common interface for
+managing multiple environments concurrently. It supports different backends for parallel execution, such as threading
+and multiprocessing, and provides methods for asynchronous stepping and resetting of environments.</p>
+<p>Contrary to <a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a>, <a class="reference internal" href="generated/torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool" title="torchrl.envs.AsyncEnvPool"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncEnvPool</span></code></a> and its subclasses permit the
+execution of a given set of sub-environments while another task performed, allowing for complex asynchronous jobs to be
+run at the same time. For instance, it is possible to execute some environments while the policy is running based on
+the output of others.</p>
+<p>This family of classes is particularly interesting when dealing with environments that have a high (and/or variable)
+latency.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This class and its subclasses should work when nested in with <code class="xref py py-class docutils literal notranslate"><span class="pre">TransformedEnv</span></code> and
+batched environments, but users won’t currently be able to use the async features of the base environment when
+it’s nested in these classes. One should prefer nested transformed envs within an <cite>AsyncEnvPool</cite> instead.
+If this is not possible, please raise an issue.</p>
+</div>
+<section id="classes">
+<h3>Classes<a class="headerlink" href="#classes" title="Permalink to this heading">¶</a></h3>
+<ul class="simple">
+<li><p><a class="reference internal" href="generated/torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool" title="torchrl.envs.AsyncEnvPool"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncEnvPool</span></code></a>: A base class for asynchronous environment pools. It determines the backend
+implementation to use based on the provided arguments and manages the lifecycle of the environments.</p></li>
+<li><p><a class="reference internal" href="generated/torchrl.envs.ProcessorAsyncEnvPool.html#torchrl.envs.ProcessorAsyncEnvPool" title="torchrl.envs.ProcessorAsyncEnvPool"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProcessorAsyncEnvPool</span></code></a>: An implementation of <a class="reference internal" href="generated/torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool" title="torchrl.envs.AsyncEnvPool"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncEnvPool</span></code></a> using
+multiprocessing for parallel execution of environments. This class manages a pool of environments, each running in
+its own process, and provides methods for asynchronous stepping and resetting of environments using inter-process
+communication. It is automatically instantiated when <cite>“multiprocessing”</cite> is passed as a backend during the
+<a class="reference internal" href="generated/torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool" title="torchrl.envs.AsyncEnvPool"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncEnvPool</span></code></a> instantiation.</p></li>
+<li><p><a class="reference internal" href="generated/torchrl.envs.ThreadingAsyncEnvPool.html#torchrl.envs.ThreadingAsyncEnvPool" title="torchrl.envs.ThreadingAsyncEnvPool"><code class="xref py py-class docutils literal notranslate"><span class="pre">ThreadingAsyncEnvPool</span></code></a>: An implementation of <a class="reference internal" href="generated/torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool" title="torchrl.envs.AsyncEnvPool"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncEnvPool</span></code></a> using
+threading for parallel execution of environments. This class manages a pool of environments, each running in its own
+thread, and provides methods for asynchronous stepping and resetting of environments using a thread pool executor.
+It is automatically instantiated when <cite>“threading”</cite> is passed as a backend during the
+<a class="reference internal" href="generated/torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool" title="torchrl.envs.AsyncEnvPool"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncEnvPool</span></code></a> instantiation.</p></li>
+</ul>
+</section>
+<section id="example">
+<h3>Example<a class="headerlink" href="#example" title="Permalink to this heading">¶</a></h3>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">partial</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">AsyncEnvPool</span><span class="p">,</span> <span class="n">GymEnv</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Choose backend</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">backend</span> <span class="o">=</span> <span class="s2">&quot;threading&quot;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">AsyncEnvPool</span><span class="p">(</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="p">[</span><span class="n">partial</span><span class="p">(</span><span class="n">GymEnv</span><span class="p">,</span> <span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">),</span> <span class="n">partial</span><span class="p">(</span><span class="n">GymEnv</span><span class="p">,</span> <span class="s2">&quot;CartPole-v1&quot;</span><span class="p">)],</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">stack</span><span class="o">=</span><span class="s2">&quot;lazy&quot;</span><span class="p">,</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">backend</span><span class="o">=</span><span class="n">backend</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Execute a synchronous reset</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">reset</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">reset</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Execute a synchronous step</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">s</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">rand_step</span><span class="p">(</span><span class="n">reset</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Execute an asynchronous step in env 0</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">s0</span> <span class="o">=</span> <span class="n">s</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">s0</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">s0</span><span class="p">[</span><span class="s2">&quot;env_index&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span><span class="o">.</span><span class="n">async_step_send</span><span class="p">(</span><span class="n">s0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Receive data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">s0_result</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">async_step_recv</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;result&#39;</span><span class="p">,</span> <span class="n">s0_result</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Close env</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</pre></div>
+</div>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool" title="torchrl.envs.AsyncEnvPool"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AsyncEnvPool</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A base class for asynchronous environment pools, providing a common interface for managing multiple environments concurrently.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.ProcessorAsyncEnvPool.html#torchrl.envs.ProcessorAsyncEnvPool" title="torchrl.envs.ProcessorAsyncEnvPool"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ProcessorAsyncEnvPool</span></code></a>(*args, **kwargs)</p></td>
+<td><p>An implementation of <cite>AsyncEnvPool</cite> using multiprocessing for parallel execution of environments.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.ThreadingAsyncEnvPool.html#torchrl.envs.ThreadingAsyncEnvPool" title="torchrl.envs.ThreadingAsyncEnvPool"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ThreadingAsyncEnvPool</span></code></a>(*args, **kwargs)</p></td>
+<td><p>An implementation of <cite>AsyncEnvPool</cite> using threading for parallel execution of environments.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
 </section>
 <section id="custom-native-torchrl-environments">
 <h2>Custom native TorchRL environments<a class="headerlink" href="#custom-native-torchrl-environments" title="Permalink to this heading">¶</a></h2>
@@ -1999,6 +2083,11 @@ the following function will return <code class="docutils literal notranslate"><s
 </ul>
 </li>
 <li><a class="reference internal" href="#vectorized-envs">Vectorized envs</a></li>
+<li><a class="reference internal" href="#async-environments">Async environments</a><ul>
+<li><a class="reference internal" href="#classes">Classes</a></li>
+<li><a class="reference internal" href="#example">Example</a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#custom-native-torchrl-environments">Custom native TorchRL environments</a></li>
 <li><a class="reference internal" href="#multi-agent-environments">Multi-agent environments</a></li>
 <li><a class="reference internal" href="#auto-resetting-envs">Auto-resetting Envs</a></li>
