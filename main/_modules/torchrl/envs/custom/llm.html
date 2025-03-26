@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+33051e7) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+48111e9) &#x25BC</span></a>
     </div>
     
 
@@ -469,6 +469,9 @@
 <span class="sd">    Prompts to the language model can be loaded when the environment is ``reset`` if the environment is created via</span>
 <span class="sd">    :meth:`~from_dataloader`.</span>
 
+<span class="sd">    .. note:: The default arguments of the `LLMEnv` class are set to make it easy to run this environment with</span>
+<span class="sd">        the vllm backend (:class:`~torchrl.modules.vLLMWrapper`).</span>
+
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        token_key (NestedKey, optional): The key in the tensordict where the tokens are stored (when `str2str=False`).</span>
 <span class="sd">            Defaults to ``&quot;tokens&quot;``.</span>
@@ -480,7 +483,7 @@
 <span class="sd">            ``&quot;tokens_response&quot;`` or ``&quot;text_response&quot;``.</span>
 <span class="sd">        reward_key (NestedKey, optional): The key in the tensordict where the reward is stored if `assign_reward=True`.</span>
 <span class="sd">            Defaults to  ``&quot;reward&quot;``.</span>
-<span class="sd">        str2str (bool, optional): Whether the environment should expect strings as input and output. Defaults to ``False``.</span>
+<span class="sd">        str2str (bool, optional): Whether the environment should expect strings as input and output. Defaults to ``True``.</span>
 <span class="sd">        device (torch.device | None, optional): The device on which the environment should run. Defaults to ``None``.</span>
 <span class="sd">        vocab_size (int | None, optional): The size of the vocabulary. If None, the environment will assume an</span>
 <span class="sd">            unbounded vocabulary. Defaults to ``None``.</span>
@@ -523,7 +526,7 @@
         <span class="n">attention_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">action_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">reward_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;reward&quot;</span><span class="p">,</span>
-        <span class="n">str2str</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">str2str</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">vocab_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">no_stack</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
@@ -671,7 +674,7 @@
         <span class="n">attention_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">action_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">reward_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;reward&quot;</span><span class="p">,</span>
-        <span class="n">str2str</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">str2str</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">vocab_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">no_stack</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
@@ -688,7 +691,7 @@
         <span class="n">stack_method</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]</span>
         <span class="o">|</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;as_nested_tensor&quot;</span><span class="p">,</span> <span class="s2">&quot;as_padded_tensor&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">repeats</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">group_repeats</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">group_repeats</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LLMEnv</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Creates an LLMEnv instance from a dataloader.</span>
 
@@ -718,7 +721,7 @@
 <span class="sd">                ``(&quot;tokens_out&quot;, &quot;sequences&quot;)``.</span>
 <span class="sd">            reward_key (NestedKey, optional): The key in the tensordict where the reward is stored if `assign_reward=True`.</span>
 <span class="sd">                Defaults to  ``&quot;reward&quot;``.</span>
-<span class="sd">            str2str (bool, optional): Whether the environment should expect strings as input and output. Defaults to ``False``.</span>
+<span class="sd">            str2str (bool, optional): Whether the environment should expect strings as input and output. Defaults to ``True``.</span>
 <span class="sd">            device (torch.device | None, optional): The device on which the environment should run. Defaults to ``None``.</span>
 <span class="sd">            vocab_size (int | None, optional): The size of the vocabulary. If None, the environment will assume an</span>
 <span class="sd">                unbounded vocabulary. Defaults to ``None``.</span>
@@ -755,7 +758,7 @@
 <span class="sd">                situations like GRPO where a single prompt is used multiple times to estimate the advantage using Monte-Carlo</span>
 <span class="sd">                samples (rather than an advantage module).</span>
 <span class="sd">            group_repeats (bool, optional): if ``True``, the batch-size is multiplied by the number of repeats such that</span>
-<span class="sd">                all repeats are grouped in a single batch collected from the buffer. Defaults to ``False``.</span>
+<span class="sd">                all repeats are grouped in a single batch collected from the buffer. Defaults to ``True``.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            LLMEnv: The created LLMEnv instance.</span>
