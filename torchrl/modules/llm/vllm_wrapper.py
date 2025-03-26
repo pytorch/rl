@@ -13,7 +13,7 @@ from tensordict import (
     LazyStackedTensorDict,
     NestedKey,
     TensorDict,
-    TensorDictBase,
+    TensorDictBase, maybe_dense_stack,
 )
 from tensordict.tensorclass import from_dataclass, NonTensorStack, TensorClass
 from tensordict.utils import _zip_strict, expand_as_right
@@ -552,7 +552,7 @@ class _RequestOutput_tc(TensorClass["nocast"]):
             if len(outputs) == 1:
                 self.outputs = outputs[0]
             else:
-                self.outputs = torch.stack(outputs)
+                self.outputs = maybe_dense_stack(outputs)
             self.prompt_logprobs = torch.tensor(
                 [
                     v[tid].logprob if v is not None else 0.0
