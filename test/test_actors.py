@@ -1333,10 +1333,7 @@ class TestLLMActor:
     def test_vllm_collection(self, vllm_instance):
         policy = vLLMWrapper(
             vllm_instance,
-            from_text=True,
-            generate=True,
             return_log_probs=True,
-            pad_output=False,
             generate_kwargs={"max_tokens": 10},
         )
         self._run_check_collector(policy)
@@ -1348,7 +1345,10 @@ class TestLLMActor:
     def env_constructor(cls):
         dl = DummyStrDataLoader(batch_size=32)
         env = LLMEnv.from_dataloader(
-            dl, batch_size=16, repeats=4, str2str=True, group_repeats=True
+            dl,
+            batch_size=16,
+            repeats=4,
+            # str2str=True, group_repeats=True
         )
         assert env.batch_size == (64,)
         return env
@@ -1364,6 +1364,15 @@ class TestLLMActor:
         for data in collector:
             assert isinstance(data, LazyStackedTensorDict)
             assert isinstance(data.reshape(-1).get("text_response"), NonTensorStack)
+            # action
+            assert "text_response" in data
+            assert "tokens_response" in data
+            # obs
+            assert "text" in data
+            assert ("next", "text") in data
+            # tokens
+            assert "tokens" in data
+            # assert ("next", "tokens") in data
 
 
 if __name__ == "__main__":
