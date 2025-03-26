@@ -32,7 +32,7 @@ jobs:
       matrix:
         include:
           - repository: pytorch/rl
-            pre-script: .github/scripts/td_script.sh
+            pre-script: .github/scripts/pre_build_script-win.sh
             env-script: .github/scripts/version_script.bat
             post-script: "python packaging/wheel/relocate.py"
             smoke-test-script: test/smoke_test.py
