@@ -1,8 +1,7 @@
-import logging
-import random
-import string
-from argparse import ArgumentParser
-from typing import Callable, Sequence
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
 
 from tensordict import lazy_stack, TensorDictBase
 
@@ -13,20 +12,7 @@ from torchrl.collectors import (
 )
 from torchrl.data import ReplayBuffer
 from torchrl.envs import LLMEnv, StepCounter
-from torchrl.envs.common import EnvBase
-from torchrl.modules import from_vllm
-from transformers import AutoTokenizer
-from vllm import LLM
-
-parser = ArgumentParser()
-parser.add_argument("--batch_size", type=int, default=1)
-parser.add_argument("--epochs", type=int, default=10)
-parser.add_argument("--repeats", type=int, default=10)
-parser.add_argument("--steps_per_batch", type=int, default=16)
-parser.add_argument("--optim_batch_size", type=int, default=4)
-
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+from torchrl.modules import vLLMWrapper
 
 
 class LLMCollector(SyncDataCollector):
@@ -34,8 +20,8 @@ class LLMCollector(SyncDataCollector):
 
     def __init__(
         self,
-        envs: Sequence[Callable[[], EnvBase]],
-        policy_factory: Callable[[], Callable],
+        env,
+        policy_factory,
         *,
         steps_per_batch: int = -1,
         # -1 is never ending (until shutdown)
@@ -69,7 +55,8 @@ class LLMCollector(SyncDataCollector):
         tensordicts = []
         collected_frames = 0
         while collected_frames < self.frames_per_batch:
-            env_input = self.policy(data)
+            policy_input = data
+            env_input = self.policy(policy_input)
             env_output, env_next_output = self.env.step_and_maybe_reset(env_input)
 
             # carry over collector data without messing up devices
@@ -92,56 +79,66 @@ class LLMCollector(SyncDataCollector):
         return data
 
 
-class DummyStrDataLoader:
-    """Loads random strings for testing purposes.
-
-    Copy from tests, since that is not accessible in this class
-    """
-
-    def __init__(self, batch_size=0):
-        self.batch_size = batch_size
-
-    def generate_random_string(self, length=10):
-        """Generate a random string of a given length."""
-        return "".join(random.choice(string.ascii_lowercase) for _ in range(length))
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        if self.batch_size == 0:
-            return self.generate_random_string()
-        else:
-            return [self.generate_random_string() for _ in range(self.batch_size)]
-
 
 if __name__ == "__main__":
+    import random
+    import string
+    from argparse import ArgumentParser
+
+    from torchrl._utils import logger
+    from vllm import LLM
+
+    parser = ArgumentParser()
+    parser.add_argument("--batch_size", type=int, default=4)
+    parser.add_argument("--epochs", type=int, default=10)
+    parser.add_argument("--repeats", type=int, default=10)
+    parser.add_argument("--steps_per_batch", type=int, default=16)
+    parser.add_argument("--optim_batch_size", type=int, default=4)
+
+    class _DummyStrDataLoader:
+        def __init__(self, batch_size=0):
+            self.batch_size = batch_size
+
+        def generate_random_string(self, length=10):
+            """Generate a random string of a given length."""
+            return "".join(random.choice(string.ascii_lowercase) for _ in range(length))
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            if self.batch_size == 0:
+                return self.generate_random_string()
+            else:
+                return [self.generate_random_string() for _ in range(self.batch_size)]
+
     args = parser.parse_args()
+    # NOTE: if VLLM fails with CUDA multiprocessing, try setting
+    # `export VLLM_WORKER_MULTIPROC_METHOD=spawn`
     inference_model = LLM("gpt2")
-    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    tokenizer = inference_model.get_tokenizer()
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
     logger.info("Model loaded.")
 
     # Env
-    dataloader = DummyStrDataLoader(args.batch_size)
+    dataloader = _DummyStrDataLoader(args.batch_size)
     env = LLMEnv.from_dataloader(
         dataloader=dataloader,
         tokenizer=tokenizer,
         str2str=True,
-        batch_size=(args.batch_size * args.repeats,),
+        batch_size=(args.batch_size,),
         repeats=args.repeats,
+        group_repeats=True,
     )
 
     # Finally, we want the env to stop after the first step
     env.append_transform(StepCounter(max_steps=1))
-    policy = from_vllm(inference_model, tokenizer=tokenizer, from_text=True)
+    logger.info(f"Env: {env}")
+    policy = vLLMWrapper(inference_model, tokenizer=tokenizer)
+    logger.info(f"Policy: {policy}")
     collector = LLMCollector(
-        envs=[lambda: env],
-        policy_factory=lambda: policy,
-        steps_per_batch=env.batch_size[0],
+        env=env, policy_factory=lambda: policy, steps_per_batch=env.batch_size[0]
     )
-
-    # View the data
     for data in collector:
         logger.info(data)
