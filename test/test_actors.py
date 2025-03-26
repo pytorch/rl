@@ -1374,6 +1374,18 @@ class TestLLMActor:
             assert "tokens" in data
             # assert ("next", "tokens") in data
 
+    def test_generate_multiple_trajs_vllm(self, vllm_instance):
+        policy = vLLMWrapper(
+            vllm_instance,
+            return_log_probs=True,
+            generate_kwargs={"n": 10, "max_tokens": 1024},
+            inplace=False,
+        )
+        data = TensorDict(
+            text=NonTensorStack("a string", "another very long string"), batch_size=2
+        )
+        data = policy(data)
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
