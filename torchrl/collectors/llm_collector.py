@@ -79,7 +79,10 @@ class LLMCollector(SyncDataCollector):
         return data
 
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> e08e2a67d (Initial collector)
 if __name__ == "__main__":
     import random
     import string
@@ -127,9 +130,14 @@ if __name__ == "__main__":
         dataloader=dataloader,
         tokenizer=tokenizer,
         str2str=True,
+<<<<<<< HEAD
         batch_size=(args.batch_size,),
         repeats=args.repeats,
         group_repeats=True,
+=======
+        batch_size=(args.batch_size * args.repeats,),
+        repeats=args.repeats,
+>>>>>>> e08e2a67d (Initial collector)
     )
 
     # Finally, we want the env to stop after the first step
