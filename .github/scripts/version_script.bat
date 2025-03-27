@@ -36,6 +36,9 @@ if "%CU_VERSION%" == "xpu" call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat
 
 set DISTUTILS_USE_SDK=1
 
+:: Upgrade setuptools before installing PyTorch
+pip install --upgrade setuptools==72.1.0 || exit /b 1
+
 set args=%1
 shift
 :start
