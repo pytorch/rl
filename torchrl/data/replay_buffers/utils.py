@@ -17,7 +17,7 @@ from typing import Any, Callable, Union
 import numpy as np
 import torch
 from tensordict import (
-    LazyStackedTensorDict,
+    lazy_stack,
     MemoryMappedTensor,
     NonTensorData,
     TensorDict,
@@ -482,7 +482,7 @@ class Flat2TED:
                         out._get_sub_tensordict((slice(None),) * i + (j,))
                         for j in range(out.shape[i])
                     ]
-                    out = LazyStackedTensorDict(*out_list, stack_dim=i)
+                    out = lazy_stack(out_list, i)
 
             # Create a function that reads slices of the input data
             with out.flatten(1, -1) if out.ndim > 2 else contextlib.nullcontext(
