@@ -69,7 +69,7 @@ if __name__ == "__main__":
 
     # LLM
     # inference_model = GPT2LMHeadModel(GPT2Config())
-    with torch.cuda.set_device(1):
+    with torch.device("cuda:1"):
         inference_model = LLM(args.model_name)
         tokenizer = inference_model.get_tokenizer()
         tokenizer.pad_token = tokenizer.eos_token
@@ -104,7 +104,7 @@ if __name__ == "__main__":
     env.append_transform(ShapedCorrectnessReward(tokenizer=tokenizer))
 
     # Ref model
-    with torch.cuda.set_device(2):
+    with torch.device("cuda:2"):
         if args.model_name == "Qwen/Qwen2.5-3B":
             ref_model = Qwen2ForCausalLM.from_pretrained(args.model_name).eval()
         else:
