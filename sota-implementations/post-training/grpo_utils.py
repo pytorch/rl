@@ -37,51 +37,16 @@ class HF2vLLMLocalWeightUpdater(LocalWeightUpdaterBase):
             except AttributeError:
                 model_runner = self.vllm_model.llm_engine.model_executor.driver_worker.model_runner
                 model = model_runner.inference_model
-            self.vllm_model = TensorDict.from_module(
-                model
-            ).data.lock_()
-        return self.vllm_model
+        return model #self.vllm_model
 
     def _maybe_map_weights(
-        self, server_weights: TensorDictBase, local_weights: TensorDictBase
-    ) -> TensorDictBase:
-        return self.format_hf_weights(td=server_weights, to_vllm=True)
-
-    @classmethod
-    def format_hf_weights(
-        cls,
-        model: nn.Module | None = None,
-        td: TensorDictBase | None = None,
-        *,
-        to_vllm=False,
-        update_model=False,
-    ):
-        if td is None:
-            if model is None:
-                raise TypeError("A model or a tensordict is required.")
-            td = TensorDict.from_module(model)
-        if to_vllm and update_model:
-            raise TypeError(
-                "Cannot update model with to_vllm=True as the weight format has changed."
-            )
-        for k in list(td.keys(True)):
-            if k[-1] == "q_proj":
-                keys = [k, k[:-1] + ("k_proj",), k[:-1] + ("v_proj",)]
-                qkv = torch.stack([td[_k].data for _k in keys])
-                if not to_vllm:
-                    splits = qkv.chunk(3)
-                    for _k, split in zip(keys, splits):
-                        td.pop(_k)
-                        td.set(_k, split.apply(lambda x: torch.nn.Parameter(x)))
-                else:
-                    qkv = qkv.apply(lambda x: torch.nn.Parameter(x))
-                    td.set(k[:-1] + ("qkv_proj",), qkv)
-        if update_model:
-            if model is None:
-                raise TypeError("The model must be provided to be updated.")
-            td.to_module(model)
-        return td
-
+                    self, server_weights: TensorDictBase, local_weights: TensorDictBase
+                        ) -> TensorDictBase:
+        return server_weights
+    def _update_local_weights(
+                    self, local_weights: TensorDictBase, mapped_weights: TensorDictBase
+                        ) -> TensorDictBase:
+        local_weights.load_weights(weights=list(mapped_weights.flatten_keys(".").items()))
 
 BASE_PROMPT = (
     "A conversation between User and Assistant. The user asks a question, and the Assistant solves it. "

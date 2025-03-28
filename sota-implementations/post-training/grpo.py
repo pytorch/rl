@@ -69,10 +69,11 @@ if __name__ == "__main__":
 
     # LLM
     # inference_model = GPT2LMHeadModel(GPT2Config())
-    inference_model = LLM(args.model_name)
-    tokenizer = inference_model.get_tokenizer()
-    tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.padding_side = "left"
+    with torch.cuda.set_device(1):
+        inference_model = LLM(args.model_name)
+        tokenizer = inference_model.get_tokenizer()
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
 
     # Env
     dataloader = DataLoader(  # noqa: TOR401
@@ -103,18 +104,20 @@ if __name__ == "__main__":
     env.append_transform(ShapedCorrectnessReward(tokenizer=tokenizer))
 
     # Ref model
-    if args.model_name == "Qwen/Qwen2.5-3B":
-        ref_model = Qwen2ForCausalLM.from_pretrained(args.model_name).eval()
-    else:
-        ref_model = GPT2LMHeadModel.from_pretrained(args.model_name).eval()
-    TensorDict.from_module(ref_model).data.to_module(ref_model)
-    ref_model = TransformersWrapper(
-        ref_model,
-        tokenizer=tokenizer,
-        from_text=False,
-        generate=False,
-        return_log_probs=True,
-    )
+    with torch.cuda.set_device(2):
+        if args.model_name == "Qwen/Qwen2.5-3B":
+            ref_model = Qwen2ForCausalLM.from_pretrained(args.model_name).eval()
+        else:
+            ref_model = GPT2LMHeadModel.from_pretrained(args.model_name).eval()
+        # Detach weights
+        TensorDict.from_module(ref_model).data.to_module(ref_model)
+        ref_model = TransformersWrapper(
+            ref_model,
+            tokenizer=tokenizer,
+            from_text=False,
+            generate=False,
+            return_log_probs=True,
+        )
     env.append_transform(
         KLRewardTransform(actor=ref_model, coef=0.1, log_prob_key="log_probs")
     )
