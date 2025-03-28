@@ -41,6 +41,7 @@ parser.add_argument("--optim_batch_size", type=int, default=4)
 parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-3B")
 parser.add_argument("--compile", action="store_true")
 
+torch.set_default_dtype(torch.bfloat16)
 
 def compute_mc_advantage(trajectories):
     # Get the question
@@ -206,6 +207,11 @@ if __name__ == "__main__":
         rb.extend(trajs)
         # logging
         reward = torch.cat(rb[:].get(("next", "reward"), as_list=True)).mean()
+        if not reward:
+            # no use in training a model without reward
+            torchrl_logger.info(f"no reward - skipping")
+            torch.cuda.empty_cache()  # TODO: Test if this is needed
+            continue
         logger.log_scalar("reward", reward)
         torchrl_logger.info(f"reward: {reward: 4.4f}")
         for i in range(args.epochs):
@@ -217,3 +223,4 @@ if __name__ == "__main__":
                 optim.step()
                 optim.zero_grad(set_to_none=True)
         collector.update_policy_weights_()
+        torch.cuda.empty_cache()

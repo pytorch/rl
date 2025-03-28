@@ -45,10 +45,10 @@ from torchrl.modules.tensordict_module.actors import (
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import get_default_devices
-    from pytorch.rl.test.mocking_classes import DummyStrDataLoader, NestedCountingEnv
+    from pytorch.rl.test.mocking_classes import DummyStrDataLoader, NestedCountingEnv, DummyTensorDataLoader
 else:
     from _utils_internal import get_default_devices
-    from mocking_classes import DummyStrDataLoader, NestedCountingEnv
+    from mocking_classes import DummyStrDataLoader, NestedCountingEnv, DummyTensorDataLoader
 
 _has_vllm = importlib.util.find_spec("vllm") is not None
 
@@ -1334,7 +1334,7 @@ class TestLLMActor:
         policy = vLLMWrapper(
             vllm_instance,
             return_log_probs=True,
-            generate_kwargs={"max_tokens": 10},
+            generate_kwargs={"max_tokens": 512},
         )
         self._run_check_collector(policy)
 
@@ -1342,20 +1342,22 @@ class TestLLMActor:
         ...
 
     @classmethod
-    def env_constructor(cls):
-        dl = DummyStrDataLoader(batch_size=32)
-        env = LLMEnv.from_dataloader(
-            dl,
-            batch_size=16,
-            repeats=4,
-            # str2str=True, group_repeats=True
-        )
-        assert env.batch_size == (64,)
-        return env
+    def env_constructor(cls, **kwargs):
+        def make():
+            dl = DummyStrDataLoader(batch_size=32)
+            env = LLMEnv.from_dataloader(
+                dl,
+                batch_size=16,
+                repeats=4,
+                **kwargs,
+            )
+            assert env.batch_size == (64,)
+            return env
+        return make
 
     def _run_check_collector(self, policy):
         collector = SyncDataCollector(
-            self.env_constructor,
+            self.env_constructor(),
             policy=policy,
             frames_per_batch=128,
             total_frames=512,
