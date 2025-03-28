@@ -70,12 +70,12 @@ if __name__ == "__main__":
     # LLM
     # inference_model = GPT2LMHeadModel(GPT2Config())
     devices = os.environ.get("CUDA_VISIBLE_DEVICES")
-    with torch.device("cuda:7"):
-        os.environ["CUDA_VISIBLE_DEVICES"] = "7"
-        inference_model = LLM(args.model_name)
-        tokenizer = inference_model.get_tokenizer()
-        tokenizer.pad_token = tokenizer.eos_token
-        tokenizer.padding_side = "left"
+    # with torch.device("cuda:7"):
+    os.environ["CUDA_VISIBLE_DEVICES"] = "7"
+    inference_model = LLM(args.model_name)
+    tokenizer = inference_model.get_tokenizer()
+    tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "left"
     if devices is not None:
         os.environ["CUDA_VISIBLE_DEVICES"] = devices
     else:
