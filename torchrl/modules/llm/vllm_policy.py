@@ -277,7 +277,7 @@ def _from_vllm_generate_text(
     module_dict["generate"] = Mod(
         model,
         method="generate",
-        method_kwargs={"sampling_params": sampling_params},
+        method_kwargs={"sampling_params": sampling_params, 'use_tqdm': False},
         in_keys=in_keys,
         out_keys=["tokens_out"],
         out_to_in_map=True,
@@ -426,6 +426,15 @@ def _from_vllm_generate_tokens(
         out_to_in_map=True,
         strict=True,
     )
+    
+    def add_policy_version(td):
+        if hasattr(model.llm_engine.model_executor.driver_worker.worker, "policy_version"):
+            td["policy_version"] = NonTensorData(model.llm_engine.model_executor.driver_worker.worker.policy_version.item())
+        else:
+            td["policy_version"] = NonTensorData(0)
+        return td
+    
+    module_dict["add_policy_version"] = add_policy_version
 
     def get_output_tokens_and_log_probs(td, padding_value=padding_value):
         td["tokens_out"] = _RequestOutput_tc.from_request_output(td["tokens_out"])
@@ -446,7 +455,7 @@ def _from_vllm_generate_tokens(
                 padded_values = tokens_response_td["tokens_response"] == padding_value
                 if padded_values.any():
                     lps = tokens_response_td["log_probs"]
-                    lps = torch.where(expand_as_right(~padded_values, lps), lps, 0.0)
+                    lps = torch.where(expand_as_right(~padded_values, lps), lps, 1.0)
                     tokens_response_td["log_probs"] = lps
         td.update(tokens_response_td)
         return td
@@ -462,6 +471,7 @@ def _from_vllm_generate_tokens(
         ("tokens_in", "input_ids"),
         ("tokens_in", "attention_mask"),
         "text_response",
+        "policy_version",
     ]
     out_keys = [
         "log_probs",
@@ -469,6 +479,7 @@ def _from_vllm_generate_tokens(
         token_key,
         attention_mask_key,
         "text_response",
+        "policy_version",
     ]
 
     def format_td(td):
