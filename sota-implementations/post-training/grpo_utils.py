@@ -53,7 +53,6 @@ class HF2vLLMLocalWeightUpdater(LocalWeightUpdaterBase):
         model: nn.Module | None = None,
         td: TensorDictBase | None = None,
         *,
-        from_,
         to_vllm=False,
         update_model=False,
     ):
