@@ -30,9 +30,9 @@ from vllm import LLM
 
 parser = ArgumentParser()
 parser.add_argument("--dataset", type=str, default="gsm8k")
-parser.add_argument("--batch_size", type=int, default=4)
+parser.add_argument("--batch_size", type=int, default=1)
 parser.add_argument("--epochs", type=int, default=10)
-parser.add_argument("--repeats", type=int, default=10)
+parser.add_argument("--repeats", type=int, default=16)
 parser.add_argument("--steps_per_batch", type=int, default=16)
 parser.add_argument("--optim_batch_size", type=int, default=4)
 # parser.add_argument("--model_name", type=str, default="gpt2")
