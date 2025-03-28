@@ -14,7 +14,6 @@ from torchrl.collectors import LocalWeightUpdaterBase
 from torchrl.data import Composite, TensorSpec, Unbounded
 from torchrl.envs import Transform
 
-
 class HF2vLLMLocalWeightUpdater(LocalWeightUpdaterBase):
     hf_params: TensorDictBase | None = None
     vllm_params: TensorDictBase | None = None
@@ -31,8 +30,16 @@ class HF2vLLMLocalWeightUpdater(LocalWeightUpdaterBase):
 
     def _get_local_weights(self) -> TensorDictBase:
         if self.vllm_params is None:
+            module = find_nn_module(self.vllm_model)
+            try:
+                # TODO: make this a remote call
+                model_runner = self.vllm_model.llm_engine.model_executor.driver_worker.worker.model_runner
+                model = model_runner.model
+            except AttributeError:
+                model_runner = self.vllm_model.llm_engine.model_executor.driver_worker.model_runner
+                model = model_runner.inference_model
             self.vllm_model = TensorDict.from_module(
-                self.vllm_model.llm_engine.model_executor.driver_worker.model_runner.inference_model
+                model
             ).data.lock_()
         return self.vllm_model
 
