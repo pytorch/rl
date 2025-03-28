@@ -30,7 +30,6 @@ class HF2vLLMLocalWeightUpdater(LocalWeightUpdaterBase):
 
     def _get_local_weights(self) -> TensorDictBase:
         if self.vllm_params is None:
-            module = find_nn_module(self.vllm_model)
             try:
                 # TODO: make this a remote call
                 model_runner = self.vllm_model.llm_engine.model_executor.driver_worker.worker.model_runner
