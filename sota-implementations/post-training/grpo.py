@@ -24,7 +24,7 @@ from torchrl.envs import KLRewardTransform, LLMEnv, StepCounter
 from torchrl.modules import TransformersWrapper, vLLMWrapper
 from torchrl.objectives import ClipPPOLoss
 from torchrl.record import WandbLogger
-from transformers import GPT2LMHeadModel
+from transformers import GPT2LMHeadModel, Qwen2ForQuestionAnswering
 from vllm import LLM
 
 parser = ArgumentParser()
@@ -102,7 +102,10 @@ if __name__ == "__main__":
     env.append_transform(ShapedCorrectnessReward(tokenizer=tokenizer))
 
     # Ref model
-    ref_model = GPT2LMHeadModel.from_pretrained(args.model_name).eval()
+    if args.model_name == "Qwen/Qwen2.5-3B":
+        ref_model = Qwen2ForQuestionAnswering.from_pretrained(args.model_name).eval()
+    else:
+        ref_model = GPT2LMHeadModel.from_pretrained(args.model_name).eval()
     TensorDict.from_module(ref_model).data.to_module(ref_model)
     ref_model = TransformersWrapper(
         ref_model,
@@ -123,7 +126,10 @@ if __name__ == "__main__":
     )
 
     # Collector
-    train_model = GPT2LMHeadModel.from_pretrained(args.model_name).eval()
+    if args.model_name == "Qwen/Qwen2.5-3B":
+        ref_model = Qwen2ForQuestionAnswering.from_pretrained(args.model_name).eval()
+    else:
+        ref_model = GPT2LMHeadModel.from_pretrained(args.model_name).eval()
     collector = SyncDataCollector(
         env,
         policy,
