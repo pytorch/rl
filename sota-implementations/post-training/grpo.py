@@ -39,6 +39,7 @@ parser.add_argument("--steps_per_batch", type=int, default=16)
 parser.add_argument("--optim_batch_size", type=int, default=4)
 # parser.add_argument("--model_name", type=str, default="gpt2")
 parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-3B")
+parser.add_argument("--compile", action="store_true")
 
 
 def compute_mc_advantage(trajectories):
@@ -107,7 +108,7 @@ if __name__ == "__main__":
         generate=True,
         # vLLM log-probs are a bit screwed up, we could use something else
         return_log_probs=True,
-        # generate_kwargs={"max_tokens": 512},
+        generate_kwargs={"max_tokens": 512},
     )
 
     # Reward transform
@@ -186,6 +187,8 @@ if __name__ == "__main__":
     )
     loss_fn.set_keys(sample_log_prob="log_probs")
     loss_fn._set_in_keys()
+    if args.compile:
+        loss_fn = torch.compile(loss_fn)
     optim = torch.optim.Adam(loss_fn.parameters())
 
     # loss_fn = ReinforceLoss(
@@ -197,6 +200,7 @@ if __name__ == "__main__":
     logger = WandbLogger(exp_name=args.model_name)
     for i, trajs in enumerate(collector):
         print("Collected batch", i)
+        print('trajs', trajs)
         trajs = trajs.reshape(-1)
         trajs = compute_mc_advantage(trajs)
         rb.extend(trajs)
