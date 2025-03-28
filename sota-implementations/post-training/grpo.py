@@ -46,6 +46,7 @@ def compute_mc_advantage(trajectories):
     answer_ids = tree_map(lambda string: hash(string), answer)
     answer_ids = torch.tensor(answer_ids)
     unique_qs = answer_ids.view(-1).unique()
+    trajectories["next", "reward"] = trajectories["next", "reward"].unsqueeze(-1)
     trajectories["advantage"] = trajectories["next", "reward"] * 0
     for u in unique_qs:
         idx = answer_ids == u
