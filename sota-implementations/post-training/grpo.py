@@ -69,11 +69,17 @@ if __name__ == "__main__":
 
     # LLM
     # inference_model = GPT2LMHeadModel(GPT2Config())
-    with torch.device("cuda:1"):
+    devices = os.environ.get("CUDA_VISIBLE_DEVICES")
+    with torch.device("cuda:7"):
+        os.environ["CUDA_VISIBLE_DEVICES"] = "7"
         inference_model = LLM(args.model_name)
         tokenizer = inference_model.get_tokenizer()
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
+    if devices is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = devices
+    else:
+        os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3,4,5,6,7"
 
     # Env
     dataloader = DataLoader(  # noqa: TOR401
@@ -104,9 +110,8 @@ if __name__ == "__main__":
     env.append_transform(ShapedCorrectnessReward(tokenizer=tokenizer))
 
     # Ref model
-    devices = os.environ.get("CUDA_VISIBLE_DEVICES")
-    with torch.device("cuda:2"):
-        os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+    with torch.device("cuda:6"):
+        os.environ["CUDA_VISIBLE_DEVICES"] = "6"
         if args.model_name == "Qwen/Qwen2.5-3B":
             ref_model = Qwen2ForCausalLM.from_pretrained(args.model_name).eval()
         else:
@@ -120,10 +125,6 @@ if __name__ == "__main__":
             generate=False,
             return_log_probs=True,
         )
-    if devices is not None:
-        os.environ["CUDA_VISIBLE_DEVICES"] = devices
-    else:
-        os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3,4,5,6,7"
     env.append_transform(
         KLRewardTransform(actor=ref_model, coef=0.1, log_prob_key="log_probs")
     )
