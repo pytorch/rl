@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 from argparse import ArgumentParser
-
+import os
 from torchrl._utils import logger as torchrl_logger
 import torch
 from datasets import load_dataset
@@ -104,7 +104,9 @@ if __name__ == "__main__":
     env.append_transform(ShapedCorrectnessReward(tokenizer=tokenizer))
 
     # Ref model
+    devices = os.environ.get("CUDA_VISIBLE_DEVICES")
     with torch.device("cuda:2"):
+        os.environ["CUDA_VISIBLE_DEVICES"] = "2"
         if args.model_name == "Qwen/Qwen2.5-3B":
             ref_model = Qwen2ForCausalLM.from_pretrained(args.model_name).eval()
         else:
@@ -118,6 +120,10 @@ if __name__ == "__main__":
             generate=False,
             return_log_probs=True,
         )
+    if devices is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = devices
+    else:
+        os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3,4,5,6,7"
     env.append_transform(
         KLRewardTransform(actor=ref_model, coef=0.1, log_prob_key="log_probs")
     )
