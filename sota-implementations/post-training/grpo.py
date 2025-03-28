@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from argparse import ArgumentParser
 import os
+
+import tqdm
 from torchrl._utils import logger as torchrl_logger
 import torch
 from datasets import load_dataset
@@ -105,6 +107,7 @@ if __name__ == "__main__":
         generate=True,
         # vLLM log-probs are a bit screwed up, we could use something else
         return_log_probs=True,
+        # generate_kwargs={"max_tokens": 512},
     )
 
     # Reward transform
@@ -200,8 +203,10 @@ if __name__ == "__main__":
         # logging
         reward = torch.cat(rb[:].get(("next", "reward"), as_list=True)).mean()
         logger.log_scalar("reward", reward)
-        for _ in range(args.epochs):
-            for batch in rb:
+        torchrl_logger.info(f"reward: {reward: 4.4f}")
+        for i in range(args.epochs):
+            torchrl_logger.info(f"epoch: {i}")
+            for batch in tqdm.tqdm(rb):
                 loss = loss_fn(batch)
                 loss_val = loss.mean(reduce=True)
                 loss_val.backward()
