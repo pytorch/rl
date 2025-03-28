@@ -132,6 +132,7 @@ if __name__ == "__main__":
     # Collector
     if args.model_name == "Qwen/Qwen2.5-3B":
         train_model = Qwen2ForCausalLM.from_pretrained(args.model_name).eval()
+        train_model.gradient_checkpointing_enable()
     else:
         train_model = GPT2LMHeadModel.from_pretrained(args.model_name).eval()
     collector = SyncDataCollector(
@@ -188,5 +189,5 @@ if __name__ == "__main__":
                 loss_val = loss.mean(reduce=True)
                 loss_val.backward()
                 optim.step()
-                optim.zero_grad()
+                optim.zero_grad(set_to_none=True)
         collector.update_policy_weights_()
