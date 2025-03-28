@@ -199,8 +199,8 @@ if __name__ == "__main__":
 
     logger = WandbLogger(exp_name=args.model_name)
     for i, trajs in enumerate(collector):
-        print("Collected batch", i)
-        print('trajs', trajs)
+        torchrl_logger.info(f"Collected batch {i}")
+        torchrl_logger.info(f'trajs {trajs}')
         trajs = trajs.reshape(-1)
         trajs = compute_mc_advantage(trajs)
         rb.extend(trajs)
