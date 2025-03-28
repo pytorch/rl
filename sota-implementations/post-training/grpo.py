@@ -127,9 +127,9 @@ if __name__ == "__main__":
 
     # Collector
     if args.model_name == "Qwen/Qwen2.5-3B":
-        ref_model = Qwen2ForQuestionAnswering.from_pretrained(args.model_name).eval()
+        train_model = Qwen2ForQuestionAnswering.from_pretrained(args.model_name).eval()
     else:
-        ref_model = GPT2LMHeadModel.from_pretrained(args.model_name).eval()
+        train_model = GPT2LMHeadModel.from_pretrained(args.model_name).eval()
     collector = SyncDataCollector(
         env,
         policy,
