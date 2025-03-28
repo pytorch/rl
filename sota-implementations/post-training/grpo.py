@@ -155,6 +155,8 @@ if __name__ == "__main__":
     # Try to update the weights
     torchrl_logger.info('updating weights...')
     collector.update_policy_weights_()
+    # make sure we can collect data
+    print('first batch', next(collector))
 
     # Loss module
     policy_training = TransformersWrapper(
