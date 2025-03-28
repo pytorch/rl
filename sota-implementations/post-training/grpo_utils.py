@@ -14,6 +14,7 @@ from torchrl.collectors import LocalWeightUpdaterBase
 from torchrl.data import Composite, TensorSpec, Unbounded
 from torchrl.envs import Transform
 
+
 class HF2vLLMLocalWeightUpdater(LocalWeightUpdaterBase):
     hf_params: TensorDictBase | None = None
     vllm_params: TensorDictBase | None = None
@@ -32,21 +33,29 @@ class HF2vLLMLocalWeightUpdater(LocalWeightUpdaterBase):
         if self.vllm_params is None:
             try:
                 # TODO: make this a remote call
-                model_runner = self.vllm_model.llm_engine.model_executor.driver_worker.worker.model_runner
+                model_runner = (
+                    self.vllm_model.llm_engine.model_executor.driver_worker.worker.model_runner
+                )
                 model = model_runner.model
             except AttributeError:
-                model_runner = self.vllm_model.llm_engine.model_executor.driver_worker.model_runner
+                model_runner = (
+                    self.vllm_model.llm_engine.model_executor.driver_worker.model_runner
+                )
                 model = model_runner.inference_model
-        return model #self.vllm_model
+        return model  # self.vllm_model
 
     def _maybe_map_weights(
-                    self, server_weights: TensorDictBase, local_weights: TensorDictBase
-                        ) -> TensorDictBase:
+        self, server_weights: TensorDictBase, local_weights: TensorDictBase
+    ) -> TensorDictBase:
         return server_weights
+
     def _update_local_weights(
-                    self, local_weights: TensorDictBase, mapped_weights: TensorDictBase
-                        ) -> TensorDictBase:
-        local_weights.load_weights(weights=list(mapped_weights.flatten_keys(".").items()))
+        self, local_weights: TensorDictBase, mapped_weights: TensorDictBase
+    ) -> TensorDictBase:
+        local_weights.load_weights(
+            weights=list(mapped_weights.flatten_keys(".").items())
+        )
+
 
 BASE_PROMPT = (
     "A conversation between User and Assistant. The user asks a question, and the Assistant solves it. "
@@ -105,7 +114,7 @@ class ShapedCorrectnessReward(Transform):
         super().__init__()
         self.tokenizer = tokenizer
         if in_keys is None:
-            in_keys = ["text", "answer"]
+            in_keys = ["text_response", "answer"]
         if not isinstance(in_keys, list) or len(in_keys) != 2:
             raise ValueError(
                 "ShapedCorrectnessReward requires in_keys to be of type list and have 2 elements."
@@ -127,7 +136,7 @@ class ShapedCorrectnessReward(Transform):
         from xml.etree import ElementTree as ET
 
         # Get the completion
-        responses = next_tensordict[self.in_keys[0]]  # batch_size, grpo_size, L
+        responses = tensordict[self.in_keys[0]]  # batch_size, grpo_size, L
         answers = next_tensordict[self.in_keys[1]]  # batch_size, grpo_size
         if isinstance(responses, torch.Tensor):
             if responses.ndim == 3:
@@ -145,6 +154,10 @@ class ShapedCorrectnessReward(Transform):
                 )  # .replace("<<", "").replace(">>", ""))
             except ET.ParseError:
                 cot, potential_answer = ("", "")
+            # TODO: in tune, the answer is parsed during dataloading
+            #  we could create a similar dataclass for both proposed and real answer
+            #  With tensorclass comparison should be easy
+            cot_orig, answer = answer.split("#### ")
             tds.append(
                 self.single_shaped_correctness_reward(answer, potential_answer, cot)
             )
@@ -172,7 +185,11 @@ class ShapedCorrectnessReward(Transform):
     def single_shaped_correctness_reward(
         cls, true_answer: str, potential_answer: list[str], cot: list[str]
     ) -> TensorDict:
-
+        # TODO: In tune, these end up being lists
+        if isinstance(potential_answer, str):
+            potential_answer = [potential_answer]
+        if isinstance(cot, str):
+            cot = [cot]
         reward_answer = 5.0 * (len(potential_answer) == 1)
 
         reward_think = 5.0 * (len(cot) == 1)

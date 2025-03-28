@@ -2,12 +2,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from argparse import ArgumentParser
 import os
+from argparse import ArgumentParser
+
+import torch
 
 import tqdm
-from torchrl._utils import logger as torchrl_logger
-import torch
 from datasets import load_dataset
 from grpo_utils import (
     HF2vLLMLocalWeightUpdater,
@@ -17,12 +17,9 @@ from grpo_utils import (
 from tensordict import TensorDict
 from torch.utils._pytree import tree_map
 from torch.utils.data import DataLoader
+from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors import SyncDataCollector
-from torchrl.data import (
-    LazyStackStorage,
-    ReplayBuffer,
-    SamplerWithoutReplacement,
-)
+from torchrl.data import LazyStackStorage, ReplayBuffer, SamplerWithoutReplacement
 from torchrl.envs import KLRewardTransform, LLMEnv, StepCounter
 from torchrl.modules import TransformersWrapper, vLLMWrapper
 from torchrl.objectives import ClipPPOLoss
@@ -42,6 +39,7 @@ parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-3B")
 parser.add_argument("--compile", action="store_true")
 
 torch.set_default_dtype(torch.bfloat16)
+
 
 def compute_mc_advantage(trajectories):
     # Get the question
@@ -201,7 +199,7 @@ if __name__ == "__main__":
     logger = WandbLogger(exp_name=args.model_name)
     for i, trajs in enumerate(collector):
         torchrl_logger.info(f"Collected batch {i}")
-        torchrl_logger.info(f'trajs {trajs}')
+        torchrl_logger.info(f"trajs {trajs}")
         trajs = trajs.reshape(-1)
         trajs = compute_mc_advantage(trajs)
         rb.extend(trajs)
@@ -209,7 +207,7 @@ if __name__ == "__main__":
         reward = torch.cat(rb[:].get(("next", "reward"), as_list=True)).mean()
         if not reward:
             # no use in training a model without reward
-            torchrl_logger.info(f"no reward - skipping")
+            torchrl_logger.info("no reward - skipping")
             torch.cuda.empty_cache()  # TODO: Test if this is needed
             continue
         logger.log_scalar("reward", reward)
