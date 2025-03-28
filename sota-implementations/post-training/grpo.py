@@ -111,7 +111,6 @@ if __name__ == "__main__":
 
     # Ref model
     with torch.device("cuda:6"):
-        os.environ["CUDA_VISIBLE_DEVICES"] = "6"
         if args.model_name == "Qwen/Qwen2.5-3B":
             ref_model = Qwen2ForCausalLM.from_pretrained(args.model_name).eval()
         else:
