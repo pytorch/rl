@@ -88,8 +88,9 @@ if __name__ == "__main__":
         dataloader=dataloader,
         # tokenizer=tokenizer,
         str2str=True,
-        batch_size=(args.batch_size * args.repeats,),
+        batch_size=(args.batch_size,),
         repeats=args.repeats,
+        group_repeats=True,
     )
     env.insert_transform(0, PrepareQuestion())
 
@@ -156,11 +157,13 @@ if __name__ == "__main__":
         ),
         use_buffers=False,
     )
-    # Try to update the weights
-    torchrl_logger.info('updating weights...')
-    collector.update_policy_weights_()
-    # make sure we can collect data
-    print('first batch', next(collector))
+    # # Try to update the weights
+    # torchrl_logger.info('updating weights...')
+    # collector.update_policy_weights_()
+    # # make sure we can collect data
+    # for batch in collector:
+    #     print('first batch', batch)
+    #     break
 
     # Loss module
     policy_training = TransformersWrapper(
