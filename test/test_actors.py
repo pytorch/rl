@@ -10,7 +10,13 @@ import os
 
 import pytest
 import torch
-from tensordict import LazyStackedTensorDict, NonTensorStack, TensorDict
+from tensordict import (
+    lazy_stack,
+    LazyStackedTensorDict,
+    NonTensorStack,
+    set_list_to_stack,
+    TensorDict,
+)
 from tensordict.nn import CompositeDistribution, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 
@@ -937,6 +943,38 @@ class TestLLMActor:
         tokenizer.pad_token = tokenizer.eos_token
         return llm_model
 
+    @pytest.fixture(scope="module")
+    def transformers_instance(self):
+        from transformers import AutoTokenizer, GPT2Config, GPT2LMHeadModel
+
+        tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        model = GPT2LMHeadModel(GPT2Config()).eval()
+        # tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
+        # model = OPTModel(OPTConfig("facebook/opt-125m"))
+        # tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
+        # model = OPTForCausalLM(OPTConfig())
+
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+
+        return model, tokenizer
+
+    @pytest.fixture(scope="module")
+    def transformers_instance_pretrained(self):
+        from transformers import AutoTokenizer, OPTForCausalLM
+
+        # tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        # model = GPT2LMHeadModel(GPT2Config())
+        # tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
+        # model = OPTModel(OPTConfig("facebook/opt-125m"))
+        tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
+        model = OPTForCausalLM.from_pretrained("facebook/opt-125m")
+
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+
+        return model, tokenizer
+
     @pytest.mark.parametrize(
         "from_text, generate, return_log_probs, tokens, attention_mask",
         [
@@ -961,22 +999,18 @@ class TestLLMActor:
             (False, True, False, torch.randint(1024, (1, 10)), None),
         ],
     )
-    def test_TransformersWrapper(
-        self, from_text, generate, return_log_probs, tokens, attention_mask
+    def test_transformers_wrapper(
+        self,
+        from_text,
+        generate,
+        return_log_probs,
+        tokens,
+        attention_mask,
+        transformers_instance,
     ):
         torch.manual_seed(0)
-        from transformers import AutoTokenizer, GPT2Config, GPT2LMHeadModel
 
-        # model_name = "distilbert-base-uncased"  # or "minilm" or "albert-tiny"
-        # Load the model and tokenizer
-        # model = AutoModel.from_pretrained(model_name)
-        # tokenizer = AutoTokenizer.from_pretrained(model_name)
-
-        tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        model = GPT2LMHeadModel(GPT2Config())
-
-        tokenizer.pad_token = tokenizer.eos_token
-        tokenizer.padding_side = "left"
+        model, tokenizer = transformers_instance
 
         m = TransformersWrapper(
             model,
@@ -1019,7 +1053,7 @@ class TestLLMActor:
             (False, True, False, torch.randint(1024, (1, 10)), None),
         ],
     )
-    def test_from_vllm(
+    def test_vllm_wrapper(
         self,
         from_text,
         generate,
@@ -1163,15 +1197,11 @@ class TestLLMActor:
             (True, None, None),
         ],
     )
-    def test_from_hf_logprobs(self, from_text, tokens, attention_mask):
+    def test_transformers_logprobs(
+        self, from_text, tokens, attention_mask, transformers_instance
+    ):
         torch.manual_seed(0)
-        from transformers import AutoTokenizer, GPT2Config, GPT2LMHeadModel
-
-        tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        model = GPT2LMHeadModel(GPT2Config()).eval()
-
-        tokenizer.pad_token = tokenizer.eos_token
-        tokenizer.padding_side = "left"
+        model, tokenizer = transformers_instance
 
         m_generate = TransformersWrapper(
             model,
@@ -1201,7 +1231,7 @@ class TestLLMActor:
             (True, False, torch.randint(1024, (1, 10)), None),
         ],
     )
-    def test_from_vllm_logprobs(
+    def test_vllm_logprobs(
         self, from_text, tokens, attention_mask, pad_output, vllm_instance
     ):
         torch.manual_seed(0)
@@ -1254,6 +1284,7 @@ class TestLLMActor:
         )
         td_logprobs = model_logprobs(tdin_logprobs)
         assert td_generate.log_probs.shape == td_generate.tokens_response.shape
+        assert td_logprobs.log_probs.shape == td_logprobs.tokens_response.shape
         assert td_logprobs.log_probs.shape == td_generate.tokens_response.shape
         torch.testing.assert_close(
             td_generate.log_probs, td_logprobs.log_probs, rtol=tol, atol=tol
@@ -1374,7 +1405,7 @@ class TestLLMActor:
             assert "tokens" in data
             # assert ("next", "tokens") in data
 
-    def test_generate_multiple_trajs_vllm(self, vllm_instance):
+    def test_vllm_generate_multiple_trajs(self, vllm_instance):
         policy = vLLMWrapper(
             vllm_instance,
             return_log_probs=True,
@@ -1385,6 +1416,63 @@ class TestLLMActor:
             text=NonTensorStack("a string", "another very long string"), batch_size=2
         )
         data = policy(data)
+
+    @set_list_to_stack(True)
+    @pytest.mark.parametrize("from_text", [True, False])
+    @pytest.mark.parametrize("generate", [True, False])
+    def test_transformers_long_sequences(
+        self, from_text, generate, transformers_instance_pretrained
+    ):
+        torch.manual_seed(42)
+        model, tokenizer = transformers_instance_pretrained
+        prompts = [
+            "The quick brown fox jumps over the lazy dog.",  # Likely to finish soon
+            "Once upon a time in a land far, far away, there was a",  # Likely to continue longer
+            "In the beginning, the universe was created. This has made a lot of people very angry and been widely regarded as a bad move.",
+        ]
+        data = lazy_stack([TensorDict() for _ in range(len(prompts))])
+        data["text"] = prompts
+        eos_token_id = tokenizer.convert_tokens_to_ids(",")
+        if not from_text:
+            data["tokens"] = tokenizer(data["text"])["input_ids"]
+            data["attention_mask"] = (
+                0 * data.get("tokens", as_nested_tensor=True, layout=torch.strided) + 1
+            )
+        if not generate:
+            # we need responses
+            responses = prompts[1:] + [" et dolore magna aliqua."]
+            data["text_response"] = responses
+            if not from_text:
+                data["tokens_response"] = tokenizer(data["text_response"])["input_ids"]
+        # make sure dimensions are ragged for tokens entries
+        if "tokens" in data:
+            assert data.get_item_shape("tokens")[-1] == -1
+        if "tokens_response" in data:
+            assert data.get_item_shape("tokens_response")[-1] == -1
+        generate_kwargs = {}
+        if generate:
+            generate_kwargs = {
+                "max_new_tokens": 128,  # Set a reasonable number of new tokens to generate
+                "min_length": 20,  # Ensure a minimum length for the generated sequence
+                "pad_token_id": tokenizer.pad_token_id,  # Use the tokenizer's pad token
+                "forced_eos_token_id": eos_token_id,  # Use comma as an EOS token
+            }
+        policy = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            from_text=from_text,
+            generate=generate,
+            return_log_probs=True,
+            # TODO: use n trajs
+            generate_kwargs=generate_kwargs,
+        )
+        data_policy = policy(data)
+        if "tokens" in data_policy:
+            assert data_policy.get_item_shape("tokens")[-1] == -1
+        if "tokens_response" in data_policy:
+            assert (
+                data_policy.get_item_shape("tokens_response")[-1] == -1
+            )  # TODO: this fails
 
 
 if __name__ == "__main__":
