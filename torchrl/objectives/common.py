@@ -385,7 +385,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                         p_out = param.expand(expand_dim, *param.shape).clone()
                         p_out = nn.Parameter(
                             p_out.uniform_(
-                                p_out.min().item(), p_out.max().item()
+                                p_out.data.min().item(), p_out.data.max().item()
                             ).requires_grad_()
                         )
                         return p_out
