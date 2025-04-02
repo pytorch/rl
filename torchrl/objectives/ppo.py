@@ -584,7 +584,10 @@ class PPOLoss(LossModule):
             self.tensor_keys.sample_log_prob,
             adv_shape,
         )
-
+        if prev_log_prob is None:
+            raise KeyError(
+                f"Couldn't find the log-prob {self.tensor_keys.sample_log_prob} in the input data."
+            )
         if prev_log_prob.requires_grad:
             raise RuntimeError(
                 f"tensordict stored {self.tensor_keys.sample_log_prob} requires grad."
