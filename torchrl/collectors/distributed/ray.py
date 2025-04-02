@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import warnings
-from typing import Callable, Iterator, OrderedDict
+from typing import Any, Callable, Iterator, OrderedDict, Sequence
 
 import torch
 import torch.nn as nn
@@ -153,8 +153,8 @@ class RayCollector(DataCollectorBase):
                 pickled directly), the :arg:`policy_factory` should be used instead.
 
     Keyword Args:
-        policy_factory (Callable[[], Callable], optional): a callable that returns
-            a policy instance. This is exclusive with the `policy` argument.
+        policy_factory (Callable[[], Callable], list of Callable[[], Callable], optional): a callable
+            (or list of callables) that returns a policy instance. This is exclusive with the `policy` argument.
 
             .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.
 
@@ -277,13 +277,16 @@ class RayCollector(DataCollectorBase):
 
             .. note:: although it is not enfoced (to allow users to implement their own replay buffer class), a
                 :class:`~torchrl.data.RayReplayBuffer` instance should be used here.
-        local_weight_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
+        local_weight_updater (LocalWeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on the local inference worker.
-            This is typically not used in :class:`~torchrl.collectors.RayCollector` as it focuses on distributed environments.
-        remote_weight_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
+            This is typically not used in :class:`~torchrl.collectors.RayCollector` as it focuses on distributed
+            environments.
+            Consider using a constructor if the updater needs to be serialized.
+        remote_weight_updater (RemoteWeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on remote inference workers managed by Ray.
             If not provided, a :class:`~torchrl.collectors.RayRemoteWeightUpdater` will be used by default, leveraging
             Ray's distributed capabilities.
+            Consider using a constructor if the updater needs to be serialized.
 
     Examples:
         >>> from torch import nn
@@ -319,13 +322,15 @@ class RayCollector(DataCollectorBase):
         create_env_fn: Callable | EnvBase | list[Callable] | list[EnvBase],
         policy: Callable[[TensorDictBase], TensorDictBase] | None = None,
         *,
-        policy_factory: Callable[[], Callable] | None = None,
+        policy_factory: Callable[[], Callable]
+        | list[Callable[[], Callable]]
+        | None = None,
         frames_per_batch: int,
         total_frames: int = -1,
-        device: torch.device | list[torch.device] = None,
-        storing_device: torch.device | list[torch.device] = None,
-        env_device: torch.device | list[torch.device] = None,
-        policy_device: torch.device | list[torch.device] = None,
+        device: torch.device | list[torch.device] | None = None,
+        storing_device: torch.device | list[torch.device] | None = None,
+        env_device: torch.device | list[torch.device] | None = None,
+        policy_device: torch.device | list[torch.device] | None = None,
         max_frames_per_traj=-1,
         init_random_frames=-1,
         reset_at_each_iter=False,
@@ -333,17 +338,21 @@ class RayCollector(DataCollectorBase):
         split_trajs=False,
         exploration_type=DEFAULT_EXPLORATION_TYPE,
         collector_class: Callable[[TensorDict], TensorDict] = SyncDataCollector,
-        collector_kwargs: dict | list[dict] = None,
+        collector_kwargs: dict[str, Any] | list[dict] | None = None,
         num_workers_per_collector: int = 1,
         sync: bool = False,
-        ray_init_config: dict = None,
-        remote_configs: dict | list[dict] = None,
-        num_collectors: int = None,
-        update_after_each_batch=False,
-        max_weight_update_interval=-1,
-        replay_buffer: ReplayBuffer = None,
-        remote_weight_updater: RemoteWeightUpdaterBase | None = None,
-        local_weight_updater: LocalWeightUpdaterBase | None = None,
+        ray_init_config: dict[str, Any] | None = None,
+        remote_configs: dict[str, Any] | list[dict[str, Any]] | None = None,
+        num_collectors: int | None = None,
+        update_after_each_batch: bool = False,
+        max_weight_update_interval: int = -1,
+        replay_buffer: ReplayBuffer | None = None,
+        remote_weight_updater: RemoteWeightUpdaterBase
+        | Callable[[], RemoteWeightUpdaterBase]
+        | None = None,
+        local_weight_updater: LocalWeightUpdaterBase
+        | Callable[[], LocalWeightUpdaterBase]
+        | None = None,
     ):
         self.frames_per_batch = frames_per_batch
         if remote_configs is None:
@@ -451,6 +460,9 @@ class RayCollector(DataCollectorBase):
             collector_class.print_remote_collector_info = print_remote_collector_info
 
         self.replay_buffer = replay_buffer
+        if not isinstance(policy_factory, Sequence):
+            policy_factory = [policy_factory] * len(create_env_fn)
+        self.policy_factory = policy_factory
         self._local_policy = policy
         if isinstance(self._local_policy, nn.Module):
             policy_weights = TensorDict.from_module(self._local_policy)
@@ -491,7 +503,7 @@ class RayCollector(DataCollectorBase):
 
         # update collector kwargs
         for i, collector_kwarg in enumerate(self.collector_kwargs):
-            collector_kwarg["policy_factory"] = policy_factory
+            collector_kwarg["policy_factory"] = policy_factory[i]
             collector_kwarg["max_frames_per_traj"] = max_frames_per_traj
             collector_kwarg["init_random_frames"] = (
                 init_random_frames // self.num_collectors
