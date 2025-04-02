@@ -13686,7 +13686,8 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         assert target_val.device == source_val.device, key
         if target_val.dtype == torch.long:
             continue
-        d0 += (target_val - source_val).norm().item()
+        with torch.no_grad():
+            d0 += (target_val - source_val).norm().item()
 
     assert d0 > 0
     if mode == "hard":
@@ -13700,7 +13701,8 @@ def test_updater(mode, value_network_update_interval, device, dtype):
                 target_val = upd._targets[key]
                 if target_val.dtype == torch.long:
                     continue
-                d1 += (target_val - source_val).norm().item()
+                with torch.no_grad():
+                    d1 += (target_val - source_val).norm().item()
 
             assert d1 == d0, i
             assert upd.counter == i
@@ -13715,7 +13717,8 @@ def test_updater(mode, value_network_update_interval, device, dtype):
             target_val = upd._targets[key]
             if target_val.dtype == torch.long:
                 continue
-            d1 += (target_val - source_val).norm().item()
+            with torch.no_grad():
+                d1 += (target_val - source_val).norm().item()
         assert d1 < d0
 
     elif mode == "soft":
@@ -13728,7 +13731,8 @@ def test_updater(mode, value_network_update_interval, device, dtype):
             target_val = upd._targets[key]
             if target_val.dtype == torch.long:
                 continue
-            d1 += (target_val - source_val).norm().item()
+            with torch.no_grad():
+                d1 += (target_val - source_val).norm().item()
         assert d1 < d0
     with pytest.warns(UserWarning, match="already"):
         upd.init_()
@@ -13741,7 +13745,8 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         target_val = upd._targets[key]
         if target_val.dtype == torch.long:
             continue
-        d2 += (target_val - source_val).norm().item()
+        with torch.no_grad():
+            d2 += (target_val - source_val).norm().item()
     assert d2 < 1e-6
 
 
@@ -16668,17 +16673,17 @@ class TestPPO4LLMs:
     @pytest.mark.parametrize("from_text", [True, False])
     def test_hf(self, from_text):
         from torchrl.envs import LLMEnv, Transform
-        from torchrl.modules import from_hf_transformers
+        from torchrl.modules import TransformersWrapper
         from transformers import AutoTokenizer, OPTConfig, OPTForCausalLM
 
         tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
         tokenizer.pad_token = tokenizer.eos_token
 
         model = OPTForCausalLM(OPTConfig())
-        policy_inference = from_hf_transformers(
+        policy_inference = TransformersWrapper(
             model, tokenizer=tokenizer, generate=True, from_text=from_text
         )
-        policy_train = from_hf_transformers(
+        policy_train = TransformersWrapper(
             model, tokenizer=tokenizer, generate=False, from_text=False
         )
         for p in policy_train.parameters():
