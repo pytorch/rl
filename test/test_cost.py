@@ -181,6 +181,9 @@ pytestmark = [
     pytest.mark.filterwarnings(
         "ignore:dep_util is Deprecated. Use functions from setuptools instead"
     ),
+    pytest.mark.filterwarnings(
+        "ignore:The PyTorch API of nested tensors is in prototype"
+    ),
 ]
 
 
@@ -16679,9 +16682,13 @@ class TestPPO4LLMs:
         tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
         tokenizer.pad_token = tokenizer.eos_token
 
-        model = OPTForCausalLM(OPTConfig())
+        model = OPTForCausalLM(OPTConfig()).eval()
         policy_inference = TransformersWrapper(
-            model, tokenizer=tokenizer, generate=True, from_text=from_text
+            model,
+            tokenizer=tokenizer,
+            generate=True,
+            from_text=from_text,
+            return_log_probs=True,
         )
         policy_train = TransformersWrapper(
             model, tokenizer=tokenizer, generate=False, from_text=False

@@ -606,8 +606,8 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
         reward = torch.tensor([reward_val], dtype=torch.float32)
         dest.set("reward", reward)
         dest.set("turn", turn)
-        dest.set("done", [done])
-        dest.set("terminated", [done])
+        dest.set("done", torch.tensor([done]))
+        dest.set("terminated", torch.tensor([done]))
         if self.pixels:
             dest.set("pixels", self._get_tensor_image(board=self.board))
         return dest
