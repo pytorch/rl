@@ -4864,12 +4864,19 @@ class TestLLMEnv:
                 all_strings = r_reset.view(-1)[LLMEnv._DEFAULT_STR_KEY]
                 assert sum(s == all_strings[0] for s in all_strings) == repeats
                 assert sum(s == all_strings[repeats] for s in all_strings) == repeats
-                assert sum(s == all_strings[repeats * 2] for s in all_strings) == repeats
+                assert (
+                    sum(s == all_strings[repeats * 2] for s in all_strings) == repeats
+                )
             else:
                 all_tokens = r_reset.view(-1)[LLMEnv._DEFAULT_TOKEN_KEY]
                 assert sum((s == all_tokens[0]).all() for s in all_tokens) == repeats
-                assert sum((s == all_tokens[repeats]).all() for s in all_tokens) == repeats
-                assert sum((s == all_tokens[repeats * 2]).all() for s in all_tokens) == repeats
+                assert (
+                    sum((s == all_tokens[repeats]).all() for s in all_tokens) == repeats
+                )
+                assert (
+                    sum((s == all_tokens[repeats * 2]).all() for s in all_tokens)
+                    == repeats
+                )
         else:
             # When batched, each block contains the 3 reset packs
             if str2str:
