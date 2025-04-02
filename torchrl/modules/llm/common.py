@@ -34,10 +34,20 @@ class CategoricalSequential(TensorDictModuleBase):
     forward = TensorDictSequential.forward
 
     @property
-    def log_prob_keys(self):
-        return ["log_probs"]
+    def log_prob_keys(self) -> list[NestedKey]:
+        return getattr(self, "_log_prob_keys", ["log_probs"])
 
-    log_prob_key = ProbabilisticTensorDictModule.log_prob_key
+    @log_prob_keys.setter
+    def log_prob_keys(self, value: list[NestedKey]):
+        self._log_prob_keys = value
+
+    @property
+    def log_prob_key(self) -> NestedKey:
+        return self.log_prob_keys[0]
+
+    @log_prob_key.setter
+    def log_prob_key(self, value: NestedKey) -> None:
+        self.log_prob_keys[0] = value
 
     @property
     def dist_params_keys(self) -> list[NestedKey]:
@@ -46,3 +56,9 @@ class CategoricalSequential(TensorDictModuleBase):
     @property
     def dist_sample_keys(self) -> list[NestedKey]:
         return ["tokens_response"]
+
+    def log_prob(self, data: TensorDictBase, **get_kwargs) -> TensorDictBase:
+        if not self.generate:
+            data = self(data)
+            return data.get(self.log_prob_key, **get_kwargs)
+        raise RuntimeError("log_prob not callable when generate=True.")

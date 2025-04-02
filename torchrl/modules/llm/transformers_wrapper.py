@@ -7,10 +7,15 @@ from __future__ import annotations
 from typing import Literal
 
 import torch
-
-from tensordict import LazyStackedTensorDict, NestedKey, TensorDict, TensorDictBase
-from tensordict.tensorclass import NonTensorStack
-from tensordict.utils import _zip_strict
+from tensordict import (
+    LazyStackedTensorDict,
+    NestedKey,
+    set_list_to_stack,
+    TensorDict,
+    TensorDictBase,
+)
+from tensordict.utils import _zip_strict, expand_as_right
+from torch.nn.utils.rnn import pad_sequence
 
 from torchrl.modules.llm.common import CategoricalSequential
 
@@ -187,8 +192,9 @@ class TransformersWrapper(CategoricalSequential):
         if from_text:
             self.out_keys += [self.text_response_key, self.token_key]
         if self.return_log_probs:
-            self.out_keys += ["log_probs", "logits"]
+            self.out_keys += [self.log_prob_key, "logits"]
 
+    @set_list_to_stack(True)
     def forward(
         self,
         tensordict: TensorDictBase,
@@ -240,6 +246,8 @@ class TransformersWrapper(CategoricalSequential):
         return result
 
     def _from_transformers_generate_text(self, td, out):
+        pad_val = self.tokenizer.pad_token_id
+
         text = td.get(self.text_key)
         if not isinstance(text, (list, str)):
             text = text.tolist()
@@ -251,39 +259,81 @@ class TransformersWrapper(CategoricalSequential):
         )
         sequences = tokens_out["sequences"]
         sequences = sequences[..., input_ids.shape[-1] :]
+
+        mask_sequences = sequences != pad_val
+        sequences = _unpad_tensors(sequences, mask_sequences, as_nested=False)
         if self.return_log_probs:
-            logits = tokens_out["logits"]
-            log_probs, logits = self._log_probs_generate(sequences, logits)
+            logits = torch.stack(list(tokens_out["logits"]), 1)
+            logits = _unpad_tensors(logits, mask_sequences, as_nested=False)
+            log_probs, logits = self._log_probs_generate(
+                sequences, logits, pad_val=pad_val
+            )
         response_text = self.tokenizer.batch_decode(sequences)
-        out.set("tokens_response", sequences)
-        out.set("tokens", input_ids)
-        out.set("attention_mask", attention_mask)
-        out.set("text_response", NonTensorStack(*response_text))
+        out.set(self.token_response_key, sequences)
+        out.set(
+            self.token_key, _unpad_tensors(input_ids, attention_mask, as_nested=False)
+        )
+        out.set(self.text_response_key, list(response_text))
+        out.set(
+            self.attention_mask_key,
+            _unpad_tensors(attention_mask, attention_mask, as_nested=False),
+        )
         if self.return_log_probs:
-            out.set("log_probs", log_probs)
-            out.set("logits", logits)
+            out.set(self.log_prob_key, log_probs)
+            out.set("logits", _unpad_tensors(logits, mask_sequences, as_nested=False))
         return out
 
     def _from_transformers_generate_tokens(self, td, out):
-        input_ids = td.get(self.token_key)
-        attention_mask = td.get(self.attention_mask_key)
+        pad_val = self.tokenizer.pad_token_id
+
+        input_ids = td.get(
+            self.token_key,
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=pad_val,
+        )
+        attention_mask = td.get(
+            self.attention_mask_key,
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=0,
+        )
+        if attention_mask is None:
+            attention_mask = (input_ids != pad_val).to(torch.int64)
         tokens_out = self.model.generate(
             input_ids=input_ids, attention_mask=attention_mask, **self.generate_kwargs
         )
         sequences = tokens_out["sequences"]
-        sequences = sequences[..., input_ids.shape[-1] :]
+        sequences = sequences[:, input_ids.shape[-1] :]
+        mask_sequences = sequences != pad_val
+        sequences = _unpad_tensors(sequences, mask_sequences, as_nested=False)
+
         if self.return_log_probs:
             logits = tokens_out["logits"]
-            log_probs, logits = self._log_probs_generate(sequences, logits)
-        out.set("tokens_response", sequences)
-        out.set("tokens", input_ids)
-        out.set("attention_mask", attention_mask)
+            logits = torch.stack(list(logits), 1)
+            logits = _unpad_tensors(logits, mask_sequences, as_nested=False)
+            log_probs, logits = self._log_probs_generate(
+                sequences, logits, pad_val=pad_val
+            )
+        out.set(
+            self.token_response_key,
+            sequences,
+        )
+        out.set(
+            self.token_key, _unpad_tensors(input_ids, attention_mask, as_nested=False)
+        )
+        out.set(
+            self.attention_mask_key,
+            _unpad_tensors(attention_mask, attention_mask, as_nested=False),
+        )
         if self.return_log_probs:
-            out.set("log_probs", log_probs)
-            out.set("logits", logits)
+            out.set(self.log_prob_key, log_probs)
+            out.set("logits", _unpad_tensors(logits, mask_sequences, as_nested=False))
         return out
 
     def _from_transformers_logprobs_text(self, td, out):
+        pad_val = self.tokenizer.pad_token_id
+
         prompt_txt = td.get(self.text_key)
         if not isinstance(prompt_txt, (list, str)):
             prompt_txt = prompt_txt.tolist()
@@ -297,66 +347,132 @@ class TransformersWrapper(CategoricalSequential):
         total_input_ids = total_tokens_in["input_ids"]
         total_attention_mask = total_tokens_in["attention_mask"]
         prompt_input_ids = prompt_tokens_in["input_ids"]
-        # prompt_attention_mask = prompt_tokens_in["attention_mask"]
-        response_input_ids = total_input_ids[:, prompt_input_ids.shape[-1] :]
+        prompt_attention_mask = prompt_tokens_in["attention_mask"]
+
+        total_tokens_out = self.model(
+            total_input_ids, attention_mask=total_attention_mask, **self.generate_kwargs
+        )
+
+        total_input_ids = _unpad_tensors(
+            total_input_ids, total_attention_mask, as_nested=False
+        )
+        prompt_input_ids = _unpad_tensors(
+            prompt_input_ids, prompt_attention_mask, as_nested=False
+        )
+        sequences = [
+            _total_input_ids[_prompt_input_ids.shape[-1] :]
+            for _total_input_ids, _prompt_input_ids in zip(
+                total_input_ids, prompt_input_ids
+            )
+        ]
         # response_attention_mask = total_attention_mask[
         #     :, prompt_attention_mask.shape[-1] :
         # ]
-
-        total_tokens_out = self.model(
-            total_input_ids, attention_mask=total_attention_mask, **self.generate_kwargs
-        )
         log_probs, logits = self._log_probs_from_logits(
-            total_tokens_out, response_input_ids
+            total_tokens_out, sequences, pad_val=pad_val
         )
+
         out.set("logits", logits)
-        out.set("log_probs", log_probs)
-        out.set(self.token_response_key, response_input_ids)
+        out.set(self.log_prob_key, log_probs)
+        out.set(self.token_response_key, sequences)
         return out
 
     def _from_transformers_logprobs_tokens(self, td, out):
-        prompt_input_ids = td[self.token_key]
-        response_input_ids = td[self.token_response_key]
-        prompt_attention_mask = td[self.attention_mask_key]
-        total_input_ids = torch.cat([prompt_input_ids, response_input_ids], -1)
+        pad_val = self.tokenizer.pad_token_id
 
-        if prompt_attention_mask is not None:
-            total_attention_mask = torch.cat(
-                [
-                    prompt_attention_mask,
-                    prompt_attention_mask.new_ones(response_input_ids.shape),
-                ],
-                -1,
+        prompt_input_ids = td.get(
+            self.token_key,
+            as_list=True,
+        )
+        response_input_ids = td.get(
+            self.token_response_key,
+            as_list=True,
+        )
+        prompt_attention_mask = td.get(
+            self.attention_mask_key,
+            as_list=True,
+        )
+
+        total_input_ids = [
+            torch.cat([_prompt_input_ids, _response_input_ids], -1)
+            for _prompt_input_ids, _response_input_ids in zip(
+                prompt_input_ids, response_input_ids
             )
+        ]
+        total_input_ids = pad_sequence(
+            total_input_ids,
+            padding_value=pad_val,
+            padding_side="left",
+            batch_first=True,
+        )
+        total_attention_mask = (total_input_ids != pad_val).to(torch.int64)
+
+        if prompt_attention_mask is None:
+            prompt_attention_mask = [
+                (_prompt_input_ids != pad_val).to(torch.int64)
+                for _prompt_input_ids in prompt_input_ids
+            ]
 
         total_tokens_out = self.model(
             total_input_ids, attention_mask=total_attention_mask, **self.generate_kwargs
         )
         log_probs, logits = self._log_probs_from_logits(
-            total_tokens_out, response_input_ids
+            total_tokens_out, response_input_ids, pad_val=pad_val
         )
+
         out.set("logits", logits)
-        out.set("log_probs", log_probs)
+        out.set(self.log_prob_key, log_probs)
+
         return out
 
     @classmethod
-    def _log_probs_from_logits(cls, total_tokens_out, response_input_ids):
-        seq_len = response_input_ids.shape[-1]
+    def _log_probs_from_logits(cls, total_tokens_out, response_input_ids, pad_val):
+        response_input_ids = pad_sequence(
+            response_input_ids,
+            padding_value=pad_val,
+            batch_first=True,
+            padding_side="left",
+        )
+        pad_mask = response_input_ids != pad_val
+
         logits = total_tokens_out["logits"]
         logits = logits.log_softmax(dim=-1)
-        logits = logits[..., -seq_len - 1 : -1, :]
-        log_probs = logits.gather(-1, response_input_ids.unsqueeze(-1))
+        logits = logits[:, -response_input_ids.shape[-1] - 1 : -1, :]
+
+        log_probs = logits.gather(-1, response_input_ids.unsqueeze(-1)).squeeze(-1)
+
+        # Recover the list
+        log_probs = _unpad_tensors(log_probs, pad_mask)
+        logits = _unpad_tensors(logits, pad_mask)
         return log_probs, logits
 
     @classmethod
-    def _log_probs_generate(cls, sequences, logits):
-        seq_len = sequences.shape[1]
+    def _log_probs_generate(cls, sequences, logits, pad_val):
+        tokens = pad_sequence(
+            sequences,
+            padding_value=pad_val,
+            batch_first=True,
+            padding_side="left",
+        )
+        logits = pad_sequence(
+            logits,
+            padding_value=0.0,
+            batch_first=True,
+            padding_side="left",
+        )
 
-        # logits = dict(logits.items())
-        logits = torch.stack(list(logits), 1)
         logits = logits.log_softmax(dim=-1)
-        logits = logits[..., -seq_len:, :]
-
-        tokens = sequences[..., -seq_len:]  # shape (B, seq-len)
         log_probs = logits.gather(-1, tokens.unsqueeze(-1)).squeeze(-1)
         return log_probs, logits
+
+
+def _unpad_tensors(tensors, mask, as_nested: bool = True) -> torch.Tensor:
+    shape = tensors.shape[2:]
+    mask = expand_as_right(mask.bool(), tensors)
+    nelts = mask.sum(-1)
+    while nelts.dim() > 1:
+        nelts = nelts.sum(-1)
+    vals = [t.view(-1, *shape) for t in tensors[mask].split(nelts.tolist(), dim=0)]
+    if as_nested:
+        return torch.nested.as_nested_tensor(vals)
+    return vals
