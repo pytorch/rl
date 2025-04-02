@@ -223,7 +223,7 @@ class vLLMWrapper(CategoricalSequential):
         if from_text:
             self.out_keys += [self.text_response_key, self.token_key]
         if self.return_log_probs:
-            self.out_keys += ["log_probs"]
+            self.out_keys += [self.log_prob_key]
 
     def forward(
         self,
@@ -303,7 +303,7 @@ class vLLMWrapper(CategoricalSequential):
                 ),
             )
         in_keys = [
-            "log_probs",
+            self.log_prob_key,
             self.token_response_key,
             self.text_response_key,
             self.token_key,
@@ -394,7 +394,7 @@ class vLLMWrapper(CategoricalSequential):
         if isinstance(input_ids_response, list):
             input_ids_response = torch.nested.nested_tensor(input_ids_response)
         out["tokens_response"] = input_ids_response
-        out["log_probs"] = lps
+        out[self.log_prob_key] = lps
         inputs = td.select(*self.in_keys, strict=False)
         if inputs.ndim < out.ndim:
             # This happens when n > 1
@@ -423,18 +423,19 @@ class vLLMWrapper(CategoricalSequential):
             ).to_padded_tensor(padding=self.padding_value)
         tokens_response_td.rename_key_("token_ids", "tokens_response")
         if self.return_log_probs:
-            tokens_response_td.rename_key_("logprobs", "log_probs")
+            tokens_response_td.rename_key_("logprobs", self.log_prob_key)
             if self.pad_output:
                 padded_values = (
                     tokens_response_td["tokens_response"] == self.padding_value
                 )
                 if padded_values.any():
-                    lps = tokens_response_td["log_probs"]
+                    lps = tokens_response_td[self.log_prob_key]
                     lps = torch.where(expand_as_right(~padded_values, lps), lps, 0.0)
-                    tokens_response_td["log_probs"] = lps
+                    tokens_response_td[self.log_prob_key] = lps
         out = tokens_response_td.empty(recurse=True)
         out.update(
-            tokens_response_td, keys_to_update=(self.token_response_key, "log_probs")
+            tokens_response_td,
+            keys_to_update=(self.token_response_key, self.log_prob_key),
         )
         inputs = td.select(*self.in_keys, strict=False)
         if inputs.ndim < out.ndim:
@@ -467,7 +468,7 @@ class vLLMWrapper(CategoricalSequential):
         padded = tokens_response == self.padding_value
         prompt_logprobs = torch.where(~padded, prompt_logprobs, 0.0)
         out = tokens_out._tensordict.empty(recurse=True)
-        out.set("log_probs", prompt_logprobs)
+        out.set(self.log_prob_key, prompt_logprobs)
         out.set(self.token_response_key, tokens_response)
         inputs = td.select(*self.in_keys, strict=False)
         if inputs.ndim < out.ndim:
@@ -501,13 +502,13 @@ class vLLMWrapper(CategoricalSequential):
             )
 
         if self.return_log_probs or "logprobs" in tokens_response_td:
-            tokens_response_td.rename_key_("logprobs", "log_probs")
+            tokens_response_td.rename_key_("logprobs", self.log_prob_key)
             if self.pad_output:
                 padded_values = tokens_response_td["tokens_response"] == padding_value
                 if padded_values.any():
-                    lps = tokens_response_td["log_probs"]
+                    lps = tokens_response_td[self.log_prob_key]
                     lps = torch.where(expand_as_right(~padded_values, lps), lps, 0.0)
-                    tokens_response_td["log_probs"] = lps
+                    tokens_response_td[self.log_prob_key] = lps
         return tokens_response_td
 
     def _to_list(self, tokens, attention_mask):
