@@ -533,7 +533,7 @@ class PPOLoss(LossModule):
         if isinstance(
             self.actor_network,
             (ProbabilisticTensorDictSequential, ProbabilisticTensorDictModule),
-        ):
+        ) or hasattr(self.actor_network, "get_dist"):
             # assert tensordict['log_probs'].requires_grad
             # assert tensordict['logits'].requires_grad
             with self.actor_network_params.to_module(
@@ -987,7 +987,9 @@ class ClipPPOLoss(PPOLoss):
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
-        advantage = tensordict.get(self.tensor_keys.advantage, None)
+        advantage = tensordict.get(
+            self.tensor_keys.advantage, None, as_padded_tensor=True
+        )
         if advantage is None:
             if self.critic_network is None:
                 raise RuntimeError(
