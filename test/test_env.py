@@ -30,6 +30,7 @@ from tensordict import (
     dense_stack_tds,
     LazyStackedTensorDict,
     set_capture_non_tensor_stack,
+    set_list_to_stack,
     TensorDict,
     TensorDictBase,
 )
@@ -3094,6 +3095,7 @@ def test_mocking_envs(envclass):
             check_env_specs(env, seed=100, return_contiguous=False)
 
 
+@set_list_to_stack(True)
 class TestTerminatedOrTruncated:
     @pytest.mark.parametrize("done_key", ["done", "terminated", "truncated"])
     def test_root_prevail(self, done_key):
@@ -3409,6 +3411,7 @@ def test_single_task_share_individual_td():
         )
 
 
+@set_list_to_stack(True)
 def test_stackable():
     # Tests the _stackable util
     stack = [TensorDict({"a": 0}, []), TensorDict({"b": 1}, [])]

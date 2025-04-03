@@ -12,6 +12,7 @@ from typing import Any, Callable, TypeVar
 import torch
 from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
+from torchrl._utils import logger as torchrl_logger
 
 Policy = TypeVar("Policy", bound=TensorDictModuleBase)
 
@@ -386,6 +387,7 @@ class RayRemoteWeightUpdater(RemoteWeightUpdaterBase):
     def _sync_weights_with_worker(
         self, worker_id: int, server_weights: TensorDictBase
     ) -> TensorDictBase:
+        torchrl_logger.info(f"syncing weights with worker {worker_id}")
         c = self.remote_collectors[worker_id]
         c.update_policy_weights_.remote(policy_weights=server_weights)
         self._batches_since_weight_update[worker_id] = 0

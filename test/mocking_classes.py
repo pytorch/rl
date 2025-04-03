@@ -1138,14 +1138,17 @@ class CountingEnv(EnvBase):
             dtype=torch.int,
             device=device if self.device is None else self.device,
         )
+        if self.reward_keys:
+            reward_spec = self.full_reward_spec[self.reward_keys[0]]
+            reward_spec_dtype = reward_spec.dtype
+        else:
+            reward_spec_dtype = torch.get_default_dtype()
         tensordict = TensorDict(
             source={
                 "observation": self.count.clone(),
                 "done": self.count > self.max_steps,
                 "terminated": self.count > self.max_steps,
-                "reward": torch.zeros_like(
-                    self.count, dtype=self.full_reward_spec[self.reward_keys[0]].dtype
-                ),
+                "reward": torch.zeros_like(self.count, dtype=reward_spec_dtype),
             },
             batch_size=self.batch_size,
             device=self.device,
