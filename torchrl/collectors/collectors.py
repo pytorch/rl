@@ -1644,6 +1644,16 @@ class _MultiDataCollector(DataCollectorBase):
         create_env_kwargs (dict, optional): A dictionary with the
             keyword arguments used to create an environment. If a list is
             provided, each of its elements will be assigned to a sub-collector.
+        collector_class (Python class or constructor): a collector class to be remotely instantiated. Can be
+            :class:`~torchrl.collectors.SyncDataCollector`,
+            :class:`~torchrl.collectors.MultiSyncDataCollector`,
+            :class:`~torchrl.collectors.MultiaSyncDataCollector`
+            or a derived class of these.
+            Defaults to :class:`~torchrl.collectors.SyncDataCollector`.
+
+            .. note:: This keyword argument is particularly handy when local attributes need to be
+                set, such as `local_weight_updater`.
+
         max_frames_per_traj (int, optional): Maximum steps per trajectory.
             Note that a trajectory can span across multiple batches (unless
             ``reset_at_each_iter`` is set to ``True``, see below).
@@ -1729,13 +1739,32 @@ class _MultiDataCollector(DataCollectorBase):
             crashes.
             Defaults to ``False``.
         local_weight_updater (LocalWeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
-            or its subclass, responsible for updating the policy weights on each local inference worker.
+            or its subclass, responsible for updating the policy weights on the server worker.
             If not provided, left unused.
             Consider using a constructor if the updater needs to be serialized.
+
+            .. note:: This instance or constructor is not passed to the workers. To specify the workers `local_weight_updater`
+                instance, you can pass a `collector_class` argument containing the constructor:
+
+                >>> from functools import partial
+                >>> # the weight receiver - called when `worker_collector.update_policy_weight_() is called
+                >>> worker_weight_updater_receiver = ...
+                >>> # The weight sender - called when `server_collector.update_policy_weight_()` is called
+                >>> server_weight_updater_sender = ...
+                >>> collector = MultiaSyncDataCollector(
+                ...     create_env_fn=[func, func],
+                ...     policy=policy,
+                ...     frames_per_batch=100,
+                ...     total_frames=1000,
+                ...     collector_class=partial(SyncDataCollector, local_weight_updater=worker_weight_updater_receiver),
+                ...     remote_weight_updater=server_weight_updater_sender,
+                ... )
+
         remote_weight_updater (RemoteWeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on remote inference workers.
             If not provided, a :class:`~torchrl.collectors.MultiProcessedRemoteWeightUpdate` will be used by default,
             which handles weight synchronization across multiple processes.
+            See `local_weight_updater` for details on the server / worker weight update API.
             Consider using a constructor if the updater needs to be serialized.
 
     """
@@ -1756,6 +1785,7 @@ class _MultiDataCollector(DataCollectorBase):
         env_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         policy_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         create_env_kwargs: Sequence[dict] | None = None,
+        collector_class: type | Callable[[], DataCollectorBase] | None = None,
         max_frames_per_traj: int | None = None,
         init_random_frames: int | None = None,
         reset_at_each_iter: bool = False,
@@ -1819,6 +1849,7 @@ class _MultiDataCollector(DataCollectorBase):
         self.storing_device = storing_devices
         self.policy_device = policy_devices
         self.env_device = env_devices
+        self.collector_class = collector_class
 
         del storing_device, env_device, policy_device, device
         self.no_cuda_sync = no_cuda_sync
@@ -1869,9 +1900,11 @@ class _MultiDataCollector(DataCollectorBase):
                     policy_weights=self._policy_weights_dict,
                 )
         elif remote_weight_updater is None:
-            # TODO
-            raise NotImplementedError(
-                "remote_weight_updater cannot be None when policy_factory is provided."
+            warnings.warn(
+                "remote_weight_updater is None, but policy_factory is provided. This means that the server will "
+                "not know how to send the weights to the workers. If the workers can handle their weight synchronization "
+                "on their own (via some specialized worker type / constructor) this may well work, but make sure "
+                "your weight synchronization strategy is properly set."
             )
 
         self.remote_weight_updater = remote_weight_updater
@@ -2113,6 +2146,7 @@ class _MultiDataCollector(DataCollectorBase):
                     if self.cudagraphed_policy
                     else False,
                     "no_cuda_sync": self.no_cuda_sync,
+                    "collector_class": self.collector_class,
                 }
                 proc = _ProcessNoWarn(
                     target=_main_async_collector,
@@ -3165,12 +3199,15 @@ def _main_async_collector(
     cudagraph_policy: bool = False,
     no_cuda_sync: bool = False,
     policy_factory: Callable | None = None,
+    collector_class: type | Callable[[], DataCollectorBase] | None = None,
 ) -> None:
+    if collector_class is None:
+        collector_class = SyncDataCollector
     pipe_parent.close()
     # init variables that will be cleared when closing
     collected_tensordict = data = next_data = data_in = inner_collector = dc_iter = None
 
-    inner_collector = SyncDataCollector(
+    inner_collector = collector_class(
         create_env_fn,
         create_env_kwargs=create_env_kwargs,
         policy=policy,
