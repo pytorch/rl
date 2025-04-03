@@ -30,6 +30,7 @@ from tensordict import (
     dense_stack_tds,
     LazyStackedTensorDict,
     set_capture_non_tensor_stack,
+    set_list_to_stack,
     TensorDict,
     TensorDictBase,
 )
@@ -3094,6 +3095,7 @@ def test_mocking_envs(envclass):
             check_env_specs(env, seed=100, return_contiguous=False)
 
 
+@set_list_to_stack(True)
 class TestTerminatedOrTruncated:
     @pytest.mark.parametrize("done_key", ["done", "terminated", "truncated"])
     def test_root_prevail(self, done_key):
@@ -3409,6 +3411,7 @@ def test_single_task_share_individual_td():
         )
 
 
+@set_list_to_stack(True)
 def test_stackable():
     # Tests the _stackable util
     stack = [TensorDict({"a": 0}, []), TensorDict({"b": 1}, [])]
@@ -4861,31 +4864,22 @@ class TestLLMEnv:
         r_reset = r[..., ::max_steps]
         if not batched:
             if str2str:
+                all_strings = r_reset.view(-1)[LLMEnv._DEFAULT_STR_KEY]
+                assert sum(s == all_strings[0] for s in all_strings) == repeats
+                assert sum(s == all_strings[repeats] for s in all_strings) == repeats
                 assert (
-                    r_reset[..., 0][LLMEnv._DEFAULT_STR_KEY]
-                    == r_reset[..., 1][LLMEnv._DEFAULT_STR_KEY]
-                )
-                assert (
-                    r_reset[..., 0][LLMEnv._DEFAULT_STR_KEY]
-                    == r_reset[..., 2][LLMEnv._DEFAULT_STR_KEY]
-                )
-                assert (
-                    r_reset[..., 0][LLMEnv._DEFAULT_STR_KEY]
-                    != r_reset[..., 3][LLMEnv._DEFAULT_STR_KEY]
+                    sum(s == all_strings[repeats * 2] for s in all_strings) == repeats
                 )
             else:
+                all_tokens = r_reset.view(-1)[LLMEnv._DEFAULT_TOKEN_KEY]
+                assert sum((s == all_tokens[0]).all() for s in all_tokens) == repeats
                 assert (
-                    r_reset[..., 0][LLMEnv._DEFAULT_TOKEN_KEY]
-                    == r_reset[..., 1][LLMEnv._DEFAULT_TOKEN_KEY]
-                ).all()
+                    sum((s == all_tokens[repeats]).all() for s in all_tokens) == repeats
+                )
                 assert (
-                    r_reset[..., 0][LLMEnv._DEFAULT_TOKEN_KEY]
-                    == r_reset[..., 2][LLMEnv._DEFAULT_TOKEN_KEY]
-                ).all()
-                assert (
-                    r_reset[..., 0][LLMEnv._DEFAULT_TOKEN_KEY]
-                    != r_reset[..., 3][LLMEnv._DEFAULT_TOKEN_KEY]
-                ).any()
+                    sum((s == all_tokens[repeats * 2]).all() for s in all_tokens)
+                    == repeats
+                )
         else:
             # When batched, each block contains the 3 reset packs
             if str2str:

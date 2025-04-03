@@ -160,8 +160,14 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         return self._local_weight_updater
 
     @local_weight_updater.setter
-    def local_weight_updater(self, value: LocalWeightUpdaterBase | None):
+    def local_weight_updater(
+        self,
+        value: LocalWeightUpdaterBase | Callable[[], LocalWeightUpdaterBase] | None,
+    ):
         if value is not None:
+            if not isinstance(value, LocalWeightUpdaterBase) and callable(value):
+                # then it's a constructor
+                value = value()
             value.register_collector(self)
             if value.collector is not self:
                 raise RuntimeError("Failed to register collector.")
@@ -174,6 +180,9 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     @remote_weight_updater.setter
     def remote_weight_updater(self, value: RemoteWeightUpdaterBase | None):
         if value is not None:
+            if not isinstance(value, RemoteWeightUpdaterBase) and callable(value):
+                # then it's a constructor
+                value = value()
             value.register_collector(self)
             if value.collector is not self:
                 raise RuntimeError("Failed to register collector.")
@@ -185,7 +194,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         observation_spec: TensorSpec = None,
         policy_device: Any = NO_DEFAULT,
         env_maker: Any | None = None,
-        env_maker_kwargs: dict | None = None,
+        env_maker_kwargs: dict[str, Any] | None = None,
     ) -> tuple[TensorDictModule, None | Callable[[], dict]]:
         """Util method to get a policy and its device given the collector __init__ inputs.
 
@@ -515,13 +524,15 @@ class SyncDataCollector(DataCollectorBase):
             or `ManiSkills <https://github.com/haosulab/ManiSkill/>`_) cuda synchronization may cause unexpected
             crashes.
             Defaults to ``False``.
-        local_weight_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
+        local_weight_updater (LocalWeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on the local inference worker.
             If not provided, a :class:`~torchrl.collectors.VanillaLocalWeightUpdater` will be used by default,
             which directly fetches and applies the weights from the server.
-        remote_weight_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
+            Consider using a constructor if the updater needs to be serialized.
+        remote_weight_updater (RemoteWeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on remote inference workers.
             This is typically not used in :class:`~torchrl.collectors.SyncDataCollector` as it operates in a single-process environment.
+            Consider using a constructor if the updater needs to be serialized.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -595,7 +606,7 @@ class SyncDataCollector(DataCollectorBase):
         storing_device: DEVICE_TYPING = None,
         policy_device: DEVICE_TYPING = None,
         env_device: DEVICE_TYPING = None,
-        create_env_kwargs: dict | None = None,
+        create_env_kwargs: dict[str, Any] | None = None,
         max_frames_per_traj: int | None = None,
         init_random_frames: int | None = None,
         reset_at_each_iter: bool = False,
@@ -612,8 +623,12 @@ class SyncDataCollector(DataCollectorBase):
         compile_policy: bool | dict[str, Any] | None = None,
         cudagraph_policy: bool | dict[str, Any] | None = None,
         no_cuda_sync: bool = False,
-        local_weight_updater: LocalWeightUpdaterBase | None = None,
-        remote_weight_updater: RemoteWeightUpdaterBase | None = None,
+        local_weight_updater: LocalWeightUpdaterBase
+        | Callable[[], LocalWeightUpdaterBase]
+        | None = None,
+        remote_weight_updater: RemoteWeightUpdaterBase
+        | Callable[[], RemoteWeightUpdaterBase]
+        | None = None,
         **kwargs,
     ):
         from torchrl.envs.batched_envs import BatchedEnvBase
@@ -1572,8 +1587,8 @@ class _MultiDataCollector(DataCollectorBase):
                 pickled directly), the :arg:`policy_factory` should be used instead.
 
     Keyword Args:
-        policy_factory (Callable[[], Callable], optional): a callable that returns
-            a policy instance. This is exclusive with the `policy` argument.
+        policy_factory (Callable[[], Callable], list of Callable[[], Callable], optional): a callable
+            (or list of callables) that returns a policy instance. This is exclusive with the `policy` argument.
 
             .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.
 
@@ -1629,6 +1644,16 @@ class _MultiDataCollector(DataCollectorBase):
         create_env_kwargs (dict, optional): A dictionary with the
             keyword arguments used to create an environment. If a list is
             provided, each of its elements will be assigned to a sub-collector.
+        collector_class (Python class or constructor): a collector class to be remotely instantiated. Can be
+            :class:`~torchrl.collectors.SyncDataCollector`,
+            :class:`~torchrl.collectors.MultiSyncDataCollector`,
+            :class:`~torchrl.collectors.MultiaSyncDataCollector`
+            or a derived class of these.
+            Defaults to :class:`~torchrl.collectors.SyncDataCollector`.
+
+            .. note:: This keyword argument is particularly handy when local attributes need to be
+                set, such as `local_weight_updater`.
+
         max_frames_per_traj (int, optional): Maximum steps per trajectory.
             Note that a trajectory can span across multiple batches (unless
             ``reset_at_each_iter`` is set to ``True``, see below).
@@ -1713,13 +1738,34 @@ class _MultiDataCollector(DataCollectorBase):
             or `ManiSkills <https://github.com/haosulab/ManiSkill/>`_) cuda synchronization may cause unexpected
             crashes.
             Defaults to ``False``.
-        local_weight_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
-            or its subclass, responsible for updating the policy weights on each local inference worker.
+        local_weight_updater (LocalWeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
+            or its subclass, responsible for updating the policy weights on the server worker.
             If not provided, left unused.
-        remote_weight_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
+            Consider using a constructor if the updater needs to be serialized.
+
+            .. note:: This instance or constructor is not passed to the workers. To specify the workers `local_weight_updater`
+                instance, you can pass a `collector_class` argument containing the constructor:
+
+                >>> from functools import partial
+                >>> # the weight receiver - called when `worker_collector.update_policy_weight_() is called
+                >>> worker_weight_updater_receiver = ...
+                >>> # The weight sender - called when `server_collector.update_policy_weight_()` is called
+                >>> server_weight_updater_sender = ...
+                >>> collector = MultiaSyncDataCollector(
+                ...     create_env_fn=[func, func],
+                ...     policy=policy,
+                ...     frames_per_batch=100,
+                ...     total_frames=1000,
+                ...     collector_class=partial(SyncDataCollector, local_weight_updater=worker_weight_updater_receiver),
+                ...     remote_weight_updater=server_weight_updater_sender,
+                ... )
+
+        remote_weight_updater (RemoteWeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on remote inference workers.
             If not provided, a :class:`~torchrl.collectors.MultiProcessedRemoteWeightUpdate` will be used by default,
             which handles weight synchronization across multiple processes.
+            See `local_weight_updater` for details on the server / worker weight update API.
+            Consider using a constructor if the updater needs to be serialized.
 
     """
 
@@ -1729,7 +1775,9 @@ class _MultiDataCollector(DataCollectorBase):
         policy: None
         | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]) = None,
         *,
-        policy_factory: Callable[[], Callable] | None = None,
+        policy_factory: Callable[[], Callable]
+        | list[Callable[[], Callable]]
+        | None = None,
         frames_per_batch: int,
         total_frames: int | None = -1,
         device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
@@ -1737,6 +1785,7 @@ class _MultiDataCollector(DataCollectorBase):
         env_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         policy_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         create_env_kwargs: Sequence[dict] | None = None,
+        collector_class: type | Callable[[], DataCollectorBase] | None = None,
         max_frames_per_traj: int | None = None,
         init_random_frames: int | None = None,
         reset_at_each_iter: bool = False,
@@ -1745,20 +1794,24 @@ class _MultiDataCollector(DataCollectorBase):
         exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
         reset_when_done: bool = True,
         update_at_each_batch: bool = False,
-        preemptive_threshold: float = None,
-        num_threads: int = None,
+        preemptive_threshold: float | None = None,
+        num_threads: int | None = None,
         num_sub_threads: int = 1,
         cat_results: str | int | None = None,
         set_truncated: bool = False,
         use_buffers: bool | None = None,
         replay_buffer: ReplayBuffer | None = None,
         replay_buffer_chunk: bool = True,
-        trust_policy: bool = None,
+        trust_policy: bool | None = None,
         compile_policy: bool | dict[str, Any] | None = None,
         cudagraph_policy: bool | dict[str, Any] | None = None,
         no_cuda_sync: bool = False,
-        remote_weight_updater: RemoteWeightUpdaterBase | None = None,
-        local_weight_updater: LocalWeightUpdaterBase | None = None,
+        remote_weight_updater: RemoteWeightUpdaterBase
+        | Callable[[], LocalWeightUpdaterBase]
+        | None = None,
+        local_weight_updater: LocalWeightUpdaterBase
+        | Callable[[], LocalWeightUpdaterBase]
+        | None = None,
     ):
         self.closed = True
         self.num_workers = len(create_env_fn)
@@ -1796,6 +1849,7 @@ class _MultiDataCollector(DataCollectorBase):
         self.storing_device = storing_devices
         self.policy_device = policy_devices
         self.env_device = env_devices
+        self.collector_class = collector_class
 
         del storing_device, env_device, policy_device, device
         self.no_cuda_sync = no_cuda_sync
@@ -1817,9 +1871,11 @@ class _MultiDataCollector(DataCollectorBase):
             trust_policy = policy is not None and isinstance(policy, CudaGraphModule)
         self.trust_policy = trust_policy
 
-        if policy_factory is not None and policy is not None:
+        if not isinstance(policy_factory, Sequence):
+            policy_factory = [policy_factory] * self.num_workers
+        if any(policy_factory) and policy is not None:
             raise TypeError("policy_factory and policy are mutually exclusive")
-        elif policy_factory is None:
+        elif not any(policy_factory):
             for policy_device, env_maker, env_maker_kwargs in zip(
                 self.policy_device, self.create_env_fn, self.create_env_kwargs
             ):
@@ -1844,9 +1900,11 @@ class _MultiDataCollector(DataCollectorBase):
                     policy_weights=self._policy_weights_dict,
                 )
         elif remote_weight_updater is None:
-            # TODO
-            raise NotImplementedError(
-                "remote_weight_updater cannot be None when policy_factory is provided."
+            warnings.warn(
+                "remote_weight_updater is None, but policy_factory is provided. This means that the server will "
+                "not know how to send the weights to the workers. If the workers can handle their weight synchronization "
+                "on their own (via some specialized worker type / constructor) this may well work, but make sure "
+                "your weight synchronization strategy is properly set."
             )
 
         self.remote_weight_updater = remote_weight_updater
@@ -2024,6 +2082,13 @@ class _MultiDataCollector(DataCollectorBase):
         self.procs = []
         self.pipes = []
         self._traj_pool = _TrajectoryPool(lock=True)
+        # Create a policy on the right device
+        policy_factory = self.policy_factory
+        if any(policy_factory):
+            policy_factory = [
+                CloudpickleWrapper(_policy_factory)
+                for _policy_factory in policy_factory
+            ]
 
         for i, (env_fun, env_fun_kwargs) in enumerate(
             zip(self.create_env_fn, self.create_env_kwargs)
@@ -2033,11 +2098,6 @@ class _MultiDataCollector(DataCollectorBase):
                 env_fun, EnvBase
             ):  # to avoid circular imports
                 env_fun = CloudpickleWrapper(env_fun)
-
-            # Create a policy on the right device
-            policy_factory = self.policy_factory
-            if policy_factory is not None:
-                policy_factory = CloudpickleWrapper(policy_factory)
 
             policy_device = self.policy_device[i]
             storing_device = self.storing_device[i]
@@ -2054,7 +2114,7 @@ class _MultiDataCollector(DataCollectorBase):
                 cm = contextlib.nullcontext()
             with cm:
                 kwargs = {
-                    "policy_factory": policy_factory,
+                    "policy_factory": policy_factory[i],
                     "pipe_parent": pipe_parent,
                     "pipe_child": pipe_child,
                     "queue_out": queue_out,
@@ -2084,6 +2144,7 @@ class _MultiDataCollector(DataCollectorBase):
                     if self.cudagraphed_policy
                     else False,
                     "no_cuda_sync": self.no_cuda_sync,
+                    "collector_class": self.collector_class,
                 }
                 proc = _ProcessNoWarn(
                     target=_main_async_collector,
@@ -3047,7 +3108,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         storing_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         env_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         policy_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
-        create_env_kwargs: Sequence[dict] | None = None,
+        create_env_kwargs: Sequence[dict[str, Any]] | None = None,
         max_frames_per_traj: int | None = None,
         init_random_frames: int | None = None,
         reset_at_each_iter: bool = False,
@@ -3056,8 +3117,8 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
         reset_when_done: bool = True,
         update_at_each_batch: bool = False,
-        preemptive_threshold: float = None,
-        num_threads: int = None,
+        preemptive_threshold: float | None = None,
+        num_threads: int | None = None,
         num_sub_threads: int = 1,
         set_truncated: bool = False,
         **kwargs,
@@ -3136,12 +3197,15 @@ def _main_async_collector(
     cudagraph_policy: bool = False,
     no_cuda_sync: bool = False,
     policy_factory: Callable | None = None,
+    collector_class: type | Callable[[], DataCollectorBase] | None = None,
 ) -> None:
+    if collector_class is None:
+        collector_class = SyncDataCollector
     pipe_parent.close()
     # init variables that will be cleared when closing
     collected_tensordict = data = next_data = data_in = inner_collector = dc_iter = None
 
-    inner_collector = SyncDataCollector(
+    inner_collector = collector_class(
         create_env_fn,
         create_env_kwargs=create_env_kwargs,
         policy=policy,

@@ -12,10 +12,23 @@ import socket
 import time
 import warnings
 from copy import copy, deepcopy
-from typing import Callable, OrderedDict
+from typing import Any, Callable, OrderedDict, Sequence
 
-from tensordict import TensorDictBase
-from torchrl._utils import logger as torchrl_logger
+import torch.cuda
+
+from tensordict import TensorDict, TensorDictBase
+from torch import nn
+
+from torch.distributed import rpc
+from torchrl._utils import _ProcessNoWarn, logger as torchrl_logger, VERBOSE
+
+from torchrl.collectors import MultiaSyncDataCollector
+from torchrl.collectors.collectors import (
+    DataCollectorBase,
+    DEFAULT_EXPLORATION_TYPE,
+    MultiSyncDataCollector,
+    SyncDataCollector,
+)
 from torchrl.collectors.distributed import DEFAULT_SLURM_CONF
 from torchrl.collectors.distributed.default_configs import (
     DEFAULT_TENSORPIPE_OPTIONS,
@@ -23,7 +36,13 @@ from torchrl.collectors.distributed.default_configs import (
     TCP_PORT,
 )
 from torchrl.collectors.utils import _NON_NN_POLICY_WEIGHTS, split_trajectories
+from torchrl.collectors.weight_update import (
+    LocalWeightUpdaterBase,
+    RemoteWeightUpdaterBase,
+)
 from torchrl.data.utils import CloudpickleWrapper
+from torchrl.envs.common import EnvBase
+from torchrl.envs.env_creator import EnvCreator
 
 SUBMITIT_ERR = None
 try:
@@ -33,26 +52,6 @@ try:
 except ModuleNotFoundError as err:
     _has_submitit = False
     SUBMITIT_ERR = err
-import torch.cuda
-from tensordict import TensorDict
-from torch import nn
-
-from torch.distributed import rpc
-from torchrl._utils import _ProcessNoWarn, VERBOSE
-
-from torchrl.collectors import MultiaSyncDataCollector
-from torchrl.collectors.collectors import (
-    DataCollectorBase,
-    DEFAULT_EXPLORATION_TYPE,
-    MultiSyncDataCollector,
-    SyncDataCollector,
-)
-from torchrl.collectors.weight_update import (
-    LocalWeightUpdaterBase,
-    RemoteWeightUpdaterBase,
-)
-from torchrl.envs.common import EnvBase
-from torchrl.envs.env_creator import EnvCreator
 
 
 def _rpc_init_collection_node(
@@ -126,8 +125,8 @@ class RPCDataCollector(DataCollectorBase):
                 pickled directly), the :arg:`policy_factory` should be used instead.
 
     Keyword Args:
-        policy_factory (Callable[[], Callable], optional): a callable that returns
-            a policy instance. This is exclusive with the `policy` argument.
+        policy_factory (Callable[[], Callable], list of Callable[[], Callable], optional): a callable
+            (or list of callables) that returns a policy instance. This is exclusive with the `policy` argument.
 
             .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.
 
@@ -266,14 +265,16 @@ class RPCDataCollector(DataCollectorBase):
             device used to pass data to main.
         tensorpipe_options (dict, optional): a dictionary of keyword argument
             to pass to :class:`torch.distributed.rpc.TensorPipeRpcBackendOption`.
-        local_weight_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
+        local_weight_updater (LocalWeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on the local inference worker. This is
             typically not used in :class:`~torchrl.collectors.distrbibuted.RPCDataCollector` as it focuses on
             distributed environments.
-        remote_weight_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
+            Consider using a constructor if the updater needs to be serialized.
+        remote_weight_updater (RemoteWeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on remote inference workers using RPC.
             If not provided, an :class:`~torchrl.collectors.distributed.RPCRemoteWeightUpdater` will be used by default, which
             handles weight synchronization via RPC.
+            Consider using a constructor if the updater needs to be serialized.
 
     """
 
@@ -284,7 +285,9 @@ class RPCDataCollector(DataCollectorBase):
         create_env_fn,
         policy: Callable[[TensorDictBase], TensorDictBase] | None = None,
         *,
-        policy_factory: Callable[[], Callable] | None = None,
+        policy_factory: Callable[[], Callable]
+        | list[Callable[[]], Callable]
+        | None = None,
         frames_per_batch: int,
         total_frames: int = -1,
         device: torch.device | list[torch.device] = None,
@@ -297,19 +300,23 @@ class RPCDataCollector(DataCollectorBase):
         postproc: Callable | None = None,
         split_trajs: bool = False,
         exploration_type: ExporationType = DEFAULT_EXPLORATION_TYPE,  # noqa
-        collector_class=SyncDataCollector,
-        collector_kwargs=None,
-        num_workers_per_collector=1,
-        sync=False,
-        slurm_kwargs=None,
-        update_after_each_batch=False,
-        max_weight_update_interval=-1,
-        launcher="submitit",
-        tcp_port=None,
-        visible_devices=None,
-        tensorpipe_options=None,
-        remote_weight_updater: RemoteWeightUpdaterBase | None = None,
-        local_weight_updater: LocalWeightUpdaterBase | None = None,
+        collector_class: type = SyncDataCollector,
+        collector_kwargs: dict[str, Any] | None = None,
+        num_workers_per_collector: int = 1,
+        sync: bool = False,
+        slurm_kwargs: dict[str, Any] | None = None,
+        update_after_each_batch: bool = False,
+        max_weight_update_interval: int = -1,
+        launcher: str = "submitit",
+        tcp_port: str | None = None,
+        visible_devices: list[torch.device] | None = None,
+        tensorpipe_options: dict[str, Any] | None = None,
+        remote_weight_updater: RemoteWeightUpdaterBase
+        | Callable[[], RemoteWeightUpdaterBase]
+        | None = None,
+        local_weight_updater: LocalWeightUpdaterBase
+        | Callable[[], LocalWeightUpdaterBase]
+        | None = None,
     ):
         if collector_class == "async":
             collector_class = MultiaSyncDataCollector
@@ -324,8 +331,16 @@ class RPCDataCollector(DataCollectorBase):
             policy_weights = TensorDict.from_module(policy)
             policy_weights = policy_weights.data.lock_()
         else:
-            warnings.warn(_NON_NN_POLICY_WEIGHTS)
+            if remote_weight_updater is None and (
+                policy_factory is None
+                or (isinstance(policy_factory, Sequence) and not any(policy_factory))
+            ):
+                warnings.warn(_NON_NN_POLICY_WEIGHTS)
             policy_weights = TensorDict(lock=True)
+
+        if not isinstance(policy_factory, Sequence):
+            policy_factory = [policy_factory] * len(create_env_fn)
+        self.policy_factory = policy_factory
         self.policy_weights = policy_weights
         self.num_workers = len(create_env_fn)
         self.frames_per_batch = frames_per_batch
@@ -508,6 +523,7 @@ class RPCDataCollector(DataCollectorBase):
         collector_class,
         num_workers_per_collector,
         policy,
+        policy_factory,
         frames_per_batch,
         total_frames,
         collector_kwargs,
@@ -551,6 +567,7 @@ class RPCDataCollector(DataCollectorBase):
                     policy,
                 ),
                 kwargs={
+                    "policy_factory": policy_factory[i],
                     "frames_per_batch": frames_per_batch,
                     "total_frames": -1,
                     "split_trajs": False,
@@ -654,6 +671,7 @@ class RPCDataCollector(DataCollectorBase):
             collector_class=self.collector_class,
             num_workers_per_collector=self.num_workers_per_collector,
             policy=self.policy,
+            policy_factory=self.policy_factory,
             frames_per_batch=self._frames_per_batch_corrected,
             total_frames=self.total_frames,
             collector_kwargs=self.collector_kwargs,

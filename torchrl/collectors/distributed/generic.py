@@ -11,7 +11,7 @@ import socket
 import warnings
 from copy import copy, deepcopy
 from datetime import timedelta
-from typing import Callable, OrderedDict
+from typing import Any, Callable, OrderedDict, Sequence
 
 import torch.cuda
 from tensordict import TensorDict, TensorDictBase
@@ -131,6 +131,7 @@ def _distributed_init_collection_node(
     num_workers,
     env_make,
     policy,
+    policy_factory,
     frames_per_batch,
     collector_kwargs,
     verbose=True,
@@ -143,6 +144,7 @@ def _distributed_init_collection_node(
         num_workers,
         env_make,
         policy,
+        policy_factory,
         frames_per_batch,
         collector_kwargs,
         verbose=verbose,
@@ -156,6 +158,7 @@ def _run_collector(
     num_workers,
     env_make,
     policy,
+    policy_factory,
     frames_per_batch,
     collector_kwargs,
     verbose=True,
@@ -178,12 +181,17 @@ def _run_collector(
         policy_weights = TensorDict.from_module(policy)
         policy_weights = policy_weights.data.lock_()
     else:
-        warnings.warn(_NON_NN_POLICY_WEIGHTS)
+        if collector_kwargs.get("remote_weight_updater") is None and (
+            policy_factory is None
+            or (isinstance(policy_factory, Sequence) and not any(policy_factory))
+        ):
+            warnings.warn(_NON_NN_POLICY_WEIGHTS)
         policy_weights = TensorDict(lock=True)
 
     collector = collector_class(
         env_make,
         policy,
+        policy_factory=policy_factory,
         frames_per_batch=frames_per_batch,
         total_frames=-1,
         split_trajs=False,
@@ -278,8 +286,8 @@ class DistributedDataCollector(DataCollectorBase):
                 pickled directly), the :arg:`policy_factory` should be used instead.
 
     Keyword Args:
-        policy_factory (Callable[[], Callable], optional): a callable that returns
-            a policy instance. This is exclusive with the `policy` argument.
+        policy_factory (Callable[[], Callable], list of Callable[[], Callable], optional): a callable
+            (or list of callables) that returns a policy instance. This is exclusive with the `policy` argument.
 
             .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.
 
@@ -411,14 +419,16 @@ class DistributedDataCollector(DataCollectorBase):
             to learn more.
             Defaults to ``"submitit"``.
         tcp_port (int, optional): the TCP port to be used. Defaults to 10003.
-        local_weight_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
+        local_weight_updater (LocalWeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on the local inference worker.
             This is typically not used in :class:`~torchrl.collectors.distributed.DistributedDataCollector` as it
             focuses on distributed environments.
-        remote_weight_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
+            Consider using a constructor if the updater needs to be serialized.
+        remote_weight_updater (RemoteWeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on distributed inference workers.
             If not provided, a :class:`~torchrl.collectors.distributed.DistributedRemoteWeightUpdater` will be used by
             default, which handles weight synchronization across distributed workers.
+            Consider using a constructor if the updater needs to be serialized.
 
     """
 
@@ -429,13 +439,15 @@ class DistributedDataCollector(DataCollectorBase):
         create_env_fn,
         policy: Callable[[TensorDictBase], TensorDictBase] | None = None,
         *,
-        policy_factory: Callable[[], Callable] | None = None,
+        policy_factory: Callable[[], Callable]
+        | list[Callable[[] | Callable]]
+        | None = None,
         frames_per_batch: int,
         total_frames: int = -1,
-        device: torch.device | list[torch.device] = None,
-        storing_device: torch.device | list[torch.device] = None,
-        env_device: torch.device | list[torch.device] = None,
-        policy_device: torch.device | list[torch.device] = None,
+        device: torch.device | list[torch.device] | None = None,
+        storing_device: torch.device | list[torch.device] | None = None,
+        env_device: torch.device | list[torch.device] | None = None,
+        policy_device: torch.device | list[torch.device] | None = None,
         max_frames_per_traj: int = -1,
         init_random_frames: int = -1,
         reset_at_each_iter: bool = False,
@@ -443,17 +455,21 @@ class DistributedDataCollector(DataCollectorBase):
         split_trajs: bool = False,
         exploration_type: ExporationType = DEFAULT_EXPLORATION_TYPE,  # noqa
         collector_class: type = SyncDataCollector,
-        collector_kwargs: dict = None,
+        collector_kwargs: dict[str, Any] | None = None,
         num_workers_per_collector: int = 1,
         sync: bool = False,
-        slurm_kwargs: dict | None = None,
+        slurm_kwargs: dict[str, Any] | None = None,
         backend: str = "gloo",
         update_after_each_batch: bool = False,
         max_weight_update_interval: int = -1,
         launcher: str = "submitit",
-        tcp_port: int = None,
-        remote_weight_updater: RemoteWeightUpdaterBase | None = None,
-        local_weight_updater: LocalWeightUpdaterBase | None = None,
+        tcp_port: int | None = None,
+        remote_weight_updater: RemoteWeightUpdaterBase
+        | Callable[[], RemoteWeightUpdaterBase]
+        | None = None,
+        local_weight_updater: LocalWeightUpdaterBase
+        | Callable[[], LocalWeightUpdaterBase]
+        | None = None,
     ):
 
         if collector_class == "async":
@@ -465,10 +481,13 @@ class DistributedDataCollector(DataCollectorBase):
         self.collector_class = collector_class
         self.env_constructors = create_env_fn
         self.policy = policy
+        if not isinstance(policy_factory, Sequence):
+            policy_factory = [policy_factory for _ in range(len(self.env_constructors))]
+        self.policy_factory = policy_factory
         if isinstance(policy, nn.Module):
             policy_weights = TensorDict.from_module(policy)
             policy_weights = policy_weights.data.lock_()
-        elif policy_factory is not None:
+        elif any(policy_factory):
             policy_weights = None
             if remote_weight_updater is None:
                 raise RuntimeError(
@@ -476,7 +495,8 @@ class DistributedDataCollector(DataCollectorBase):
                     "a policy_factory."
                 )
         else:
-            warnings.warn(_NON_NN_POLICY_WEIGHTS)
+            if not any(policy_factory):
+                warnings.warn(_NON_NN_POLICY_WEIGHTS)
             policy_weights = TensorDict(lock=True)
         self.policy_weights = policy_weights
         self.num_workers = len(create_env_fn)
@@ -664,12 +684,15 @@ class DistributedDataCollector(DataCollectorBase):
         if self._VERBOSE:
             torchrl_logger.info("making container")
         env_constructor = self.env_constructors[0]
+        kwargs = self.collector_kwargs[0]
         pseudo_collector = SyncDataCollector(
             env_constructor,
-            self.policy,
+            policy=self.policy,
+            policy_factory=self.policy_factory[0],
             frames_per_batch=self._frames_per_batch_corrected,
             total_frames=-1,
             split_trajs=False,
+            **kwargs,
         )
         for _data in pseudo_collector:
             break
@@ -713,6 +736,7 @@ class DistributedDataCollector(DataCollectorBase):
             self.num_workers_per_collector,
             env_make,
             self.policy,
+            self.policy_factory[i],
             self._frames_per_batch_corrected,
             self.collector_kwargs[i],
             self._VERBOSE,
@@ -734,6 +758,7 @@ class DistributedDataCollector(DataCollectorBase):
                 "num_workers": self.num_workers_per_collector,
                 "env_make": get_env_make(i),
                 "policy": self.policy,
+                "policy_factory": self.policy_factory[i],
                 "frames_per_batch": self._frames_per_batch_corrected,
                 "collector_kwargs": self.collector_kwargs[i],
             }
@@ -760,6 +785,7 @@ class DistributedDataCollector(DataCollectorBase):
                 self.num_workers_per_collector,
                 env_make,
                 self.policy,
+                self.policy_factory[i],
                 self._frames_per_batch_corrected,
                 self.collector_kwargs[i],
                 self._VERBOSE,

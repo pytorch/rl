@@ -12,6 +12,7 @@ from tensordict import (
     is_leaf_nontensor,
     LazyStackedTensorDict,
     NestedKey,
+    set_list_to_stack,
     TensorDict,
     TensorDictBase,
     unravel_key,
@@ -687,6 +688,7 @@ class LLMHashingEnv(EnvBase):
         self.action_spec = Composite(action=CategoricalSpec(vocab_size, shape=(1,)))
         _StepMDP(self)
 
+    @set_list_to_stack(True)
     def make_tensordict(self, input: str | list[str]) -> TensorDict:
         """Converts a string or list of strings in a TensorDict with appropriate shape and device."""
         list_len = len(input) if isinstance(input, list) else 0
