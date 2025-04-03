@@ -57,6 +57,7 @@ from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
     Composite,
     LazyMemmapStorage,
+    LazyStackStorage,
     LazyTensorStorage,
     NonTensor,
     ReplayBuffer,
@@ -3590,33 +3591,22 @@ class TestLLMCollector:
 
         return model, tokenizer
 
-    def test_llm_collector_with_vllm(self, vllm_instance):
+    @pytest.mark.slow
+    @pytest.mark.parametrize("rb", [True, False])
+    @pytest.mark.parametrize("total_steps", [1, 10, 20])
+    def test_llm_collector_with_vllm(self, rb, total_steps, vllm_instance):
         # NOTE: if VLLM fails with CUDA multiprocessing, try setting
         # `export VLLM_WORKER_MULTIPROC_METHOD=spawn`
         policy = vLLMWrapper(vllm_instance)
         tokenizer = vllm_instance.get_tokenizer()
-        bsz = 2
-        dataloader = DummyStrDataLoader(bsz)
+        self._run_collector_test(total_steps, rb, policy, tokenizer)
 
-        env = LLMEnv.from_dataloader(
-            dataloader=dataloader,
-            tokenizer=tokenizer,
-            str2str=True,
-            batch_size=bsz,
-            group_repeats=True,
-        )
-
-        collector = LLMCollector(
-            env=env,
-            policy_factory=lambda: policy,
-            steps_per_batch=env.batch_size[0],
-            total_steps=3,
-        )
-
-        for data in collector:
-            assert data is not None
-
-    def test_llm_collector_with_transformers(self, transformers_instance):
+    @pytest.mark.slow
+    @pytest.mark.parametrize("rb", [True, False])
+    @pytest.mark.parametrize("total_steps", [1, 10, 20])
+    def test_llm_collector_with_transformers(
+        self, rb, total_steps, transformers_instance
+    ):
         model, tokenizer = transformers_instance
         policy = TransformersWrapper(
             model,
@@ -3625,7 +3615,10 @@ class TestLLMCollector:
             generate=True,
             return_log_probs=True,
         )
-        bsz = 2
+        self._run_collector_test(total_steps, rb, policy, tokenizer)
+
+    def _run_collector_test(self, total_steps, rb, policy, tokenizer):
+        bsz = 1
         dataloader = DummyStrDataLoader(bsz)
 
         env = LLMEnv.from_dataloader(
@@ -3635,16 +3628,37 @@ class TestLLMCollector:
             batch_size=bsz,
             group_repeats=True,
         )
-
+        if rb:
+            rb = ReplayBuffer(storage=LazyStackStorage(max_size=total_steps * 2))
+        else:
+            rb = None
         collector = LLMCollector(
             env=env,
             policy_factory=lambda: policy,
             steps_per_batch=env.batch_size[0],
-            total_steps=3,
+            replay_buffer=rb,
+            total_steps=total_steps,
         )
 
+        stack = []
         for data in collector:
-            assert data is not None
+            # Should be moved to replay buffer
+            if rb is not None:
+                assert data is None
+            else:
+                stack.append(data)
+
+        if rb is not None:
+            # Now check the buffer
+            assert len(rb) == total_steps
+            sample = rb.sample(1)
+            # Should match length
+            assert len(sample["text"]) == 1
+            # Should be non-empty
+            assert sample["text_response"] is not None
+        else:
+            stack = torch.cat(stack)
+            assert stack.numel() == total_steps
 
 
 if __name__ == "__main__":
