@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+c9caf3d) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+9bc85f4) &#x25BC</span></a>
     </div>
     
 
@@ -433,6 +433,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModuleBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
 
 <span class="n">Policy</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;Policy&quot;</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="n">TensorDictModuleBase</span><span class="p">)</span>
 
@@ -807,6 +808,7 @@
 <div class="viewcode-block" id="RayRemoteWeightUpdater._sync_weights_with_worker"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.RayRemoteWeightUpdater.html#torchrl.collectors.RayRemoteWeightUpdater._sync_weights_with_worker">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">_sync_weights_with_worker</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">worker_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;syncing weights with worker </span><span class="si">{</span><span class="n">worker_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="n">c</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span>
         <span class="n">c</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">policy_weights</span><span class="o">=</span><span class="n">server_weights</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span></div>

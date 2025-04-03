@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+c9caf3d) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+9bc85f4) &#x25BC</span></a>
     </div>
     
 
@@ -432,12 +432,11 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">copy</span><span class="p">,</span> <span class="n">deepcopy</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">timedelta</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">OrderedDict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">OrderedDict</span><span class="p">,</span> <span class="n">Sequence</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch.cuda</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
-
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_ProcessNoWarn</span><span class="p">,</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span><span class="p">,</span> <span class="n">VERBOSE</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiaSyncDataCollector</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
@@ -475,6 +474,7 @@
     <span class="n">num_workers</span><span class="p">,</span>
     <span class="n">env_make</span><span class="p">,</span>
     <span class="n">policy</span><span class="p">,</span>
+    <span class="n">policy_factory</span><span class="p">,</span>
     <span class="n">frames_per_batch</span><span class="p">,</span>
     <span class="n">collector_kwargs</span><span class="p">,</span>
     <span class="n">update_interval</span><span class="p">,</span>
@@ -501,7 +501,11 @@
         <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">policy</span><span class="p">)</span>
         <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">policy_weights</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">lock_</span><span class="p">()</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">_NON_NN_POLICY_WEIGHTS</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">collector_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;remote_weight_updater&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span>
+            <span class="n">policy_factory</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="ow">or</span> <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">policy_factory</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">policy_factory</span><span class="p">))</span>
+        <span class="p">):</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">_NON_NN_POLICY_WEIGHTS</span><span class="p">)</span>
         <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">lock</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
     <span class="n">collector</span> <span class="o">=</span> <span class="n">collector_class</span><span class="p">(</span>
@@ -510,6 +514,7 @@
         <span class="n">frames_per_batch</span><span class="o">=</span><span class="n">frames_per_batch</span><span class="p">,</span>
         <span class="n">split_trajs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="n">total_frames</span><span class="o">=</span><span class="n">total_frames</span><span class="p">,</span>
+        <span class="n">policy_factory</span><span class="o">=</span><span class="n">policy_factory</span><span class="p">,</span>
         <span class="o">**</span><span class="n">collector_kwargs</span><span class="p">,</span>
     <span class="p">)</span>
 
@@ -575,8 +580,8 @@
 <span class="sd">                pickled directly), the :arg:`policy_factory` should be used instead.</span>
 
 <span class="sd">    Keyword Args:</span>
-<span class="sd">        policy_factory (Callable[[], Callable], optional): a callable that returns</span>
-<span class="sd">            a policy instance. This is exclusive with the `policy` argument.</span>
+<span class="sd">        policy_factory (Callable[[], Callable], list of Callable[[], Callable], optional): a callable</span>
+<span class="sd">            (or list of callables) that returns a policy instance. This is exclusive with the `policy` argument.</span>
 
 <span class="sd">            .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.</span>
 
@@ -702,7 +707,9 @@
         <span class="n">create_env_fn</span><span class="p">,</span>
         <span class="n">policy</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">policy_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Callable</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">policy_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Callable</span><span class="p">]</span>
+        <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[],</span> <span class="n">Callable</span><span class="p">]]</span>
+        <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">frames_per_batch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">total_frames</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
         <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -715,15 +722,15 @@
         <span class="n">postproc</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">split_trajs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">exploration_type</span><span class="p">:</span> <span class="n">ExporationType</span> <span class="o">=</span> <span class="n">DEFAULT_EXPLORATION_TYPE</span><span class="p">,</span>  <span class="c1"># noqa</span>
-        <span class="n">collector_class</span><span class="o">=</span><span class="n">SyncDataCollector</span><span class="p">,</span>
-        <span class="n">collector_kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">num_workers_per_collector</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">slurm_kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;gloo&quot;</span><span class="p">,</span>
-        <span class="n">max_weight_update_interval</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">update_interval</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">launcher</span><span class="o">=</span><span class="s2">&quot;submitit&quot;</span><span class="p">,</span>
-        <span class="n">tcp_port</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">collector_class</span><span class="p">:</span> <span class="nb">type</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">DataCollectorBase</span><span class="p">]</span> <span class="o">=</span> <span class="n">SyncDataCollector</span><span class="p">,</span>
+        <span class="n">collector_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_workers_per_collector</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">slurm_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">backend</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;gloo&quot;</span><span class="p">,</span> <span class="s2">&quot;nccl&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;gloo&quot;</span><span class="p">,</span>
+        <span class="n">max_weight_update_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">update_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">launcher</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;submitit&quot;</span><span class="p">,</span>
+        <span class="n">tcp_port</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
 
         <span class="k">if</span> <span class="n">collector_class</span> <span class="o">==</span> <span class="s2">&quot;async&quot;</span><span class="p">:</span>
@@ -735,14 +742,22 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">collector_class</span> <span class="o">=</span> <span class="n">collector_class</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">env_constructors</span> <span class="o">=</span> <span class="n">create_env_fn</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">policy</span> <span class="o">=</span> <span class="n">policy</span>
+        <span class="n">collector_kwargs</span> <span class="o">=</span> <span class="n">collector_kwargs</span> <span class="k">if</span> <span class="n">collector_kwargs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">{}</span>
 
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
             <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">policy</span><span class="p">)</span>
             <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">policy_weights</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">lock_</span><span class="p">()</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">_NON_NN_POLICY_WEIGHTS</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">collector_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;remote_weight_updater&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span>
+                <span class="n">policy_factory</span> <span class="ow">is</span> <span class="kc">None</span>
+                <span class="ow">or</span> <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">policy_factory</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">policy_factory</span><span class="p">))</span>
+            <span class="p">):</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">_NON_NN_POLICY_WEIGHTS</span><span class="p">)</span>
             <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">lock</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy_factory</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">):</span>
+            <span class="n">policy_factory</span> <span class="o">=</span> <span class="p">[</span><span class="n">policy_factory</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">policy_factory</span> <span class="o">=</span> <span class="n">policy_factory</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span> <span class="o">=</span> <span class="n">policy_weights</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch</span> <span class="o">=</span> <span class="n">frames_per_batch</span>
@@ -782,7 +797,6 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">slurm_kwargs</span> <span class="o">=</span> <span class="n">copy</span><span class="p">(</span><span class="n">DEFAULT_SLURM_CONF</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">slurm_kwargs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">slurm_kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">slurm_kwargs</span><span class="p">)</span>
-        <span class="n">collector_kwargs</span> <span class="o">=</span> <span class="n">collector_kwargs</span> <span class="k">if</span> <span class="n">collector_kwargs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">collector_kwargs</span> <span class="o">=</span> <span class="p">(</span>
             <span class="n">deepcopy</span><span class="p">(</span><span class="n">collector_kwargs</span><span class="p">)</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">collector_kwargs</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">))</span>
@@ -921,6 +935,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">num_workers_per_collector</span><span class="p">,</span>
             <span class="n">env_make</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">policy_factory</span><span class="p">[</span><span class="n">i</span><span class="p">],</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_frames_per_batch_corrected</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">collector_kwargs</span><span class="p">[</span><span class="n">i</span><span class="p">],</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">update_interval</span><span class="p">,</span>
@@ -945,6 +960,7 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">num_workers_per_collector</span><span class="p">,</span>
                 <span class="n">env_make</span><span class="p">,</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">policy_factory</span><span class="p">[</span><span class="n">i</span><span class="p">],</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_frames_per_batch_corrected</span><span class="p">,</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">collector_kwargs</span><span class="p">[</span><span class="n">i</span><span class="p">],</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">update_interval</span><span class="p">,</span>

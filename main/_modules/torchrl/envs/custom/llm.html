@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+c9caf3d) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+9bc85f4) &#x25BC</span></a>
     </div>
     
 
@@ -433,6 +433,7 @@
     <span class="n">is_leaf_nontensor</span><span class="p">,</span>
     <span class="n">LazyStackedTensorDict</span><span class="p">,</span>
     <span class="n">NestedKey</span><span class="p">,</span>
+    <span class="n">set_list_to_stack</span><span class="p">,</span>
     <span class="n">TensorDict</span><span class="p">,</span>
     <span class="n">TensorDictBase</span><span class="p">,</span>
     <span class="n">unravel_key</span><span class="p">,</span>
@@ -1108,7 +1109,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="n">CategoricalSpec</span><span class="p">(</span><span class="n">vocab_size</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,)))</span>
         <span class="n">_StepMDP</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
 
-<div class="viewcode-block" id="LLMHashingEnv.make_tensordict"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.LLMHashingEnv.html#torchrl.envs.LLMHashingEnv.make_tensordict">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">make_tensordict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">input</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">TensorDict</span><span class="p">:</span>
+<div class="viewcode-block" id="LLMHashingEnv.make_tensordict"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.LLMHashingEnv.html#torchrl.envs.LLMHashingEnv.make_tensordict">[docs]</a>    <span class="nd">@set_list_to_stack</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">make_tensordict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">input</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">TensorDict</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Converts a string or list of strings in a TensorDict with appropriate shape and device.&quot;&quot;&quot;</span>
         <span class="n">list_len</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="k">else</span> <span class="mi">0</span>
         <span class="n">tensordict</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>

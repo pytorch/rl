@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+c9caf3d) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+9bc85f4) &#x25BC</span></a>
     </div>
     
 
@@ -806,7 +806,7 @@
                         <span class="n">p_out</span> <span class="o">=</span> <span class="n">param</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">expand_dim</span><span class="p">,</span> <span class="o">*</span><span class="n">param</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
                         <span class="n">p_out</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span>
                             <span class="n">p_out</span><span class="o">.</span><span class="n">uniform_</span><span class="p">(</span>
-                                <span class="n">p_out</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span> <span class="n">p_out</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+                                <span class="n">p_out</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span> <span class="n">p_out</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
                             <span class="p">)</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">()</span>
                         <span class="p">)</span>
                         <span class="k">return</span> <span class="n">p_out</span>

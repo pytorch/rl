@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+c9caf3d) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+9bc85f4) &#x25BC</span></a>
     </div>
     
 
@@ -828,6 +828,7 @@
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">critic_coef</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_has_critic</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">critic_coef</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_coef</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">loss_critic_type</span> <span class="o">=</span> <span class="n">loss_critic_type</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">normalize_advantage</span> <span class="o">=</span> <span class="n">normalize_advantage</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">normalize_advantage_exclude_dims</span> <span class="o">=</span> <span class="n">normalize_advantage_exclude_dims</span>
@@ -1005,7 +1006,10 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">sample_log_prob</span><span class="p">,</span>
             <span class="n">adv_shape</span><span class="p">,</span>
         <span class="p">)</span>
-
+        <span class="k">if</span> <span class="n">prev_log_prob</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Couldn&#39;t find the log-prob </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">sample_log_prob</span><span class="si">}</span><span class="s2"> in the input data.&quot;</span>
+            <span class="p">)</span>
         <span class="k">if</span> <span class="n">prev_log_prob</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;tensordict stored </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">sample_log_prob</span><span class="si">}</span><span class="s2"> requires grad.&quot;</span>
@@ -1107,7 +1111,7 @@
             <span class="s2">&quot;target_actor_network_params&quot;</span><span class="p">,</span>
             <span class="s2">&quot;target_critic_network_params&quot;</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_coef</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_has_critic</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_coef</span> <span class="o">*</span> <span class="n">loss_value</span><span class="p">,</span> <span class="n">clip_fraction</span>
         <span class="k">return</span> <span class="n">loss_value</span><span class="p">,</span> <span class="n">clip_fraction</span></div>
 
@@ -1155,7 +1159,7 @@
                 <span class="n">entropy</span> <span class="o">=</span> <span class="n">_sum_td_features</span><span class="p">(</span><span class="n">entropy</span><span class="p">)</span>
             <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;entropy&quot;</span><span class="p">,</span> <span class="n">entropy</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>  <span class="c1"># for logging</span>
             <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;loss_entropy&quot;</span><span class="p">,</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">entropy_coef</span> <span class="o">*</span> <span class="n">entropy</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_coef</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_has_critic</span><span class="p">:</span>
             <span class="n">loss_critic</span><span class="p">,</span> <span class="n">value_clip_fraction</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_critic</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
             <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;loss_critic&quot;</span><span class="p">,</span> <span class="n">loss_critic</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">value_clip_fraction</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -1466,7 +1470,7 @@
                 <span class="n">entropy</span> <span class="o">=</span> <span class="n">_sum_td_features</span><span class="p">(</span><span class="n">entropy</span><span class="p">)</span>
             <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;entropy&quot;</span><span class="p">,</span> <span class="n">entropy</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>  <span class="c1"># for logging</span>
             <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;loss_entropy&quot;</span><span class="p">,</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">entropy_coef</span> <span class="o">*</span> <span class="n">entropy</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_coef</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_coef</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_has_critic</span><span class="p">:</span>
             <span class="n">loss_critic</span><span class="p">,</span> <span class="n">value_clip_fraction</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_critic</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
             <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;loss_critic&quot;</span><span class="p">,</span> <span class="n">loss_critic</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">value_clip_fraction</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -1793,7 +1797,7 @@
                 <span class="n">entropy</span> <span class="o">=</span> <span class="n">_sum_td_features</span><span class="p">(</span><span class="n">entropy</span><span class="p">)</span>
             <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;entropy&quot;</span><span class="p">,</span> <span class="n">entropy</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>  <span class="c1"># for logging</span>
             <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;loss_entropy&quot;</span><span class="p">,</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">entropy_coef</span> <span class="o">*</span> <span class="n">entropy</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_coef</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_has_critic</span><span class="p">:</span>
             <span class="n">loss_critic</span><span class="p">,</span> <span class="n">value_clip_fraction</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_critic</span><span class="p">(</span><span class="n">tensordict_copy</span><span class="p">)</span>
             <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;loss_critic&quot;</span><span class="p">,</span> <span class="n">loss_critic</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">value_clip_fraction</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>

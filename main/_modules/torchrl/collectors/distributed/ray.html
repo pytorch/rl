@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+c9caf3d) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+9bc85f4) &#x25BC</span></a>
     </div>
     
 
@@ -428,7 +428,7 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">OrderedDict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">OrderedDict</span><span class="p">,</span> <span class="n">Sequence</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch.nn</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nn</span>
@@ -574,8 +574,8 @@
 <span class="sd">                pickled directly), the :arg:`policy_factory` should be used instead.</span>
 
 <span class="sd">    Keyword Args:</span>
-<span class="sd">        policy_factory (Callable[[], Callable], optional): a callable that returns</span>
-<span class="sd">            a policy instance. This is exclusive with the `policy` argument.</span>
+<span class="sd">        policy_factory (Callable[[], Callable], list of Callable[[], Callable], optional): a callable</span>
+<span class="sd">            (or list of callables) that returns a policy instance. This is exclusive with the `policy` argument.</span>
 
 <span class="sd">            .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.</span>
 
@@ -651,7 +651,7 @@
 <span class="sd">            collecting data. Must be one of ``torchrl.envs.utils.ExplorationType.DETERMINISTIC``,</span>
 <span class="sd">            ``torchrl.envs.utils.ExplorationType.RANDOM``, ``torchrl.envs.utils.ExplorationType.MODE``</span>
 <span class="sd">            or ``torchrl.envs.utils.ExplorationType.MEAN``.</span>
-<span class="sd">        collector_class (Python class): a collector class to be remotely instantiated. Can be</span>
+<span class="sd">        collector_class (Python class or constructor): a collector class to be remotely instantiated. Can be</span>
 <span class="sd">            :class:`~torchrl.collectors.SyncDataCollector`,</span>
 <span class="sd">            :class:`~torchrl.collectors.MultiSyncDataCollector`,</span>
 <span class="sd">            :class:`~torchrl.collectors.MultiaSyncDataCollector`</span>
@@ -698,13 +698,16 @@
 
 <span class="sd">            .. note:: although it is not enfoced (to allow users to implement their own replay buffer class), a</span>
 <span class="sd">                :class:`~torchrl.data.RayReplayBuffer` instance should be used here.</span>
-<span class="sd">        local_weight_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`</span>
+<span class="sd">        local_weight_updater (LocalWeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`</span>
 <span class="sd">            or its subclass, responsible for updating the policy weights on the local inference worker.</span>
-<span class="sd">            This is typically not used in :class:`~torchrl.collectors.RayCollector` as it focuses on distributed environments.</span>
-<span class="sd">        remote_weight_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`</span>
+<span class="sd">            This is typically not used in :class:`~torchrl.collectors.RayCollector` as it focuses on distributed</span>
+<span class="sd">            environments.</span>
+<span class="sd">            Consider using a constructor if the updater needs to be serialized.</span>
+<span class="sd">        remote_weight_updater (RemoteWeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`</span>
 <span class="sd">            or its subclass, responsible for updating the policy weights on remote inference workers managed by Ray.</span>
 <span class="sd">            If not provided, a :class:`~torchrl.collectors.RayRemoteWeightUpdater` will be used by default, leveraging</span>
 <span class="sd">            Ray&#39;s distributed capabilities.</span>
+<span class="sd">            Consider using a constructor if the updater needs to be serialized.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; from torch import nn</span>
@@ -740,13 +743,15 @@
         <span class="n">create_env_fn</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="n">EnvBase</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">Callable</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">EnvBase</span><span class="p">],</span>
         <span class="n">policy</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">policy_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Callable</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">policy_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Callable</span><span class="p">]</span>
+        <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[],</span> <span class="n">Callable</span><span class="p">]]</span>
+        <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">frames_per_batch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">total_frames</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">storing_device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">env_device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">policy_device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">storing_device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">env_device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">policy_device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">max_frames_per_traj</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
         <span class="n">init_random_frames</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
         <span class="n">reset_at_each_iter</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
@@ -754,17 +759,21 @@
         <span class="n">split_trajs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="n">exploration_type</span><span class="o">=</span><span class="n">DEFAULT_EXPLORATION_TYPE</span><span class="p">,</span>
         <span class="n">collector_class</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDict</span><span class="p">],</span> <span class="n">TensorDict</span><span class="p">]</span> <span class="o">=</span> <span class="n">SyncDataCollector</span><span class="p">,</span>
-        <span class="n">collector_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">collector_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">num_workers_per_collector</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">sync</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-        <span class="n">ray_init_config</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">remote_configs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">num_collectors</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">update_after_each_batch</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">max_weight_update_interval</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">replay_buffer</span><span class="p">:</span> <span class="n">ReplayBuffer</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">remote_weight_updater</span><span class="p">:</span> <span class="n">RemoteWeightUpdaterBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">local_weight_updater</span><span class="p">:</span> <span class="n">LocalWeightUpdaterBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">ray_init_config</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">remote_configs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_collectors</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">update_after_each_batch</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">max_weight_update_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">replay_buffer</span><span class="p">:</span> <span class="n">ReplayBuffer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">remote_weight_updater</span><span class="p">:</span> <span class="n">RemoteWeightUpdaterBase</span>
+        <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">RemoteWeightUpdaterBase</span><span class="p">]</span>
+        <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">local_weight_updater</span><span class="p">:</span> <span class="n">LocalWeightUpdaterBase</span>
+        <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">LocalWeightUpdaterBase</span><span class="p">]</span>
+        <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch</span> <span class="o">=</span> <span class="n">frames_per_batch</span>
         <span class="k">if</span> <span class="n">remote_configs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -872,6 +881,9 @@
             <span class="n">collector_class</span><span class="o">.</span><span class="n">print_remote_collector_info</span> <span class="o">=</span> <span class="n">print_remote_collector_info</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="o">=</span> <span class="n">replay_buffer</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy_factory</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">):</span>
+            <span class="n">policy_factory</span> <span class="o">=</span> <span class="p">[</span><span class="n">policy_factory</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">policy_factory</span> <span class="o">=</span> <span class="n">policy_factory</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_local_policy</span> <span class="o">=</span> <span class="n">policy</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_local_policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
             <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_local_policy</span><span class="p">)</span>
@@ -912,7 +924,7 @@
 
         <span class="c1"># update collector kwargs</span>
         <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">collector_kwarg</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">collector_kwargs</span><span class="p">):</span>
-            <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;policy_factory&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">policy_factory</span>
+            <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;policy_factory&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">policy_factory</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
             <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;max_frames_per_traj&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">max_frames_per_traj</span>
             <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;init_random_frames&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="n">init_random_frames</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_collectors</span>
@@ -1099,6 +1111,7 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Collects one data batch per remote collector in each iteration.&quot;&quot;&quot;</span>
         <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">collected_frames</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span><span class="p">:</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">update_after_each_batch</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_weight_update_interval</span> <span class="o">&gt;</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Updating weights on all workers&quot;</span><span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">()</span>
 
             <span class="c1"># Ask for batches to all remote workers.</span>
@@ -1180,6 +1193,7 @@
             <span class="k">yield</span> <span class="n">out_td</span>
 
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">update_after_each_batch</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_weight_update_interval</span> <span class="o">&gt;</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Updating weights on worker </span><span class="si">{</span><span class="n">collector_index</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">worker_ids</span><span class="o">=</span><span class="n">collector_index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
 
             <span class="c1"># Schedule a new collection task</span>

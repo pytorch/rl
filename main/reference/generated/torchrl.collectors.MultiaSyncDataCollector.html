@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+c9caf3d) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+9bc85f4) &#x25BC</span></a>
     </div>
     
 
@@ -538,8 +538,8 @@ pickled directly), the <a href="#id1"><span class="problematic" id="id2">:arg:`p
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>policy_factory</strong> (<em>Callable</em><em>[</em><em>[</em><em>]</em><em>, </em><em>Callable</em><em>]</em><em>, </em><em>optional</em>) – <p>a callable that returns
-a policy instance. This is exclusive with the <cite>policy</cite> argument.</p>
+<li><p><strong>policy_factory</strong> (<em>Callable</em><em>[</em><em>[</em><em>]</em><em>, </em><em>Callable</em><em>]</em><em>, </em><em>list of Callable</em><em>[</em><em>[</em><em>]</em><em>, </em><em>Callable</em><em>]</em><em>, </em><em>optional</em>) – <p>a callable
+(or list of callables) that returns a policy instance. This is exclusive with the <cite>policy</cite> argument.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p><cite>policy_factory</cite> comes in handy whenever the policy cannot be serialized.</p>
@@ -602,6 +602,18 @@ for each worker. The list must be as long as the number of workers.</p></li>
 <li><p><strong>create_env_kwargs</strong> (<em>dict</em><em>, </em><em>optional</em>) – A dictionary with the
 keyword arguments used to create an environment. If a list is
 provided, each of its elements will be assigned to a sub-collector.</p></li>
+<li><p><strong>collector_class</strong> (<em>Python class</em><em> or </em><em>constructor</em>) – <p>a collector class to be remotely instantiated. Can be
+<a class="reference internal" href="torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector" title="torchrl.collectors.SyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">SyncDataCollector</span></code></a>,
+<a class="reference internal" href="torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector" title="torchrl.collectors.MultiSyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code></a>,
+<a class="reference internal" href="#torchrl.collectors.MultiaSyncDataCollector" title="torchrl.collectors.MultiaSyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code></a>
+or a derived class of these.
+Defaults to <a class="reference internal" href="torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector" title="torchrl.collectors.SyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">SyncDataCollector</span></code></a>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This keyword argument is particularly handy when local attributes need to be
+set, such as <cite>local_weight_updater</cite>.</p>
+</div>
+</p></li>
 <li><p><strong>max_frames_per_traj</strong> (<em>int</em><em>, </em><em>optional</em>) – Maximum steps per trajectory.
 Note that a trajectory can span across multiple batches (unless
 <code class="docutils literal notranslate"><span class="pre">reset_at_each_iter</span></code> is set to <code class="docutils literal notranslate"><span class="pre">True</span></code>, see below).
@@ -688,13 +700,37 @@ For environments running directly on CUDA (<a class="reference external" href="h
 or <a class="reference external" href="https://github.com/haosulab/ManiSkill/">ManiSkills</a>) cuda synchronization may cause unexpected
 crashes.
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>local_weight_updater</strong> (<a class="reference internal" href="torchrl.collectors.LocalWeightUpdaterBase.html#torchrl.collectors.LocalWeightUpdaterBase" title="torchrl.collectors.LocalWeightUpdaterBase"><em>LocalWeightUpdaterBase</em></a><em>, </em><em>optional</em>) – An instance of <a class="reference internal" href="torchrl.collectors.LocalWeightUpdaterBase.html#torchrl.collectors.LocalWeightUpdaterBase" title="torchrl.collectors.LocalWeightUpdaterBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">LocalWeightUpdaterBase</span></code></a>
-or its subclass, responsible for updating the policy weights on each local inference worker.
-If not provided, left unused.</p></li>
-<li><p><strong>remote_weight_updater</strong> (<a class="reference internal" href="torchrl.collectors.RemoteWeightUpdaterBase.html#torchrl.collectors.RemoteWeightUpdaterBase" title="torchrl.collectors.RemoteWeightUpdaterBase"><em>RemoteWeightUpdaterBase</em></a><em>, </em><em>optional</em>) – An instance of <a class="reference internal" href="torchrl.collectors.RemoteWeightUpdaterBase.html#torchrl.collectors.RemoteWeightUpdaterBase" title="torchrl.collectors.RemoteWeightUpdaterBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">RemoteWeightUpdaterBase</span></code></a>
+<li><p><strong>local_weight_updater</strong> (<a class="reference internal" href="torchrl.collectors.LocalWeightUpdaterBase.html#torchrl.collectors.LocalWeightUpdaterBase" title="torchrl.collectors.LocalWeightUpdaterBase"><em>LocalWeightUpdaterBase</em></a><em> or </em><em>constructor</em><em>, </em><em>optional</em>) – <p>An instance of <a class="reference internal" href="torchrl.collectors.LocalWeightUpdaterBase.html#torchrl.collectors.LocalWeightUpdaterBase" title="torchrl.collectors.LocalWeightUpdaterBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">LocalWeightUpdaterBase</span></code></a>
+or its subclass, responsible for updating the policy weights on the server worker.
+If not provided, left unused.
+Consider using a constructor if the updater needs to be serialized.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This instance or constructor is not passed to the workers. To specify the workers <cite>local_weight_updater</cite>
+instance, you can pass a <cite>collector_class</cite> argument containing the constructor:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">partial</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># the weight receiver - called when `worker_collector.update_policy_weight_() is called</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">worker_weight_updater_receiver</span> <span class="o">=</span> <span class="o">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># The weight sender - called when `server_collector.update_policy_weight_()` is called</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">server_weight_updater_sender</span> <span class="o">=</span> <span class="o">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span> <span class="o">=</span> <span class="n">MultiaSyncDataCollector</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">create_env_fn</span><span class="o">=</span><span class="p">[</span><span class="n">func</span><span class="p">,</span> <span class="n">func</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">total_frames</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">collector_class</span><span class="o">=</span><span class="n">partial</span><span class="p">(</span><span class="n">SyncDataCollector</span><span class="p">,</span> <span class="n">local_weight_updater</span><span class="o">=</span><span class="n">worker_weight_updater_receiver</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">remote_weight_updater</span><span class="o">=</span><span class="n">server_weight_updater_sender</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</p></li>
+<li><p><strong>remote_weight_updater</strong> (<a class="reference internal" href="torchrl.collectors.RemoteWeightUpdaterBase.html#torchrl.collectors.RemoteWeightUpdaterBase" title="torchrl.collectors.RemoteWeightUpdaterBase"><em>RemoteWeightUpdaterBase</em></a><em> or </em><em>constructor</em><em>, </em><em>optional</em>) – An instance of <a class="reference internal" href="torchrl.collectors.RemoteWeightUpdaterBase.html#torchrl.collectors.RemoteWeightUpdaterBase" title="torchrl.collectors.RemoteWeightUpdaterBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">RemoteWeightUpdaterBase</span></code></a>
 or its subclass, responsible for updating the policy weights on remote inference workers.
 If not provided, a <a class="reference internal" href="torchrl.collectors.MultiProcessedRemoteWeightUpdate.html#torchrl.collectors.MultiProcessedRemoteWeightUpdate" title="torchrl.collectors.MultiProcessedRemoteWeightUpdate"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiProcessedRemoteWeightUpdate</span></code></a> will be used by default,
-which handles weight synchronization across multiple processes.</p></li>
+which handles weight synchronization across multiple processes.
+See <cite>local_weight_updater</cite> for details on the server / worker weight update API.
+Consider using a constructor if the updater needs to be serialized.</p></li>
 </ul>
 </dd>
 </dl>

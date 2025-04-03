@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+c9caf3d) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+9bc85f4) &#x25BC</span></a>
     </div>
     
 
@@ -2012,8 +2012,13 @@
             <span class="n">policy</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">out_keys</span><span class="o">=</span><span class="n">out_keys</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;&quot;&quot;Arguments to policy.forward are incompatible with entries in</span>
-<span class="s2">    env.observation_spec (got incongruent signatures: fun signature is </span><span class="si">{</span><span class="nb">set</span><span class="p">(</span><span class="n">sig</span><span class="o">.</span><span class="n">parameters</span><span class="p">)</span><span class="si">}</span><span class="s2"> vs specs </span><span class="si">{</span><span class="nb">set</span><span class="p">(</span><span class="n">next_observation</span><span class="p">)</span><span class="si">}</span><span class="s2">).</span>
+                <span class="sa">f</span><span class="s2">&quot;&quot;&quot;This error is raised because TorchRL tried to automatically wrap your policy in</span>
+<span class="s2">    a TensorDictModule. If you&#39;re confident the policy can directly process environment outputs, set</span>
+<span class="s2">    the `trust_policy` argument to `True` in the constructor.</span>
+
+<span class="s2">    Arguments to policy.forward are incompatible with entries in</span>
+<span class="s2">    env.observation_spec (got incongruent signatures:</span>
+<span class="s2">    the function signature is </span><span class="si">{</span><span class="nb">set</span><span class="p">(</span><span class="n">sig</span><span class="o">.</span><span class="n">parameters</span><span class="p">)</span><span class="si">}</span><span class="s2"> but the specs have keys </span><span class="si">{</span><span class="nb">set</span><span class="p">(</span><span class="n">next_observation</span><span class="p">)</span><span class="si">}</span><span class="s2">).</span>
 <span class="s2">    If you want TorchRL to automatically wrap your policy with a TensorDictModule</span>
 <span class="s2">    then the arguments to policy.forward must correspond one-to-one with entries</span>
 <span class="s2">    in env.observation_spec.</span>

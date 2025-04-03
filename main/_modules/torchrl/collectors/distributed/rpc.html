@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+c9caf3d) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+9bc85f4) &#x25BC</span></a>
     </div>
     
 
@@ -433,10 +433,23 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">copy</span><span class="p">,</span> <span class="n">deepcopy</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">OrderedDict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">OrderedDict</span><span class="p">,</span> <span class="n">Sequence</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictBase</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch.cuda</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.distributed</span><span class="w"> </span><span class="kn">import</span> <span class="n">rpc</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_ProcessNoWarn</span><span class="p">,</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span><span class="p">,</span> <span class="n">VERBOSE</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiaSyncDataCollector</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">DataCollectorBase</span><span class="p">,</span>
+    <span class="n">DEFAULT_EXPLORATION_TYPE</span><span class="p">,</span>
+    <span class="n">MultiSyncDataCollector</span><span class="p">,</span>
+    <span class="n">SyncDataCollector</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.distributed</span><span class="w"> </span><span class="kn">import</span> <span class="n">DEFAULT_SLURM_CONF</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.distributed.default_configs</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">DEFAULT_TENSORPIPE_OPTIONS</span><span class="p">,</span>
@@ -444,7 +457,13 @@
     <span class="n">TCP_PORT</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_NON_NN_POLICY_WEIGHTS</span><span class="p">,</span> <span class="n">split_trajectories</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.weight_update</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">LocalWeightUpdaterBase</span><span class="p">,</span>
+    <span class="n">RemoteWeightUpdaterBase</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">CloudpickleWrapper</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.env_creator</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvCreator</span>
 
 <span class="n">SUBMITIT_ERR</span> <span class="o">=</span> <span class="kc">None</span>
 <span class="k">try</span><span class="p">:</span>
@@ -454,26 +473,6 @@
 <span class="k">except</span> <span class="ne">ModuleNotFoundError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
     <span class="n">_has_submitit</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">SUBMITIT_ERR</span> <span class="o">=</span> <span class="n">err</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">torch.cuda</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
-
-<span class="kn">from</span><span class="w"> </span><span class="nn">torch.distributed</span><span class="w"> </span><span class="kn">import</span> <span class="n">rpc</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_ProcessNoWarn</span><span class="p">,</span> <span class="n">VERBOSE</span>
-
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiaSyncDataCollector</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">DataCollectorBase</span><span class="p">,</span>
-    <span class="n">DEFAULT_EXPLORATION_TYPE</span><span class="p">,</span>
-    <span class="n">MultiSyncDataCollector</span><span class="p">,</span>
-    <span class="n">SyncDataCollector</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.weight_update</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">LocalWeightUpdaterBase</span><span class="p">,</span>
-    <span class="n">RemoteWeightUpdaterBase</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.env_creator</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvCreator</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_rpc_init_collection_node</span><span class="p">(</span>
@@ -547,8 +546,8 @@
 <span class="sd">                pickled directly), the :arg:`policy_factory` should be used instead.</span>
 
 <span class="sd">    Keyword Args:</span>
-<span class="sd">        policy_factory (Callable[[], Callable], optional): a callable that returns</span>
-<span class="sd">            a policy instance. This is exclusive with the `policy` argument.</span>
+<span class="sd">        policy_factory (Callable[[], Callable], list of Callable[[], Callable], optional): a callable</span>
+<span class="sd">            (or list of callables) that returns a policy instance. This is exclusive with the `policy` argument.</span>
 
 <span class="sd">            .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.</span>
 
@@ -687,14 +686,16 @@
 <span class="sd">            device used to pass data to main.</span>
 <span class="sd">        tensorpipe_options (dict, optional): a dictionary of keyword argument</span>
 <span class="sd">            to pass to :class:`torch.distributed.rpc.TensorPipeRpcBackendOption`.</span>
-<span class="sd">        local_weight_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`</span>
+<span class="sd">        local_weight_updater (LocalWeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`</span>
 <span class="sd">            or its subclass, responsible for updating the policy weights on the local inference worker. This is</span>
 <span class="sd">            typically not used in :class:`~torchrl.collectors.distrbibuted.RPCDataCollector` as it focuses on</span>
 <span class="sd">            distributed environments.</span>
-<span class="sd">        remote_weight_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`</span>
+<span class="sd">            Consider using a constructor if the updater needs to be serialized.</span>
+<span class="sd">        remote_weight_updater (RemoteWeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`</span>
 <span class="sd">            or its subclass, responsible for updating the policy weights on remote inference workers using RPC.</span>
 <span class="sd">            If not provided, an :class:`~torchrl.collectors.distributed.RPCRemoteWeightUpdater` will be used by default, which</span>
 <span class="sd">            handles weight synchronization via RPC.</span>
+<span class="sd">            Consider using a constructor if the updater needs to be serialized.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
@@ -705,7 +706,9 @@
         <span class="n">create_env_fn</span><span class="p">,</span>
         <span class="n">policy</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">policy_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Callable</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">policy_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Callable</span><span class="p">]</span>
+        <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[]],</span> <span class="n">Callable</span><span class="p">]</span>
+        <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">frames_per_batch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">total_frames</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
         <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -718,19 +721,23 @@
         <span class="n">postproc</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">split_trajs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">exploration_type</span><span class="p">:</span> <span class="n">ExporationType</span> <span class="o">=</span> <span class="n">DEFAULT_EXPLORATION_TYPE</span><span class="p">,</span>  <span class="c1"># noqa</span>
-        <span class="n">collector_class</span><span class="o">=</span><span class="n">SyncDataCollector</span><span class="p">,</span>
-        <span class="n">collector_kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">num_workers_per_collector</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">sync</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">slurm_kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">update_after_each_batch</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">max_weight_update_interval</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">launcher</span><span class="o">=</span><span class="s2">&quot;submitit&quot;</span><span class="p">,</span>
-        <span class="n">tcp_port</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">visible_devices</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">tensorpipe_options</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">remote_weight_updater</span><span class="p">:</span> <span class="n">RemoteWeightUpdaterBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">local_weight_updater</span><span class="p">:</span> <span class="n">LocalWeightUpdaterBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">collector_class</span><span class="p">:</span> <span class="nb">type</span> <span class="o">=</span> <span class="n">SyncDataCollector</span><span class="p">,</span>
+        <span class="n">collector_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_workers_per_collector</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">sync</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">slurm_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">update_after_each_batch</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">max_weight_update_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">launcher</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;submitit&quot;</span><span class="p">,</span>
+        <span class="n">tcp_port</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">visible_devices</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">tensorpipe_options</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">remote_weight_updater</span><span class="p">:</span> <span class="n">RemoteWeightUpdaterBase</span>
+        <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">RemoteWeightUpdaterBase</span><span class="p">]</span>
+        <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">local_weight_updater</span><span class="p">:</span> <span class="n">LocalWeightUpdaterBase</span>
+        <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">LocalWeightUpdaterBase</span><span class="p">]</span>
+        <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="k">if</span> <span class="n">collector_class</span> <span class="o">==</span> <span class="s2">&quot;async&quot;</span><span class="p">:</span>
             <span class="n">collector_class</span> <span class="o">=</span> <span class="n">MultiaSyncDataCollector</span>
@@ -745,8 +752,16 @@
             <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">policy</span><span class="p">)</span>
             <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">policy_weights</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">lock_</span><span class="p">()</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">_NON_NN_POLICY_WEIGHTS</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">remote_weight_updater</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span>
+                <span class="n">policy_factory</span> <span class="ow">is</span> <span class="kc">None</span>
+                <span class="ow">or</span> <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">policy_factory</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">policy_factory</span><span class="p">))</span>
+            <span class="p">):</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">_NON_NN_POLICY_WEIGHTS</span><span class="p">)</span>
             <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">lock</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy_factory</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">):</span>
+            <span class="n">policy_factory</span> <span class="o">=</span> <span class="p">[</span><span class="n">policy_factory</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">policy_factory</span> <span class="o">=</span> <span class="n">policy_factory</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span> <span class="o">=</span> <span class="n">policy_weights</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch</span> <span class="o">=</span> <span class="n">frames_per_batch</span>
@@ -929,6 +944,7 @@
         <span class="n">collector_class</span><span class="p">,</span>
         <span class="n">num_workers_per_collector</span><span class="p">,</span>
         <span class="n">policy</span><span class="p">,</span>
+        <span class="n">policy_factory</span><span class="p">,</span>
         <span class="n">frames_per_batch</span><span class="p">,</span>
         <span class="n">total_frames</span><span class="p">,</span>
         <span class="n">collector_kwargs</span><span class="p">,</span>
@@ -972,6 +988,7 @@
                     <span class="n">policy</span><span class="p">,</span>
                 <span class="p">),</span>
                 <span class="n">kwargs</span><span class="o">=</span><span class="p">{</span>
+                    <span class="s2">&quot;policy_factory&quot;</span><span class="p">:</span> <span class="n">policy_factory</span><span class="p">[</span><span class="n">i</span><span class="p">],</span>
                     <span class="s2">&quot;frames_per_batch&quot;</span><span class="p">:</span> <span class="n">frames_per_batch</span><span class="p">,</span>
                     <span class="s2">&quot;total_frames&quot;</span><span class="p">:</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
                     <span class="s2">&quot;split_trajs&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
@@ -1075,6 +1092,7 @@
             <span class="n">collector_class</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">collector_class</span><span class="p">,</span>
             <span class="n">num_workers_per_collector</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers_per_collector</span><span class="p">,</span>
             <span class="n">policy</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span>
+            <span class="n">policy_factory</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_factory</span><span class="p">,</span>
             <span class="n">frames_per_batch</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_frames_per_batch_corrected</span><span class="p">,</span>
             <span class="n">total_frames</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span><span class="p">,</span>
             <span class="n">collector_kwargs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">collector_kwargs</span><span class="p">,</span>
