@@ -407,6 +407,7 @@ class PPOLoss(LossModule):
             )
         else:
             self.critic_coef = None
+        self._has_critic = bool(self.critic_coef is not None and self.critic_coef > 0)
         self.loss_critic_type = loss_critic_type
         self.normalize_advantage = normalize_advantage
         self.normalize_advantage_exclude_dims = normalize_advantage_exclude_dims
@@ -689,7 +690,7 @@ class PPOLoss(LossModule):
             "target_actor_network_params",
             "target_critic_network_params",
         )
-        if self.critic_coef is not None:
+        if self._has_critic:
             return self.critic_coef * loss_value, clip_fraction
         return loss_value, clip_fraction
 
@@ -737,7 +738,7 @@ class PPOLoss(LossModule):
                 entropy = _sum_td_features(entropy)
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
-        if self.critic_coef is not None:
+        if self._has_critic:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
             if value_clip_fraction is not None:
@@ -1048,7 +1049,7 @@ class ClipPPOLoss(PPOLoss):
                 entropy = _sum_td_features(entropy)
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
-        if self.critic_coef is not None and self.critic_coef > 0:
+        if self._has_critic:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
             if value_clip_fraction is not None:
@@ -1375,7 +1376,7 @@ class KLPENPPOLoss(PPOLoss):
                 entropy = _sum_td_features(entropy)
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
-        if self.critic_coef is not None:
+        if self._has_critic:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict_copy)
             td_out.set("loss_critic", loss_critic)
             if value_clip_fraction is not None:
