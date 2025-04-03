@@ -2051,9 +2051,7 @@ class _MultiDataCollector(DataCollectorBase):
         self._traj_pool = _TrajectoryPool(lock=True)
         # Create a policy on the right device
         policy_factory = self.policy_factory
-        if policy_factory is not None:
-            if not isinstance(policy_factory, Sequence):
-                policy_factory = [policy_factory for _ in range(total_workers)]
+        if any(policy_factory):
             policy_factory = [
                 CloudpickleWrapper(_policy_factory)
                 for _policy_factory in policy_factory
