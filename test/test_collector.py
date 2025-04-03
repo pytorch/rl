@@ -8,6 +8,8 @@ import argparse
 import contextlib
 import functools
 import gc
+
+import importlib
 import os
 import subprocess
 import sys
@@ -49,6 +51,8 @@ from torchrl.collectors.collectors import (
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
 )
+
+from torchrl.collectors.llm_collector import LLMCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
     Composite,
@@ -59,11 +63,13 @@ from torchrl.data import (
     TensorSpec,
     Unbounded,
 )
+from torchrl.data.llm.dataset import _has_transformers
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import (
     EnvBase,
     EnvCreator,
     InitTracker,
+    LLMEnv,
     ParallelEnv,
     SerialEnv,
     StepCounter,
@@ -77,7 +83,13 @@ from torchrl.envs.utils import (
     PARTIAL_MISSING_ERR,
     RandomPolicy,
 )
-from torchrl.modules import Actor, OrnsteinUhlenbeckProcessModule, SafeModule
+from torchrl.modules import (
+    Actor,
+    OrnsteinUhlenbeckProcessModule,
+    SafeModule,
+    TransformersWrapper,
+    vLLMWrapper,
+)
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True
@@ -102,6 +114,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         DiscreteActionConvPolicy,
         DiscreteActionVecMockEnv,
         DiscreteActionVecPolicy,
+        DummyStrDataLoader,
         EnvThatErrorsAfter10Iters,
         EnvWithDynamicSpec,
         HeterogeneousCountingEnv,
@@ -134,6 +147,7 @@ else:
         DiscreteActionConvPolicy,
         DiscreteActionVecMockEnv,
         DiscreteActionVecPolicy,
+        DummyStrDataLoader,
         EnvThatErrorsAfter10Iters,
         EnvWithDynamicSpec,
         HeterogeneousCountingEnv,
@@ -151,6 +165,7 @@ PYTHON_3_10 = sys.version_info.major == 3 and sys.version_info.minor == 10
 PYTHON_3_7 = sys.version_info.major == 3 and sys.version_info.minor == 7
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 _has_cuda = torch.cuda.is_available()
+_has_vllm = importlib.util.find_spec("vllm") is not None
 
 
 class WrappablePolicy(nn.Module):
@@ -3542,6 +3557,94 @@ class TestPolicyFactory:
                     break
         finally:
             collector.shutdown()
+
+
+@pytest.mark.skipif(not _has_transformers, reason="missing transformers dependencies")
+@pytest.mark.skipif(not _has_vllm, reason="missing vllm dependencies")
+class TestLLMCollector:
+    @pytest.fixture(scope="module")
+    def vllm_instance(self):
+        try:
+            import vllm
+        except ImportError:
+            pytest.skip(reason="missing vllm")
+
+        llm_model = vllm.LLM("gpt2")
+        tokenizer = llm_model.get_tokenizer()
+        tokenizer.pad_token = tokenizer.eos_token
+        return llm_model
+
+    @pytest.fixture(scope="module")
+    def transformers_instance(self):
+        from transformers import AutoTokenizer, GPT2Config, GPT2LMHeadModel
+
+        tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        model = GPT2LMHeadModel(GPT2Config()).eval()
+        # tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
+        # model = OPTModel(OPTConfig("facebook/opt-125m"))
+        # tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
+        # model = OPTForCausalLM(OPTConfig())
+
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+
+        return model, tokenizer
+
+    def test_llm_collector_with_vllm(self, vllm_instance):
+        # NOTE: if VLLM fails with CUDA multiprocessing, try setting
+        # `export VLLM_WORKER_MULTIPROC_METHOD=spawn`
+        policy = vLLMWrapper(vllm_instance)
+        tokenizer = vllm_instance.get_tokenizer()
+        bsz = 2
+        dataloader = DummyStrDataLoader(bsz)
+
+        env = LLMEnv.from_dataloader(
+            dataloader=dataloader,
+            tokenizer=tokenizer,
+            str2str=True,
+            batch_size=bsz,
+            group_repeats=True,
+        )
+
+        collector = LLMCollector(
+            env=env,
+            policy_factory=lambda: policy,
+            steps_per_batch=env.batch_size[0],
+            total_steps=3,
+        )
+
+        for data in collector:
+            assert data is not None
+
+    def test_llm_collector_with_transformers(self, transformers_instance):
+        model, tokenizer = transformers_instance
+        policy = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            from_text=True,
+            generate=True,
+            return_log_probs=True,
+        )
+        bsz = 2
+        dataloader = DummyStrDataLoader(bsz)
+
+        env = LLMEnv.from_dataloader(
+            dataloader=dataloader,
+            tokenizer=tokenizer,
+            str2str=True,
+            batch_size=bsz,
+            group_repeats=True,
+        )
+
+        collector = LLMCollector(
+            env=env,
+            policy_factory=lambda: policy,
+            steps_per_batch=env.batch_size[0],
+            total_steps=3,
+        )
+
+        for data in collector:
+            assert data is not None
 
 
 if __name__ == "__main__":

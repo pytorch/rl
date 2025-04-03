@@ -11,8 +11,6 @@ from torchrl.collectors import (
     SyncDataCollector,
 )
 from torchrl.data import ReplayBuffer
-from torchrl.envs import LLMEnv, StepCounter
-from torchrl.modules import vLLMWrapper
 
 
 class LLMCollector(SyncDataCollector):
@@ -77,76 +75,3 @@ class LLMCollector(SyncDataCollector):
             self.replay_buffer.extend(data)
             return None
         return data
-
-
-<<<<<<< HEAD
-
-=======
->>>>>>> e08e2a67d (Initial collector)
-if __name__ == "__main__":
-    import random
-    import string
-    from argparse import ArgumentParser
-
-    from torchrl._utils import logger
-    from vllm import LLM
-
-    parser = ArgumentParser()
-    parser.add_argument("--batch_size", type=int, default=4)
-    parser.add_argument("--epochs", type=int, default=10)
-    parser.add_argument("--repeats", type=int, default=10)
-    parser.add_argument("--steps_per_batch", type=int, default=16)
-    parser.add_argument("--optim_batch_size", type=int, default=4)
-
-    class _DummyStrDataLoader:
-        def __init__(self, batch_size=0):
-            self.batch_size = batch_size
-
-        def generate_random_string(self, length=10):
-            """Generate a random string of a given length."""
-            return "".join(random.choice(string.ascii_lowercase) for _ in range(length))
-
-        def __iter__(self):
-            return self
-
-        def __next__(self):
-            if self.batch_size == 0:
-                return self.generate_random_string()
-            else:
-                return [self.generate_random_string() for _ in range(self.batch_size)]
-
-    args = parser.parse_args()
-    # NOTE: if VLLM fails with CUDA multiprocessing, try setting
-    # `export VLLM_WORKER_MULTIPROC_METHOD=spawn`
-    inference_model = LLM("gpt2")
-    tokenizer = inference_model.get_tokenizer()
-    tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.padding_side = "left"
-    logger.info("Model loaded.")
-
-    # Env
-    dataloader = _DummyStrDataLoader(args.batch_size)
-    env = LLMEnv.from_dataloader(
-        dataloader=dataloader,
-        tokenizer=tokenizer,
-        str2str=True,
-<<<<<<< HEAD
-        batch_size=(args.batch_size,),
-        repeats=args.repeats,
-        group_repeats=True,
-=======
-        batch_size=(args.batch_size * args.repeats,),
-        repeats=args.repeats,
->>>>>>> e08e2a67d (Initial collector)
-    )
-
-    # Finally, we want the env to stop after the first step
-    env.append_transform(StepCounter(max_steps=1))
-    logger.info(f"Env: {env}")
-    policy = vLLMWrapper(inference_model, tokenizer=tokenizer)
-    logger.info(f"Policy: {policy}")
-    collector = LLMCollector(
-        env=env, policy_factory=lambda: policy, steps_per_batch=env.batch_size[0]
-    )
-    for data in collector:
-        logger.info(data)
