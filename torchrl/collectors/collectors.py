@@ -1840,9 +1840,11 @@ class _MultiDataCollector(DataCollectorBase):
             trust_policy = policy is not None and isinstance(policy, CudaGraphModule)
         self.trust_policy = trust_policy
 
-        if policy_factory is not None and policy is not None:
+        if not isinstance(policy_factory, Sequence):
+            policy_factory = [policy_factory] * self.num_workers
+        if any(policy_factory) and policy is not None:
             raise TypeError("policy_factory and policy are mutually exclusive")
-        elif policy_factory is None:
+        elif not any(policy_factory):
             for policy_device, env_maker, env_maker_kwargs in zip(
                 self.policy_device, self.create_env_fn, self.create_env_kwargs
             ):

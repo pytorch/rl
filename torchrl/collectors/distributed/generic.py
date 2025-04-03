@@ -487,7 +487,7 @@ class DistributedDataCollector(DataCollectorBase):
         if isinstance(policy, nn.Module):
             policy_weights = TensorDict.from_module(policy)
             policy_weights = policy_weights.data.lock_()
-        elif policy_factory is not None:
+        elif any(policy_factory):
             policy_weights = None
             if remote_weight_updater is None:
                 raise RuntimeError(
