@@ -690,6 +690,7 @@ class RayCollector(DataCollectorBase):
         """Collects one data batch per remote collector in each iteration."""
         while self.collected_frames < self.total_frames:
             if self.update_after_each_batch or self.max_weight_update_interval > -1:
+                torchrl_logger.info("Updating weights on all workers")
                 self.update_policy_weights_()
 
             # Ask for batches to all remote workers.
@@ -771,6 +772,7 @@ class RayCollector(DataCollectorBase):
             yield out_td
 
             if self.update_after_each_batch or self.max_weight_update_interval > -1:
+                torchrl_logger.info(f"Updating weights on worker {collector_index}")
                 self.update_policy_weights_(worker_ids=collector_index + 1)
 
             # Schedule a new collection task
