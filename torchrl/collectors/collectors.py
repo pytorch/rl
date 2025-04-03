@@ -2089,8 +2089,6 @@ class _MultiDataCollector(DataCollectorBase):
                 CloudpickleWrapper(_policy_factory)
                 for _policy_factory in policy_factory
             ]
-        else:
-            policy_factory = [None] * total_workers
 
         for i, (env_fun, env_fun_kwargs) in enumerate(
             zip(self.create_env_fn, self.create_env_kwargs)
