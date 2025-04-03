@@ -8,6 +8,7 @@ from .llm import (
     ConstantKLController,
     create_infinite_iterator,
     get_dataloader,
+    History,
     LLMData,
     LLMInput,
     LLMOutput,
@@ -108,6 +109,7 @@ from .utils import check_no_exclusive_keys, consolidate_spec, contains_lazy_spec
 
 __all__ = [
     "AdaptiveKLController",
+    "History",
     "Binary",
     "BinaryDiscreteTensorSpec",
     "BinaryToDecimal",

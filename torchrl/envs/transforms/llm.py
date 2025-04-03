@@ -563,7 +563,6 @@ class DataLoadingPrimer(TensorDictPrimer):
                 out = out.unsqueeze(0)
             self._queue.extend(
                 [d for d in out.unbind(0) for _ in range(max(1, self.repeats))]
-                # [d for _ in range(max(1, self.repeats)) for d in out.unbind(0)]
             )
             return self._queue.popleft()
         return out
