@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import functools
+import importlib.util
 import itertools
 import operator
 import os
@@ -168,6 +169,8 @@ try:
 except ImportError as err:
     _has_functorch = False
     FUNCTORCH_ERR = str(err)
+
+_has_transformers = bool(importlib.util.find_spec("transformers"))
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 IS_WINDOWS = sys.platform == "win32"
@@ -7998,6 +8001,7 @@ class TestDiscreteCQL(LossModuleTestBase):
                 assert loss[key].shape == torch.Size([])
 
 
+@pytest.mark.skipif(not _has_transformers, reason="requires transformers lib")
 class TestPPO(LossModuleTestBase):
     seed = 0
 
