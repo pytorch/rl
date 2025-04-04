@@ -6388,7 +6388,9 @@ class TensorDictPrimer(Transform):
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
         for key in self.primers.keys(True, True):
-            if key not in next_tensordict.keys(True, True):
+            # We relax a bit the condition here, allowing nested but not leaf values to
+            #  be checked against
+            if key not in next_tensordict.keys(True, is_leaf=_is_leaf_nontensor):
                 prev_val = tensordict.get(key)
                 next_tensordict.set(key, prev_val)
         return next_tensordict
@@ -6433,11 +6435,16 @@ class TensorDictPrimer(Transform):
         if _reset.any():
             if self.single_default_value and callable(self.default_value):
                 if not _reset.all():
-                    tensordict_reset = torch.where(
-                        _reset,
-                        self.default_value(reset=_reset),
-                        tensordict_reset[_reset],
+                    # FIXME: use masked op
+                    tensordict_reset = tensordict_reset.clone()
+                    reset_val = self.default_value(reset=_reset)
+                    # This is safe because env.reset calls _update_during_reset which will discard the new data
+                    tensordict_reset = (
+                        self.container.full_observation_spec.zero().select(
+                            *reset_val.keys(True)
+                        )
                     )
+                    tensordict_reset[_reset] = reset_val
                 else:
                     resets = self.default_value(reset=_reset)
                     tensordict_reset.update(resets)

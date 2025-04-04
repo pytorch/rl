@@ -33,6 +33,7 @@ from torchrl.data.tensor_specs import (
 )
 from torchrl.envs import EnvBase
 from torchrl.envs.utils import _StepMDP
+from torchrl.modules.utils.utils import _unpad_tensors
 
 
 class LLMEnv(EnvBase):
@@ -84,6 +85,8 @@ class LLMEnv(EnvBase):
 
             .. note:: When using a :class:`~torchrl.envs.DataLoadingPrimer` transform, the batch-size of the env
                 and the transform should match.
+        eos_token_id (int, optional): The token id of the end of the sequence. If passed, the `done` state
+            is set to `True` when detected. Defaults to `None`.
 
     .. seealso:: :class:`~torchrl.envs.DataLoadingPrimer` for examples.
 
@@ -109,13 +112,14 @@ class LLMEnv(EnvBase):
         str2str: bool = True,
         device: torch.device | None = None,
         vocab_size: int | None = None,
-        no_stack: bool = True,
+        no_stack: bool = False,
         assign_reward: bool = False,
         assign_done: bool = False,
         batch_size: int | torch.Size | None = None,
         has_attention: bool = True,
         # Experimental
         as_llm_data: bool = False,
+        eos_token_id: int | None = None,
     ) -> None:
         self.as_llm_data = as_llm_data
         if token_key is None:
@@ -151,6 +155,7 @@ class LLMEnv(EnvBase):
         self.no_stack = no_stack
         self.assign_reward = assign_reward
         self.assign_done = assign_done
+        self.eos_token_id = eos_token_id
 
         # self.action_key = unravel_key(action_key)
         if str2str:
@@ -272,6 +277,7 @@ class LLMEnv(EnvBase):
         | Literal["as_nested_tensor", "as_padded_tensor"] = None,
         repeats: int | None = None,
         group_repeats: bool = True,
+        eos_token_id: int | None = None,
     ) -> LLMEnv:
         """Creates an LLMEnv instance from a dataloader.
 
@@ -339,6 +345,8 @@ class LLMEnv(EnvBase):
                 samples (rather than an advantage module).
             group_repeats (bool, optional): if ``True``, the batch-size is multiplied by the number of repeats such that
                 all repeats are grouped in a single batch collected from the buffer. Defaults to ``True``.
+            eos_token_id (int, optional): The token id of the end of the sequence. If passed, the `done` state
+                is set to `True` when detected. Defaults to `None`.
 
         Returns:
             LLMEnv: The created LLMEnv instance.
@@ -424,6 +432,7 @@ class LLMEnv(EnvBase):
             batch_size=primer.batch_size,
             has_attention=has_attention,
             as_llm_data=as_llm_data,
+            eos_token_id=eos_token_id,
         )
         if tokenizer is not None:
             env = env.append_transform(tokenizer_transform)
@@ -462,7 +471,10 @@ class LLMEnv(EnvBase):
         return next_td
 
     def _maybe_make_done(
-        self, tensordict: TensorDictBase, next_td: TensorDictBase
+        self,
+        tensordict: TensorDictBase,
+        next_td: TensorDictBase,
+        resetting: bool = False,
     ) -> TensorDictBase:
         if self.assign_done:
             action = tensordict.get(self.action_key)
@@ -475,12 +487,35 @@ class LLMEnv(EnvBase):
             next_td.set(("tokens_data", "terminated"), done)
             next_td.set(("tokens_data", "done"), done.clone())
             next_td.set(
-                "terminated", next_td.get(("tokens_data", "done")).any(-1, keepdim=True)
+                "done", next_td.get(("tokens_data", "done")).any(-1, keepdim=True)
             )
             next_td.set(
                 "terminated",
                 next_td.get(("tokens_data", "terminated")).any(-1, keepdim=True),
             )
+        if not resetting and self.eos_token_id is not None:
+            if self.str2str:
+                token_action_key = self._DEFAULT_ACTION_TOKENS_KEY
+            else:
+                token_action_key = self.action_key
+            action = tensordict.get(
+                token_action_key, as_padded_tensor=True, padding_value=-1
+            )
+            mask = action == -1
+
+            if action is None:
+                raise RuntimeError(
+                    f"Couldn't find the tokenized action with key {token_action_key} to set the done state in tensordict "
+                    f"with keys {list(tensordict.keys(True))}."
+                )
+            full_done = action == self.eos_token_id
+            done = full_done.any(-1, keepdim=True)
+            next_td.set("done", done)
+            next_td.set("terminated", done)
+            if self.assign_done:
+                full_done = _unpad_tensors(full_done, mask)
+                next_td.set(("tokens_data", "terminated"), full_done)
+                next_td.set(("tokens_data", "done"), full_done)
         return next_td
 
     def _make_next_obs(
@@ -583,7 +618,7 @@ class LLMEnv(EnvBase):
                 td_reset.clear_device_()
             else:
                 td_reset = td_reset.to(self.device)
-        tensordict = self._maybe_make_done(tensordict, td_reset)
+        tensordict = self._maybe_make_done(tensordict, td_reset, resetting=True)
         if self.as_llm_data:
             raise NotImplementedError()
         return tensordict

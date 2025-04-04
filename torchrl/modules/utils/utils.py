@@ -6,6 +6,9 @@ from __future__ import annotations
 
 import warnings
 
+import torch
+from tensordict.utils import expand_as_right
+
 
 def get_primers_from_module(module):
     """Get all tensordict primers from all submodules of a module.
@@ -72,3 +75,15 @@ def get_primers_from_module(module):
         from torchrl.envs.transforms import Compose
 
         return Compose(*primers)
+
+
+def _unpad_tensors(tensors, mask, as_nested: bool = True) -> torch.Tensor:
+    shape = tensors.shape[2:]
+    mask = expand_as_right(mask.bool(), tensors)
+    nelts = mask.sum(-1)
+    while nelts.dim() > 1:
+        nelts = nelts.sum(-1)
+    vals = [t.view(-1, *shape) for t in tensors[mask].split(nelts.tolist(), dim=0)]
+    if as_nested:
+        return torch.nested.as_nested_tensor(vals)
+    return vals
