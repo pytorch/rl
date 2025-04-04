@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data
+
+
+History
+=======
+
+.. autoclass:: History
+    :members:
+    :inherited-members:
