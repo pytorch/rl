@@ -80,7 +80,7 @@ def _distributed_init_collection_node(
         policy_weights = TensorDict.from_module(policy)
         policy_weights = policy_weights.data.lock_()
     else:
-        if collector_kwargs.get("remote_weight_updater") is None and (
+        if collector_kwargs.get("weight_update_sender") is None and (
             policy_factory is None
             or (isinstance(policy_factory, Sequence) and not any(policy_factory))
         ):
@@ -327,7 +327,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
             policy_weights = TensorDict.from_module(policy)
             policy_weights = policy_weights.data.lock_()
         else:
-            if collector_kwargs.get("remote_weight_updater") is None and (
+            if collector_kwargs.get("weight_update_sender") is None and (
                 policy_factory is None
                 or (isinstance(policy_factory, Sequence) and not any(policy_factory))
             ):

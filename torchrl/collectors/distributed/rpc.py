@@ -37,8 +37,8 @@ from torchrl.collectors.distributed.default_configs import (
 )
 from torchrl.collectors.utils import _NON_NN_POLICY_WEIGHTS, split_trajectories
 from torchrl.collectors.weight_update import (
-    LocalWeightUpdaterBase,
-    RemoteWeightUpdaterBase,
+    WeightUpdateReceiverBase,
+    WeightUpdateSenderBase,
 )
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs.common import EnvBase
@@ -265,14 +265,14 @@ class RPCDataCollector(DataCollectorBase):
             device used to pass data to main.
         tensorpipe_options (dict, optional): a dictionary of keyword argument
             to pass to :class:`torch.distributed.rpc.TensorPipeRpcBackendOption`.
-        local_weight_updater (LocalWeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
+        weight_update_receiver (WeightUpdateReceiverBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdateReceiverBase`
             or its subclass, responsible for updating the policy weights on the local inference worker. This is
             typically not used in :class:`~torchrl.collectors.distrbibuted.RPCDataCollector` as it focuses on
             distributed environments.
             Consider using a constructor if the updater needs to be serialized.
-        remote_weight_updater (RemoteWeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
+        weight_update_sender (WeightUpdateSenderBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdateSenderBase`
             or its subclass, responsible for updating the policy weights on remote inference workers using RPC.
-            If not provided, an :class:`~torchrl.collectors.distributed.RPCRemoteWeightUpdater` will be used by default, which
+            If not provided, an :class:`~torchrl.collectors.distributed.RPCWeightUpdateSender` will be used by default, which
             handles weight synchronization via RPC.
             Consider using a constructor if the updater needs to be serialized.
 
@@ -311,11 +311,11 @@ class RPCDataCollector(DataCollectorBase):
         tcp_port: str | None = None,
         visible_devices: list[torch.device] | None = None,
         tensorpipe_options: dict[str, Any] | None = None,
-        remote_weight_updater: RemoteWeightUpdaterBase
-        | Callable[[], RemoteWeightUpdaterBase]
+        weight_update_sender: WeightUpdateSenderBase
+        | Callable[[], WeightUpdateSenderBase]
         | None = None,
-        local_weight_updater: LocalWeightUpdaterBase
-        | Callable[[], LocalWeightUpdaterBase]
+        weight_update_receiver: WeightUpdateReceiverBase
+        | Callable[[], WeightUpdateReceiverBase]
         | None = None,
     ):
         if collector_class == "async":
@@ -331,7 +331,7 @@ class RPCDataCollector(DataCollectorBase):
             policy_weights = TensorDict.from_module(policy)
             policy_weights = policy_weights.data.lock_()
         else:
-            if remote_weight_updater is None and (
+            if weight_update_sender is None and (
                 policy_factory is None
                 or (isinstance(policy_factory, Sequence) and not any(policy_factory))
             ):
@@ -422,16 +422,16 @@ class RPCDataCollector(DataCollectorBase):
                 tensorpipe_options
             )
         self._init()
-        if remote_weight_updater is None:
-            remote_weight_updater = RPCRemoteWeightUpdater(
+        if weight_update_sender is None:
+            weight_update_sender = RPCWeightUpdaterBase(
                 collector_infos=self.collector_infos,
                 collector_class=self.collector_class,
                 collector_rrefs=self.collector_rrefs,
                 policy_weights=self.policy_weights,
                 num_workers=self.num_workers,
             )
-        self.local_weight_updater = local_weight_updater
-        self.remote_weight_updater = remote_weight_updater
+        self.weight_update_receiver = weight_update_receiver
+        self.weight_update_sender = weight_update_sender
 
     @property
     def device(self) -> list[torch.device]:
@@ -822,10 +822,10 @@ class RPCDataCollector(DataCollectorBase):
         self._shutdown = True
 
 
-class RPCRemoteWeightUpdater(RemoteWeightUpdaterBase):
+class RPCWeightUpdaterBase(WeightUpdateSenderBase):
     """A remote weight updater for synchronizing policy weights across remote workers using RPC.
 
-    The `RPCRemoteWeightUpdater` class provides a mechanism for updating the weights of a policy
+    The `RPCWeightUpdateSender` class provides a mechanism for updating the weights of a policy
     across remote inference workers using RPC. It is designed to work with the :class:`~torchrl.collectors.distributed.RPCDataCollector`
     to ensure that each worker receives the latest policy weights.
     This class is typically used in distributed data collection scenarios where remote workers
@@ -849,9 +849,9 @@ class RPCRemoteWeightUpdater(RemoteWeightUpdaterBase):
     .. note::
         This class assumes that the server weights can be directly applied to the remote workers
         without any additional processing. If your use case requires more complex weight mapping or
-        synchronization logic, consider extending `RemoteWeightUpdaterBase` with a custom implementation.
+        synchronization logic, consider extending `WeightUpdateSenderBase` with a custom implementation.
 
-    .. seealso:: :class:`~torchrl.collectors.RemoteWeightUpdaterBase` and
+    .. seealso:: :class:`~torchrl.collectors.WeightUpdateSenderBase` and
         :class:`~torchrl.collectors.distributed.RPCDataCollector`.
 
     """

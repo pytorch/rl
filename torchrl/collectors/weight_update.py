@@ -17,7 +17,7 @@ from torchrl._utils import logger as torchrl_logger
 Policy = TypeVar("Policy", bound=TensorDictModuleBase)
 
 
-class LocalWeightUpdaterBase(metaclass=abc.ABCMeta):
+class WeightUpdateReceiverBase(metaclass=abc.ABCMeta):
     """A base class for updating local policy weights from a server.
 
     This class provides an interface for downloading and updating the weights of a policy
@@ -106,7 +106,7 @@ class LocalWeightUpdaterBase(metaclass=abc.ABCMeta):
         self._update_local_weights(local_weights, mapped_weights)
 
 
-class RemoteWeightUpdaterBase(metaclass=abc.ABCMeta):
+class WeightUpdateSenderBase(metaclass=abc.ABCMeta):
     """A base class for updating remote policy weights on inference workers.
 
     This class provides an interface for uploading and synchronizing the weights of a policy
@@ -205,8 +205,8 @@ class RemoteWeightUpdaterBase(metaclass=abc.ABCMeta):
 
 
 # Specialized classes
-class VanillaLocalWeightUpdater(LocalWeightUpdaterBase):
-    """A simple implementation of `LocalWeightUpdaterBase` for updating local policy weights.
+class VanillaWeightUpdater(WeightUpdateReceiverBase):
+    """A simple implementation of `WeightUpdateReceiverBase` for updating local policy weights.
 
     The `VanillaLocalWeightUpdater` class provides a basic mechanism for updating the weights
     of a local policy by directly fetching them from a specified source. It is typically used
@@ -231,9 +231,9 @@ class VanillaLocalWeightUpdater(LocalWeightUpdaterBase):
     .. note::
         This class assumes that the server weights can be directly applied to the local policy
         without any additional processing. If your use case requires more complex weight mapping,
-        consider extending `LocalWeightUpdaterBase` with a custom implementation.
+        consider extending `WeightUpdateReceiverBase` with a custom implementation.
 
-    .. seealso:: :class:`~torchrl.collectors.LocalWeightUpdaterBase` and :class:`~torchrl.collectors.SyncDataCollector`.
+    .. seealso:: :class:`~torchrl.collectors.WeightUpdateReceiverBase` and :class:`~torchrl.collectors.SyncDataCollector`.
     """
 
     def __init__(
@@ -266,7 +266,7 @@ class VanillaLocalWeightUpdater(LocalWeightUpdaterBase):
         local_weights.update_(mapped_weights)
 
 
-class MultiProcessedRemoteWeightUpdate(RemoteWeightUpdaterBase):
+class MultiProcessedWeightUpdate(WeightUpdateSenderBase):
     """A remote weight updater for synchronizing policy weights across multiple processes or devices.
 
     The `MultiProcessedRemoteWeightUpdate` class provides a mechanism for updating the weights
@@ -291,9 +291,9 @@ class MultiProcessedRemoteWeightUpdate(RemoteWeightUpdaterBase):
     .. note::
         This class assumes that the server weights can be directly applied to the workers without
         any additional processing. If your use case requires more complex weight mapping or synchronization
-        logic, consider extending `RemoteWeightUpdaterBase` with a custom implementation.
+        logic, consider extending `WeightUpdateSenderBase` with a custom implementation.
 
-    .. seealso:: :class:`~torchrl.collectors.RemoteWeightUpdaterBase` and
+    .. seealso:: :class:`~torchrl.collectors.WeightUpdateSenderBase` and
         :class:`~torchrl.collectors.DataCollectorBase`.
 
     """
@@ -329,10 +329,10 @@ class MultiProcessedRemoteWeightUpdate(RemoteWeightUpdaterBase):
         return server_weights
 
 
-class RayRemoteWeightUpdater(RemoteWeightUpdaterBase):
+class RayWeightUpdater(WeightUpdateSenderBase):
     """A remote weight updater for synchronizing policy weights across remote workers using Ray.
 
-    The `RayRemoteWeightUpdater` class provides a mechanism for updating the weights of a policy
+    The `RayWeightUpdateSender` class provides a mechanism for updating the weights of a policy
     across remote inference workers managed by Ray. It leverages Ray's distributed computing
     capabilities to efficiently distribute policy weights to remote collectors.
     This class is typically used in distributed data collectors where each remote worker requires
@@ -355,9 +355,9 @@ class RayRemoteWeightUpdater(RemoteWeightUpdaterBase):
     .. note::
         This class assumes that the server weights can be directly applied to the remote workers without
         any additional processing. If your use case requires more complex weight mapping or synchronization
-        logic, consider extending `RemoteWeightUpdaterBase` with a custom implementation.
+        logic, consider extending `WeightUpdateSenderBase` with a custom implementation.
 
-    .. seealso:: :class:`~torchrl.collectors.RemoteWeightUpdaterBase` and
+    .. seealso:: :class:`~torchrl.collectors.WeightUpdateSenderBase` and
         :class:`~torchrl.collectors.distributed.RayCollector`.
 
     """
