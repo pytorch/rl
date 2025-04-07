@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import functools
 import gc
 import importlib.util
@@ -23,7 +25,6 @@ import urllib
 from contextlib import nullcontext
 from pathlib import Path
 from sys import platform
-from typing import Optional, Union
 from unittest import mock
 
 import numpy as np
@@ -695,8 +696,8 @@ class TestGym:
             def reset(
                 self,
                 *,
-                seed: Optional[int] = None,
-                options: Optional[dict] = None,
+                seed: int | None = None,
+                options: dict | None = None,
             ):
                 return (0.0, {})
 
@@ -731,8 +732,8 @@ class TestGym:
             def reset(
                 self,
                 *,
-                seed: Optional[int] = None,
-                options: Optional[dict] = None,
+                seed: int | None = None,
+                options: dict | None = None,
             ):
                 return (0.0, {})
 
@@ -1920,7 +1921,7 @@ class TestEnvPool:
         class DiscreteChoice(torch.nn.Module):
             """Dummy module producing discrete output. Necessary when the action space is discrete."""
 
-            def __init__(self, out_dim: int, dtype: Optional[Union[torch.dtype, str]]):
+            def __init__(self, out_dim: int, dtype: torch.dtype | str | None):
                 super().__init__()
                 self.lin = torch.nn.LazyLinear(out_dim, dtype=dtype)
 

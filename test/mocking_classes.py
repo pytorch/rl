@@ -1097,10 +1097,7 @@ class CountingEnv(EnvBase):
         self.done_spec = Categorical(
             2,
             dtype=torch.bool,
-            shape=(
-                *self.batch_size,
-                1,
-            ),
+            shape=(*self.batch_size, 1),
             device=self.device,
         )
         self.action_spec = Binary(n=1, shape=[*self.batch_size, 1], device=self.device)
@@ -1141,12 +1138,17 @@ class CountingEnv(EnvBase):
             dtype=torch.int,
             device=device if self.device is None else self.device,
         )
+        if self.reward_keys:
+            reward_spec = self.full_reward_spec[self.reward_keys[0]]
+            reward_spec_dtype = reward_spec.dtype
+        else:
+            reward_spec_dtype = torch.get_default_dtype()
         tensordict = TensorDict(
             source={
                 "observation": self.count.clone(),
                 "done": self.count > self.max_steps,
                 "terminated": self.count > self.max_steps,
-                "reward": torch.zeros_like(self.count, dtype=torch.float),
+                "reward": torch.zeros_like(self.count, dtype=reward_spec_dtype),
             },
             batch_size=self.batch_size,
             device=self.device,
@@ -1300,7 +1302,11 @@ class MultiAgentCountingEnv(EnvBase):
                 source[group_name][agent_name] = TensorDict(
                     source={
                         "observation": torch.rand(
-                            (*self.batch_size, 3, 4), device=self.device
+                            (*self.batch_size, 3, 4),
+                            device=self.device,
+                            dtype=self.full_observation_spec[
+                                group_name, agent_name, "observation"
+                            ].dtype,
                         ),
                         "done": self.count > self.max_steps,
                         "terminated": self.count > self.max_steps,
@@ -1324,11 +1330,20 @@ class MultiAgentCountingEnv(EnvBase):
                 source[group_name][agent_name] = TensorDict(
                     source={
                         "observation": torch.rand(
-                            (*self.batch_size, 3, 4), device=self.device
+                            (*self.batch_size, 3, 4),
+                            device=self.device,
+                            dtype=self.full_observation_spec[
+                                group_name, agent_name, "observation"
+                            ].dtype,
                         ),
                         "done": self.count > self.max_steps,
                         "terminated": self.count > self.max_steps,
-                        "reward": torch.zeros_like(self.count, dtype=torch.float),
+                        "reward": torch.zeros_like(
+                            self.count,
+                            dtype=self.full_reward_spec[
+                                group_name, agent_name, "reward"
+                            ].dtype,
+                        ),
                     },
                     batch_size=self.batch_size,
                     device=self.device,
@@ -2459,3 +2474,54 @@ class HistoryTransform(Transform):
             self.parent.device,
         )
         return next_tensordict
+
+
+class DummyStrDataLoader:
+    def __init__(self, batch_size=0):
+        self.batch_size = batch_size
+
+    def generate_random_string(self, length=10):
+        """Generate a random string of a given length."""
+        return "".join(random.choice(string.ascii_lowercase) for _ in range(length))
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.batch_size == 0:
+            return self.generate_random_string()
+        else:
+            return [self.generate_random_string() for _ in range(self.batch_size)]
+
+
+class DummyTensorDataLoader:
+    def __init__(self, batch_size=0, max_length=10, padding=False):
+        self.batch_size = batch_size
+        self.max_length = max_length
+        self.padding = padding
+
+    def generate_random_tensor(self):
+        """Generate a tensor of random int64 values."""
+        length = random.randint(1, self.max_length)
+        rt = torch.randint(0, 100, (length,))
+        return rt
+
+    def pad_tensor(self, tensor):
+        """Pad a tensor to the maximum length."""
+        padding_length = self.max_length - len(tensor)
+        return torch.cat((torch.zeros(padding_length, dtype=torch.int64), tensor))
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.batch_size == 0:
+            tensor = self.generate_random_tensor()
+            return self.pad_tensor(tensor) if self.padding else tensor
+        else:
+            tensors = [self.generate_random_tensor() for _ in range(self.batch_size)]
+            if self.padding:
+                tensors = [self.pad_tensor(tensor) for tensor in tensors]
+                return torch.stack(tensors)
+            else:
+                return tensors

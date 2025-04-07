@@ -427,6 +427,87 @@ etc.), but one can not use an arbitrary TorchRL environment, as it is possible w
     ParallelEnv
     EnvCreator
 
+Async environments
+------------------
+
+Asynchronous environments allow for parallel execution of multiple environments, which can significantly speed up the
+data collection process in reinforcement learning.
+
+The `AsyncEnvPool` class and its subclasses provide a flexible interface for managing these environments using different
+backends, such as threading and multiprocessing.
+
+The `AsyncEnvPool` class serves as a base class for asynchronous environment pools, providing a common interface for
+managing multiple environments concurrently. It supports different backends for parallel execution, such as threading
+and multiprocessing, and provides methods for asynchronous stepping and resetting of environments.
+
+Contrary to :class:`~torchrl.envs.ParallelEnv`, :class:`~torchrl.envs.AsyncEnvPool` and its subclasses permit the
+execution of a given set of sub-environments while another task performed, allowing for complex asynchronous jobs to be
+run at the same time. For instance, it is possible to execute some environments while the policy is running based on
+the output of others.
+
+This family of classes is particularly interesting when dealing with environments that have a high (and/or variable)
+latency.
+
+.. note:: This class and its subclasses should work when nested in with :class:`~torchrl.envs.TransformedEnv` and
+    batched environments, but users won't currently be able to use the async features of the base environment when
+    it's nested in these classes. One should prefer nested transformed envs within an `AsyncEnvPool` instead.
+    If this is not possible, please raise an issue.
+
+Classes
+~~~~~~~
+
+- :class:`~torchrl.envs.AsyncEnvPool`: A base class for asynchronous environment pools. It determines the backend
+  implementation to use based on the provided arguments and manages the lifecycle of the environments.
+- :class:`~torchrl.envs.ProcessorAsyncEnvPool`: An implementation of :class:`~torchrl.envs.AsyncEnvPool` using
+  multiprocessing for parallel execution of environments. This class manages a pool of environments, each running in
+  its own process, and provides methods for asynchronous stepping and resetting of environments using inter-process
+  communication. It is automatically instantiated when `"multiprocessing"` is passed as a backend during the
+  :class:`~torchrl.envs.AsyncEnvPool` instantiation.
+- :class:`~torchrl.envs.ThreadingAsyncEnvPool`: An implementation of :class:`~torchrl.envs.AsyncEnvPool` using
+  threading for parallel execution of environments. This class manages a pool of environments, each running in its own
+  thread, and provides methods for asynchronous stepping and resetting of environments using a thread pool executor.
+  It is automatically instantiated when `"threading"` is passed as a backend during the
+  :class:`~torchrl.envs.AsyncEnvPool` instantiation.
+
+Example
+~~~~~~~
+
+     >>> from functools import partial
+     >>> from torchrl.envs import AsyncEnvPool, GymEnv
+     >>> import torch
+     >>> # Choose backend
+     >>> backend = "threading"
+     >>> env = AsyncEnvPool(
+     >>>     [partial(GymEnv, "Pendulum-v1"), partial(GymEnv, "CartPole-v1")],
+     >>>     stack="lazy",
+     >>>     backend=backend
+     >>> )
+     >>> # Execute a synchronous reset
+     >>> reset = env.reset()
+     >>> print(reset)
+     >>> # Execute a synchronous step
+     >>> s = env.rand_step(reset)
+     >>> print(s)
+     >>> # Execute an asynchronous step in env 0
+     >>> s0 = s[0]
+     >>> s0["action"] = torch.randn(1).clamp(-1, 1)
+     >>> s0["env_index"] = 0
+     >>> env.async_step_send(s0)
+     >>> # Receive data
+     >>> s0_result = env.async_step_recv()
+     >>> print('result', s0_result)
+     >>> # Close env
+     >>> env.close()
+
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    AsyncEnvPool
+    ProcessorAsyncEnvPool
+    ThreadingAsyncEnvPool
+
 
 Custom native TorchRL environments
 ----------------------------------
@@ -1083,6 +1164,7 @@ to be able to create this other composition:
     VIPTransform
     VecGymEnvTransform
     VecNorm
+    VecNormV2
     gSDENoise
 
 Environments with masked actions

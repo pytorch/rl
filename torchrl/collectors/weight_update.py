@@ -2,18 +2,22 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import abc
+import weakref
 from abc import abstractmethod
-from typing import Callable, Dict, List, TypeVar
+from typing import Any, Callable, TypeVar
 
 import torch
 from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
+from torchrl._utils import logger as torchrl_logger
 
 Policy = TypeVar("Policy", bound=TensorDictModuleBase)
 
 
-class LocalWeightUpdaterBase(metaclass=abc.ABCMeta):
+class WeightUpdateReceiverBase(metaclass=abc.ABCMeta):
     """A base class for updating local policy weights from a server.
 
     This class provides an interface for downloading and updating the weights of a policy
@@ -41,6 +45,25 @@ class LocalWeightUpdaterBase(metaclass=abc.ABCMeta):
         :meth:`~torchrl.collectors.DataCollectorBase.update_policy_weights_`.
 
     """
+
+    _collector_wr: Any = None
+
+    def register_collector(self, collector: DataCollectorBase):  # noqa
+        """Register a collector in the updater.
+
+        Once registered, the updater will not accept another collector.
+
+        Args:
+            collector (DataCollectorBase): The collector to register.
+
+        """
+        if self._collector_wr is not None:
+            raise RuntimeError("Cannot register collector twice.")
+        self._collector_wr = weakref.ref(collector)
+
+    @property
+    def collector(self) -> torchrl.collectors.DataCollectorBase:  # noqa
+        return self._collector_wr() if self._collector_wr is not None else None
 
     @abstractmethod
     def _get_server_weights(self) -> TensorDictBase:
@@ -83,7 +106,7 @@ class LocalWeightUpdaterBase(metaclass=abc.ABCMeta):
         self._update_local_weights(local_weights, mapped_weights)
 
 
-class RemoteWeightUpdaterBase(metaclass=abc.ABCMeta):
+class WeightUpdateSenderBase(metaclass=abc.ABCMeta):
     """A base class for updating remote policy weights on inference workers.
 
     This class provides an interface for uploading and synchronizing the weights of a policy
@@ -102,11 +125,32 @@ class RemoteWeightUpdaterBase(metaclass=abc.ABCMeta):
 
     Methods:
         update_weights: Updates the weights on specified or all remote workers.
+        register_collector: Registers a collector. This should be called automatically by the collector
+            upon registration of the updater.
 
     .. seealso:: :class:`~torchrl.collectors.LocalWeightsUpdaterBase` and
         :meth:`~torchrl.collectors.DataCollectorBase.update_policy_weights_`.
 
     """
+
+    _collector_wr: Any = None
+
+    def register_collector(self, collector: DataCollectorBase):  # noqa
+        """Register a collector in the updater.
+
+        Once registered, the updater will not accept another collector.
+
+        Args:
+            collector (DataCollectorBase): The collector to register.
+
+        """
+        if self._collector_wr is not None:
+            raise RuntimeError("Cannot register collector twice.")
+        self._collector_wr = weakref.ref(collector)
+
+    @property
+    def collector(self) -> torch.collector.DataCollectorBase:  # noqa
+        return self._collector_wr() if self._collector_wr is not None else None
 
     @abstractmethod
     def _sync_weights_with_worker(
@@ -123,7 +167,7 @@ class RemoteWeightUpdaterBase(metaclass=abc.ABCMeta):
         ...
 
     @abstractmethod
-    def all_worker_ids(self) -> list[int] | List[torch.device]:
+    def all_worker_ids(self) -> list[int] | list[torch.device]:
         ...
 
     def _skip_update(self, worker_id: int | torch.device) -> bool:
@@ -132,14 +176,14 @@ class RemoteWeightUpdaterBase(metaclass=abc.ABCMeta):
     def __call__(
         self,
         weights: TensorDictBase | None = None,
-        worker_ids: torch.device | int | List[int] | List[torch.device] | None = None,
+        worker_ids: torch.device | int | list[int] | list[torch.device] | None = None,
     ):
         return self.update_weights(weights=weights, worker_ids=worker_ids)
 
     def update_weights(
         self,
         weights: TensorDictBase | None = None,
-        worker_ids: torch.device | int | List[int] | List[torch.device] | None = None,
+        worker_ids: torch.device | int | list[int] | list[torch.device] | None = None,
     ):
         if weights is None:
             # Get the weights on server (local)
@@ -161,8 +205,8 @@ class RemoteWeightUpdaterBase(metaclass=abc.ABCMeta):
 
 
 # Specialized classes
-class VanillaLocalWeightUpdater(LocalWeightUpdaterBase):
-    """A simple implementation of `LocalWeightUpdaterBase` for updating local policy weights.
+class VanillaWeightUpdater(WeightUpdateReceiverBase):
+    """A simple implementation of `WeightUpdateReceiverBase` for updating local policy weights.
 
     The `VanillaLocalWeightUpdater` class provides a basic mechanism for updating the weights
     of a local policy by directly fetching them from a specified source. It is typically used
@@ -187,9 +231,9 @@ class VanillaLocalWeightUpdater(LocalWeightUpdaterBase):
     .. note::
         This class assumes that the server weights can be directly applied to the local policy
         without any additional processing. If your use case requires more complex weight mapping,
-        consider extending `LocalWeightUpdaterBase` with a custom implementation.
+        consider extending `WeightUpdateReceiverBase` with a custom implementation.
 
-    .. seealso:: :class:`~torchrl.collectors.LocalWeightUpdaterBase` and :class:`~torchrl.collectors.SyncDataCollector`.
+    .. seealso:: :class:`~torchrl.collectors.WeightUpdateReceiverBase` and :class:`~torchrl.collectors.SyncDataCollector`.
     """
 
     def __init__(
@@ -222,7 +266,7 @@ class VanillaLocalWeightUpdater(LocalWeightUpdaterBase):
         local_weights.update_(mapped_weights)
 
 
-class MultiProcessedRemoteWeightUpdate(RemoteWeightUpdaterBase):
+class MultiProcessedWeightUpdate(WeightUpdateSenderBase):
     """A remote weight updater for synchronizing policy weights across multiple processes or devices.
 
     The `MultiProcessedRemoteWeightUpdate` class provides a mechanism for updating the weights
@@ -247,9 +291,9 @@ class MultiProcessedRemoteWeightUpdate(RemoteWeightUpdaterBase):
     .. note::
         This class assumes that the server weights can be directly applied to the workers without
         any additional processing. If your use case requires more complex weight mapping or synchronization
-        logic, consider extending `RemoteWeightUpdaterBase` with a custom implementation.
+        logic, consider extending `WeightUpdateSenderBase` with a custom implementation.
 
-    .. seealso:: :class:`~torchrl.collectors.RemoteWeightUpdaterBase` and
+    .. seealso:: :class:`~torchrl.collectors.WeightUpdateSenderBase` and
         :class:`~torchrl.collectors.DataCollectorBase`.
 
     """
@@ -257,12 +301,12 @@ class MultiProcessedRemoteWeightUpdate(RemoteWeightUpdaterBase):
     def __init__(
         self,
         get_server_weights: Callable[[], TensorDictBase] | None,
-        policy_weights: Dict[torch.device, TensorDictBase],
+        policy_weights: dict[torch.device, TensorDictBase],
     ):
         self.weights_getter = get_server_weights
         self._policy_weights = policy_weights
 
-    def all_worker_ids(self) -> list[int] | List[torch.device]:
+    def all_worker_ids(self) -> list[int] | list[torch.device]:
         return list(self._policy_weights)
 
     def _sync_weights_with_worker(
@@ -285,10 +329,10 @@ class MultiProcessedRemoteWeightUpdate(RemoteWeightUpdaterBase):
         return server_weights
 
 
-class RayRemoteWeightUpdater(RemoteWeightUpdaterBase):
+class RayWeightUpdater(WeightUpdateSenderBase):
     """A remote weight updater for synchronizing policy weights across remote workers using Ray.
 
-    The `RayRemoteWeightUpdater` class provides a mechanism for updating the weights of a policy
+    The `RayWeightUpdateSender` class provides a mechanism for updating the weights of a policy
     across remote inference workers managed by Ray. It leverages Ray's distributed computing
     capabilities to efficiently distribute policy weights to remote collectors.
     This class is typically used in distributed data collectors where each remote worker requires
@@ -311,9 +355,9 @@ class RayRemoteWeightUpdater(RemoteWeightUpdaterBase):
     .. note::
         This class assumes that the server weights can be directly applied to the remote workers without
         any additional processing. If your use case requires more complex weight mapping or synchronization
-        logic, consider extending `RemoteWeightUpdaterBase` with a custom implementation.
+        logic, consider extending `WeightUpdateSenderBase` with a custom implementation.
 
-    .. seealso:: :class:`~torchrl.collectors.RemoteWeightUpdaterBase` and
+    .. seealso:: :class:`~torchrl.collectors.WeightUpdateSenderBase` and
         :class:`~torchrl.collectors.distributed.RayCollector`.
 
     """
@@ -321,7 +365,7 @@ class RayRemoteWeightUpdater(RemoteWeightUpdaterBase):
     def __init__(
         self,
         policy_weights: TensorDictBase,
-        remote_collectors: List,
+        remote_collectors: list,
         max_interval: int = 0,
     ):
         self.policy_weights = policy_weights
@@ -329,7 +373,7 @@ class RayRemoteWeightUpdater(RemoteWeightUpdaterBase):
         self.max_interval = max(0, max_interval)
         self._batches_since_weight_update = [0] * len(self.remote_collectors)
 
-    def all_worker_ids(self) -> list[int] | List[torch.device]:
+    def all_worker_ids(self) -> list[int] | list[torch.device]:
         return list(range(len(self.remote_collectors)))
 
     def _get_server_weights(self) -> TensorDictBase:
@@ -343,6 +387,7 @@ class RayRemoteWeightUpdater(RemoteWeightUpdaterBase):
     def _sync_weights_with_worker(
         self, worker_id: int, server_weights: TensorDictBase
     ) -> TensorDictBase:
+        torchrl_logger.info(f"syncing weights with worker {worker_id}")
         c = self.remote_collectors[worker_id]
         c.update_policy_weights_.remote(policy_weights=server_weights)
         self._batches_since_weight_update[worker_id] = 0

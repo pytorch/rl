@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import warnings
-from typing import Callable, Iterator, OrderedDict
+from typing import Any, Callable, Iterator, OrderedDict, Sequence
 
 import torch
 import torch.nn as nn
@@ -23,9 +23,9 @@ from torchrl.collectors.collectors import (
 )
 from torchrl.collectors.utils import _NON_NN_POLICY_WEIGHTS, split_trajectories
 from torchrl.collectors.weight_update import (
-    LocalWeightUpdaterBase,
-    RayRemoteWeightUpdater,
-    RemoteWeightUpdaterBase,
+    RayWeightUpdater,
+    WeightUpdateReceiverBase,
+    WeightUpdateSenderBase,
 )
 from torchrl.data import ReplayBuffer
 from torchrl.envs.common import EnvBase
@@ -153,8 +153,8 @@ class RayCollector(DataCollectorBase):
                 pickled directly), the :arg:`policy_factory` should be used instead.
 
     Keyword Args:
-        policy_factory (Callable[[], Callable], optional): a callable that returns
-            a policy instance. This is exclusive with the `policy` argument.
+        policy_factory (Callable[[], Callable], list of Callable[[], Callable], optional): a callable
+            (or list of callables) that returns a policy instance. This is exclusive with the `policy` argument.
 
             .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.
 
@@ -230,7 +230,7 @@ class RayCollector(DataCollectorBase):
             collecting data. Must be one of ``torchrl.envs.utils.ExplorationType.DETERMINISTIC``,
             ``torchrl.envs.utils.ExplorationType.RANDOM``, ``torchrl.envs.utils.ExplorationType.MODE``
             or ``torchrl.envs.utils.ExplorationType.MEAN``.
-        collector_class (Python class): a collector class to be remotely instantiated. Can be
+        collector_class (Python class or constructor): a collector class to be remotely instantiated. Can be
             :class:`~torchrl.collectors.SyncDataCollector`,
             :class:`~torchrl.collectors.MultiSyncDataCollector`,
             :class:`~torchrl.collectors.MultiaSyncDataCollector`
@@ -277,13 +277,16 @@ class RayCollector(DataCollectorBase):
 
             .. note:: although it is not enfoced (to allow users to implement their own replay buffer class), a
                 :class:`~torchrl.data.RayReplayBuffer` instance should be used here.
-        local_weights_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
+        weight_update_receiver (WeightUpdateReceiverBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdateReceiverBase`
             or its subclass, responsible for updating the policy weights on the local inference worker.
-            This is typically not used in :class:`~torchrl.collectors.RayCollector` as it focuses on distributed environments.
-        remote_weights_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
+            This is typically not used in :class:`~torchrl.collectors.RayCollector` as it focuses on distributed
+            environments.
+            Consider using a constructor if the updater needs to be serialized.
+        weight_update_sender (WeightUpdateSenderBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdateSenderBase`
             or its subclass, responsible for updating the policy weights on remote inference workers managed by Ray.
-            If not provided, a :class:`~torchrl.collectors.RayRemoteWeightUpdater` will be used by default, leveraging
+            If not provided, a :class:`~torchrl.collectors.RayWeightUpdateSender` will be used by default, leveraging
             Ray's distributed capabilities.
+            Consider using a constructor if the updater needs to be serialized.
 
     Examples:
         >>> from torch import nn
@@ -319,13 +322,15 @@ class RayCollector(DataCollectorBase):
         create_env_fn: Callable | EnvBase | list[Callable] | list[EnvBase],
         policy: Callable[[TensorDictBase], TensorDictBase] | None = None,
         *,
-        policy_factory: Callable[[], Callable] | None = None,
+        policy_factory: Callable[[], Callable]
+        | list[Callable[[], Callable]]
+        | None = None,
         frames_per_batch: int,
         total_frames: int = -1,
-        device: torch.device | list[torch.device] = None,
-        storing_device: torch.device | list[torch.device] = None,
-        env_device: torch.device | list[torch.device] = None,
-        policy_device: torch.device | list[torch.device] = None,
+        device: torch.device | list[torch.device] | None = None,
+        storing_device: torch.device | list[torch.device] | None = None,
+        env_device: torch.device | list[torch.device] | None = None,
+        policy_device: torch.device | list[torch.device] | None = None,
         max_frames_per_traj=-1,
         init_random_frames=-1,
         reset_at_each_iter=False,
@@ -333,17 +338,21 @@ class RayCollector(DataCollectorBase):
         split_trajs=False,
         exploration_type=DEFAULT_EXPLORATION_TYPE,
         collector_class: Callable[[TensorDict], TensorDict] = SyncDataCollector,
-        collector_kwargs: dict | list[dict] = None,
+        collector_kwargs: dict[str, Any] | list[dict] | None = None,
         num_workers_per_collector: int = 1,
         sync: bool = False,
-        ray_init_config: dict = None,
-        remote_configs: dict | list[dict] = None,
-        num_collectors: int = None,
-        update_after_each_batch=False,
-        max_weight_update_interval=-1,
-        replay_buffer: ReplayBuffer = None,
-        remote_weights_updater: RemoteWeightUpdaterBase | None = None,
-        local_weights_updater: LocalWeightUpdaterBase | None = None,
+        ray_init_config: dict[str, Any] | None = None,
+        remote_configs: dict[str, Any] | list[dict[str, Any]] | None = None,
+        num_collectors: int | None = None,
+        update_after_each_batch: bool = False,
+        max_weight_update_interval: int = -1,
+        replay_buffer: ReplayBuffer | None = None,
+        weight_update_sender: WeightUpdateSenderBase
+        | Callable[[], WeightUpdateSenderBase]
+        | None = None,
+        weight_update_receiver: WeightUpdateReceiverBase
+        | Callable[[], WeightUpdateReceiverBase]
+        | None = None,
     ):
         self.frames_per_batch = frames_per_batch
         if remote_configs is None:
@@ -451,13 +460,16 @@ class RayCollector(DataCollectorBase):
             collector_class.print_remote_collector_info = print_remote_collector_info
 
         self.replay_buffer = replay_buffer
+        if not isinstance(policy_factory, Sequence):
+            policy_factory = [policy_factory] * len(create_env_fn)
+        self.policy_factory = policy_factory
         self._local_policy = policy
         if isinstance(self._local_policy, nn.Module):
             policy_weights = TensorDict.from_module(self._local_policy)
             policy_weights = policy_weights.data.lock_()
         else:
             policy_weights = TensorDict(lock=True)
-            if remote_weights_updater is None:
+            if weight_update_sender is None:
                 warnings.warn(_NON_NN_POLICY_WEIGHTS)
         self.policy_weights = policy_weights
         self.collector_class = collector_class
@@ -491,7 +503,7 @@ class RayCollector(DataCollectorBase):
 
         # update collector kwargs
         for i, collector_kwarg in enumerate(self.collector_kwargs):
-            collector_kwarg["policy_factory"] = policy_factory
+            collector_kwarg["policy_factory"] = policy_factory[i]
             collector_kwarg["max_frames_per_traj"] = max_frames_per_traj
             collector_kwarg["init_random_frames"] = (
                 init_random_frames // self.num_collectors
@@ -525,14 +537,14 @@ class RayCollector(DataCollectorBase):
                 collector_kwargs,
                 remote_configs,
             )
-        if remote_weights_updater is None:
-            remote_weights_updater = RayRemoteWeightUpdater(
+        if weight_update_sender is None:
+            weight_update_sender = RayWeightUpdater(
                 policy_weights=policy_weights,
                 remote_collectors=self.remote_collectors,
                 max_interval=self.max_weight_update_interval,
             )
-        self.remote_weights_updater = remote_weights_updater
-        self.local_weights_updater = local_weights_updater
+        self.weight_update_sender = weight_update_sender
+        self.weight_update_receiver = weight_update_receiver
 
         # Print info of all remote workers
         pending_samples = [
@@ -678,6 +690,7 @@ class RayCollector(DataCollectorBase):
         """Collects one data batch per remote collector in each iteration."""
         while self.collected_frames < self.total_frames:
             if self.update_after_each_batch or self.max_weight_update_interval > -1:
+                torchrl_logger.info("Updating weights on all workers")
                 self.update_policy_weights_()
 
             # Ask for batches to all remote workers.
@@ -759,6 +772,7 @@ class RayCollector(DataCollectorBase):
             yield out_td
 
             if self.update_after_each_batch or self.max_weight_update_interval > -1:
+                torchrl_logger.info(f"Updating weights on worker {collector_index}")
                 self.update_policy_weights_(worker_ids=collector_index + 1)
 
             # Schedule a new collection task

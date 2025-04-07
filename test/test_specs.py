@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import argparse
 import contextlib
 import os
@@ -523,8 +525,10 @@ class TestComposite:
 
     def test_device_cast_with_dtype_fails(self, shape, is_complete, device, dtype):
         ts = self._composite_spec(shape, is_complete, device, dtype)
-        with pytest.raises(ValueError, match="Only device casting is allowed"):
-            ts.to(torch.float16)
+        ts = ts.to(torch.float16)
+        for spec in ts.values(True, True):
+            if spec is not None:
+                assert spec.dtype == torch.float16
 
     @pytest.mark.parametrize("dest", get_available_devices())
     def test_device_cast(self, shape, is_complete, device, dtype, dest):

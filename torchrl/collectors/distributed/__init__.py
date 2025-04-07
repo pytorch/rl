@@ -6,7 +6,7 @@
 from .generic import (
     DEFAULT_SLURM_CONF,
     DistributedDataCollector,
-    DistributedRemoteWeightUpdater,
+    DistributedWeightUpdater,
 )
 from .ray import RayCollector
 from .rpc import RPCDataCollector
@@ -16,7 +16,7 @@ from .utils import submitit_delayed_launcher
 __all__ = [
     "DEFAULT_SLURM_CONF",
     "DistributedDataCollector",
-    "DistributedRemoteWeightUpdater",
+    "DistributedWeightUpdater",
     "DistributedSyncDataCollector",
     "RPCDataCollector",
     "RPCDataCollector",

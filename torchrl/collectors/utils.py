@@ -13,7 +13,7 @@ from tensordict import NestedKey, pad, set_lazy_legacy, TensorDictBase
 
 _NON_NN_POLICY_WEIGHTS = (
     "The policy is not an nn.Module. TorchRL will assume that the parameter set is empty and "
-    "update_policy_weights_ will be a no-op. Consider passing a local/remote_weight_updater object "
+    "update_policy_weights_ will be a no-op. Consider passing a local/weight_update_sender object "
     "to your collector to handle the weight updates."
 )
 
