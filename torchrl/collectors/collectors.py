@@ -757,9 +757,9 @@ class SyncDataCollector(DataCollectorBase):
                 raise TypeError(
                     "postproc must be None when a replay buffer is passed, or extend_buffer must be set to True."
                 )
-            if split_trajs is not None and not self.extend_buffer:
+            if split_trajs not in (None, False) and not self.extend_buffer:
                 raise TypeError(
-                    "split_trajs must be None when a replay buffer is passed, or extend_buffer must be set to True."
+                    "split_trajs must be None/False when a replay buffer is passed, or extend_buffer must be set to True."
                 )
             if return_same_td:
                 raise TypeError(
@@ -1771,6 +1771,8 @@ class _MultiDataCollector(DataCollectorBase):
             for envs without dynamic specs, ``False`` for others.
         replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordicts
             but populate the buffer instead. Defaults to ``None``.
+        extend_buffer (bool, optional): if `True`, the replay buffer is extended with entire rollouts and not
+            with single steps. Defaults to `True` for multiprocessed data collectors.
         trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
             assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
             and ``False`` otherwise.
@@ -1848,7 +1850,8 @@ class _MultiDataCollector(DataCollectorBase):
         set_truncated: bool = False,
         use_buffers: bool | None = None,
         replay_buffer: ReplayBuffer | None = None,
-        replay_buffer_chunk: bool = True,
+        extend_buffer: bool = True,
+        replay_buffer_chunk: bool | None = None,
         trust_policy: bool | None = None,
         compile_policy: bool | dict[str, Any] | None = None,
         cudagraph_policy: bool | dict[str, Any] | None = None,
@@ -1904,7 +1907,18 @@ class _MultiDataCollector(DataCollectorBase):
         self._use_buffers = use_buffers
         self.replay_buffer = replay_buffer
         self._check_replay_buffer_init()
-        self.replay_buffer_chunk = replay_buffer_chunk
+        if replay_buffer_chunk is not None:
+            if extend_buffer is None:
+                replay_buffer_chunk = extend_buffer
+                warnings.warn(
+                    "The replay_buffer_chunk is deprecated and replaced by extend_buffer. This argument will disappear in v0.10.",
+                    DeprecationWarning,
+                )
+            elif extend_buffer != replay_buffer_chunk:
+                raise ValueError(
+                    "conflicting values for replay_buffer_chunk and extend_buffer."
+                )
+        self.extend_buffer = extend_buffer
         if (
             replay_buffer is not None
             and hasattr(replay_buffer, "shared")
@@ -2181,7 +2195,7 @@ class _MultiDataCollector(DataCollectorBase):
                     "set_truncated": self.set_truncated,
                     "use_buffers": self._use_buffers,
                     "replay_buffer": self.replay_buffer,
-                    "replay_buffer_chunk": self.replay_buffer_chunk,
+                    "extend_buffer": self.extend_buffer,
                     "traj_pool": self._traj_pool,
                     "trust_policy": self.trust_policy,
                     "compile_policy": self.compiled_policy_kwargs
@@ -2598,7 +2612,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             for _ in range(self.num_workers):
                 new_data, j = recv.popleft()
                 use_buffers = self._use_buffers
-                if self.replay_buffer is not None and not self.extend_buffer:
+                if self.replay_buffer is not None:
                     idx = new_data
                     workers_frames[idx] = (
                         workers_frames[idx] + self.frames_per_batch_worker
@@ -3237,7 +3251,7 @@ def _main_async_collector(
     set_truncated: bool = False,
     use_buffers: bool | None = None,
     replay_buffer: ReplayBuffer | None = None,
-    replay_buffer_chunk: bool = True,
+    extend_buffer: bool = True,
     traj_pool: _TrajectoryPool = None,
     trust_policy: bool = False,
     compile_policy: bool = False,
@@ -3272,7 +3286,8 @@ def _main_async_collector(
         interruptor=interruptor,
         set_truncated=set_truncated,
         use_buffers=use_buffers,
-        replay_buffer=replay_buffer if replay_buffer_chunk else None,
+        replay_buffer=replay_buffer if extend_buffer else None,
+        extend_buffer=False,
         traj_pool=traj_pool,
         trust_policy=trust_policy,
         compile_policy=compile_policy,
@@ -3342,7 +3357,7 @@ def _main_async_collector(
                 continue
 
             if replay_buffer is not None:
-                if not replay_buffer_chunk:
+                if not extend_buffer:
                     next_data.names = None
                     replay_buffer.extend(next_data)
 

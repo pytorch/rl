@@ -3391,11 +3391,11 @@ class TestCollectorRB:
         assert assert_allclose_td(rbdata0, rbdata1)
 
     @pytest.mark.skipif(not _has_gym, reason="requires gym.")
-    @pytest.mark.parametrize("replay_buffer_chunk", [False, True])
+    @pytest.mark.parametrize("extend_buffer", [False, True])
     @pytest.mark.parametrize("env_creator", [False, True])
     @pytest.mark.parametrize("storagetype", [LazyTensorStorage, LazyMemmapStorage])
     def test_collector_rb_multisync(
-        self, replay_buffer_chunk, env_creator, storagetype, tmpdir
+        self, extend_buffer, env_creator, storagetype, tmpdir
     ):
         if not env_creator:
             env = GymEnv(CARTPOLE_VERSIONED()).append_transform(StepCounter())
@@ -3420,7 +3420,7 @@ class TestCollectorRB:
             replay_buffer=rb,
             total_frames=256,
             frames_per_batch=32,
-            replay_buffer_chunk=replay_buffer_chunk,
+            extend_buffer=extend_buffer,
         )
         torch.manual_seed(0)
         pred_len = 0
@@ -3430,7 +3430,7 @@ class TestCollectorRB:
             assert len(rb) == pred_len
         collector.shutdown()
         assert len(rb) == 256
-        if not replay_buffer_chunk:
+        if not extend_buffer:
             steps_counts = rb["step_count"].squeeze().split(16)
             collector_ids = rb["collector", "traj_ids"].squeeze().split(16)
             for step_count, ids in zip(steps_counts, collector_ids):
@@ -3442,11 +3442,11 @@ class TestCollectorRB:
                 assert (idsdiff >= 0).all()
 
     @pytest.mark.skipif(not _has_gym, reason="requires gym.")
-    @pytest.mark.parametrize("replay_buffer_chunk", [False, True])
+    @pytest.mark.parametrize("extend_buffer", [False, True])
     @pytest.mark.parametrize("env_creator", [False, True])
     @pytest.mark.parametrize("storagetype", [LazyTensorStorage, LazyMemmapStorage])
     def test_collector_rb_multiasync(
-        self, replay_buffer_chunk, env_creator, storagetype, tmpdir
+        self, extend_buffer, env_creator, storagetype, tmpdir
     ):
         if not env_creator:
             env = GymEnv(CARTPOLE_VERSIONED()).append_transform(StepCounter())
@@ -3471,7 +3471,7 @@ class TestCollectorRB:
             replay_buffer=rb,
             total_frames=256,
             frames_per_batch=16,
-            replay_buffer_chunk=replay_buffer_chunk,
+            extend_buffer=extend_buffer,
         )
         torch.manual_seed(0)
         pred_len = 0
@@ -3481,7 +3481,7 @@ class TestCollectorRB:
             assert len(rb) >= pred_len
         collector.shutdown()
         assert len(rb) == 256
-        if not replay_buffer_chunk:
+        if not extend_buffer:
             steps_counts = rb["step_count"].squeeze().split(16)
             collector_ids = rb["collector", "traj_ids"].squeeze().split(16)
             for step_count, ids in zip(steps_counts, collector_ids):
@@ -3676,7 +3676,7 @@ class TestLLMCollector:
         else:
             stack = torch.cat(stack)
             assert not stack._has_exclusive_keys
-            assert stack.numel() == max(- (total_steps // -4) * 4, 4)
+            assert stack.numel() == max(-(total_steps // -4) * 4, 4)
             stack = stack.view(-1)
             for i in range(stack.numel()):
                 # Check that there are more chars in the next step
