@@ -109,7 +109,10 @@ class DataLoadingPrimer(TensorDictPrimer):
             that differs from the dataloader's, or when partial resets are to be expected, using a buffer to store data
             ensures that `next()` is called on the dataloader only when necessary, and that elements of the dataset
             are loaded in order.
-            Defaults to ``True`` whenever the batch-size of the dataloader is greater than 1.
+            Defaults to ``True``.
+        auto_batch_size (bool, optional): if ``False``, the resulting tensordicts will have the batch-size of the
+            dataloader (whenever `use_buffer` is set to ``False``). If not passed, its value is set to `True` if a
+            batch-size is passed or found in the dataloader.
         repeats (int, optional): How many times the same sample needs to appear successively. This can be useful in
             situations like GRPO where a single prompt is used multiple times to estimate the advantage using Monte-Carlo
             samples (rather than an advantage module).
@@ -384,6 +387,7 @@ class DataLoadingPrimer(TensorDictPrimer):
         repeats: int | None = None,
         device: torch.device | None = None,
         group_repeats: bool = False,
+        auto_batch_size: bool | None = None,
     ):
         self.dataloader = dataloader
         if repeats is None:
@@ -415,11 +419,14 @@ class DataLoadingPrimer(TensorDictPrimer):
         #  automatically so we will consider that each element in the DL has a batch-size of 0 (ie,
         #  a single non-batched element is returned at a time).
 
-        if batch_size is None:
-            batch_size = getattr(dataloader, "batch_size", 0)
-            auto_batch_size = batch_size > 0
-        else:
-            auto_batch_size = hasattr(dataloader, "batch_size")
+        if auto_batch_size is None:
+            if batch_size is None:
+                batch_size = getattr(dataloader, "batch_size", 0)
+                auto_batch_size = batch_size > 0
+            else:
+                auto_batch_size = hasattr(dataloader, "batch_size")
+        elif batch_size is None:
+            batch_size = ()
 
         if not isinstance(batch_size, int):
             if not isinstance(batch_size, (list, tuple)) or len(batch_size) > 1:
@@ -431,7 +438,7 @@ class DataLoadingPrimer(TensorDictPrimer):
             else:
                 batch_size = 0
 
-        if (batch_size >= 1 and use_buffer is None) or repeats:
+        if use_buffer is None:
             use_buffer = True
 
         # We deliver all the repeats in the same batch
@@ -531,7 +538,7 @@ class DataLoadingPrimer(TensorDictPrimer):
             out = TensorDict.from_dict(
                 data,
                 auto_batch_size=self.auto_batch_size,
-                batch_dims=1,
+                batch_dims=int(bool(self.auto_batch_size or self.batch_size)),
                 device=device,
             )
         elif self.data_keys is None:
@@ -544,14 +551,14 @@ class DataLoadingPrimer(TensorDictPrimer):
             out = TensorDict.from_dict(
                 {k: val for k, val in _zip_strict(self.data_keys, data)},
                 auto_batch_size=self.auto_batch_size,
-                batch_dims=1,
+                batch_dims=int(bool(self.auto_batch_size or self.batch_size)),
                 device=device,
             )
         elif len(self.data_keys) == 1:
             out = TensorDict.from_dict(
                 {self.data_keys[0]: data},
                 auto_batch_size=self.auto_batch_size,
-                batch_dims=1,
+                batch_dims=int(bool(self.auto_batch_size or self.batch_size)),
                 device=device,
             )
         else:
@@ -564,7 +571,7 @@ class DataLoadingPrimer(TensorDictPrimer):
             self._queue.extend(
                 [d for d in out.unbind(0) for _ in range(max(1, self.repeats))]
             )
-            return self._queue.popleft()
+            out = self._queue.popleft()
         return out
 
     def set_container(self, container: Transform | EnvBase) -> None:

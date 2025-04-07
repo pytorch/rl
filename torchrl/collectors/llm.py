@@ -17,6 +17,7 @@ from torchrl.collectors import (
     WeightUpdateSenderBase,
 )
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
+from torchrl.envs import AsyncEnvPool
 from torchrl.envs.common import EnvBase
 
 
@@ -57,7 +58,8 @@ class LLMCollector(SyncDataCollector):
             a :class:`~torchrl.envs.Transform` or a :class:`~torchrl.data.postprocs.MultiStep`
             instance.
             Defaults to ``None``.
-        async_envs (bool, optional): if ``True``, the environment will be run synchronously.
+        async_envs (bool, optional): if ``True``, the environment will be run asynchronously. Defaults to `True` if the
+            environment is a :class:`~torchrl.envs.AsyncEnvPool` instance.
         replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordicts
             but populate the buffer instead. Defaults to ``None``.
         reset_at_each_iter (bool, optional): if ``True``, the environment will be reset at each iteration.
@@ -149,7 +151,7 @@ class LLMCollector(SyncDataCollector):
         yield_completed_trajectories: bool | None = None,
         postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
         total_steps: int = -1,
-        async_envs: bool = False,
+        async_envs: bool | None = None,
         replay_buffer: ReplayBuffer | None = None,
         reset_at_each_iter: bool = False,
         flatten_data: bool | None = None,
@@ -160,8 +162,6 @@ class LLMCollector(SyncDataCollector):
         | Callable[[], WeightUpdateSenderBase]
         | None = None,
     ):
-        if async_envs:
-            raise NotImplementedError
         super().__init__(
             create_env_fn=env,
             policy=policy,
@@ -209,6 +209,13 @@ class LLMCollector(SyncDataCollector):
                 )
             self._yield_queues = [deque() for _ in range(self.env.batch_size[0])]
             self._trajectory_queue = deque()
+        self.async_envs = bool(async_envs) | isinstance(self.env, AsyncEnvPool)
+        if self.async_envs and not isinstance(self.env, AsyncEnvPool):
+            # This basically means that `async_envs` is automatically set and passing is it useless as of today,
+            #  except for the following error.
+            raise RuntimeError(
+                "async_envs requires the environment to be an AsyncEnvPool instance."
+            )
 
     @property
     def steps_per_batch(self) -> int:
@@ -218,7 +225,10 @@ class LLMCollector(SyncDataCollector):
     @property
     def rollout(self) -> Callable[[], TensorDictBase]:
         if self.yield_completed_trajectories:
-            return self._rollout_yield_trajs
+            if self.async_envs:
+                return self._rollout_yield_trajs_async
+            else:
+                return self._rollout_yield_trajs
         else:
             return self._rollout_all
 
@@ -250,27 +260,33 @@ class LLMCollector(SyncDataCollector):
 
     def _rollout_yield_trajs(self) -> TensorDictBase:  # A simplified version of rollout
         if self._shuttle is None:
-            data = self.env.reset()
+            raise RuntimeError("Data shuttle not found")
+            # next_output = self.env.reset()
         else:
-            data = self._shuttle
+            next_output = self._shuttle
 
         collected_steps = 0
         dones = torch.zeros(self.env.batch_size, dtype=torch.bool)
         while True:
             if self._trajectory_queue:
                 break
-            policy_input = data
-            env_input = self.policy(policy_input)
-            env_output, env_next_output = self.env.step_and_maybe_reset(env_input)
+            env_input = self.policy(next_output)
+            cur_output, next_output = self.env.step_and_maybe_reset(env_input)
+            # for i in range(cur_output.numel()):
+            #     print(len(cur_output[i]["text"]) < len(cur_output[i]["next", "text"]))
 
             # carry over collector data without messing up devices
-            collector_data = env_output.get("collector").copy()
-            env_next_output.set("collector", collector_data)
-            self._shuttle = env_next_output
-            self._update_traj_ids(env_output)
-            data = env_output
-            collected_steps += data.numel()
-            for i, (_data, queue) in enumerate(zip(data.unbind(0), self._yield_queues)):
+            self._update_traj_ids(cur_output)
+
+            collector_data = cur_output.get("collector").copy()
+            next_output.set("collector", collector_data)
+
+            # if the loop is interrupted
+            self._shuttle = next_output
+            collected_steps += next_output.numel()
+            for i, (_data, queue) in enumerate(
+                zip(cur_output.unbind(0), self._yield_queues)
+            ):
                 queue.append(_data)
                 dones[i] = _data["next", "done"].any()
             if dones.any():
@@ -287,6 +303,64 @@ class LLMCollector(SyncDataCollector):
                             lazy_stack([self._yield_queues[idx][-1]])
                         )
                     self._yield_queues[idx].clear()
+
+        result = self._trajectory_queue.popleft()
+        return result
+
+    started = False
+
+    def _rollout_yield_trajs_async(
+        self,
+    ) -> TensorDictBase:  # A simplified version of rollout
+        if not self.started:
+            next_output = self._shuttle
+            env_input = self.policy(next_output)
+            self.env.async_step_and_maybe_reset_send(env_input)
+        self.started = True
+
+        collected_steps = 0
+        dones = torch.zeros(self.env.batch_size, dtype=torch.bool)
+        while True:
+            if self._trajectory_queue:
+                break
+
+            cur_output, next_output = self.env.async_step_and_maybe_reset_recv()
+
+            # Get the env ids
+            env_ids = cur_output.get(self.env._env_idx_key).tolist()
+
+            # carry over collector data without messing up devices
+            self._update_traj_ids(cur_output)
+
+            collector_data = cur_output.get("collector").copy()
+            next_output.set("collector", collector_data)
+
+            collected_steps += next_output.numel()
+            dones.fill_(False)
+            for i, _data in zip(env_ids, cur_output.unbind(0)):
+                queue = self._yield_queues[i]
+                queue.append(_data)
+                dones[i] = _data["next", "done"].any()
+            if dones.any():
+                for idx in dones.nonzero()[0].tolist():
+                    if not self.yield_only_last_steps:
+                        self._trajectory_queue.append(
+                            lazy_stack(self._yield_queues[idx], -1)
+                        )
+                    else:
+                        # FIXME: We need to increment the step count here because iterator() won't
+                        #  see the extra steps
+                        # We use lazy-stack because unsqueeze doesn't nest the strings in lists
+                        self._trajectory_queue.append(
+                            lazy_stack([self._yield_queues[idx][-1]])
+                        )
+                    self._yield_queues[idx].clear()
+
+            # Launch the next batch:
+            # FIXME: Add a condition RE number of frames here
+            if True:
+                env_input = self.policy(next_output)
+                self.env.async_step_and_maybe_reset_send(env_input)
 
         result = self._trajectory_queue.popleft()
         return result
