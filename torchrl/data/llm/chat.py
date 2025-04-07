@@ -4,7 +4,10 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import dataclasses
+
 import re
+from typing import Literal
 
 import torch
 
@@ -107,10 +110,11 @@ class History(TensorClass["nocast"]):
         padding: bool | str = False,
         truncation: bool | str = False,
         return_tensors: str | None = "pt",
+        **kwargs,
     ):
         """Applies a chat template to the history.
 
-        Args:
+        Keyword Args:
             tokenizer (transformers.PreTrainedTokenizer): The tokenizer to use.
             add_generation_prompt (bool, optional): Whether to add a generation prompt. Defaults to True.
             chat_template (str, optional): The chat template to use. Defaults to _TEMPLATES["chatml_format"].
@@ -119,6 +123,7 @@ class History(TensorClass["nocast"]):
             padding (bool | str, optional): The padding strategy to use. Defaults to False.
             truncation (bool | str, optional): The truncation strategy to use. Defaults to False.
             return_tensors (str | None, optional): The type of tensors to return. Defaults to "pt".
+            **kwargs: Additional keyword arguments to pass to the tokenizer `apply_chat_template` method.
 
         Returns:
             The formatted history.
@@ -134,6 +139,17 @@ class History(TensorClass["nocast"]):
             return_tensors=return_tensors,
             continue_final_message=continue_final_message,
         )
+
+    @classmethod
+    def inv_chat_template(
+        cls, text: str, chat_template_name: Literal["chatml_format"] = "chatml_format"
+    ) -> History:
+        if chat_template_name not in ("chatml_format",):
+            # Hard coded for now
+            raise NotImplementedError(
+                "chat_template_name must be one of ('chatml_format',)"
+            )
+        return cls._inv_chatml(text)
 
     @classmethod
     def _inv_chatml(cls, text: str) -> History:
@@ -227,3 +243,64 @@ class History(TensorClass["nocast"]):
                 self.__dict__["_tensordict"] = td
                 return self
         return torch.stack(list(self.unbind(dim)) + list(history.unbind(dim)), dim=dim)
+
+    @classmethod
+    def default_spec(cls, shape=(-1,)):
+        """A default spec to use in transforms / envs that return History objects.
+
+        Args:
+            shape (torch.Size, optional): The shape of the returned History spec. Defaults to `(-1)` (variable length
+                along time dimension).
+
+        Example:
+            >>> import tensordict
+            >>> from torchrl.data import History
+            >>> tensordict.set_list_to_stack(True).set()
+            >>>
+            >>> history = History(role=["system", "user"], content=["a message", "another message"], batch_size=(2,))
+            >>> spec = history.default_spec()
+            >>> print(spec)
+            Composite(
+                role: NonTensor(
+                    shape=torch.Size([-1]),
+                    space=None,
+                    device=None,
+                    dtype=None,
+                    domain=None,
+                    example_data=foo),
+                content: NonTensor(
+                    shape=torch.Size([-1]),
+                    space=None,
+                    device=None,
+                    dtype=None,
+                    domain=None,
+                    example_data=foo),
+                device=None,
+                shape=torch.Size([-1]))
+            >>> print(spec.zero())
+            History(
+                content=NonTensorData(data=foo, batch_size=torch.Size([1]), device=None),
+                role=NonTensorData(data=foo, batch_size=torch.Size([1]), device=None),
+                batch_size=torch.Size([1]),
+                device=None,
+                is_shared=False)
+
+        """
+        from torchrl.data import Composite, NonTensor
+
+        def get_default_value(field):
+            if field.default is not dataclasses.MISSING:
+                return field.default
+            elif field.type in (str, "str"):
+                return "foo"
+            else:
+                return None
+
+        defaults = {
+            k: NonTensor(
+                example_data=get_default_value(cls.__dataclass_fields__[k]), shape=(-1,)
+            )
+            for k in cls.__dataclass_fields__
+        }
+
+        return Composite(defaults, shape=shape, data_cls=cls)

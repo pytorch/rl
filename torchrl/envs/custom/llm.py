@@ -278,6 +278,8 @@ class LLMEnv(EnvBase):
         repeats: int | None = None,
         group_repeats: bool = True,
         eos_token_id: int | None = None,
+        auto_batch_size: bool | None = None,
+        use_buffer: bool | None = None,
     ) -> LLMEnv:
         """Creates an LLMEnv instance from a dataloader.
 
@@ -347,6 +349,14 @@ class LLMEnv(EnvBase):
                 all repeats are grouped in a single batch collected from the buffer. Defaults to ``True``.
             eos_token_id (int, optional): The token id of the end of the sequence. If passed, the `done` state
                 is set to `True` when detected. Defaults to `None`.
+        use_buffer (bool, optional): Whether to use a buffer to load the batches. When an environment has a batch-size
+            that differs from the dataloader's, or when partial resets are to be expected, using a buffer to store data
+            ensures that `next()` is called on the dataloader only when necessary, and that elements of the dataset
+            are loaded in order.
+            Defaults to ``True``.
+        auto_batch_size (bool, optional): if ``False``, the resulting tensordicts will have the batch-size of the
+            dataloader (whenever `use_buffer` is set to ``False``). If not passed, its value is set to `True` if a
+            batch-size is passed or found in the dataloader.
 
         Returns:
             LLMEnv: The created LLMEnv instance.
@@ -416,6 +426,8 @@ class LLMEnv(EnvBase):
             device=device,
             group_repeats=group_repeats,
             batch_size=batch_size,
+            auto_batch_size=auto_batch_size,
+            use_buffer=use_buffer,
         )
         env = LLMEnv(
             str2str=str2str,
@@ -610,7 +622,7 @@ class LLMEnv(EnvBase):
                 f"{list(tensordict.keys(True, True, is_leaf=is_leaf_nontensor))}. Make sure a TensorDictPrimer (eg, "
                 f"torchrl.envs.DataLoadingPrimer) is appended to the env transforms."
             )
-        if not isinstance(tensordict, LazyStackedTensorDict):
+        if not isinstance(tensordict, LazyStackedTensorDict) and tensordict.ndim:
             tensordict = LazyStackedTensorDict(*tensordict.unbind(0))
         td_reset = tensordict.copy()
         if td_reset.device != self.device:
