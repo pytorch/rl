@@ -3709,12 +3709,6 @@ class TestLLMCollector:
         )
         torchrl_logger.info("starting")
         collector.start()
-        # try:
-        #     # Assuming collector._task is the task created in start()
-        #     await asyncio.wait_for(collector._task, timeout=30)
-        # except asyncio.TimeoutError:
-        #     torchrl_logger.info("Collector start timed out")
-        # torchrl_logger.info('started')
 
         j = 0
         while True:
@@ -3724,8 +3718,6 @@ class TestLLMCollector:
             assert sample.ndim == 1
             for i in range(10):
                 # Check that there are more chars in the next step
-                # torchrl_logger.info(sample[i]["text"])
-                # torchrl_logger.info(sample[i]["next", "text"])
                 assert len(sample["text"][i]) < len(sample["next", "text"][i])
             assert not sample._has_exclusive_keys, sample
             j += 1
