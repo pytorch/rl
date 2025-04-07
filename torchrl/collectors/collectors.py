@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import _pickle
 import abc
+import asyncio
 import collections
 import contextlib
 import functools
@@ -145,6 +146,7 @@ def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
 class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     """Base class for data collectors."""
 
+    _task = None
     _iterator = None
     total_frames: int
     requested_frames_per_batch: int
@@ -509,7 +511,17 @@ class SyncDataCollector(DataCollectorBase):
             This isn't compatible with environments with dynamic specs. Defaults to ``True``
             for envs without dynamic specs, ``False`` for others.
         replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordicts
-            but populate the buffer instead. Defaults to ``None``.
+            but populate the buffer instead.
+            Defaults to ``None``.
+
+            .. seealso:: By default, the buffer is populated every time a (batch of) frames is collected.
+                If the buffer needs to be extended with entire rollouts, set `extend_buffer` to `True`.
+
+            .. warning:: Using a replay buffer with a `postproc` or `split_trajs=True` is prohibited unless
+                `extend_buffer=True`, as the whole batch needs to be observed to apply these transforms.
+
+        extend_buffer (bool, optional): if `True`, the replay buffer is extended with entire rollouts and not
+            with single steps. Defaults to `False`.
         trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
             assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
             and ``False`` otherwise.
@@ -619,6 +631,7 @@ class SyncDataCollector(DataCollectorBase):
         set_truncated: bool = False,
         use_buffers: bool | None = None,
         replay_buffer: ReplayBuffer | None = None,
+        extend_buffer: bool = False,
         trust_policy: bool = None,
         compile_policy: bool | dict[str, Any] | None = None,
         cudagraph_policy: bool | dict[str, Any] | None = None,
@@ -738,9 +751,20 @@ class SyncDataCollector(DataCollectorBase):
         self.env: EnvBase = env
         del env
         self.replay_buffer = replay_buffer
+        self.extend_buffer = extend_buffer
         if self.replay_buffer is not None:
-            if postproc is not None:
-                raise TypeError("postproc must be None when a replay buffer is passed.")
+            if postproc is not None and not self.extend_buffer:
+                raise TypeError(
+                    "postproc must be None when a replay buffer is passed, or extend_buffer must be set to True."
+                )
+            if split_trajs not in (None, False) and not self.extend_buffer:
+                raise TypeError(
+                    "split_trajs must be None/False when a replay buffer is passed, or extend_buffer must be set to True."
+                )
+            if return_same_td:
+                raise TypeError(
+                    "return_same_td must be False when a replay buffer is passed, or extend_buffer must be set to True."
+                )
             if use_buffers:
                 raise TypeError("replay_buffer is exclusive with use_buffers.")
         if use_buffers is None:
@@ -1181,35 +1205,12 @@ class SyncDataCollector(DataCollectorBase):
                 self._iter += 1
                 tensordict_out = self.rollout()
                 if tensordict_out is None:
-                    # if a replay buffer is passed, there is no tensordict_out
+                    # if a replay buffer is passed and self.extend_buffer=False, there is no tensordict_out
                     #  frames are updated within the rollout function
                     yield
                     continue
                 self._increment_frames(tensordict_out.numel())
-
-                if self.split_trajs:
-                    tensordict_out = split_trajectories(
-                        tensordict_out, prefix="collector"
-                    )
-                if self.postproc is not None:
-                    tensordict_out = self.postproc(tensordict_out)
-                if self._exclude_private_keys:
-
-                    def is_private(key):
-                        if isinstance(key, str) and key.startswith("_"):
-                            return True
-                        if isinstance(key, tuple) and any(
-                            _key.startswith("_") for _key in key
-                        ):
-                            return True
-                        return False
-
-                    excluded_keys = [
-                        key for key in tensordict_out.keys(True) if is_private(key)
-                    ]
-                    tensordict_out = tensordict_out.exclude(
-                        *excluded_keys, inplace=True
-                    )
+                tensordict_out = self._postproc(tensordict_out)
                 if self.return_same_td:
                     # This is used with multiprocessed collectors to use the buffers
                     # stored in the tensordict.
@@ -1218,6 +1219,9 @@ class SyncDataCollector(DataCollectorBase):
                             event.record()
                             event.synchronize()
                     yield tensordict_out
+                elif self.replay_buffer is not None:
+                    self.replay_buffer.extend(tensordict_out)
+                    yield
                 else:
                     # we must clone the values, as the tensordict is updated in-place.
                     # otherwise the following code may break:
@@ -1230,6 +1234,49 @@ class SyncDataCollector(DataCollectorBase):
                     # >>>          break
                     # >>> assert data0["done"] is not data1["done"]
                     yield tensordict_out.clone()
+
+    def start(self):
+        """Starts the RayCollector."""
+        if self.replay_buffer is None:
+            raise RuntimeError("Replay buffer must be defined for asyncio execution.")
+        if self._task is None or self._task.done():
+            loop = asyncio.get_event_loop()
+            self._task = loop.create_task(self._run_iterator_silently())
+
+    async def _run_iterator_silently(self):
+        async for _ in self._asyncio_iterator():
+            # Process each item silently
+            continue
+
+    async def _asyncio_iterator(self):
+        for d in self:
+            yield d
+
+    async def async_shutdown(self):
+        """Finishes processes started by ray.init() during async execution."""
+        if self._task is not None:
+            await self._task
+        self.shutdown()
+
+    def _postproc(self, tensordict_out):
+        if self.split_trajs:
+            tensordict_out = split_trajectories(tensordict_out, prefix="collector")
+        if self.postproc is not None:
+            tensordict_out = self.postproc(tensordict_out)
+        if self._exclude_private_keys:
+
+            def is_private(key):
+                if isinstance(key, str) and key.startswith("_"):
+                    return True
+                if isinstance(key, tuple) and any(_key.startswith("_") for _key in key):
+                    return True
+                return False
+
+            excluded_keys = [
+                key for key in tensordict_out.keys(True) if is_private(key)
+            ]
+            tensordict_out = tensordict_out.exclude(*excluded_keys, inplace=True)
+        return tensordict_out
 
     def _update_traj_ids(self, env_output) -> None:
         # we can't use the reset keys because they're gone
@@ -1352,7 +1399,7 @@ class SyncDataCollector(DataCollectorBase):
                         next_data.clear_device_()
                     self._shuttle.set("next", next_data)
 
-                if self.replay_buffer is not None:
+                if self.replay_buffer is not None and not self.extend_buffer:
                     self.replay_buffer.add(self._shuttle)
                     if self._increment_frames(self._shuttle.numel()):
                         return
@@ -1383,7 +1430,7 @@ class SyncDataCollector(DataCollectorBase):
                     self.interruptor is not None
                     and self.interruptor.collection_stopped()
                 ):
-                    if self.replay_buffer is not None:
+                    if self.replay_buffer is not None and not self.extend_buffer:
                         return
                     result = self._final_rollout
                     if self._use_buffers:
@@ -1420,7 +1467,7 @@ class SyncDataCollector(DataCollectorBase):
                                 self._final_rollout.ndim - 1,
                                 out=self._final_rollout,
                             )
-                elif self.replay_buffer is not None:
+                elif self.replay_buffer is not None and not self.extend_buffer:
                     return
                 else:
                     result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
@@ -1724,6 +1771,8 @@ class _MultiDataCollector(DataCollectorBase):
             for envs without dynamic specs, ``False`` for others.
         replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordicts
             but populate the buffer instead. Defaults to ``None``.
+        extend_buffer (bool, optional): if `True`, the replay buffer is extended with entire rollouts and not
+            with single steps. Defaults to `True` for multiprocessed data collectors.
         trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
             assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
             and ``False`` otherwise.
@@ -1801,7 +1850,8 @@ class _MultiDataCollector(DataCollectorBase):
         set_truncated: bool = False,
         use_buffers: bool | None = None,
         replay_buffer: ReplayBuffer | None = None,
-        replay_buffer_chunk: bool = True,
+        extend_buffer: bool = True,
+        replay_buffer_chunk: bool | None = None,
         trust_policy: bool | None = None,
         compile_policy: bool | dict[str, Any] | None = None,
         cudagraph_policy: bool | dict[str, Any] | None = None,
@@ -1857,7 +1907,18 @@ class _MultiDataCollector(DataCollectorBase):
         self._use_buffers = use_buffers
         self.replay_buffer = replay_buffer
         self._check_replay_buffer_init()
-        self.replay_buffer_chunk = replay_buffer_chunk
+        if replay_buffer_chunk is not None:
+            if extend_buffer is None:
+                replay_buffer_chunk = extend_buffer
+                warnings.warn(
+                    "The replay_buffer_chunk is deprecated and replaced by extend_buffer. This argument will disappear in v0.10.",
+                    DeprecationWarning,
+                )
+            elif extend_buffer != replay_buffer_chunk:
+                raise ValueError(
+                    "conflicting values for replay_buffer_chunk and extend_buffer."
+                )
+        self.extend_buffer = extend_buffer
         if (
             replay_buffer is not None
             and hasattr(replay_buffer, "shared")
@@ -2134,7 +2195,7 @@ class _MultiDataCollector(DataCollectorBase):
                     "set_truncated": self.set_truncated,
                     "use_buffers": self._use_buffers,
                     "replay_buffer": self.replay_buffer,
-                    "replay_buffer_chunk": self.replay_buffer_chunk,
+                    "extend_buffer": self.extend_buffer,
                     "traj_pool": self._traj_pool,
                     "trust_policy": self.trust_policy,
                     "compile_policy": self.compiled_policy_kwargs
@@ -3190,7 +3251,7 @@ def _main_async_collector(
     set_truncated: bool = False,
     use_buffers: bool | None = None,
     replay_buffer: ReplayBuffer | None = None,
-    replay_buffer_chunk: bool = True,
+    extend_buffer: bool = True,
     traj_pool: _TrajectoryPool = None,
     trust_policy: bool = False,
     compile_policy: bool = False,
@@ -3225,7 +3286,8 @@ def _main_async_collector(
         interruptor=interruptor,
         set_truncated=set_truncated,
         use_buffers=use_buffers,
-        replay_buffer=replay_buffer if replay_buffer_chunk else None,
+        replay_buffer=replay_buffer if extend_buffer else None,
+        extend_buffer=False,
         traj_pool=traj_pool,
         trust_policy=trust_policy,
         compile_policy=compile_policy,
@@ -3295,7 +3357,7 @@ def _main_async_collector(
                 continue
 
             if replay_buffer is not None:
-                if not replay_buffer_chunk:
+                if not extend_buffer:
                     next_data.names = None
                     replay_buffer.extend(next_data)
 

@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from collections import deque
 from typing import Callable
 
 from tensordict import lazy_stack, TensorDictBase
@@ -15,7 +16,8 @@ from torchrl.collectors import (
 )
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.envs.common import EnvBase
-
+import torch
+import asyncio
 
 class LLMCollector(SyncDataCollector):
     """A simplified version of SyncDataCollector for LLM inference.
@@ -35,10 +37,34 @@ class LLMCollector(SyncDataCollector):
         total_steps (int): A keyword-only argument representing the total
             number of steps returned by the collector
             during its lifespan.
+        yield_completed_trajectories (bool, optional): whether to yield batches of rollouts with a given number of steps
+            (`yield_completed_trajectories=False`, default) or single, completed trajectories
+            (`yield_completed_trajectories=True`).
+            Defaults to `False` unless `yield_only_last_steps=True`, where it cannot be `False`.
+
+            .. warning:: If the `done` state of the environment is not properly set, this may lead to a collector
+                that never leads any data.
+
+        yield_only_last_steps (bool, optional): whether to yield every step of a trajectory, or only the
+            last (done) steps.
+            If `True`, a single trajectory is yielded (or written in the buffer) at a time.
+
+            .. warning:: If the `done` state of the environment is not properly set, this may lead to a collector
+                that never leads any data.
+
+        postproc (Callable, optional): A post-processing transform, such as
+            a :class:`~torchrl.envs.Transform` or a :class:`~torchrl.data.postprocs.MultiStep`
+            instance.
+            Defaults to ``None``.
         async_envs (bool, optional): if ``True``, the environment will be run synchronously.
         replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordicts
             but populate the buffer instead. Defaults to ``None``.
         reset_at_each_iter (bool, optional): if ``True``, the environment will be reset at each iteration.
+        flatten_data (bool, optional): if ``True``, the collector will flatten the collected data
+            before returning it. In practice, this means that if an environment of batch-size `(B,)` is used
+            and run for `T` steps, `flatten_data=True` will present data of shape `(B*T,)`, whereas
+            `flatten_data=False` will not present data of shape `(B, T)`.
+            Defaults to `True` when `replay_buffer` is provided, `False` otherwise.
         local_weight_updater (LocalWeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on the local inference worker.
             If not provided, a :class:`~torchrl.collectors.VanillaLocalWeightUpdater` will be used by default,
@@ -118,10 +144,14 @@ class LLMCollector(SyncDataCollector):
         policy_factory: Callable[[], Callable[[TensorDictBase], TensorDictBase]]
         | None = None,
         steps_per_batch: int,
+            yield_only_last_steps: bool | None = None,
+            yield_completed_trajectories: bool | None = None,
+        postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
         total_steps: int = -1,
         async_envs: bool = False,
         replay_buffer: ReplayBuffer | None = None,
         reset_at_each_iter: bool = False,
+        flatten_data: bool | None= None,
         local_weight_updater: LocalWeightUpdaterBase
         | Callable[[], LocalWeightUpdaterBase]
         | None = None,
@@ -144,20 +174,52 @@ class LLMCollector(SyncDataCollector):
             trust_policy=True,
             use_buffers=False,
             no_cuda_sync=True,
+            extend_buffer=True,
         )
+        if yield_only_last_steps is None:
+            yield_only_last_steps = False
+
+        if yield_completed_trajectories is None:
+            yield_completed_trajectories = yield_only_last_steps
+        elif yield_only_last_steps and not yield_completed_trajectories:
+            raise TypeError("yield_only_last_steps=True requires yield_completed_trajectories=True (or None)")
+
+        if yield_only_last_steps:
+            if flatten_data is not None:
+                raise TypeError("`yield_only_last_steps` cannot be `True` when `flatten_data` is passed.")
+            if self.reset_at_each_iter:
+                raise TypeError("`yield_only_last_steps` cannot be `True` when `reset_at_each_iter=True`.")
+        if flatten_data is None:
+            flatten_data = replay_buffer is not None
+        self.flatten_data = flatten_data
+        self.yield_completed_trajectories = yield_completed_trajectories
+        self.yield_only_last_steps = yield_only_last_steps
+        if self.yield_completed_trajectories:
+            if len(self.env.batch_size) != 1:
+                raise ValueError("`yield_only_last_steps` only works with envs that have a single batch dimension. Got "
+                                 f"env.batch_size={self.env.batch_size}.")
+            self._yield_queues = [deque() for _ in range(self.env.batch_size[0])]
+            self._trajectory_queue = deque()
 
     @property
     def steps_per_batch(self) -> int:
         """Alias to `frames_per_batch`."""
         return self.frames_per_batch
 
-    def rollout(self) -> TensorDictBase:  # A simplified version of rollout
+    @property
+    def rollout(self) -> Callable[[], TensorDictBase]:
+        if self.yield_completed_trajectories:
+            return self._rollout_yield_trajs
+        else:
+            return self._rollout_all
+
+    def _rollout_all(self) -> TensorDictBase:  # A simplified version of rollout
         if self.reset_at_each_iter or self._shuttle is None:
             data = self.env.reset()
         else:
             data = self._shuttle
 
-        tensordicts = []
+        trajectory = []
         collected_steps = 0
         while collected_steps < self.steps_per_batch:
             policy_input = data
@@ -168,17 +230,52 @@ class LLMCollector(SyncDataCollector):
             collector_data = env_output.get("collector").copy()
             env_next_output.set("collector", collector_data)
             self._shuttle = env_next_output
-            self._shuttle.set("collector", collector_data)
             self._update_traj_ids(env_output)
-            data = self._shuttle
-            tensordicts.append(data)
+            data = env_output
+            trajectory.append(data)
             collected_steps += data.numel()
+        trajectory = lazy_stack(trajectory, -1)
+        if self.flatten_data:
+            return trajectory.view(-1)
+        return trajectory
 
-        data = lazy_stack(tensordicts, -1)
+    def _rollout_yield_trajs(self) -> TensorDictBase:  # A simplified version of rollout
+        if self._shuttle is None:
+            data = self.env.reset()
+        else:
+            data = self._shuttle
 
-        if self.replay_buffer is not None:
-            self.replay_buffer.extend(data)
-            if self._increment_frames(data.numel()):
-                return
-            return None
-        return data
+        collected_steps = 0
+        dones = torch.zeros(self.env.batch_size, dtype=torch.bool)
+        while True:
+            if self._trajectory_queue:
+                break
+            policy_input = data
+            env_input = self.policy(policy_input)
+            env_output, env_next_output = self.env.step_and_maybe_reset(env_input)
+
+            # carry over collector data without messing up devices
+            collector_data = env_output.get("collector").copy()
+            env_next_output.set("collector", collector_data)
+            self._shuttle = env_next_output
+            self._update_traj_ids(env_output)
+            data = env_output
+            collected_steps += data.numel()
+            for i, (_data, queue) in enumerate(zip(data.unbind(0), self._yield_queues)):
+                queue.append(_data)
+                dones[i] = _data["next", "done"].any()
+            if dones.any():
+                for idx in dones.nonzero()[0].tolist():
+                    if not self.yield_only_last_steps:
+                        print('stacking')
+                        self._trajectory_queue.append(lazy_stack(self._yield_queues[idx], -1))
+                        print('self._trajectory_queue', self._trajectory_queue[-1].shape)
+                    else:
+                        # FIXME: We need to increment the step count here because iterator() won't
+                        #  see the extra steps
+                        # We use lazy-stack because unsqueeze doesn't nest the strings in lists
+                        self._trajectory_queue.append(lazy_stack([self._yield_queues[idx][-1]]))
+                    self._yield_queues[idx].clear()
+
+        result = self._trajectory_queue.popleft()
+        return result

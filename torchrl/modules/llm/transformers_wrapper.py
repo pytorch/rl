@@ -14,10 +14,11 @@ from tensordict import (
     TensorDict,
     TensorDictBase,
 )
-from tensordict.utils import _zip_strict, expand_as_right
+from tensordict.utils import _zip_strict
 from torch.nn.utils.rnn import pad_sequence
 
 from torchrl.modules.llm.common import CategoricalSequential
+from torchrl.modules.utils.utils import _unpad_tensors
 
 
 class TransformersWrapper(CategoricalSequential):
@@ -464,15 +465,3 @@ class TransformersWrapper(CategoricalSequential):
         logits = logits.log_softmax(dim=-1)
         log_probs = logits.gather(-1, tokens.unsqueeze(-1)).squeeze(-1)
         return log_probs, logits
-
-
-def _unpad_tensors(tensors, mask, as_nested: bool = True) -> torch.Tensor:
-    shape = tensors.shape[2:]
-    mask = expand_as_right(mask.bool(), tensors)
-    nelts = mask.sum(-1)
-    while nelts.dim() > 1:
-        nelts = nelts.sum(-1)
-    vals = [t.view(-1, *shape) for t in tensors[mask].split(nelts.tolist(), dim=0)]
-    if as_nested:
-        return torch.nested.as_nested_tensor(vals)
-    return vals

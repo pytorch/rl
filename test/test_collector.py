@@ -5,10 +5,10 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import contextlib
 import functools
 import gc
-
 import importlib
 import os
 import subprocess
@@ -52,7 +52,7 @@ from torchrl.collectors.collectors import (
     MultiSyncDataCollector,
 )
 
-from torchrl.collectors.llm_collector import LLMCollector
+from torchrl.collectors.llm import LLMCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
     Composite,
@@ -3391,11 +3391,11 @@ class TestCollectorRB:
         assert assert_allclose_td(rbdata0, rbdata1)
 
     @pytest.mark.skipif(not _has_gym, reason="requires gym.")
-    @pytest.mark.parametrize("replay_buffer_chunk", [False, True])
+    @pytest.mark.parametrize("extend_buffer", [False, True])
     @pytest.mark.parametrize("env_creator", [False, True])
     @pytest.mark.parametrize("storagetype", [LazyTensorStorage, LazyMemmapStorage])
     def test_collector_rb_multisync(
-        self, replay_buffer_chunk, env_creator, storagetype, tmpdir
+        self, extend_buffer, env_creator, storagetype, tmpdir
     ):
         if not env_creator:
             env = GymEnv(CARTPOLE_VERSIONED()).append_transform(StepCounter())
@@ -3420,7 +3420,7 @@ class TestCollectorRB:
             replay_buffer=rb,
             total_frames=256,
             frames_per_batch=32,
-            replay_buffer_chunk=replay_buffer_chunk,
+            extend_buffer=extend_buffer,
         )
         torch.manual_seed(0)
         pred_len = 0
@@ -3430,7 +3430,7 @@ class TestCollectorRB:
             assert len(rb) == pred_len
         collector.shutdown()
         assert len(rb) == 256
-        if not replay_buffer_chunk:
+        if not extend_buffer:
             steps_counts = rb["step_count"].squeeze().split(16)
             collector_ids = rb["collector", "traj_ids"].squeeze().split(16)
             for step_count, ids in zip(steps_counts, collector_ids):
@@ -3442,11 +3442,11 @@ class TestCollectorRB:
                 assert (idsdiff >= 0).all()
 
     @pytest.mark.skipif(not _has_gym, reason="requires gym.")
-    @pytest.mark.parametrize("replay_buffer_chunk", [False, True])
+    @pytest.mark.parametrize("extend_buffer", [False, True])
     @pytest.mark.parametrize("env_creator", [False, True])
     @pytest.mark.parametrize("storagetype", [LazyTensorStorage, LazyMemmapStorage])
     def test_collector_rb_multiasync(
-        self, replay_buffer_chunk, env_creator, storagetype, tmpdir
+        self, extend_buffer, env_creator, storagetype, tmpdir
     ):
         if not env_creator:
             env = GymEnv(CARTPOLE_VERSIONED()).append_transform(StepCounter())
@@ -3471,7 +3471,7 @@ class TestCollectorRB:
             replay_buffer=rb,
             total_frames=256,
             frames_per_batch=16,
-            replay_buffer_chunk=replay_buffer_chunk,
+            extend_buffer=extend_buffer,
         )
         torch.manual_seed(0)
         pred_len = 0
@@ -3481,7 +3481,7 @@ class TestCollectorRB:
             assert len(rb) >= pred_len
         collector.shutdown()
         assert len(rb) == 256
-        if not replay_buffer_chunk:
+        if not extend_buffer:
             steps_counts = rb["step_count"].squeeze().split(16)
             collector_ids = rb["collector", "traj_ids"].squeeze().split(16)
             for step_count, ids in zip(steps_counts, collector_ids):
@@ -3576,6 +3576,18 @@ class TestLLMCollector:
         return llm_model
 
     @pytest.fixture(scope="module")
+    def vllm_instance_opt(self):
+        try:
+            import vllm
+        except ImportError:
+            pytest.skip(reason="missing vllm")
+
+        llm_model = vllm.LLM("facebook/opt-125m")
+        tokenizer = llm_model.get_tokenizer()
+        tokenizer.pad_token = tokenizer.eos_token
+        return llm_model
+
+    @pytest.fixture(scope="module")
     def transformers_instance(self):
         from transformers import AutoTokenizer, GPT2Config, GPT2LMHeadModel
 
@@ -3618,12 +3630,11 @@ class TestLLMCollector:
         self._run_collector_test(total_steps, rb, policy, tokenizer)
 
     def _run_collector_test(self, total_steps, rb, policy, tokenizer):
-        bsz = 1
+        bsz = 4
         dataloader = DummyStrDataLoader(bsz)
 
         env = LLMEnv.from_dataloader(
             dataloader=dataloader,
-            tokenizer=tokenizer,
             str2str=True,
             batch_size=bsz,
             group_repeats=True,
@@ -3650,15 +3661,142 @@ class TestLLMCollector:
 
         if rb is not None:
             # Now check the buffer
-            assert len(rb) == total_steps
-            sample = rb.sample(1)
+            assert len(rb) >= total_steps
+            sample = rb.sample(4)
+            assert sample.shape == (4,)
+            assert not sample._has_exclusive_keys
             # Should match length
-            assert len(sample["text"]) == 1
+            assert len(sample["text"]) == 4
+            # assert len(sample["text"][0]) == 10, sample["text"][0]
             # Should be non-empty
             assert sample["text_response"] is not None
+            for i in range(4):
+                # Check that there are more chars in the next step
+                assert len(sample["text"][i]) < len(sample["next", "text"][i])
         else:
             stack = torch.cat(stack)
-            assert stack.numel() == total_steps
+            assert not stack._has_exclusive_keys
+            assert stack.numel() == max(-(total_steps // -4) * 4, 4)
+            stack = stack.view(-1)
+            for i in range(stack.numel()):
+                # Check that there are more chars in the next step
+                assert len(stack["text"][i]) < len(stack["next", "text"][i])
+        assert collector._frames >= total_steps
+
+    def test_llm_collector_start(self, vllm_instance):
+        asyncio.run(self._async_run_collector_test(vllm_instance))
+
+    async def _async_run_collector_test(self, vllm_instance):
+        total_steps = 20
+        policy = vLLMWrapper(vllm_instance)
+        vllm_instance.get_tokenizer()
+        bsz = 4
+        dataloader = DummyStrDataLoader(bsz)
+
+        env = LLMEnv.from_dataloader(
+            dataloader=dataloader,
+            str2str=True,
+            batch_size=bsz,
+            group_repeats=True,
+        )
+
+        rb = ReplayBuffer(storage=LazyStackStorage(max_size=total_steps * 2))
+        collector = LLMCollector(
+            env=env,
+            policy_factory=lambda: policy,
+            steps_per_batch=env.batch_size[0],
+            replay_buffer=rb,
+            total_steps=total_steps,
+        )
+        collector.start()
+
+        i = 0
+        wait = 0
+        while True:
+            while not len(rb):
+                await asyncio.sleep(1)  # Use asyncio.sleep instead of time.sleep
+                wait += 1
+                if wait > 20:
+                    raise RuntimeError
+            sample = rb.sample(10)
+            for i in range(sample.numel()):
+                # Check that there are more chars in the next step
+                assert len(sample["text"][i]) < len(sample["next", "text"][i])
+            assert not sample._has_exclusive_keys, sample
+            await asyncio.sleep(0.1)  # Use asyncio.sleep instead of time.sleep
+            i += 1
+            if i == 5:
+                break
+        assert collector._frames >= total_steps
+
+        await collector.async_shutdown()
+
+    @pytest.mark.slow
+    @pytest.mark.parametrize("rb", [False, True])
+    @pytest.mark.parametrize("yield_only_last_steps", [False, True])
+    def test_llm_collector_completed(
+        self, vllm_instance_opt, rb, yield_only_last_steps
+    ):
+        policy = vLLMWrapper(vllm_instance_opt)
+        tokenizer = vllm_instance_opt.get_tokenizer()
+        bsz = 4
+        total_steps = 20
+        dataloader = DummyStrDataLoader(bsz)
+
+        env = LLMEnv.from_dataloader(
+            dataloader=dataloader,
+            str2str=True,
+            batch_size=bsz,
+            group_repeats=True,
+            eos_token_id=tokenizer.eos_token_id,
+        )
+        # To make sure the env breaks at some point
+        env = env.append_transform(StepCounter(max_steps=100))
+
+        if rb:
+            rb = ReplayBuffer(storage=LazyStackStorage(max_size=total_steps * 2))
+        else:
+            rb = None
+        collector = LLMCollector(
+            env=env,
+            policy_factory=lambda: policy,
+            steps_per_batch=env.batch_size[0],
+            replay_buffer=rb,
+            total_steps=total_steps,
+            yield_completed_trajectories=True,
+            yield_only_last_steps=yield_only_last_steps,
+        )
+        assert collector.yield_completed_trajectories
+        assert collector.yield_only_last_steps is yield_only_last_steps
+
+        cur_total_steps = 0
+        has_found_one_with_more_steps = False
+        for data in collector:
+            if rb is None:
+                assert data.ndim == 1
+                assert (data["next", "step_count"] < 99).all()
+                cur_total_steps += data.numel()
+                for i in range(data.numel()):
+                    # Check that there are more chars in the next step
+                    assert len(data["text"][i]) < len(data["next", "text"][i])
+                if yield_only_last_steps:
+                    assert data.shape == (1,)
+                else:
+                    has_found_one_with_more_steps |= data.numel() > 1
+            else:
+                assert data is None
+                sample = rb.sample(5)
+                for i in range(sample.numel()):
+                    # Check that there are more chars in the next step
+                    assert len(sample["text"][i]) < len(sample["next", "text"][i])
+                assert sample.ndim == 1
+                assert sample.shape == (5,)
+                assert (sample["next", "step_count"] < 99).all()
+                cur_total_steps += 1
+            assert collector._frames >= cur_total_steps
+        if rb is None and not yield_only_last_steps:
+            assert has_found_one_with_more_steps
+        assert collector._frames >= total_steps
 
 
 if __name__ == "__main__":
