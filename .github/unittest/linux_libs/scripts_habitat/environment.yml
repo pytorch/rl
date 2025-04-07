@@ -13,6 +13,7 @@ dependencies:
     - pytest-instafail
     - pytest-error-for-skips
     - pytest-rerunfailures
+    - pytest-asyncio
     - expecttest
     - pyyaml
     - scipy==1.9.1

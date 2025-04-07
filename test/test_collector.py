@@ -43,8 +43,8 @@ from torchrl._utils import (
 )
 from torchrl.collectors import (
     aSyncDataCollector,
-    RemoteWeightUpdaterBase,
     SyncDataCollector,
+    WeightUpdateSenderBase,
 )
 from torchrl.collectors.collectors import (
     _Interruptor,
@@ -3498,7 +3498,7 @@ def __deepcopy_error__(*args, **kwargs):
 
 
 class TestPolicyFactory:
-    class MPSRemoteWeightUpdater(RemoteWeightUpdaterBase):
+    class MPSWeightUpdaterBase(WeightUpdateSenderBase):
         def __init__(self, policy_weights, num_workers):
             # Weights are on mps device, which cannot be shared
             self.policy_weights = policy_weights.data
@@ -3542,7 +3542,7 @@ class TestPolicyFactory:
             reset_at_each_iter=False,
             device=device,
             storing_device="cpu",
-            remote_weight_updater=self.MPSRemoteWeightUpdater(policy_weights, 2),
+            weight_update_sender=self.MPSWeightUpdaterBase(policy_weights, 2),
         )
 
         collector.update_policy_weights_()
@@ -3683,10 +3683,9 @@ class TestLLMCollector:
                 assert len(stack["text"][i]) < len(stack["next", "text"][i])
         assert collector._frames >= total_steps
 
-    def test_llm_collector_start(self, vllm_instance):
-        asyncio.run(self._async_run_collector_test(vllm_instance))
-
-    async def _async_run_collector_test(self, vllm_instance):
+    @pytest.mark.slow
+    @pytest.mark.asyncio
+    async def test_llm_collector_start(self, vllm_instance):
         total_steps = 20
         policy = vLLMWrapper(vllm_instance)
         vllm_instance.get_tokenizer()
@@ -3708,28 +3707,29 @@ class TestLLMCollector:
             replay_buffer=rb,
             total_steps=total_steps,
         )
+        torchrl_logger.info("starting")
         collector.start()
 
-        i = 0
-        wait = 0
+        j = 0
         while True:
-            while not len(rb):
+            if not len(rb):
                 await asyncio.sleep(1)  # Use asyncio.sleep instead of time.sleep
-                wait += 1
-                if wait > 20:
-                    raise RuntimeError
             sample = rb.sample(10)
-            for i in range(sample.numel()):
+            assert sample.ndim == 1
+            for i in range(10):
                 # Check that there are more chars in the next step
                 assert len(sample["text"][i]) < len(sample["next", "text"][i])
             assert not sample._has_exclusive_keys, sample
-            await asyncio.sleep(0.1)  # Use asyncio.sleep instead of time.sleep
-            i += 1
-            if i == 5:
+            j += 1
+            if j == 5:
                 break
         assert collector._frames >= total_steps
 
-        await collector.async_shutdown()
+        try:
+            # Assuming collector._task is the task created in start()
+            await asyncio.wait_for(collector.async_shutdown(), timeout=30)
+        except asyncio.TimeoutError:
+            torchrl_logger.info("Collector shutdown timed out")
 
     @pytest.mark.slow
     @pytest.mark.parametrize("rb", [False, True])

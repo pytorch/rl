@@ -23,9 +23,9 @@ from torchrl.collectors.collectors import (
 )
 from torchrl.collectors.utils import _NON_NN_POLICY_WEIGHTS, split_trajectories
 from torchrl.collectors.weight_update import (
-    LocalWeightUpdaterBase,
-    RayRemoteWeightUpdater,
-    RemoteWeightUpdaterBase,
+    RayWeightUpdater,
+    WeightUpdateReceiverBase,
+    WeightUpdateSenderBase,
 )
 from torchrl.data import ReplayBuffer
 from torchrl.envs.common import EnvBase
@@ -277,14 +277,14 @@ class RayCollector(DataCollectorBase):
 
             .. note:: although it is not enfoced (to allow users to implement their own replay buffer class), a
                 :class:`~torchrl.data.RayReplayBuffer` instance should be used here.
-        local_weight_updater (LocalWeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
+        weight_update_receiver (WeightUpdateReceiverBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdateReceiverBase`
             or its subclass, responsible for updating the policy weights on the local inference worker.
             This is typically not used in :class:`~torchrl.collectors.RayCollector` as it focuses on distributed
             environments.
             Consider using a constructor if the updater needs to be serialized.
-        remote_weight_updater (RemoteWeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
+        weight_update_sender (WeightUpdateSenderBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdateSenderBase`
             or its subclass, responsible for updating the policy weights on remote inference workers managed by Ray.
-            If not provided, a :class:`~torchrl.collectors.RayRemoteWeightUpdater` will be used by default, leveraging
+            If not provided, a :class:`~torchrl.collectors.RayWeightUpdateSender` will be used by default, leveraging
             Ray's distributed capabilities.
             Consider using a constructor if the updater needs to be serialized.
 
@@ -347,11 +347,11 @@ class RayCollector(DataCollectorBase):
         update_after_each_batch: bool = False,
         max_weight_update_interval: int = -1,
         replay_buffer: ReplayBuffer | None = None,
-        remote_weight_updater: RemoteWeightUpdaterBase
-        | Callable[[], RemoteWeightUpdaterBase]
+        weight_update_sender: WeightUpdateSenderBase
+        | Callable[[], WeightUpdateSenderBase]
         | None = None,
-        local_weight_updater: LocalWeightUpdaterBase
-        | Callable[[], LocalWeightUpdaterBase]
+        weight_update_receiver: WeightUpdateReceiverBase
+        | Callable[[], WeightUpdateReceiverBase]
         | None = None,
     ):
         self.frames_per_batch = frames_per_batch
@@ -469,7 +469,7 @@ class RayCollector(DataCollectorBase):
             policy_weights = policy_weights.data.lock_()
         else:
             policy_weights = TensorDict(lock=True)
-            if remote_weight_updater is None:
+            if weight_update_sender is None:
                 warnings.warn(_NON_NN_POLICY_WEIGHTS)
         self.policy_weights = policy_weights
         self.collector_class = collector_class
@@ -537,14 +537,14 @@ class RayCollector(DataCollectorBase):
                 collector_kwargs,
                 remote_configs,
             )
-        if remote_weight_updater is None:
-            remote_weight_updater = RayRemoteWeightUpdater(
+        if weight_update_sender is None:
+            weight_update_sender = RayWeightUpdater(
                 policy_weights=policy_weights,
                 remote_collectors=self.remote_collectors,
                 max_interval=self.max_weight_update_interval,
             )
-        self.remote_weight_updater = remote_weight_updater
-        self.local_weight_updater = local_weight_updater
+        self.weight_update_sender = weight_update_sender
+        self.weight_update_receiver = weight_update_receiver
 
         # Print info of all remote workers
         pending_samples = [

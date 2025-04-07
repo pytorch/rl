@@ -7,17 +7,18 @@ from __future__ import annotations
 from collections import deque
 from typing import Callable
 
+import torch
+
 from tensordict import lazy_stack, TensorDictBase
 
 from torchrl.collectors import (
-    LocalWeightUpdaterBase,
-    RemoteWeightUpdaterBase,
     SyncDataCollector,
+    WeightUpdateReceiverBase,
+    WeightUpdateSenderBase,
 )
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.envs.common import EnvBase
-import torch
-import asyncio
+
 
 class LLMCollector(SyncDataCollector):
     """A simplified version of SyncDataCollector for LLM inference.
@@ -65,12 +66,12 @@ class LLMCollector(SyncDataCollector):
             and run for `T` steps, `flatten_data=True` will present data of shape `(B*T,)`, whereas
             `flatten_data=False` will not present data of shape `(B, T)`.
             Defaults to `True` when `replay_buffer` is provided, `False` otherwise.
-        local_weight_updater (LocalWeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
+        weight_update_receiver (WeightUpdateReceiverBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdateReceiverBase`
             or its subclass, responsible for updating the policy weights on the local inference worker.
             If not provided, a :class:`~torchrl.collectors.VanillaLocalWeightUpdater` will be used by default,
             which directly fetches and applies the weights from the server.
             Consider using a constructor if the updater needs to be serialized.
-        remote_weight_updater (RemoteWeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
+        weight_update_sender (WeightUpdateSenderBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdateSenderBase`
             or its subclass, responsible for updating the policy weights on remote inference workers.
             This is typically not used in :class:`~torchrl.collectors.SyncDataCollector` as it operates in a single-process environment.
             Consider using a constructor if the updater needs to be serialized.
@@ -144,19 +145,19 @@ class LLMCollector(SyncDataCollector):
         policy_factory: Callable[[], Callable[[TensorDictBase], TensorDictBase]]
         | None = None,
         steps_per_batch: int,
-            yield_only_last_steps: bool | None = None,
-            yield_completed_trajectories: bool | None = None,
+        yield_only_last_steps: bool | None = None,
+        yield_completed_trajectories: bool | None = None,
         postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
         total_steps: int = -1,
         async_envs: bool = False,
         replay_buffer: ReplayBuffer | None = None,
         reset_at_each_iter: bool = False,
-        flatten_data: bool | None= None,
-        local_weight_updater: LocalWeightUpdaterBase
-        | Callable[[], LocalWeightUpdaterBase]
+        flatten_data: bool | None = None,
+        weight_update_receiver: WeightUpdateReceiverBase
+        | Callable[[], WeightUpdateReceiverBase]
         | None = None,
-        remote_weight_updater: RemoteWeightUpdaterBase
-        | Callable[[], RemoteWeightUpdaterBase]
+        weight_update_sender: WeightUpdateSenderBase
+        | Callable[[], WeightUpdateSenderBase]
         | None = None,
     ):
         if async_envs:
@@ -168,8 +169,8 @@ class LLMCollector(SyncDataCollector):
             frames_per_batch=steps_per_batch,
             replay_buffer=replay_buffer,
             total_frames=total_steps,
-            local_weight_updater=local_weight_updater,
-            remote_weight_updater=remote_weight_updater,
+            weight_update_receiver=weight_update_receiver,
+            weight_update_sender=weight_update_sender,
             reset_at_each_iter=reset_at_each_iter,
             trust_policy=True,
             use_buffers=False,
@@ -182,13 +183,19 @@ class LLMCollector(SyncDataCollector):
         if yield_completed_trajectories is None:
             yield_completed_trajectories = yield_only_last_steps
         elif yield_only_last_steps and not yield_completed_trajectories:
-            raise TypeError("yield_only_last_steps=True requires yield_completed_trajectories=True (or None)")
+            raise TypeError(
+                "yield_only_last_steps=True requires yield_completed_trajectories=True (or None)"
+            )
 
         if yield_only_last_steps:
             if flatten_data is not None:
-                raise TypeError("`yield_only_last_steps` cannot be `True` when `flatten_data` is passed.")
+                raise TypeError(
+                    "`yield_only_last_steps` cannot be `True` when `flatten_data` is passed."
+                )
             if self.reset_at_each_iter:
-                raise TypeError("`yield_only_last_steps` cannot be `True` when `reset_at_each_iter=True`.")
+                raise TypeError(
+                    "`yield_only_last_steps` cannot be `True` when `reset_at_each_iter=True`."
+                )
         if flatten_data is None:
             flatten_data = replay_buffer is not None
         self.flatten_data = flatten_data
@@ -196,8 +203,10 @@ class LLMCollector(SyncDataCollector):
         self.yield_only_last_steps = yield_only_last_steps
         if self.yield_completed_trajectories:
             if len(self.env.batch_size) != 1:
-                raise ValueError("`yield_only_last_steps` only works with envs that have a single batch dimension. Got "
-                                 f"env.batch_size={self.env.batch_size}.")
+                raise ValueError(
+                    "`yield_only_last_steps` only works with envs that have a single batch dimension. Got "
+                    f"env.batch_size={self.env.batch_size}."
+                )
             self._yield_queues = [deque() for _ in range(self.env.batch_size[0])]
             self._trajectory_queue = deque()
 
@@ -267,14 +276,16 @@ class LLMCollector(SyncDataCollector):
             if dones.any():
                 for idx in dones.nonzero()[0].tolist():
                     if not self.yield_only_last_steps:
-                        print('stacking')
-                        self._trajectory_queue.append(lazy_stack(self._yield_queues[idx], -1))
-                        print('self._trajectory_queue', self._trajectory_queue[-1].shape)
+                        self._trajectory_queue.append(
+                            lazy_stack(self._yield_queues[idx], -1)
+                        )
                     else:
                         # FIXME: We need to increment the step count here because iterator() won't
                         #  see the extra steps
                         # We use lazy-stack because unsqueeze doesn't nest the strings in lists
-                        self._trajectory_queue.append(lazy_stack([self._yield_queues[idx][-1]]))
+                        self._trajectory_queue.append(
+                            lazy_stack([self._yield_queues[idx][-1]])
+                        )
                     self._yield_queues[idx].clear()
 
         result = self._trajectory_queue.popleft()

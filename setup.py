@@ -216,6 +216,7 @@ def _main(argv):
             "scipy",
             "pytest-mock",
             "pytest-cov",
+            "pytest-asyncio",
             "pytest-benchmark",
             "pytest-rerunfailures",
             "pytest-error-for-skips",
