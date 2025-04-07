@@ -1249,8 +1249,8 @@ class SyncDataCollector(DataCollectorBase):
             continue
 
     async def _asyncio_iterator(self):
-        for d in self:
-            yield d
+        for data in self:
+            yield data
 
     async def async_shutdown(self):
         """Finishes processes started by ray.init() during async execution."""
