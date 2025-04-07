@@ -4097,6 +4097,22 @@ class TestHistory:
         )
         recovered = history._inv_chatml(tokenizer.batch_decode(data_token)[0])
 
+    def test_history_spec(self):
+        history = History(
+            role=["system", "user", "assistant", "user"],
+            content=[
+                "i'm the system",
+                "i'm the user",
+                "I'm the assistant",
+                "I'm the user again",
+            ],
+        )
+        spec = history.default_spec()
+        r = spec.zero()
+        assert isinstance(r, History)
+        assert spec.is_in(r)
+        assert spec.is_in(history)
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
