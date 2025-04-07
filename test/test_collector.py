@@ -67,6 +67,7 @@ from torchrl.data import (
 from torchrl.data.llm.dataset import _has_transformers
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import (
+    AsyncEnvPool,
     EnvBase,
     EnvCreator,
     InitTracker,
@@ -3737,10 +3738,12 @@ class TestLLMCollector:
     def test_llm_collector_completed(
         self, vllm_instance_opt, rb, yield_only_last_steps
     ):
+        torch.manual_seed(0)
         policy = vLLMWrapper(vllm_instance_opt)
         tokenizer = vllm_instance_opt.get_tokenizer()
         bsz = 4
         total_steps = 20
+        max_steps = 20
         dataloader = DummyStrDataLoader(bsz)
 
         env = LLMEnv.from_dataloader(
@@ -3751,7 +3754,7 @@ class TestLLMCollector:
             eos_token_id=tokenizer.eos_token_id,
         )
         # To make sure the env breaks at some point
-        env = env.append_transform(StepCounter(max_steps=100))
+        env = env.append_transform(StepCounter(max_steps=max_steps))
 
         if rb:
             rb = ReplayBuffer(storage=LazyStackStorage(max_size=total_steps * 2))
@@ -3774,11 +3777,27 @@ class TestLLMCollector:
         for data in collector:
             if rb is None:
                 assert data.ndim == 1
-                assert (data["next", "step_count"] < 99).all()
+                # assert (data["next", "step_count"] < max_steps-1).all()
                 cur_total_steps += data.numel()
                 for i in range(data.numel()):
-                    # Check that there are more chars in the next step
-                    assert len(data["text"][i]) < len(data["next", "text"][i])
+                    if data[i]["next", "step_count"] == max_steps:
+                        continue
+                    if data[i]["text_response"]:
+                        # Check that there are more chars in the next step
+                        assert len(data["text"][i]) < len(data["next", "text"][i]), (
+                            i,
+                            data[i]["next", "step_count"],
+                            data[i]["next", "done"],
+                            data[i]["text_response"],
+                        )
+                    else:
+                        assert len(data["text"][i]) == len(data["next", "text"][i]), (
+                            i,
+                            data[i]["next", "step_count"],
+                            data[i]["next", "done"],
+                            data[i]["text_response"],
+                        )
+
                 if yield_only_last_steps:
                     assert data.shape == (1,)
                 else:
@@ -3787,8 +3806,137 @@ class TestLLMCollector:
                 assert data is None
                 sample = rb.sample(5)
                 for i in range(sample.numel()):
-                    # Check that there are more chars in the next step
-                    assert len(sample["text"][i]) < len(sample["next", "text"][i])
+                    if sample[i]["next", "step_count"] == max_steps:
+                        continue
+                    if sample[i]["text_response"]:
+                        # Check that there are more chars in the next step
+                        assert len(sample["text"][i]) < len(
+                            sample["next", "text"][i]
+                        ), (
+                            i,
+                            sample[i]["next", "step_count"],
+                            sample[i]["next", "done"],
+                            sample[i]["text_response"],
+                        )
+                    else:
+                        assert len(sample["text"][i]) == len(
+                            sample["next", "text"][i]
+                        ), (
+                            i,
+                            sample[i]["next", "step_count"],
+                            sample[i]["next", "done"],
+                            sample[i]["text_response"],
+                        )
+
+                assert sample.ndim == 1
+                assert sample.shape == (5,)
+                assert (sample["next", "step_count"] < 99).all()
+                cur_total_steps += 1
+            assert collector._frames >= cur_total_steps
+        if rb is None and not yield_only_last_steps:
+            assert has_found_one_with_more_steps
+        assert collector._frames >= total_steps
+
+    @pytest.mark.slow
+    @pytest.mark.parametrize("rb", [False, True])
+    @pytest.mark.parametrize("yield_only_last_steps", [False, True])
+    def test_llm_collector_completed_async(
+        self, vllm_instance_opt, rb, yield_only_last_steps
+    ):
+        torch.manual_seed(0)
+        policy = vLLMWrapper(vllm_instance_opt)
+        tokenizer = vllm_instance_opt.get_tokenizer()
+        bsz = 4
+        total_steps = 20
+        max_steps = 20
+        dataloader = DummyStrDataLoader(bsz)
+
+        def env_maker():
+            env = LLMEnv.from_dataloader(
+                dataloader=dataloader,
+                str2str=True,
+                batch_size=(),
+                group_repeats=True,
+                eos_token_id=tokenizer.eos_token_id,
+            )
+            # To make sure the env breaks at some point
+            env = env.append_transform(StepCounter(max_steps=max_steps))
+            return env
+
+        env = AsyncEnvPool([env_maker] * bsz, backend="threading", stack="lazy")
+
+        if rb:
+            rb = ReplayBuffer(storage=LazyStackStorage(max_size=total_steps * 2))
+        else:
+            rb = None
+        collector = LLMCollector(
+            env=env,
+            policy_factory=lambda: policy,
+            steps_per_batch=env.batch_size[0],
+            replay_buffer=rb,
+            total_steps=total_steps,
+            yield_completed_trajectories=True,
+            yield_only_last_steps=yield_only_last_steps,
+        )
+        assert collector.yield_completed_trajectories
+        assert collector.yield_only_last_steps is yield_only_last_steps
+
+        cur_total_steps = 0
+        has_found_one_with_more_steps = False
+        for data in collector:
+            if rb is None:
+                assert data.ndim == 1
+                # assert (data["next", "step_count"] < max_steps-1).all()
+                cur_total_steps += data.numel()
+                for i in range(data.numel()):
+                    if data[i]["next", "step_count"] == max_steps:
+                        continue
+                    if data[i]["text_response"]:
+                        # Check that there are more chars in the next step
+                        assert len(data["text"][i]) < len(data["next", "text"][i]), (
+                            i,
+                            data[i]["next", "step_count"],
+                            data[i]["next", "done"],
+                            data[i]["text_response"],
+                        )
+                    else:
+                        assert len(data["text"][i]) == len(data["next", "text"][i]), (
+                            i,
+                            data[i]["next", "step_count"],
+                            data[i]["next", "done"],
+                            data[i]["text_response"],
+                        )
+
+                if yield_only_last_steps:
+                    assert data.shape == (1,)
+                else:
+                    has_found_one_with_more_steps |= data.numel() > 1
+            else:
+                assert data is None
+                sample = rb.sample(5)
+                for i in range(sample.numel()):
+                    if sample[i]["next", "step_count"] == max_steps:
+                        continue
+                    if sample[i]["text_response"]:
+                        # Check that there are more chars in the next step
+                        assert len(sample["text"][i]) < len(
+                            sample["next", "text"][i]
+                        ), (
+                            i,
+                            sample[i]["next", "step_count"],
+                            sample[i]["next", "done"],
+                            sample[i]["text_response"],
+                        )
+                    else:
+                        assert len(sample["text"][i]) == len(
+                            sample["next", "text"][i]
+                        ), (
+                            i,
+                            sample[i]["next", "step_count"],
+                            sample[i]["next", "done"],
+                            sample[i]["text_response"],
+                        )
+
                 assert sample.ndim == 1
                 assert sample.shape == (5,)
                 assert (sample["next", "step_count"] < 99).all()

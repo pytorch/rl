@@ -524,15 +524,15 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         output_spec.unlock_(recurse=True)
         input_spec.unlock_(recurse=True)
         if "full_observation_spec" not in output_spec:
-            output_spec["full_observation_spec"] = Composite()
+            output_spec["full_observation_spec"] = Composite(batch_size=batch_size)
         if "full_done_spec" not in output_spec:
-            output_spec["full_done_spec"] = Composite()
+            output_spec["full_done_spec"] = Composite(batch_size=batch_size)
         if "full_reward_spec" not in output_spec:
-            output_spec["full_reward_spec"] = Composite()
+            output_spec["full_reward_spec"] = Composite(batch_size=batch_size)
         if "full_state_spec" not in input_spec:
-            input_spec["full_state_spec"] = Composite()
+            input_spec["full_state_spec"] = Composite(batch_size=batch_size)
         if "full_action_spec" not in input_spec:
-            input_spec["full_action_spec"] = Composite()
+            input_spec["full_action_spec"] = Composite(batch_size=batch_size)
 
         if "is_closed" not in self.__dir__():
             self.is_closed = True

@@ -219,7 +219,7 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
 
         output_spec, input_spec = self._setup()
         input_spec["full_state_spec"].set(
-            self._env_idx_key, NonTensor(example_data=0, shape=self.batch_size)
+            self._env_idx_key, NonTensor(example_data=0, shape=input_spec.shape)
         )
         self.__dict__["_output_spec"] = output_spec
         self.__dict__["_input_spec"] = input_spec
