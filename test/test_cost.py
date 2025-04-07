@@ -16676,6 +16676,9 @@ def test_loss_exploration():
 
 
 class TestPPO4LLMs:
+    @pytest.mark.skipif(
+        not _has_transformers, reason="transformers lib required to test PPO with LLMs"
+    )
     @set_capture_non_tensor_stack(False)
     @pytest.mark.parametrize("from_text", [True, False])
     def test_hf(self, from_text):
