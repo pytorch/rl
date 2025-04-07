@@ -2,9 +2,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import argparse
 import contextlib
 import functools
+import importlib.util
 import itertools
 import operator
 import os
@@ -12,7 +15,6 @@ import sys
 import warnings
 from copy import deepcopy
 from dataclasses import asdict, dataclass
-from typing import Optional
 
 import numpy as np
 import pytest
@@ -39,7 +41,7 @@ from tensordict.nn import (
 )
 from tensordict.nn.distributions.composite import _add_suffix
 from tensordict.nn.utils import Buffer
-from tensordict.utils import unravel_key
+from tensordict.utils import set_capture_non_tensor_stack, unravel_key
 from torch import autograd, nn
 from torchrl._utils import _standardize
 from torchrl.data import Bounded, Categorical, Composite, MultiOneHot, OneHot, Unbounded
@@ -145,7 +147,10 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         get_available_devices,
         get_default_devices,
     )
-    from pytorch.rl.test.mocking_classes import ContinuousActionConvMockEnv
+    from pytorch.rl.test.mocking_classes import (
+        ContinuousActionConvMockEnv,
+        DummyStrDataLoader,
+    )
 else:
     from _utils_internal import (  # noqa
         _call_value_nets,
@@ -153,7 +158,7 @@ else:
         get_available_devices,
         get_default_devices,
     )
-    from mocking_classes import ContinuousActionConvMockEnv
+    from mocking_classes import ContinuousActionConvMockEnv, DummyStrDataLoader
 
 _has_functorch = True
 try:
@@ -164,6 +169,8 @@ try:
 except ImportError as err:
     _has_functorch = False
     FUNCTORCH_ERR = str(err)
+
+_has_transformers = bool(importlib.util.find_spec("transformers"))
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 IS_WINDOWS = sys.platform == "win32"
@@ -176,6 +183,9 @@ pytestmark = [
     ),
     pytest.mark.filterwarnings(
         "ignore:dep_util is Deprecated. Use functions from setuptools instead"
+    ),
+    pytest.mark.filterwarnings(
+        "ignore:The PyTorch API of nested tensors is in prototype"
     ),
 ]
 
@@ -270,7 +280,7 @@ class MARLEnv(EnvBase):
     def _reset(self, tensordic):
         ...
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None):
         ...
 
 
@@ -7991,6 +8001,7 @@ class TestDiscreteCQL(LossModuleTestBase):
                 assert loss[key].shape == torch.Size([])
 
 
+@pytest.mark.skipif(not _has_transformers, reason="requires transformers lib")
 class TestPPO(LossModuleTestBase):
     seed = 0
 
@@ -13682,7 +13693,8 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         assert target_val.device == source_val.device, key
         if target_val.dtype == torch.long:
             continue
-        d0 += (target_val - source_val).norm().item()
+        with torch.no_grad():
+            d0 += (target_val - source_val).norm().item()
 
     assert d0 > 0
     if mode == "hard":
@@ -13696,7 +13708,8 @@ def test_updater(mode, value_network_update_interval, device, dtype):
                 target_val = upd._targets[key]
                 if target_val.dtype == torch.long:
                     continue
-                d1 += (target_val - source_val).norm().item()
+                with torch.no_grad():
+                    d1 += (target_val - source_val).norm().item()
 
             assert d1 == d0, i
             assert upd.counter == i
@@ -13711,7 +13724,8 @@ def test_updater(mode, value_network_update_interval, device, dtype):
             target_val = upd._targets[key]
             if target_val.dtype == torch.long:
                 continue
-            d1 += (target_val - source_val).norm().item()
+            with torch.no_grad():
+                d1 += (target_val - source_val).norm().item()
         assert d1 < d0
 
     elif mode == "soft":
@@ -13724,7 +13738,8 @@ def test_updater(mode, value_network_update_interval, device, dtype):
             target_val = upd._targets[key]
             if target_val.dtype == torch.long:
                 continue
-            d1 += (target_val - source_val).norm().item()
+            with torch.no_grad():
+                d1 += (target_val - source_val).norm().item()
         assert d1 < d0
     with pytest.warns(UserWarning, match="already"):
         upd.init_()
@@ -13737,7 +13752,8 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         target_val = upd._targets[key]
         if target_val.dtype == torch.long:
             continue
-        d2 += (target_val - source_val).norm().item()
+        with torch.no_grad():
+            d2 += (target_val - source_val).norm().item()
     assert d2 < 1e-6
 
 
@@ -16657,6 +16673,75 @@ def test_loss_exploration():
         assert exploration_type() == ExplorationType.RANDOM
         loss_fn(None, ExplorationType.MEAN)
         assert exploration_type() == ExplorationType.RANDOM
+
+
+class TestPPO4LLMs:
+    @set_capture_non_tensor_stack(False)
+    @pytest.mark.parametrize("from_text", [True, False])
+    def test_hf(self, from_text):
+        from torchrl.envs import LLMEnv, Transform
+        from torchrl.modules import TransformersWrapper
+        from transformers import AutoTokenizer, OPTConfig, OPTForCausalLM
+
+        tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
+        tokenizer.pad_token = tokenizer.eos_token
+
+        model = OPTForCausalLM(OPTConfig()).eval()
+        policy_inference = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            generate=True,
+            from_text=from_text,
+            return_log_probs=True,
+        )
+        policy_train = TransformersWrapper(
+            model, tokenizer=tokenizer, generate=False, from_text=False
+        )
+        for p in policy_train.parameters():
+            assert p.requires_grad
+        # Create some fake data
+        dl = DummyStrDataLoader(batch_size=32)
+        llm_env = LLMEnv.from_dataloader(
+            dl,
+            tokenizer=tokenizer if not from_text else None,
+            batch_size=(32,),
+            str2str=True,
+        )
+
+        class RewardTransform(Transform):
+            def _step(self, td, next_td):
+                next_td["reward"] = torch.randn_like(
+                    td["tokens_response"], dtype=torch.float
+                ).unsqueeze(-1)
+                return next_td
+
+            def transform_reward_spec(self, reward_spec):
+                return reward_spec.set(
+                    "reward", Unbounded((*reward_spec.shape, -1, 1), dtype=torch.float)
+                )
+
+        llm_env = llm_env.append_transform(RewardTransform())
+        with torch.no_grad():
+            data = llm_env.rollout(3, policy_inference)
+            data = data.view(-1)
+            assert data["tokens_response"].shape[-1] == 20
+        # Make some fake advantages:
+        data["advantage"] = torch.randn_like(data["next", "reward"])
+
+        loss = ClipPPOLoss(
+            actor_network=policy_train,
+        )
+        loss_vals = loss(data)
+
+        assert "loss_objective" in loss_vals
+        assert "loss_entropy" in loss_vals
+        assert loss_vals["loss_objective"].requires_grad
+        assert loss_vals["loss_entropy"].requires_grad
+        assert "clip_fraction" in loss_vals
+        assert "kl_approx" in loss_vals
+        assert "entropy" in loss_vals
+        assert "ESS" in loss_vals
+        assert "loss_critic" not in loss_vals
 
 
 if __name__ == "__main__":

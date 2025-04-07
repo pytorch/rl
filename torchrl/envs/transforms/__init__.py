@@ -74,6 +74,7 @@ from .transforms import (
     VecNorm,
 )
 from .vc1 import VC1Transform
+from .vecnorm import VecNormV2
 from .vip import VIPRewardTransform, VIPTransform
 
 __all__ = [
@@ -143,6 +144,7 @@ __all__ = [
     "VIPTransform",
     "VecGymEnvTransform",
     "VecNorm",
+    "VecNormV2",
     "as_nested_tensor",
     "as_padded_tensor",
     "gSDENoise",

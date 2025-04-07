@@ -126,16 +126,16 @@ mechanism for updating policy weights across different devices and processes, ac
 Local and Remote Weight Updaters
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The weight synchronization process is facilitated by two main components: :class:`~torchrl.collectors.LocalWeightUpdaterBase`
-and :class:`~torchrl.collectors.RemoteWeightUpdaterBase`. These base classes provide a structured interface for
+The weight synchronization process is facilitated by two main components: :class:`~torchrl.collectors.WeightUpdateReceiverBase`
+and :class:`~torchrl.collectors.WeightUpdateSenderBase`. These base classes provide a structured interface for
 implementing custom weight update logic, allowing users to tailor the synchronization process to their specific needs.
 
-- :class:`~torchrl.collectors.LocalWeightUpdaterBase`: This component is responsible for updating the policy weights on
+- :class:`~torchrl.collectors.WeightUpdateReceiverBase`: This component is responsible for updating the policy weights on
   the local inference worker. It is particularly useful when the training and inference occur on the same machine but on
   different devices. Users can extend this class to define how weights are fetched from a server and applied locally.
   It is also the extension point for collectors where the workers need to ask for weight updates (in contrast with
   situations where the server decides when to update the worker policies).
-- :class:`~torchrl.collectors.RemoteWeightUpdaterBase`: This component handles the distribution of policy weights to
+- :class:`~torchrl.collectors.WeightUpdateSenderBase`: This component handles the distribution of policy weights to
   remote inference workers. It is essential in distributed systems where multiple workers need to be kept in sync with
   the central policy. Users can extend this class to implement custom logic for synchronizing weights across a network of
   devices or processes.
@@ -153,8 +153,8 @@ Default Implementations
 
 For common scenarios, the API provides default implementations of these updaters, such as
 :class:`~torchrl.collectors.VanillaLocalWeightUpdater`, :class:`~torchrl.collectors.MultiProcessedRemoteWeightUpdate`,
-:class:`~torchrl.collectors.RayRemoteWeightUpdater`, :class:`~torchrl.collectors.RPCRemoteWeightUpdater`, and
-:class:`~torchrl.collectors.DistributedRemoteWeightUpdater`.
+:class:`~torchrl.collectors.RayWeightUpdateSender`, :class:`~torchrl.collectors.RPCWeightUpdateSender`, and
+:class:`~torchrl.collectors.DistributedWeightUpdateSender`.
 These implementations cover a range of typical deployment configurations, from single-device setups to large-scale
 distributed systems.
 
@@ -180,13 +180,13 @@ scenarios, ensuring that their policies remain up-to-date and performant.
     :toctree: generated/
     :template: rl_template.rst
 
-    LocalWeightUpdaterBase
-    RemoteWeightUpdaterBase
+    WeightUpdateReceiverBase
+    WeightUpdateSenderBase
     VanillaLocalWeightUpdater
     MultiProcessedRemoteWeightUpdate
-    RayRemoteWeightUpdater
-    DistributedRemoteWeightUpdater
-    RPCRemoteWeightUpdater
+    RayWeightUpdateSender
+    DistributedWeightUpdateSender
+    RPCWeightUpdateSender
 
 Collectors and replay buffers interoperability
 ----------------------------------------------
@@ -319,6 +319,21 @@ node or across multiple nodes.
     submitit_delayed_launcher
     RayCollector
 
+LLM Collectors
+---------------------------
+TorchRL also provides a data collectors for large language models. These collectors
+are meant to include a subset of the functionality of other data collectors, targeted
+at supporting researchers in fine-tuning large language models.  These classes 
+currently derive from the :class:`~torchrl.collectors.SyncDataCollector` class.
+These classes are experimental and subject to change.
+
+.. currentmodule:: torchrl.collectors.llm_collectors
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    LLMCollector
 
 Helper functions
 ----------------

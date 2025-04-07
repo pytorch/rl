@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import _pickle
 import abc
+import asyncio
 import collections
 import contextlib
 import functools
@@ -49,10 +50,10 @@ from torchrl._utils import (
 )
 from torchrl.collectors.utils import split_trajectories
 from torchrl.collectors.weight_update import (
-    LocalWeightUpdaterBase,
-    MultiProcessedRemoteWeightUpdate,
-    RemoteWeightUpdaterBase,
-    VanillaLocalWeightUpdater,
+    MultiProcessedWeightUpdate,
+    VanillaWeightUpdater,
+    WeightUpdateReceiverBase,
+    WeightUpdateSenderBase,
 )
 from torchrl.data import ReplayBuffer
 from torchrl.data.tensor_specs import TensorSpec
@@ -145,6 +146,7 @@ def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
 class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     """Base class for data collectors."""
 
+    _task = None
     _iterator = None
     total_frames: int
     requested_frames_per_batch: int
@@ -152,8 +154,41 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     trust_policy: bool
     compiled_policy: bool
     cudagraphed_policy: bool
-    local_weights_updater: LocalWeightUpdaterBase | None = None
-    remote_weights_updater: RemoteWeightUpdaterBase | None = None
+    _weight_update_receiver: WeightUpdateReceiverBase | None = None
+    _weight_update_sender: WeightUpdateSenderBase | None = None
+
+    @property
+    def weight_update_receiver(self) -> WeightUpdateReceiverBase:
+        return self._weight_update_receiver
+
+    @weight_update_receiver.setter
+    def weight_update_receiver(
+        self,
+        value: WeightUpdateReceiverBase | Callable[[], WeightUpdateReceiverBase] | None,
+    ):
+        if value is not None:
+            if not isinstance(value, WeightUpdateReceiverBase) and callable(value):
+                # then it's a constructor
+                value = value()
+            value.register_collector(self)
+            if value.collector is not self:
+                raise RuntimeError("Failed to register collector.")
+        self._weight_update_receiver = value
+
+    @property
+    def weight_update_sender(self) -> WeightUpdateSenderBase:
+        return self._weight_update_sender
+
+    @weight_update_sender.setter
+    def weight_update_sender(self, value: WeightUpdateSenderBase | None):
+        if value is not None:
+            if not isinstance(value, WeightUpdateSenderBase) and callable(value):
+                # then it's a constructor
+                value = value()
+            value.register_collector(self)
+            if value.collector is not self:
+                raise RuntimeError("Failed to register collector.")
+        self._weight_update_sender = value
 
     def _get_policy_and_device(
         self,
@@ -161,7 +196,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         observation_spec: TensorSpec = None,
         policy_device: Any = NO_DEFAULT,
         env_maker: Any | None = None,
-        env_maker_kwargs: dict | None = None,
+        env_maker_kwargs: dict[str, Any] | None = None,
     ) -> tuple[TensorDictModule, None | Callable[[], dict]]:
         """Util method to get a policy and its device given the collector __init__ inputs.
 
@@ -268,27 +303,25 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 configured remote weights updater, a TypeError will be raised.
 
         Raises:
-            TypeError: If `worker_ids` is provided but no `remote_weights_updater` is configured.
+            TypeError: If `worker_ids` is provided but no `weight_update_sender` is configured.
 
         .. note::
 
-            - The method first attempts to update weights locally using `local_weights_updater`, if available.
-            - If a `remote_weights_updater` is configured, it will be used to update the specified remote workers.
-            - Users can extend the `LocalWeightUpdaterBase` and `RemoteWeightUpdaterBase` classes to customize
+            - The method first attempts to update weights locally using `weight_update_receiver`, if available.
+            - If a `weight_update_sender` is configured, it will be used to update the specified remote workers.
+            - Users can extend the `WeightUpdateReceiverBase` and `WeightUpdateSenderBase` classes to customize
               the weight update logic for specific use cases. This method should not be overwritten.
 
         .. seealso:: :class:`~torchrl.collectors.LocalWeightsUpdaterBase` and
             :meth:`~torchrl.collectors.RemoteWeightsUpdaterBase`.
 
         """
-        if self.local_weights_updater is not None:
-            self.local_weights_updater(policy_weights, **kwargs)
-        if self.remote_weights_updater is not None:
-            self.remote_weights_updater(policy_weights, worker_ids=worker_ids, **kwargs)
+        if self.weight_update_receiver is not None:
+            self.weight_update_receiver(policy_weights, **kwargs)
+        if self.weight_update_sender is not None:
+            self.weight_update_sender(policy_weights, worker_ids=worker_ids, **kwargs)
         elif worker_ids is not None:
-            raise TypeError(
-                "worker_ids was passed but remote_weights_updater was None."
-            )
+            raise TypeError("worker_ids was passed but weight_update_sender was None.")
 
     def __iter__(self) -> Iterator[TensorDictBase]:
         try:
@@ -478,7 +511,17 @@ class SyncDataCollector(DataCollectorBase):
             This isn't compatible with environments with dynamic specs. Defaults to ``True``
             for envs without dynamic specs, ``False`` for others.
         replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordicts
-            but populate the buffer instead. Defaults to ``None``.
+            but populate the buffer instead.
+            Defaults to ``None``.
+
+            .. seealso:: By default, the buffer is populated every time a (batch of) frames is collected.
+                If the buffer needs to be extended with entire rollouts, set `extend_buffer` to `True`.
+
+            .. warning:: Using a replay buffer with a `postproc` or `split_trajs=True` is prohibited unless
+                `extend_buffer=True`, as the whole batch needs to be observed to apply these transforms.
+
+        extend_buffer (bool, optional): if `True`, the replay buffer is extended with entire rollouts and not
+            with single steps. Defaults to `False`.
         trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
             assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
             and ``False`` otherwise.
@@ -493,13 +536,15 @@ class SyncDataCollector(DataCollectorBase):
             or `ManiSkills <https://github.com/haosulab/ManiSkill/>`_) cuda synchronization may cause unexpected
             crashes.
             Defaults to ``False``.
-        local_weights_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
+        weight_update_receiver (WeightUpdateReceiverBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdateReceiverBase`
             or its subclass, responsible for updating the policy weights on the local inference worker.
             If not provided, a :class:`~torchrl.collectors.VanillaLocalWeightUpdater` will be used by default,
             which directly fetches and applies the weights from the server.
-        remote_weights_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
+            Consider using a constructor if the updater needs to be serialized.
+        weight_update_sender (WeightUpdateSenderBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdateSenderBase`
             or its subclass, responsible for updating the policy weights on remote inference workers.
             This is typically not used in :class:`~torchrl.collectors.SyncDataCollector` as it operates in a single-process environment.
+            Consider using a constructor if the updater needs to be serialized.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -573,7 +618,7 @@ class SyncDataCollector(DataCollectorBase):
         storing_device: DEVICE_TYPING = None,
         policy_device: DEVICE_TYPING = None,
         env_device: DEVICE_TYPING = None,
-        create_env_kwargs: dict | None = None,
+        create_env_kwargs: dict[str, Any] | None = None,
         max_frames_per_traj: int | None = None,
         init_random_frames: int | None = None,
         reset_at_each_iter: bool = False,
@@ -586,12 +631,17 @@ class SyncDataCollector(DataCollectorBase):
         set_truncated: bool = False,
         use_buffers: bool | None = None,
         replay_buffer: ReplayBuffer | None = None,
+        extend_buffer: bool = False,
         trust_policy: bool = None,
         compile_policy: bool | dict[str, Any] | None = None,
         cudagraph_policy: bool | dict[str, Any] | None = None,
         no_cuda_sync: bool = False,
-        local_weights_updater: LocalWeightUpdaterBase | None = None,
-        remote_weights_updater: RemoteWeightUpdaterBase | None = None,
+        weight_update_receiver: WeightUpdateReceiverBase
+        | Callable[[], WeightUpdateReceiverBase]
+        | None = None,
+        weight_update_sender: WeightUpdateSenderBase
+        | Callable[[], WeightUpdateSenderBase]
+        | None = None,
         **kwargs,
     ):
         from torchrl.envs.batched_envs import BatchedEnvBase
@@ -701,9 +751,20 @@ class SyncDataCollector(DataCollectorBase):
         self.env: EnvBase = env
         del env
         self.replay_buffer = replay_buffer
+        self.extend_buffer = extend_buffer
         if self.replay_buffer is not None:
-            if postproc is not None:
-                raise TypeError("postproc must be None when a replay buffer is passed.")
+            if postproc is not None and not self.extend_buffer:
+                raise TypeError(
+                    "postproc must be None when a replay buffer is passed, or extend_buffer must be set to True."
+                )
+            if split_trajs not in (None, False) and not self.extend_buffer:
+                raise TypeError(
+                    "split_trajs must be None/False when a replay buffer is passed, or extend_buffer must be set to True."
+                )
+            if return_same_td:
+                raise TypeError(
+                    "return_same_td must be False when a replay buffer is passed, or extend_buffer must be set to True."
+                )
             if use_buffers:
                 raise TypeError("replay_buffer is exclusive with use_buffers.")
         if use_buffers is None:
@@ -831,13 +892,13 @@ class SyncDataCollector(DataCollectorBase):
         self._frames = 0
         self._iter = -1
 
-        if local_weights_updater is None:
-            local_weights_updater = VanillaLocalWeightUpdater(
+        if weight_update_receiver is None:
+            weight_update_receiver = VanillaWeightUpdater(
                 weight_getter=self.get_weights_fn, policy_weights=self.policy_weights
             )
 
-        self.local_weights_updater = local_weights_updater
-        self.remote_weights_updater = remote_weights_updater
+        self.weight_update_receiver = weight_update_receiver
+        self.weight_update_sender = weight_update_sender
 
     @property
     def _traj_pool(self):
@@ -1144,35 +1205,12 @@ class SyncDataCollector(DataCollectorBase):
                 self._iter += 1
                 tensordict_out = self.rollout()
                 if tensordict_out is None:
-                    # if a replay buffer is passed, there is no tensordict_out
+                    # if a replay buffer is passed and self.extend_buffer=False, there is no tensordict_out
                     #  frames are updated within the rollout function
                     yield
                     continue
                 self._increment_frames(tensordict_out.numel())
-
-                if self.split_trajs:
-                    tensordict_out = split_trajectories(
-                        tensordict_out, prefix="collector"
-                    )
-                if self.postproc is not None:
-                    tensordict_out = self.postproc(tensordict_out)
-                if self._exclude_private_keys:
-
-                    def is_private(key):
-                        if isinstance(key, str) and key.startswith("_"):
-                            return True
-                        if isinstance(key, tuple) and any(
-                            _key.startswith("_") for _key in key
-                        ):
-                            return True
-                        return False
-
-                    excluded_keys = [
-                        key for key in tensordict_out.keys(True) if is_private(key)
-                    ]
-                    tensordict_out = tensordict_out.exclude(
-                        *excluded_keys, inplace=True
-                    )
+                tensordict_out = self._postproc(tensordict_out)
                 if self.return_same_td:
                     # This is used with multiprocessed collectors to use the buffers
                     # stored in the tensordict.
@@ -1181,6 +1219,9 @@ class SyncDataCollector(DataCollectorBase):
                             event.record()
                             event.synchronize()
                     yield tensordict_out
+                elif self.replay_buffer is not None:
+                    self.replay_buffer.extend(tensordict_out)
+                    yield
                 else:
                     # we must clone the values, as the tensordict is updated in-place.
                     # otherwise the following code may break:
@@ -1193,6 +1234,49 @@ class SyncDataCollector(DataCollectorBase):
                     # >>>          break
                     # >>> assert data0["done"] is not data1["done"]
                     yield tensordict_out.clone()
+
+    def start(self):
+        """Starts the RayCollector."""
+        if self.replay_buffer is None:
+            raise RuntimeError("Replay buffer must be defined for asyncio execution.")
+        if self._task is None or self._task.done():
+            loop = asyncio.get_event_loop()
+            self._task = loop.create_task(self._run_iterator_silently())
+
+    async def _run_iterator_silently(self):
+        async for _ in self._asyncio_iterator():
+            # Process each item silently
+            continue
+
+    async def _asyncio_iterator(self):
+        for data in self:
+            yield data
+
+    async def async_shutdown(self):
+        """Finishes processes started by ray.init() during async execution."""
+        if self._task is not None:
+            await self._task
+        self.shutdown()
+
+    def _postproc(self, tensordict_out):
+        if self.split_trajs:
+            tensordict_out = split_trajectories(tensordict_out, prefix="collector")
+        if self.postproc is not None:
+            tensordict_out = self.postproc(tensordict_out)
+        if self._exclude_private_keys:
+
+            def is_private(key):
+                if isinstance(key, str) and key.startswith("_"):
+                    return True
+                if isinstance(key, tuple) and any(_key.startswith("_") for _key in key):
+                    return True
+                return False
+
+            excluded_keys = [
+                key for key in tensordict_out.keys(True) if is_private(key)
+            ]
+            tensordict_out = tensordict_out.exclude(*excluded_keys, inplace=True)
+        return tensordict_out
 
     def _update_traj_ids(self, env_output) -> None:
         # we can't use the reset keys because they're gone
@@ -1315,7 +1399,7 @@ class SyncDataCollector(DataCollectorBase):
                         next_data.clear_device_()
                     self._shuttle.set("next", next_data)
 
-                if self.replay_buffer is not None:
+                if self.replay_buffer is not None and not self.extend_buffer:
                     self.replay_buffer.add(self._shuttle)
                     if self._increment_frames(self._shuttle.numel()):
                         return
@@ -1346,7 +1430,7 @@ class SyncDataCollector(DataCollectorBase):
                     self.interruptor is not None
                     and self.interruptor.collection_stopped()
                 ):
-                    if self.replay_buffer is not None:
+                    if self.replay_buffer is not None and not self.extend_buffer:
                         return
                     result = self._final_rollout
                     if self._use_buffers:
@@ -1383,7 +1467,7 @@ class SyncDataCollector(DataCollectorBase):
                                 self._final_rollout.ndim - 1,
                                 out=self._final_rollout,
                             )
-                elif self.replay_buffer is not None:
+                elif self.replay_buffer is not None and not self.extend_buffer:
                     return
                 else:
                     result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
@@ -1515,7 +1599,7 @@ class SyncDataCollector(DataCollectorBase):
                 f"\nexploration={self.exploration_type})"
             )
             return string
-        except AttributeError:
+        except Exception:
             return f"{type(self).__name__}(not_init)"
 
 
@@ -1550,8 +1634,8 @@ class _MultiDataCollector(DataCollectorBase):
                 pickled directly), the :arg:`policy_factory` should be used instead.
 
     Keyword Args:
-        policy_factory (Callable[[], Callable], optional): a callable that returns
-            a policy instance. This is exclusive with the `policy` argument.
+        policy_factory (Callable[[], Callable], list of Callable[[], Callable], optional): a callable
+            (or list of callables) that returns a policy instance. This is exclusive with the `policy` argument.
 
             .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.
 
@@ -1607,6 +1691,16 @@ class _MultiDataCollector(DataCollectorBase):
         create_env_kwargs (dict, optional): A dictionary with the
             keyword arguments used to create an environment. If a list is
             provided, each of its elements will be assigned to a sub-collector.
+        collector_class (Python class or constructor): a collector class to be remotely instantiated. Can be
+            :class:`~torchrl.collectors.SyncDataCollector`,
+            :class:`~torchrl.collectors.MultiSyncDataCollector`,
+            :class:`~torchrl.collectors.MultiaSyncDataCollector`
+            or a derived class of these.
+            Defaults to :class:`~torchrl.collectors.SyncDataCollector`.
+
+            .. note:: This keyword argument is particularly handy when local attributes need to be
+                set, such as `weight_update_receiver`.
+
         max_frames_per_traj (int, optional): Maximum steps per trajectory.
             Note that a trajectory can span across multiple batches (unless
             ``reset_at_each_iter`` is set to ``True``, see below).
@@ -1677,6 +1771,8 @@ class _MultiDataCollector(DataCollectorBase):
             for envs without dynamic specs, ``False`` for others.
         replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordicts
             but populate the buffer instead. Defaults to ``None``.
+        extend_buffer (bool, optional): if `True`, the replay buffer is extended with entire rollouts and not
+            with single steps. Defaults to `True` for multiprocessed data collectors.
         trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
             assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
             and ``False`` otherwise.
@@ -1691,13 +1787,34 @@ class _MultiDataCollector(DataCollectorBase):
             or `ManiSkills <https://github.com/haosulab/ManiSkill/>`_) cuda synchronization may cause unexpected
             crashes.
             Defaults to ``False``.
-        local_weights_updater (LocalWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`
-            or its subclass, responsible for updating the policy weights on each local inference worker.
+        weight_update_receiver (WeightUpdateReceiverBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdateReceiverBase`
+            or its subclass, responsible for updating the policy weights on the server worker.
             If not provided, left unused.
-        remote_weights_updater (RemoteWeightUpdaterBase, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`
+            Consider using a constructor if the updater needs to be serialized.
+
+            .. note:: This instance or constructor is not passed to the workers. To specify the workers `weight_update_receiver`
+                instance, you can pass a `collector_class` argument containing the constructor:
+
+                >>> from functools import partial
+                >>> # the weight receiver - called when `worker_collector.update_policy_weight_() is called
+                >>> worker_weight_updater_receiver = ...
+                >>> # The weight sender - called when `server_collector.update_policy_weight_()` is called
+                >>> server_weight_updater_sender = ...
+                >>> collector = MultiaSyncDataCollector(
+                ...     create_env_fn=[func, func],
+                ...     policy=policy,
+                ...     frames_per_batch=100,
+                ...     total_frames=1000,
+                ...     collector_class=partial(SyncDataCollector, weight_update_receiver=worker_weight_updater_receiver),
+                ...     weight_update_sender=server_weight_updater_sender,
+                ... )
+
+        weight_update_sender (WeightUpdateSenderBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdateSenderBase`
             or its subclass, responsible for updating the policy weights on remote inference workers.
             If not provided, a :class:`~torchrl.collectors.MultiProcessedRemoteWeightUpdate` will be used by default,
             which handles weight synchronization across multiple processes.
+            See `weight_update_receiver` for details on the server / worker weight update API.
+            Consider using a constructor if the updater needs to be serialized.
 
     """
 
@@ -1707,7 +1824,9 @@ class _MultiDataCollector(DataCollectorBase):
         policy: None
         | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]) = None,
         *,
-        policy_factory: Callable[[], Callable] | None = None,
+        policy_factory: Callable[[], Callable]
+        | list[Callable[[], Callable]]
+        | None = None,
         frames_per_batch: int,
         total_frames: int | None = -1,
         device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
@@ -1715,6 +1834,7 @@ class _MultiDataCollector(DataCollectorBase):
         env_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         policy_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         create_env_kwargs: Sequence[dict] | None = None,
+        collector_class: type | Callable[[], DataCollectorBase] | None = None,
         max_frames_per_traj: int | None = None,
         init_random_frames: int | None = None,
         reset_at_each_iter: bool = False,
@@ -1723,20 +1843,25 @@ class _MultiDataCollector(DataCollectorBase):
         exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
         reset_when_done: bool = True,
         update_at_each_batch: bool = False,
-        preemptive_threshold: float = None,
-        num_threads: int = None,
+        preemptive_threshold: float | None = None,
+        num_threads: int | None = None,
         num_sub_threads: int = 1,
         cat_results: str | int | None = None,
         set_truncated: bool = False,
         use_buffers: bool | None = None,
         replay_buffer: ReplayBuffer | None = None,
-        replay_buffer_chunk: bool = True,
-        trust_policy: bool = None,
+        extend_buffer: bool = True,
+        replay_buffer_chunk: bool | None = None,
+        trust_policy: bool | None = None,
         compile_policy: bool | dict[str, Any] | None = None,
         cudagraph_policy: bool | dict[str, Any] | None = None,
         no_cuda_sync: bool = False,
-        remote_weights_updater: RemoteWeightUpdaterBase | None = None,
-        local_weights_updater: LocalWeightUpdaterBase | None = None,
+        weight_update_sender: WeightUpdateSenderBase
+        | Callable[[], WeightUpdateReceiverBase]
+        | None = None,
+        weight_update_receiver: WeightUpdateReceiverBase
+        | Callable[[], WeightUpdateReceiverBase]
+        | None = None,
     ):
         self.closed = True
         self.num_workers = len(create_env_fn)
@@ -1774,6 +1899,7 @@ class _MultiDataCollector(DataCollectorBase):
         self.storing_device = storing_devices
         self.policy_device = policy_devices
         self.env_device = env_devices
+        self.collector_class = collector_class
 
         del storing_device, env_device, policy_device, device
         self.no_cuda_sync = no_cuda_sync
@@ -1781,7 +1907,18 @@ class _MultiDataCollector(DataCollectorBase):
         self._use_buffers = use_buffers
         self.replay_buffer = replay_buffer
         self._check_replay_buffer_init()
-        self.replay_buffer_chunk = replay_buffer_chunk
+        if replay_buffer_chunk is not None:
+            if extend_buffer is None:
+                replay_buffer_chunk = extend_buffer
+                warnings.warn(
+                    "The replay_buffer_chunk is deprecated and replaced by extend_buffer. This argument will disappear in v0.10.",
+                    DeprecationWarning,
+                )
+            elif extend_buffer != replay_buffer_chunk:
+                raise ValueError(
+                    "conflicting values for replay_buffer_chunk and extend_buffer."
+                )
+        self.extend_buffer = extend_buffer
         if (
             replay_buffer is not None
             and hasattr(replay_buffer, "shared")
@@ -1795,9 +1932,11 @@ class _MultiDataCollector(DataCollectorBase):
             trust_policy = policy is not None and isinstance(policy, CudaGraphModule)
         self.trust_policy = trust_policy
 
-        if policy_factory is not None and policy is not None:
+        if not isinstance(policy_factory, Sequence):
+            policy_factory = [policy_factory] * self.num_workers
+        if any(policy_factory) and policy is not None:
             raise TypeError("policy_factory and policy are mutually exclusive")
-        elif policy_factory is None:
+        elif not any(policy_factory):
             for policy_device, env_maker, env_maker_kwargs in zip(
                 self.policy_device, self.create_env_fn, self.create_env_kwargs
             ):
@@ -1816,21 +1955,24 @@ class _MultiDataCollector(DataCollectorBase):
                 )
                 self._policy_weights_dict[policy_device] = weights
             self._get_weights_fn = get_weights_fn
-            if remote_weights_updater is None:
-                remote_weights_updater = MultiProcessedRemoteWeightUpdate(
+            if weight_update_sender is None:
+                weight_update_sender = MultiProcessedWeightUpdate(
                     get_server_weights=self._get_weights_fn,
                     policy_weights=self._policy_weights_dict,
                 )
-        elif remote_weights_updater is None:
-            # TODO
-            raise NotImplementedError(
-                "remote_weights_updater cannot be None when policy_factory is provided."
+        elif weight_update_sender is None:
+            warnings.warn(
+                "weight_update_sender is None, but policy_factory is provided. This means that the server will "
+                "not know how to send the weights to the workers. If the workers can handle their weight synchronization "
+                "on their own (via some specialized worker type / constructor) this may well work, but make sure "
+                "your weight synchronization strategy is properly set."
             )
 
-        self.remote_weights_updater = remote_weights_updater
-        self.local_weights_updater = local_weights_updater
+        self.weight_update_sender = weight_update_sender
+        self.weight_update_receiver = weight_update_receiver
 
         self.policy = policy
+        self.policy_factory = policy_factory
 
         remainder = 0
         if total_frames is None or total_frames < 0:
@@ -2001,6 +2143,13 @@ class _MultiDataCollector(DataCollectorBase):
         self.procs = []
         self.pipes = []
         self._traj_pool = _TrajectoryPool(lock=True)
+        # Create a policy on the right device
+        policy_factory = self.policy_factory
+        if any(policy_factory):
+            policy_factory = [
+                CloudpickleWrapper(_policy_factory)
+                for _policy_factory in policy_factory
+            ]
 
         for i, (env_fun, env_fun_kwargs) in enumerate(
             zip(self.create_env_fn, self.create_env_kwargs)
@@ -2011,7 +2160,6 @@ class _MultiDataCollector(DataCollectorBase):
             ):  # to avoid circular imports
                 env_fun = CloudpickleWrapper(env_fun)
 
-            # Create a policy on the right device
             policy_device = self.policy_device[i]
             storing_device = self.storing_device[i]
             env_device = self.env_device[i]
@@ -2020,13 +2168,14 @@ class _MultiDataCollector(DataCollectorBase):
             #  This makes sure that a given set of shared weights for a given device are
             #  shared for all policies that rely on that device.
             policy = self.policy
-            policy_weights = self._policy_weights_dict[policy_device]
+            policy_weights = self._policy_weights_dict.get(policy_device)
             if policy is not None and policy_weights is not None:
                 cm = policy_weights.to_module(policy)
             else:
                 cm = contextlib.nullcontext()
             with cm:
                 kwargs = {
+                    "policy_factory": policy_factory[i],
                     "pipe_parent": pipe_parent,
                     "pipe_child": pipe_child,
                     "queue_out": queue_out,
@@ -2046,7 +2195,7 @@ class _MultiDataCollector(DataCollectorBase):
                     "set_truncated": self.set_truncated,
                     "use_buffers": self._use_buffers,
                     "replay_buffer": self.replay_buffer,
-                    "replay_buffer_chunk": self.replay_buffer_chunk,
+                    "extend_buffer": self.extend_buffer,
                     "traj_pool": self._traj_pool,
                     "trust_policy": self.trust_policy,
                     "compile_policy": self.compiled_policy_kwargs
@@ -2056,6 +2205,7 @@ class _MultiDataCollector(DataCollectorBase):
                     if self.cudagraphed_policy
                     else False,
                     "no_cuda_sync": self.no_cuda_sync,
+                    "collector_class": self.collector_class,
                 }
                 proc = _ProcessNoWarn(
                     target=_main_async_collector,
@@ -3019,7 +3169,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         storing_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         env_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         policy_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
-        create_env_kwargs: Sequence[dict] | None = None,
+        create_env_kwargs: Sequence[dict[str, Any]] | None = None,
         max_frames_per_traj: int | None = None,
         init_random_frames: int | None = None,
         reset_at_each_iter: bool = False,
@@ -3028,8 +3178,8 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
         reset_when_done: bool = True,
         update_at_each_batch: bool = False,
-        preemptive_threshold: float = None,
-        num_threads: int = None,
+        preemptive_threshold: float | None = None,
+        num_threads: int | None = None,
         num_sub_threads: int = 1,
         set_truncated: bool = False,
         **kwargs,
@@ -3101,21 +3251,26 @@ def _main_async_collector(
     set_truncated: bool = False,
     use_buffers: bool | None = None,
     replay_buffer: ReplayBuffer | None = None,
-    replay_buffer_chunk: bool = True,
+    extend_buffer: bool = True,
     traj_pool: _TrajectoryPool = None,
     trust_policy: bool = False,
     compile_policy: bool = False,
     cudagraph_policy: bool = False,
     no_cuda_sync: bool = False,
+    policy_factory: Callable | None = None,
+    collector_class: type | Callable[[], DataCollectorBase] | None = None,
 ) -> None:
+    if collector_class is None:
+        collector_class = SyncDataCollector
     pipe_parent.close()
     # init variables that will be cleared when closing
     collected_tensordict = data = next_data = data_in = inner_collector = dc_iter = None
 
-    inner_collector = SyncDataCollector(
+    inner_collector = collector_class(
         create_env_fn,
         create_env_kwargs=create_env_kwargs,
         policy=policy,
+        policy_factory=policy_factory,
         total_frames=-1,
         max_frames_per_traj=max_frames_per_traj,
         frames_per_batch=frames_per_batch,
@@ -3131,7 +3286,8 @@ def _main_async_collector(
         interruptor=interruptor,
         set_truncated=set_truncated,
         use_buffers=use_buffers,
-        replay_buffer=replay_buffer if replay_buffer_chunk else None,
+        replay_buffer=replay_buffer if extend_buffer else None,
+        extend_buffer=False,
         traj_pool=traj_pool,
         trust_policy=trust_policy,
         compile_policy=compile_policy,
@@ -3201,7 +3357,7 @@ def _main_async_collector(
                 continue
 
             if replay_buffer is not None:
-                if not replay_buffer_chunk:
+                if not extend_buffer:
                     next_data.names = None
                     replay_buffer.extend(next_data)
 
@@ -3278,7 +3434,7 @@ def _main_async_collector(
                 continue
 
         elif msg == "update":
-            inner_collector.update_policy_weights_()
+            inner_collector.update_policy_weights_(policy_weights=data_in)
             pipe_child.send((j, "updated"))
             has_timed_out = False
             continue

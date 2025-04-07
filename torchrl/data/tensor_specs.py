@@ -4941,7 +4941,7 @@ class Composite(TensorSpec):
                     spec.shape = self.shape
                 else:
                     raise ValueError(
-                        f"The shape of the spec {type(spec).__name__} and the Composite {type(self).__name__} mismatch: the first "
+                        f"The shapes of the spec {type(spec).__name__} and the {type(self).__name__} mismatch: the first "
                         f"{self.ndim} dimensions should match but got spec.shape={spec.shape} and "
                         f"Composite.shape={self.shape}."
                     )
@@ -5284,9 +5284,20 @@ class Composite(TensorSpec):
     def to(self, dest: torch.dtype | DEVICE_TYPING) -> Composite:
         if dest is None:
             return self
+        if isinstance(dest, torch.dtype):
+            items = list(self.items())
+            kwargs = {}
+            for key, value in items:
+                if value is None:
+                    kwargs[key] = value
+                    continue
+                kwargs[key] = value.to(dest)
+            return self.__class__(
+                **kwargs, device=self.device, shape=self.shape, data_cls=self.data_cls
+            )
         if not isinstance(dest, (str, int, torch.device)):
             raise ValueError(
-                "Only device casting is allowed with specs of type Composite."
+                "Only device/dtype casting is allowed with specs of type Composite."
             )
         if self._device and self._device == torch.device(dest):
             return self

@@ -5,9 +5,11 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import contextlib
 import functools
 import gc
+import importlib
 import os
 import subprocess
 import sys
@@ -39,27 +41,36 @@ from torchrl._utils import (
     prod,
     seed_generator,
 )
-from torchrl.collectors import aSyncDataCollector, SyncDataCollector
+from torchrl.collectors import (
+    aSyncDataCollector,
+    SyncDataCollector,
+    WeightUpdateSenderBase,
+)
 from torchrl.collectors.collectors import (
     _Interruptor,
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
 )
+
+from torchrl.collectors.llm import LLMCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
     Composite,
     LazyMemmapStorage,
+    LazyStackStorage,
     LazyTensorStorage,
     NonTensor,
     ReplayBuffer,
     TensorSpec,
     Unbounded,
 )
+from torchrl.data.llm.dataset import _has_transformers
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import (
     EnvBase,
     EnvCreator,
     InitTracker,
+    LLMEnv,
     ParallelEnv,
     SerialEnv,
     StepCounter,
@@ -73,7 +84,13 @@ from torchrl.envs.utils import (
     PARTIAL_MISSING_ERR,
     RandomPolicy,
 )
-from torchrl.modules import Actor, OrnsteinUhlenbeckProcessModule, SafeModule
+from torchrl.modules import (
+    Actor,
+    OrnsteinUhlenbeckProcessModule,
+    SafeModule,
+    TransformersWrapper,
+    vLLMWrapper,
+)
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True
@@ -98,6 +115,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         DiscreteActionConvPolicy,
         DiscreteActionVecMockEnv,
         DiscreteActionVecPolicy,
+        DummyStrDataLoader,
         EnvThatErrorsAfter10Iters,
         EnvWithDynamicSpec,
         HeterogeneousCountingEnv,
@@ -130,6 +148,7 @@ else:
         DiscreteActionConvPolicy,
         DiscreteActionVecMockEnv,
         DiscreteActionVecPolicy,
+        DummyStrDataLoader,
         EnvThatErrorsAfter10Iters,
         EnvWithDynamicSpec,
         HeterogeneousCountingEnv,
@@ -146,6 +165,8 @@ IS_OSX = sys.platform == "darwin"
 PYTHON_3_10 = sys.version_info.major == 3 and sys.version_info.minor == 10
 PYTHON_3_7 = sys.version_info.major == 3 and sys.version_info.minor == 7
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
+_has_cuda = torch.cuda.is_available()
+_has_vllm = importlib.util.find_spec("vllm") is not None
 
 
 class WrappablePolicy(nn.Module):
@@ -3370,11 +3391,11 @@ class TestCollectorRB:
         assert assert_allclose_td(rbdata0, rbdata1)
 
     @pytest.mark.skipif(not _has_gym, reason="requires gym.")
-    @pytest.mark.parametrize("replay_buffer_chunk", [False, True])
+    @pytest.mark.parametrize("extend_buffer", [False, True])
     @pytest.mark.parametrize("env_creator", [False, True])
     @pytest.mark.parametrize("storagetype", [LazyTensorStorage, LazyMemmapStorage])
     def test_collector_rb_multisync(
-        self, replay_buffer_chunk, env_creator, storagetype, tmpdir
+        self, extend_buffer, env_creator, storagetype, tmpdir
     ):
         if not env_creator:
             env = GymEnv(CARTPOLE_VERSIONED()).append_transform(StepCounter())
@@ -3399,7 +3420,7 @@ class TestCollectorRB:
             replay_buffer=rb,
             total_frames=256,
             frames_per_batch=32,
-            replay_buffer_chunk=replay_buffer_chunk,
+            extend_buffer=extend_buffer,
         )
         torch.manual_seed(0)
         pred_len = 0
@@ -3409,7 +3430,7 @@ class TestCollectorRB:
             assert len(rb) == pred_len
         collector.shutdown()
         assert len(rb) == 256
-        if not replay_buffer_chunk:
+        if not extend_buffer:
             steps_counts = rb["step_count"].squeeze().split(16)
             collector_ids = rb["collector", "traj_ids"].squeeze().split(16)
             for step_count, ids in zip(steps_counts, collector_ids):
@@ -3421,11 +3442,11 @@ class TestCollectorRB:
                 assert (idsdiff >= 0).all()
 
     @pytest.mark.skipif(not _has_gym, reason="requires gym.")
-    @pytest.mark.parametrize("replay_buffer_chunk", [False, True])
+    @pytest.mark.parametrize("extend_buffer", [False, True])
     @pytest.mark.parametrize("env_creator", [False, True])
     @pytest.mark.parametrize("storagetype", [LazyTensorStorage, LazyMemmapStorage])
     def test_collector_rb_multiasync(
-        self, replay_buffer_chunk, env_creator, storagetype, tmpdir
+        self, extend_buffer, env_creator, storagetype, tmpdir
     ):
         if not env_creator:
             env = GymEnv(CARTPOLE_VERSIONED()).append_transform(StepCounter())
@@ -3450,7 +3471,7 @@ class TestCollectorRB:
             replay_buffer=rb,
             total_frames=256,
             frames_per_batch=16,
-            replay_buffer_chunk=replay_buffer_chunk,
+            extend_buffer=extend_buffer,
         )
         torch.manual_seed(0)
         pred_len = 0
@@ -3460,7 +3481,7 @@ class TestCollectorRB:
             assert len(rb) >= pred_len
         collector.shutdown()
         assert len(rb) == 256
-        if not replay_buffer_chunk:
+        if not extend_buffer:
             steps_counts = rb["step_count"].squeeze().split(16)
             collector_ids = rb["collector", "traj_ids"].squeeze().split(16)
             for step_count, ids in zip(steps_counts, collector_ids):
@@ -3474,6 +3495,308 @@ class TestCollectorRB:
 
 def __deepcopy_error__(*args, **kwargs):
     raise RuntimeError("deepcopy not allowed")
+
+
+class TestPolicyFactory:
+    class MPSWeightUpdaterBase(WeightUpdateSenderBase):
+        def __init__(self, policy_weights, num_workers):
+            # Weights are on mps device, which cannot be shared
+            self.policy_weights = policy_weights.data
+            self.num_workers = num_workers
+
+        def _sync_weights_with_worker(
+            self, worker_id: int | torch.device, server_weights: TensorDictBase
+        ) -> TensorDictBase:
+            # Send weights on cpu - the local workers will do the cpu->mps copy
+            self.collector.pipes[worker_id].send((server_weights, "update"))
+            val, msg = self.collector.pipes[worker_id].recv()
+            assert msg == "updated"
+            return server_weights
+
+        def _get_server_weights(self) -> TensorDictBase:
+            return self.policy_weights.cpu()
+
+        def _maybe_map_weights(self, server_weights: TensorDictBase) -> TensorDictBase:
+            return server_weights
+
+        def all_worker_ids(self) -> list[int] | list[torch.device]:
+            return list(range(self.num_workers))
+
+    @pytest.mark.skipif(not _has_cuda, reason="requires cuda another device than CPU.")
+    def test_weight_update(self):
+        device = "cuda:0"
+        env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
+        policy_factory = lambda: TensorDictModule(
+            nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"]
+        ).to(device)
+        policy = policy_factory()
+        policy_weights = TensorDict.from_module(policy)
+
+        collector = MultiSyncDataCollector(
+            create_env_fn=[env_maker, env_maker],
+            policy_factory=policy_factory,
+            total_frames=2000,
+            max_frames_per_traj=50,
+            frames_per_batch=200,
+            init_random_frames=-1,
+            reset_at_each_iter=False,
+            device=device,
+            storing_device="cpu",
+            weight_update_sender=self.MPSWeightUpdaterBase(policy_weights, 2),
+        )
+
+        collector.update_policy_weights_()
+        try:
+            for i, data in enumerate(collector):
+                if i == 2:
+                    assert (data["action"] != 0).any()
+                    # zero the policy
+                    policy_weights.data.zero_()
+                    collector.update_policy_weights_()
+                elif i == 3:
+                    assert (data["action"] == 0).all(), data["action"]
+                    break
+        finally:
+            collector.shutdown()
+
+
+@pytest.mark.skipif(not _has_transformers, reason="missing transformers dependencies")
+@pytest.mark.skipif(not _has_vllm, reason="missing vllm dependencies")
+class TestLLMCollector:
+    @pytest.fixture(scope="module")
+    def vllm_instance(self):
+        try:
+            import vllm
+        except ImportError:
+            pytest.skip(reason="missing vllm")
+
+        llm_model = vllm.LLM("gpt2")
+        tokenizer = llm_model.get_tokenizer()
+        tokenizer.pad_token = tokenizer.eos_token
+        return llm_model
+
+    @pytest.fixture(scope="module")
+    def vllm_instance_opt(self):
+        try:
+            import vllm
+        except ImportError:
+            pytest.skip(reason="missing vllm")
+
+        llm_model = vllm.LLM("facebook/opt-125m")
+        tokenizer = llm_model.get_tokenizer()
+        tokenizer.pad_token = tokenizer.eos_token
+        return llm_model
+
+    @pytest.fixture(scope="module")
+    def transformers_instance(self):
+        from transformers import AutoTokenizer, GPT2Config, GPT2LMHeadModel
+
+        tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        model = GPT2LMHeadModel(GPT2Config()).eval()
+        # tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
+        # model = OPTModel(OPTConfig("facebook/opt-125m"))
+        # tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
+        # model = OPTForCausalLM(OPTConfig())
+
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+
+        return model, tokenizer
+
+    @pytest.mark.slow
+    @pytest.mark.parametrize("rb", [True, False])
+    @pytest.mark.parametrize("total_steps", [1, 10, 20])
+    def test_llm_collector_with_vllm(self, rb, total_steps, vllm_instance):
+        # NOTE: if VLLM fails with CUDA multiprocessing, try setting
+        # `export VLLM_WORKER_MULTIPROC_METHOD=spawn`
+        policy = vLLMWrapper(vllm_instance)
+        tokenizer = vllm_instance.get_tokenizer()
+        self._run_collector_test(total_steps, rb, policy, tokenizer)
+
+    @pytest.mark.slow
+    @pytest.mark.parametrize("rb", [True, False])
+    @pytest.mark.parametrize("total_steps", [1, 10, 20])
+    def test_llm_collector_with_transformers(
+        self, rb, total_steps, transformers_instance
+    ):
+        model, tokenizer = transformers_instance
+        policy = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            from_text=True,
+            generate=True,
+            return_log_probs=True,
+        )
+        self._run_collector_test(total_steps, rb, policy, tokenizer)
+
+    def _run_collector_test(self, total_steps, rb, policy, tokenizer):
+        bsz = 4
+        dataloader = DummyStrDataLoader(bsz)
+
+        env = LLMEnv.from_dataloader(
+            dataloader=dataloader,
+            str2str=True,
+            batch_size=bsz,
+            group_repeats=True,
+        )
+        if rb:
+            rb = ReplayBuffer(storage=LazyStackStorage(max_size=total_steps * 2))
+        else:
+            rb = None
+        collector = LLMCollector(
+            env=env,
+            policy_factory=lambda: policy,
+            steps_per_batch=env.batch_size[0],
+            replay_buffer=rb,
+            total_steps=total_steps,
+        )
+
+        stack = []
+        for data in collector:
+            # Should be moved to replay buffer
+            if rb is not None:
+                assert data is None
+            else:
+                stack.append(data)
+
+        if rb is not None:
+            # Now check the buffer
+            assert len(rb) >= total_steps
+            sample = rb.sample(4)
+            assert sample.shape == (4,)
+            assert not sample._has_exclusive_keys
+            # Should match length
+            assert len(sample["text"]) == 4
+            # assert len(sample["text"][0]) == 10, sample["text"][0]
+            # Should be non-empty
+            assert sample["text_response"] is not None
+            for i in range(4):
+                # Check that there are more chars in the next step
+                assert len(sample["text"][i]) < len(sample["next", "text"][i])
+        else:
+            stack = torch.cat(stack)
+            assert not stack._has_exclusive_keys
+            assert stack.numel() == max(-(total_steps // -4) * 4, 4)
+            stack = stack.view(-1)
+            for i in range(stack.numel()):
+                # Check that there are more chars in the next step
+                assert len(stack["text"][i]) < len(stack["next", "text"][i])
+        assert collector._frames >= total_steps
+
+    @pytest.mark.slow
+    @pytest.mark.asyncio
+    async def test_llm_collector_start(self, vllm_instance):
+        total_steps = 20
+        policy = vLLMWrapper(vllm_instance)
+        vllm_instance.get_tokenizer()
+        bsz = 4
+        dataloader = DummyStrDataLoader(bsz)
+
+        env = LLMEnv.from_dataloader(
+            dataloader=dataloader,
+            str2str=True,
+            batch_size=bsz,
+            group_repeats=True,
+        )
+
+        rb = ReplayBuffer(storage=LazyStackStorage(max_size=total_steps * 2))
+        collector = LLMCollector(
+            env=env,
+            policy_factory=lambda: policy,
+            steps_per_batch=env.batch_size[0],
+            replay_buffer=rb,
+            total_steps=total_steps,
+        )
+        torchrl_logger.info("starting")
+        collector.start()
+
+        j = 0
+        while True:
+            if not len(rb):
+                await asyncio.sleep(1)  # Use asyncio.sleep instead of time.sleep
+            sample = rb.sample(10)
+            assert sample.ndim == 1
+            for i in range(10):
+                # Check that there are more chars in the next step
+                assert len(sample["text"][i]) < len(sample["next", "text"][i])
+            assert not sample._has_exclusive_keys, sample
+            j += 1
+            if j == 5:
+                break
+        assert collector._frames >= total_steps
+
+        try:
+            # Assuming collector._task is the task created in start()
+            await asyncio.wait_for(collector.async_shutdown(), timeout=30)
+        except asyncio.TimeoutError:
+            torchrl_logger.info("Collector shutdown timed out")
+
+    @pytest.mark.slow
+    @pytest.mark.parametrize("rb", [False, True])
+    @pytest.mark.parametrize("yield_only_last_steps", [False, True])
+    def test_llm_collector_completed(
+        self, vllm_instance_opt, rb, yield_only_last_steps
+    ):
+        policy = vLLMWrapper(vllm_instance_opt)
+        tokenizer = vllm_instance_opt.get_tokenizer()
+        bsz = 4
+        total_steps = 20
+        dataloader = DummyStrDataLoader(bsz)
+
+        env = LLMEnv.from_dataloader(
+            dataloader=dataloader,
+            str2str=True,
+            batch_size=bsz,
+            group_repeats=True,
+            eos_token_id=tokenizer.eos_token_id,
+        )
+        # To make sure the env breaks at some point
+        env = env.append_transform(StepCounter(max_steps=100))
+
+        if rb:
+            rb = ReplayBuffer(storage=LazyStackStorage(max_size=total_steps * 2))
+        else:
+            rb = None
+        collector = LLMCollector(
+            env=env,
+            policy_factory=lambda: policy,
+            steps_per_batch=env.batch_size[0],
+            replay_buffer=rb,
+            total_steps=total_steps,
+            yield_completed_trajectories=True,
+            yield_only_last_steps=yield_only_last_steps,
+        )
+        assert collector.yield_completed_trajectories
+        assert collector.yield_only_last_steps is yield_only_last_steps
+
+        cur_total_steps = 0
+        has_found_one_with_more_steps = False
+        for data in collector:
+            if rb is None:
+                assert data.ndim == 1
+                assert (data["next", "step_count"] < 99).all()
+                cur_total_steps += data.numel()
+                for i in range(data.numel()):
+                    # Check that there are more chars in the next step
+                    assert len(data["text"][i]) < len(data["next", "text"][i])
+                if yield_only_last_steps:
+                    assert data.shape == (1,)
+                else:
+                    has_found_one_with_more_steps |= data.numel() > 1
+            else:
+                assert data is None
+                sample = rb.sample(5)
+                for i in range(sample.numel()):
+                    # Check that there are more chars in the next step
+                    assert len(sample["text"][i]) < len(sample["next", "text"][i])
+                assert sample.ndim == 1
+                assert sample.shape == (5,)
+                assert (sample["next", "step_count"] < 99).all()
+                cur_total_steps += 1
+            assert collector._frames >= cur_total_steps
+        if rb is None and not yield_only_last_steps:
+            assert has_found_one_with_more_steps
+        assert collector._frames >= total_steps
 
 
 if __name__ == "__main__":

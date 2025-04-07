@@ -11,12 +11,11 @@ import socket
 import warnings
 from copy import copy, deepcopy
 from datetime import timedelta
-from typing import Callable, OrderedDict
+from typing import Any, Callable, Literal, OrderedDict, Sequence
 
 import torch.cuda
 from tensordict import TensorDict, TensorDictBase
 from torch import nn
-
 from torchrl._utils import _ProcessNoWarn, logger as torchrl_logger, VERBOSE
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
@@ -54,6 +53,7 @@ def _distributed_init_collection_node(
     num_workers,
     env_make,
     policy,
+    policy_factory,
     frames_per_batch,
     collector_kwargs,
     update_interval,
@@ -80,7 +80,11 @@ def _distributed_init_collection_node(
         policy_weights = TensorDict.from_module(policy)
         policy_weights = policy_weights.data.lock_()
     else:
-        warnings.warn(_NON_NN_POLICY_WEIGHTS)
+        if collector_kwargs.get("weight_update_sender") is None and (
+            policy_factory is None
+            or (isinstance(policy_factory, Sequence) and not any(policy_factory))
+        ):
+            warnings.warn(_NON_NN_POLICY_WEIGHTS)
         policy_weights = TensorDict(lock=True)
 
     collector = collector_class(
@@ -89,6 +93,7 @@ def _distributed_init_collection_node(
         frames_per_batch=frames_per_batch,
         split_trajs=False,
         total_frames=total_frames,
+        policy_factory=policy_factory,
         **collector_kwargs,
     )
 
@@ -154,8 +159,8 @@ class DistributedSyncDataCollector(DataCollectorBase):
                 pickled directly), the :arg:`policy_factory` should be used instead.
 
     Keyword Args:
-        policy_factory (Callable[[], Callable], optional): a callable that returns
-            a policy instance. This is exclusive with the `policy` argument.
+        policy_factory (Callable[[], Callable], list of Callable[[], Callable], optional): a callable
+            (or list of callables) that returns a policy instance. This is exclusive with the `policy` argument.
 
             .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.
 
@@ -281,7 +286,9 @@ class DistributedSyncDataCollector(DataCollectorBase):
         create_env_fn,
         policy: Callable[[TensorDictBase], TensorDictBase] | None = None,
         *,
-        policy_factory: Callable[[], Callable] | None = None,
+        policy_factory: Callable[[], Callable]
+        | list[Callable[[], Callable]]
+        | None = None,
         frames_per_batch: int,
         total_frames: int = -1,
         device: torch.device | list[torch.device] = None,
@@ -294,15 +301,15 @@ class DistributedSyncDataCollector(DataCollectorBase):
         postproc: Callable | None = None,
         split_trajs: bool = False,
         exploration_type: ExporationType = DEFAULT_EXPLORATION_TYPE,  # noqa
-        collector_class=SyncDataCollector,
-        collector_kwargs=None,
-        num_workers_per_collector=1,
-        slurm_kwargs=None,
-        backend="gloo",
-        max_weight_update_interval=-1,
-        update_interval=1,
-        launcher="submitit",
-        tcp_port=None,
+        collector_class: type | Callable[[], DataCollectorBase] = SyncDataCollector,
+        collector_kwargs: dict[str, Any] | None = None,
+        num_workers_per_collector: int = 1,
+        slurm_kwargs: dict[str, Any] | None = None,
+        backend: Literal["gloo", "nccl"] = "gloo",
+        max_weight_update_interval: int = -1,
+        update_interval: int = 1,
+        launcher: str = "submitit",
+        tcp_port: str | None = None,
     ):
 
         if collector_class == "async":
@@ -314,14 +321,22 @@ class DistributedSyncDataCollector(DataCollectorBase):
         self.collector_class = collector_class
         self.env_constructors = create_env_fn
         self.policy = policy
+        collector_kwargs = collector_kwargs if collector_kwargs is not None else {}
 
         if isinstance(policy, nn.Module):
             policy_weights = TensorDict.from_module(policy)
             policy_weights = policy_weights.data.lock_()
         else:
-            warnings.warn(_NON_NN_POLICY_WEIGHTS)
+            if collector_kwargs.get("weight_update_sender") is None and (
+                policy_factory is None
+                or (isinstance(policy_factory, Sequence) and not any(policy_factory))
+            ):
+                warnings.warn(_NON_NN_POLICY_WEIGHTS)
             policy_weights = TensorDict(lock=True)
 
+        if not isinstance(policy_factory, Sequence):
+            policy_factory = [policy_factory] * len(create_env_fn)
+        self.policy_factory = policy_factory
         self.policy_weights = policy_weights
         self.num_workers = len(create_env_fn)
         self.frames_per_batch = frames_per_batch
@@ -361,7 +376,6 @@ class DistributedSyncDataCollector(DataCollectorBase):
         self.slurm_kwargs = copy(DEFAULT_SLURM_CONF)
         if slurm_kwargs is not None:
             self.slurm_kwargs.update(slurm_kwargs)
-        collector_kwargs = collector_kwargs if collector_kwargs is not None else {}
         self.collector_kwargs = (
             deepcopy(collector_kwargs)
             if isinstance(collector_kwargs, (list, tuple))
@@ -500,6 +514,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
             self.num_workers_per_collector,
             env_make,
             self.policy,
+            self.policy_factory[i],
             self._frames_per_batch_corrected,
             self.collector_kwargs[i],
             self.update_interval,
@@ -524,6 +539,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
                 self.num_workers_per_collector,
                 env_make,
                 self.policy,
+                self.policy_factory[i],
                 self._frames_per_batch_corrected,
                 self.collector_kwargs[i],
                 self.update_interval,

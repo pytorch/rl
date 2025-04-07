@@ -944,7 +944,7 @@ var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
 if (downloadNote.length >= 1) {
     var tutorialUrlArray = $("#tutorial-type").text().split('/');
 
-    var githubLink = "https://github.com/pytorch/rl/tree/tutorial_py_dup/sphinx-tutorials/" + tutorialUrlArray[tutorialUrlArray.length - 1] + ".py",
+    var githubLink = "https://github.com/pytorch/rl/tree/tutorial_py_dup/sphinx-" + tutorialUrlArray[tutorialUrlArray.length - 1] + ".py",
         notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
         notebookDownloadPath = notebookLink.split('_downloads')[1],
         colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/_downloads" + notebookDownloadPath;

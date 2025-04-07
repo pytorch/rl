@@ -3,7 +3,9 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .transformers_policy import from_hf_transformers
-from .vllm_policy import from_vllm
+from .common import CategoricalSequential
+from .transformers_wrapper import TransformersWrapper
 
-__all__ = ["from_hf_transformers", "from_vllm"]
+from .vllm_wrapper import vLLMWrapper
+
+__all__ = ["TransformersWrapper", "vLLMWrapper", "CategoricalSequential"]

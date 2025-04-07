@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import argparse
 import functools
@@ -186,7 +187,7 @@ class TestTDModule:
 
         # test bounds
         if not safe and spec_type == "bounded":
-            assert ((td.get("out") > 0.1) | (td.get("out") < -0.1)).any()
+            assert ((td.get("out") > 0.1) | (td.get("out") < -0.1)).any(), td.get("out")
         elif safe and spec_type == "bounded":
             assert ((td.get("out") < 0.1) | (td.get("out") > -0.1)).all()
 

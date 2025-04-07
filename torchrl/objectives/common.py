@@ -385,7 +385,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                         p_out = param.expand(expand_dim, *param.shape).clone()
                         p_out = nn.Parameter(
                             p_out.uniform_(
-                                p_out.min().item(), p_out.max().item()
+                                p_out.data.min().item(), p_out.data.max().item()
                             ).requires_grad_()
                         )
                         return p_out
@@ -669,7 +669,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         return pd
 
     def _make_vmap(self):
-        """Caches the the vmap callers to reduce the overhead at runtime."""
+        """Caches thevmap callers to reduce the overhead at runtime."""
         raise NotImplementedError(
             f"_make_vmap has been called but is not implemented for loss of type {type(self).__name__}."
         )

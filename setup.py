@@ -216,6 +216,7 @@ def _main(argv):
             "scipy",
             "pytest-mock",
             "pytest-cov",
+            "pytest-asyncio",
             "pytest-benchmark",
             "pytest-rerunfailures",
             "pytest-error-for-skips",
@@ -273,7 +274,7 @@ def _main(argv):
         ),
         ext_modules=get_extensions(),
         cmdclass={
-            "build_ext": BuildExtension.with_options(no_python_abi_suffix=True),
+            "build_ext": BuildExtension.with_options(),
             "clean": clean,
         },
         install_requires=[
