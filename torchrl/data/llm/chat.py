@@ -11,7 +11,7 @@ from typing import Literal
 
 import torch
 
-from tensordict import lazy_stack, LazyStackedTensorDict, list_to_stack, TensorClass
+from tensordict import lazy_stack, LazyStackedTensorDict, list_to_stack, TensorClass, set_list_to_stack
 from tensordict.utils import _maybe_correct_neg_dim
 from torchrl._utils import logger as torchrl_logger
 
@@ -152,6 +152,7 @@ class History(TensorClass["nocast"]):
         return cls._inv_chatml(text)
 
     @classmethod
+    @set_list_to_stack(True)
     def _inv_chatml(cls, text: str) -> History:
         """Inverts a chatml string into a History object.
 
@@ -164,18 +165,23 @@ class History(TensorClass["nocast"]):
         torchrl_logger.debug(f"Inverting chatml:\n{text}")
         pattern = r"<\|im_start\|>(.*?)\n(.*?)<\|im_end\|>"
         matches = re.findall(pattern, text, flags=re.DOTALL)
-        chat_template = []
+        roles = []
+        contents = []
         for match in matches:
             role = match[0].strip()
 
             # Override role
             # role = "assistant"
             content = match[1].strip()
-            chat_template.append({"role": role, "content": content})
+            roles.append(role)
+            contents.append(content)
+        if not roles:
+            raise RutimeError(f"Couldn't get a single item out of text {text}")
+
         return cls(
-            role=[chat_template["role"] for chat_template in chat_template],
-            content=[chat_template["content"] for chat_template in chat_template],
-            batch_size=len(chat_template),
+            role=roles,
+            content=contents,
+            batch_size=len(roles),
         )
 
     def append(
