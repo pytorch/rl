@@ -567,7 +567,9 @@ class _RequestOutput_tc(TensorClass["nocast"]):
                 t = []
                 for v, tid in zip(output.logprobs, output.token_ids):
                     t.append(
-                        v[tid]["logprob"] if v[tid].get("logprob") is not None else 0.0
+                        v[int(tid)]["logprob"]
+                        if v[tid].get("logprob") is not None
+                        else 0.0
                     )
                 return torch.tensor(t)
 
@@ -589,7 +591,7 @@ class _RequestOutput_tc(TensorClass["nocast"]):
             if self.prompt_logprobs is not None:
                 self.prompt_logprobs = torch.tensor(
                     [
-                        v[tid].logprob if v is not None else 0.0
+                        v[int(tid)].logprob if v is not None else 0.0
                         for v, tid in _zip_strict(
                             self.prompt_logprobs, self.prompt_token_ids
                         )
