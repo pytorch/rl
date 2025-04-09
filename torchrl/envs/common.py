@@ -2156,8 +2156,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     *self.output_spec["full_reward_spec"][reward_key].shape,
                 ]
             )
+            # If the reward has a variable shape, we don't want to perform this check
             if all(s > 0 for s in expected_reward_shape):
-                reward = next_tensordict_out.get(reward_key, as_nested=True)
+                reward = next_tensordict_out.get(reward_key)
                 actual_reward_shape = reward.shape
                 if actual_reward_shape != expected_reward_shape:
                     reward = reward.view(expected_reward_shape)

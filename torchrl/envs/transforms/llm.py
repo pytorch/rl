@@ -742,8 +742,9 @@ class KLRewardTransform(Transform):
             self.sample_log_prob_key, as_nested_tensor=True, layout=torch.strided
         )
         log_prob = log_prob.to(curr_log_prob.device)
+        # We want the log-probs to have a similar dim to the reward
         curr_log_prob = curr_log_prob.unsqueeze(-1)
-        # log_prob = log_prob.unsqueeze(-1)
+        log_prob = log_prob.unsqueeze(-1)
 
         # we use the unbiased consistent estimator of the KL: log_p(x) - log_q(x) when x ~ p(x)
         if not reward.is_nested and log_prob.is_nested:
@@ -787,7 +788,9 @@ class KLRewardTransform(Transform):
             else:
                 raise KeyError("Couln't find the reward key.")
             shape = output_spec["full_reward_spec"][reward_key].shape
-            shape = (*shape[:-2], -1, 1)
+            if len(shape) > 2:
+                # For LLMs, the shape of the reward is (batch, -1, 1)
+                shape = (*shape[:-2], -1, 1)
             reward_spec = Unbounded(
                 device=output_spec.device,
                 shape=shape,
@@ -802,7 +805,9 @@ class KLRewardTransform(Transform):
             reward_spec = output_spec["full_reward_spec"][parent.reward_key]
 
             shape = reward_spec.shape
-            shape = (*shape[:-2], -1, 1)
+            if len(shape) > 2:
+                # For LLMs, the shape of the reward is (batch, -1, 1)
+                shape = (*shape[:-2], -1, 1)
             reward_spec = reward_spec.clone()
             reward_spec.shape = torch.Size(shape)
 
