@@ -1517,7 +1517,8 @@ class TestGym:
         torch.testing.assert_close(r0["next", "done"], r1["next", "done"])
 
     @implement_for("gym")
-    def test_resetting_strategies(self):
+    @pytest.mark.parametrize("heterogeneous", [False, True])
+    def test_resetting_strategies(self, heterogeneous):
         return
 
     @implement_for("gymnasium", None, "1.0.0")
