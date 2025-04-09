@@ -1033,14 +1033,14 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
 
     @implement_for("gymnasium", "1.1.0")
     def _validate_env(self, env):
-        auto_reset_mode = getattr(env, "auto_reset_mode", None)
-        if auto_reset_mode is not None:
-            from gymnasium import AutoResetMode
+        autoreset_mode = getattr(env, "autoreset_mode", None)
+        if autoreset_mode is not None:
+            from gymnasium.vector import AutoresetMode
 
-            if auto_reset_mode not in (AutoResetMode.DISABLED, AutoResetMode.SAME_STEP):
+            if autoreset_mode not in (AutoresetMode.DISABLED, AutoresetMode.SAME_STEP):
                 raise RuntimeError(
                     "The auto-reset mode must be one of SAME_STEP or DISABLED (which is preferred). Got "
-                    f"auto_reset_mode={auto_reset_mode}."
+                    f"autoreset_mode={autoreset_mode}."
                 )
 
     @implement_for("gym", None, "1.1.0")

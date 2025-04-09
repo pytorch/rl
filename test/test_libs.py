@@ -1424,7 +1424,6 @@ class TestGym:
 
             return CustomEnv(**kwargs)
 
-    @pytest.fixture(scope="function")
     def counting_env(self):
         import gymnasium as gym
         from gymnasium import Env
@@ -1482,9 +1481,10 @@ class TestGym:
 
     @implement_for("gymnasium", "1.1.0")
     @pytest.mark.parametrize("venv", ["sync", "async"])
-    def test_gymnasium_autoreset(self, venv, counting_env):  # noqa
+    def test_gymnasium_autoreset(self, venv):  # noqa
         import gymnasium as gym
 
+        counting_env = self.counting_env()
         if venv == "sync":
             venv = gym.vector.SyncVectorEnv
         else:
@@ -1516,8 +1516,25 @@ class TestGym:
         torch.testing.assert_close(r0["next", "observation"], r1["next", "observation"])
         torch.testing.assert_close(r0["next", "done"], r1["next", "done"])
 
+    @implement_for("gym")
+    def test_resetting_strategies(self):
+        return
+
+    @implement_for("gymnasium", None, "1.0.0")
     @pytest.mark.parametrize("heterogeneous", [False, True])
-    def test_resetting_strategies(self, heterogeneous):
+    def test_resetting_strategies(self, heterogeneous):  # noqa
+        self._test_resetting_strategies(heterogeneous, {})
+
+    @implement_for("gymnasium", "1.1.0")
+    @pytest.mark.parametrize("heterogeneous", [False, True])
+    def test_resetting_strategies(self, heterogeneous):  # noqa
+        import gymnasium as gym
+
+        self._test_resetting_strategies(
+            heterogeneous, {"autoreset_mode": gym.vector.AutoresetMode.SAME_STEP}
+        )
+
+    def _test_resetting_strategies(self, heterogeneous, kwargs):
         if _has_gymnasium:
             backend = "gymnasium"
         else:
@@ -1533,7 +1550,8 @@ class TestGym:
                 env = GymWrapper(
                     gym_backend().vector.AsyncVectorEnv(
                         [functools.partial(self._get_dummy_gym_env, backend=backend)]
-                        * 4
+                        * 4,
+                        **kwargs,
                     )
                 )
             else:
@@ -1546,7 +1564,8 @@ class TestGym:
                                 backend=backend,
                             )
                             for i in range(4)
-                        ]
+                        ],
+                        **kwargs,
                     )
                 )
             try:
