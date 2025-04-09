@@ -3636,9 +3636,10 @@ class TestLLMCollector:
 
         env = LLMEnv.from_dataloader(
             dataloader=dataloader,
-            str2str=True,
+            from_text=True,
             batch_size=bsz,
             group_repeats=True,
+            eos_token_id=tokenizer.eos_token_id,
         )
         if rb:
             rb = ReplayBuffer(storage=LazyStackStorage(max_size=total_steps * 2))
@@ -3695,7 +3696,7 @@ class TestLLMCollector:
 
         env = LLMEnv.from_dataloader(
             dataloader=dataloader,
-            str2str=True,
+            from_text=True,
             batch_size=bsz,
             group_repeats=True,
         )
@@ -3748,7 +3749,7 @@ class TestLLMCollector:
 
         env = LLMEnv.from_dataloader(
             dataloader=dataloader,
-            str2str=True,
+            from_text=True,
             batch_size=bsz,
             group_repeats=True,
             eos_token_id=tokenizer.eos_token_id,
@@ -3854,7 +3855,7 @@ class TestLLMCollector:
         def env_maker():
             env = LLMEnv.from_dataloader(
                 dataloader=dataloader,
-                str2str=True,
+                from_text=True,
                 batch_size=(),
                 group_repeats=True,
                 eos_token_id=tokenizer.eos_token_id,

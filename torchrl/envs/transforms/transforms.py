@@ -5471,14 +5471,27 @@ class Tokenizer(UnaryTransform):
             return out, attention_mask
         return out
 
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        # Override _inv_call to account for ragged dims
+        if not self.in_keys_inv:
+            return tensordict
+        for in_key, out_key in _zip_strict(self.in_keys_inv, self.out_keys_inv):
+            data = tensordict.get(out_key, None, as_padded_tensor=True)
+            if data is not None:
+                item = self._inv_apply_transform(data)
+                tensordict.set(in_key, item)
+            elif not self.missing_tolerance:
+                raise KeyError(f"'{out_key}' not found in tensordict {tensordict}")
+        return tensordict
+
     def call_tokenizer_inv_fn(self, value: Tensor):
         if value.ndim == 1:
             out = self.tokenizer.decode(
-                value, skip_special_tokens=self.skip_special_tokens
+                value.int(), skip_special_tokens=self.skip_special_tokens
             )
         else:
             out = self.tokenizer.batch_decode(
-                value, skip_special_tokens=self.skip_special_tokens
+                value.int(), skip_special_tokens=self.skip_special_tokens
             )
         device = self._str_device
         if isinstance(out, list):

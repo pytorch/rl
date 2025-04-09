@@ -16708,7 +16708,8 @@ class TestPPO4LLMs:
             dl,
             tokenizer=tokenizer if not from_text else None,
             batch_size=(32,),
-            str2str=True,
+            from_text=True,
+            eos_token_id=tokenizer.eos_token_id,
         )
 
         class RewardTransform(Transform):

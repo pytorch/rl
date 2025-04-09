@@ -1361,37 +1361,55 @@ class TestLLMActor:
         else:
             assert isinstance(tokens, list)
 
-    def test_vllm_collection(self, vllm_instance):
+    @pytest.mark.parametrize("from_text", [True])
+    def test_vllm_collection(self, vllm_instance, from_text):
         policy = vLLMWrapper(
             vllm_instance,
             return_log_probs=True,
-            generate_kwargs={"max_tokens": 10},
+            generate_kwargs={"max_tokens": 32},
+            from_text=from_text in (True, None),
         )
-        self._run_check_collector(policy)
+        tokenizer = vllm_instance.get_tokenizer()
+        self._run_check_collector(policy, from_text=from_text, tokenizer=tokenizer)
 
     def test_transformers_collection(self):
         ...
 
     @classmethod
-    def env_constructor(cls):
-        dl = DummyStrDataLoader(batch_size=32)
-        env = LLMEnv.from_dataloader(
-            dl,
-            batch_size=16,
-            repeats=4,
-            # str2str=True, group_repeats=True
-        )
-        assert env.batch_size == (64,)
-        return env
+    def env_constructor(cls, **kwargs):
+        def make():
+            # if kwargs.get("from_text", True):
+            dl = DummyStrDataLoader(batch_size=32)
+            # else:
+            #     dl = DummyTensorDataLoader(batch_size=32)
+            env = LLMEnv.from_dataloader(
+                dl,
+                batch_size=4,
+                repeats=4,
+                **kwargs,
+            )
+            assert env.batch_size == (16,)
+            return env
 
-    def _run_check_collector(self, policy):
+        return make
+
+    def _run_check_collector(self, policy, from_text, tokenizer):
+        if from_text is None:
+            kwargs = {"eos_token_id": tokenizer.eos_token_id}
+        else:
+            kwargs = {
+                "from_text": from_text,
+                "tokenizer": tokenizer,
+                "eos_token_id": tokenizer.eos_token_id,
+            }
         collector = SyncDataCollector(
-            self.env_constructor,
+            self.env_constructor(**kwargs),
             policy=policy,
-            frames_per_batch=128,
-            total_frames=512,
+            frames_per_batch=32,
+            total_frames=128,
             use_buffers=False,
         )
+        t = 0
         for data in collector:
             assert isinstance(data, LazyStackedTensorDict)
             assert isinstance(data.reshape(-1).get("text_response"), NonTensorStack)
@@ -1403,6 +1421,10 @@ class TestLLMActor:
             assert ("next", "text") in data
             # tokens
             assert "tokens" in data
+
+            t += data.numel()
+            assert collector._frames == t
+            assert t < 512, t
             # assert ("next", "tokens") in data
 
     def test_vllm_generate_multiple_trajs(self, vllm_instance):

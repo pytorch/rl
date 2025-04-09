@@ -11561,7 +11561,9 @@ class TestKLRewardTransform(TransformBase):
             with pytest.raises(ValueError):
                 KLRewardTransform(actor, in_keys=in_key, out_keys=out_key)
             return
-        t = KLRewardTransform(actor, in_keys=in_key, out_keys=out_key)
+        t = KLRewardTransform(
+            actor, in_keys=in_key, out_keys=out_key, action_key="action"
+        )
         batch = [2, 3]
         tensordict = TensorDict(
             {
@@ -11578,7 +11580,7 @@ class TestKLRewardTransform(TransformBase):
 
     def test_transform_compose(self):
         actor = self._make_actor()
-        t = Compose(KLRewardTransform(actor))
+        t = Compose(KLRewardTransform(actor, action_key="action"))
         batch = [2, 3]
         tensordict = TensorDict(
             {
@@ -11610,7 +11612,7 @@ class TestKLRewardTransform(TransformBase):
             base_env,
             Compose(
                 RewardScaling(0.0, 0.0),  # make reward 0 to check the effect of kl
-                KLRewardTransform(actor, out_keys=out_key),
+                KLRewardTransform(actor, out_keys=out_key, action_key="action"),
             ),
         )
         torch.manual_seed(0)
@@ -11694,7 +11696,9 @@ class TestKLRewardTransform(TransformBase):
 
     def test_transform_model(self):
         actor = self._make_actor()
-        t = KLRewardTransform(actor, in_keys="reward", out_keys="reward")
+        t = KLRewardTransform(
+            actor, in_keys="reward", out_keys="reward", action_key="action"
+        )
         batch = [2, 3]
         tensordict = TensorDict(
             {
@@ -11712,7 +11716,9 @@ class TestKLRewardTransform(TransformBase):
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
     def test_transform_rb(self, rbclass):
         actor = self._make_actor()
-        t = KLRewardTransform(actor, in_keys="reward", out_keys="reward")
+        t = KLRewardTransform(
+            actor, in_keys="reward", out_keys="reward", action_key="action"
+        )
         batch = [2, 3]
         tensordict = TensorDict(
             {
@@ -11771,7 +11777,7 @@ class TestKLRewardTransform(TransformBase):
             ),
         )
         policy(env.reset())
-        klt = KLRewardTransform(policy)
+        klt = KLRewardTransform(policy, action_key="action")
         # check that this runs: it can only run if the params are nn.Parameter instances
         klt(env.rollout(3, policy))
 

@@ -804,7 +804,16 @@ def check_env_specs(
             real_tensordict_select.filter_non_tensor_data().unbind(-1),
             fake_tensordict_select.filter_non_tensor_data().unbind(-1),
         ):
-            fake = fake.apply(lambda x, y: x.expand_as(y), real)
+
+            def expand(name, x, y):
+                try:
+                    return x.expand_as(y)
+                except Exception as e:
+                    raise RuntimeError(
+                        f"Failed to expand fake tensor {name} with shape {x.shape} to real shape {y.shape}"
+                    ) from e
+
+            fake = fake.apply(expand, real, named=True, nested_keys=True)
             if (torch.zeros_like(real) != torch.zeros_like(fake)).any():
                 raise AssertionError(zeroing_err_msg())
 

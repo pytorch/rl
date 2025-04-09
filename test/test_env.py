@@ -14,7 +14,6 @@ import pickle
 import random
 import re
 from collections import defaultdict
-from contextlib import nullcontext
 from functools import partial
 from sys import platform
 from typing import Any
@@ -3767,7 +3766,7 @@ class TestNonTensorEnv:
                 env.close(raise_if_closed=False)
 
     @pytest.mark.skipif(not _has_transformers, reason="transformers required")
-    def test_str2str_env_tokenizer(self):
+    def test_from_text_env_tokenizer(self):
         env = Str2StrEnv()
         env.set_seed(0)
         env = env.append_transform(
@@ -3790,7 +3789,7 @@ class TestNonTensorEnv:
 
     @pytest.mark.skipif(not _has_transformers, reason="transformers required")
     @set_auto_unwrap_transformed_env(False)
-    def test_str2str_env_tokenizer_catframes(self):
+    def test_from_text_env_tokenizer_catframes(self):
         """Tests that we can use Unsqueeze + CatFrames with tokenized strings of variable lengths."""
         env = Str2StrEnv()
         env.set_seed(0)
@@ -3815,7 +3814,7 @@ class TestNonTensorEnv:
         assert r["obs_tokens_cat"].shape == (3, 4, 10)
 
     @pytest.mark.skipif(not _has_transformers, reason="transformers required")
-    def test_str2str_rb_slicesampler(self):
+    def test_from_text_rb_slicesampler(self):
         """Dedicated test for replay buffer sampling of trajectories with variable token length"""
         from torchrl.data import LazyStackStorage, ReplayBuffer, SliceSampler
         from torchrl.envs import TrajCounter
@@ -4589,7 +4588,7 @@ class TestLLMEnv:
 
     @pytest.mark.skipif(not _has_transformers, reason="test requires transformers")
     @pytest.mark.parametrize(
-        "str2str,stack_method",
+        "from_text,stack_method",
         [
             [True, None],
             [False, "as_padded_tensor"],
@@ -4598,197 +4597,188 @@ class TestLLMEnv:
             [False, None],
         ],
     )
-    @pytest.mark.parametrize("batch_size,batched", [[0, True], [4, False]])
+    @pytest.mark.parametrize("dl_batch_size", [1, 4])
+    @pytest.mark.parametrize("env_batch_size", [None, 0, (), 4])
     @pytest.mark.parametrize("device", [None, "cpu"])
-    def test_llm_env(self, str2str, batched, stack_method, device, batch_size):
-        if str2str:
+    def test_llm_env(
+        self, from_text, stack_method, device, dl_batch_size, env_batch_size
+    ):
+        if from_text:
             primer = DataLoadingPrimer(
-                dataloader=DummyStrDataLoader(batch_size=batch_size),
-                data_keys=[LLMEnv._DEFAULT_STR_KEY],
-                example_data="a string!",
+                dataloader=DummyStrDataLoader(batch_size=dl_batch_size),
+                batch_size=env_batch_size,
             )
         else:
             if stack_method is None:
                 stack_method = as_padded_tensor
             primer = DataLoadingPrimer(
-                dataloader=DummyTensorDataLoader(batch_size=batch_size, padding=True),
-                data_keys=[LLMEnv._DEFAULT_TOKEN_KEY],
-                data_specs=[Unbounded(shape=(-1,), dtype=torch.int64)],
+                dataloader=DummyTensorDataLoader(
+                    batch_size=dl_batch_size, padding=True
+                ),
                 stack_method=stack_method,
+                batch_size=env_batch_size,
             )
-        env = LLMEnv(
-            str2str=str2str,
-            device=device,
-            has_attention=False,
-            no_stack=False,
-            batch_size=primer.batch_size,
-        )
-        if batched:
-            assert not env.batch_locked
+        with pytest.warns(UserWarning, match="eos_token_id"):
+            env = LLMEnv(
+                from_text=from_text,
+                device=device,
+                batch_size=primer.batch_size,
+            )
         env = env.append_transform(primer)
-        if batched:
-            assert not env.batch_locked
-        if batched:
-            td = env.reset(TensorDict(batch_size=[3]))
-            env.check_env_specs(break_when_any_done="both", tensordict=td)
-            env.rollout(10, tensordict=TensorDict(batch_size=[3]))
+        if env_batch_size is None:
+            assert env.batch_size == torch.Size((dl_batch_size,))
         else:
-            env.check_env_specs(break_when_any_done="both")
+            if not isinstance(env_batch_size, tuple):
+                env_batch_size = (
+                    torch.Size(())
+                    if env_batch_size == 0
+                    else torch.Size((env_batch_size,))
+                )
+            assert env.batch_size == env_batch_size
+
+        env.check_env_specs(break_when_any_done="both")
 
     @pytest.mark.skipif(not _has_transformers, reason="test requires transformers")
     @pytest.mark.parametrize("tokenizer", [True, False])
     @pytest.mark.parametrize(
-        "str2str,no_stack,stack_method",
+        "from_text,stack_method",
         [
-            [True, True, None],
-            [True, False, None],
-            [False, False, "as_padded_tensor"],
-            [False, False, None],
+            [True, None],
+            [False, "as_padded_tensor"],
+            [False, None],
         ],
     )
     @pytest.mark.parametrize("device", [None, "cpu"])
-    @pytest.mark.parametrize("batch_size,batched", [[0, True], [4, False]])
+    @pytest.mark.parametrize("dl_batch_size", [1, 4])
+    @pytest.mark.parametrize("env_batch_size", [None, 0, (), 4])
     def test_llm_from_dataloader(
         self,
-        str2str,
-        batched,
+        from_text,
         stack_method,
         device,
-        batch_size,
+        dl_batch_size,
+        env_batch_size,
         tokenizer,
-        no_stack,
     ):
         from transformers import AutoTokenizer
 
-        if tokenizer:
+        if tokenizer and from_text:
             tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
         else:
             tokenizer = None
-        if str2str:
+        if from_text:
             kwargs = {
-                "dataloader": DummyStrDataLoader(batch_size=batch_size),
-                "data_keys": [LLMEnv._DEFAULT_STR_KEY],
-                "example_data": "a string!",
+                "dataloader": DummyStrDataLoader(batch_size=dl_batch_size),
             }
         else:
             if stack_method is None:
                 stack_method = as_padded_tensor
             kwargs = {
                 "dataloader": DummyTensorDataLoader(
-                    padding=True, batch_size=batch_size
+                    padding=True, batch_size=dl_batch_size
                 ),
-                "data_keys": [LLMEnv._DEFAULT_TOKEN_KEY],
-                "data_specs": [Unbounded(shape=(-1,), dtype=torch.int64)],
                 "stack_method": stack_method,
             }
         kwargs.update(
             {
-                "str2str": str2str,
+                "batch_size": env_batch_size,
+                "from_text": from_text,
                 "device": device,
                 "has_attention": False,
-                "no_stack": no_stack,
                 "tokenizer": tokenizer,
             }
         )
-        env = LLMEnv.from_dataloader(**kwargs)
-        if batched:
-            assert not env.batch_locked
-        if batched:
-            td = env.reset(TensorDict(batch_size=[3]))
-            env.check_env_specs(break_when_any_done="both", tensordict=td)
+        with pytest.warns(UserWarning, match="eos_token_id"):
+            env = LLMEnv.from_dataloader(**kwargs)
+        if env_batch_size is None:
+            assert env.batch_size == torch.Size((dl_batch_size,))
         else:
-            env.check_env_specs(break_when_any_done="both")
-        if batch_size > 0:
-
-            def policy(td):
-                if str2str and tokenizer is None:
-                    if not td.shape:
-                        td[LLMEnv._DEFAULT_ACTION_STR_KEY] = NonTensorData(
-                            "<nothing>", device=device
-                        )
-                    else:
-                        td[LLMEnv._DEFAULT_ACTION_STR_KEY] = NonTensorStack(
-                            *[
-                                NonTensorData("<nothing>", device=device)
-                                for _ in range(td.shape[0])
-                            ]
-                        )
-                else:
-                    td[LLMEnv._DEFAULT_ACTION_TOKENS_KEY] = torch.ones(
-                        td.shape + (1,), dtype=torch.int64
-                    )
-                return td
-
-            if batched:
-                # Tell the env that we want 3 sub-envs
-                r = env.rollout(10, policy, tensordict=TensorDict(batch_size=[3]))
-                assert r.ndim == 2
-                if str2str and tokenizer is None:
-                    assert isinstance(r[0, 0][LLMEnv._DEFAULT_STR_KEY], str)
-                    assert isinstance(r[0, 1][LLMEnv._DEFAULT_STR_KEY], str)
-                    should_fail = no_stack
-                    if should_fail:
-                        ctx = pytest.raises(AssertionError)
-                    else:
-                        ctx = nullcontext()
-                    with ctx:
-                        assert (
-                            r[0, 0][LLMEnv._DEFAULT_STR_KEY]
-                            == r[0, 1][LLMEnv._DEFAULT_STR_KEY][
-                                : -len(r[0, 0][LLMEnv._DEFAULT_ACTION_STR_KEY])
-                            ]
-                        ), (
-                            r[0, 0][LLMEnv._DEFAULT_STR_KEY],
-                            r[0, 0][LLMEnv._DEFAULT_ACTION_STR_KEY],
-                            r[0, 0]["next", LLMEnv._DEFAULT_STR_KEY],
-                            r[0, 1][LLMEnv._DEFAULT_STR_KEY],
-                        )
-                    with ctx:
-                        assert (
-                            r[0, 1][LLMEnv._DEFAULT_STR_KEY]
-                            == r[0, 2][LLMEnv._DEFAULT_STR_KEY][
-                                : -len(r[0, 1][LLMEnv._DEFAULT_ACTION_STR_KEY])
-                            ]
-                        )
-                    with ctx:
-                        assert (
-                            r[-1, 0][LLMEnv._DEFAULT_STR_KEY]
-                            == r[-1, 1][LLMEnv._DEFAULT_STR_KEY][
-                                : -len(r[-1, 0][LLMEnv._DEFAULT_ACTION_STR_KEY])
-                            ]
-                        )
-                    with ctx:
-                        assert (
-                            r[-1, 1][LLMEnv._DEFAULT_STR_KEY]
-                            == r[-1, 2][LLMEnv._DEFAULT_STR_KEY][
-                                : -len(r[-1, 1][LLMEnv._DEFAULT_ACTION_STR_KEY])
-                            ]
-                        )
-                elif tokenizer is None:
-                    assert (
-                        r[0, 0][LLMEnv._DEFAULT_TOKEN_KEY]
-                        == r[0, 1][LLMEnv._DEFAULT_TOKEN_KEY][:-1]
-                    ).all()
-                    assert (
-                        r[0, 1][LLMEnv._DEFAULT_TOKEN_KEY]
-                        == r[0, 2][LLMEnv._DEFAULT_TOKEN_KEY][:-1]
-                    ).all()
-                    assert (
-                        r[-1, 0][LLMEnv._DEFAULT_TOKEN_KEY]
-                        == r[-1, 1][LLMEnv._DEFAULT_TOKEN_KEY][:-1]
-                    ).all()
-                    assert (
-                        r[-1, 1][LLMEnv._DEFAULT_TOKEN_KEY]
-                        == r[-1, 2][LLMEnv._DEFAULT_TOKEN_KEY][:-1]
-                    ).all()
-            else:
-                r = env.rollout(
-                    10, policy, tensordict=TensorDict(batch_size=env.batch_size)
+            if not isinstance(env_batch_size, tuple):
+                env_batch_size = (
+                    torch.Size(())
+                    if env_batch_size == 0
+                    else torch.Size((env_batch_size,))
                 )
-                assert r.ndim == len(env.batch_size) + 1
+            assert env.batch_size == env_batch_size
+        env.check_env_specs(break_when_any_done="both")
+
+        def policy(td):
+            if from_text and tokenizer is None:
+                if not td.shape:
+                    td[LLMEnv._DEFAULT_ACTION_STR_KEY] = NonTensorData(
+                        "<nothing>", device=device
+                    )
+                else:
+                    td[LLMEnv._DEFAULT_ACTION_STR_KEY] = NonTensorStack(
+                        *[
+                            NonTensorData("<nothing>", device=device)
+                            for _ in range(td.shape[0])
+                        ]
+                    )
+            else:
+                td[LLMEnv._DEFAULT_ACTION_TOKENS_KEY] = torch.ones(
+                    td.shape + (1,), dtype=torch.int64
+                )
+            return td
+
+        r = env.rollout(10, policy)
+        if env.batch_size == ():
+            assert r.ndim == 1
+            r = r.unsqueeze(0)
+        else:
+            assert r.ndim == 2
+        if from_text and tokenizer is None:
+            assert isinstance(r[0, 0][LLMEnv._DEFAULT_STR_KEY], str)
+            assert isinstance(r[0, 1][LLMEnv._DEFAULT_STR_KEY], str)
+            assert (
+                r[0, 0][LLMEnv._DEFAULT_STR_KEY]
+                == r[0, 1][LLMEnv._DEFAULT_STR_KEY][
+                    : -len(r[0, 0][LLMEnv._DEFAULT_ACTION_STR_KEY])
+                ]
+            ), (
+                r[0, 0][LLMEnv._DEFAULT_STR_KEY],
+                r[0, 0][LLMEnv._DEFAULT_ACTION_STR_KEY],
+                r[0, 0]["next", LLMEnv._DEFAULT_STR_KEY],
+                r[0, 1][LLMEnv._DEFAULT_STR_KEY],
+            )
+            assert (
+                r[0, 1][LLMEnv._DEFAULT_STR_KEY]
+                == r[0, 2][LLMEnv._DEFAULT_STR_KEY][
+                    : -len(r[0, 1][LLMEnv._DEFAULT_ACTION_STR_KEY])
+                ]
+            )
+            assert (
+                r[-1, 0][LLMEnv._DEFAULT_STR_KEY]
+                == r[-1, 1][LLMEnv._DEFAULT_STR_KEY][
+                    : -len(r[-1, 0][LLMEnv._DEFAULT_ACTION_STR_KEY])
+                ]
+            )
+            assert (
+                r[-1, 1][LLMEnv._DEFAULT_STR_KEY]
+                == r[-1, 2][LLMEnv._DEFAULT_STR_KEY][
+                    : -len(r[-1, 1][LLMEnv._DEFAULT_ACTION_STR_KEY])
+                ]
+            )
+        elif tokenizer is None:
+            assert (
+                r[0, 0][LLMEnv._DEFAULT_TOKEN_KEY]
+                == r[0, 1][LLMEnv._DEFAULT_TOKEN_KEY][:-1]
+            ).all()
+            assert (
+                r[0, 1][LLMEnv._DEFAULT_TOKEN_KEY]
+                == r[0, 2][LLMEnv._DEFAULT_TOKEN_KEY][:-1]
+            ).all()
+            assert (
+                r[-1, 0][LLMEnv._DEFAULT_TOKEN_KEY]
+                == r[-1, 1][LLMEnv._DEFAULT_TOKEN_KEY][:-1]
+            ).all()
+            assert (
+                r[-1, 1][LLMEnv._DEFAULT_TOKEN_KEY]
+                == r[-1, 2][LLMEnv._DEFAULT_TOKEN_KEY][:-1]
+            ).all()
 
     @pytest.mark.parametrize(
-        "str2str,stack_method",
+        "from_text,stack_method",
         [
             [True, None],
             [False, "as_padded_tensor"],
@@ -4798,16 +4788,15 @@ class TestLLMEnv:
         ],
     )
     @pytest.mark.parametrize("device", [None, "cpu"])
-    @pytest.mark.parametrize("batch_size,batched", [[0, True], [4, False]])
+    @pytest.mark.parametrize("dl_batch_size", [1, 4])
+    @pytest.mark.parametrize("env_batch_size", [None, 0, (), 4])
     @pytest.mark.parametrize("repeats", [3])
     def test_llm_from_dataloader_repeats(
-        self, str2str, batched, stack_method, device, batch_size, repeats
+        self, from_text, stack_method, device, env_batch_size, dl_batch_size, repeats
     ):
-        if str2str:
+        if from_text:
             kwargs = {
-                "dataloader": DummyStrDataLoader(batch_size=batch_size),
-                "data_keys": [LLMEnv._DEFAULT_STR_KEY],
-                "example_data": "a string!",
+                "dataloader": DummyStrDataLoader(batch_size=dl_batch_size),
                 "repeats": repeats,
             }
         else:
@@ -4815,30 +4804,28 @@ class TestLLMEnv:
                 stack_method = as_padded_tensor
             kwargs = {
                 "dataloader": DummyTensorDataLoader(
-                    padding=True, batch_size=batch_size
+                    padding=True, batch_size=dl_batch_size
                 ),
-                "data_keys": [LLMEnv._DEFAULT_TOKEN_KEY],
-                "data_specs": [Unbounded(shape=(-1,), dtype=torch.int64)],
                 "stack_method": stack_method,
                 "repeats": repeats,
             }
         kwargs.update(
             {
-                "str2str": str2str,
+                "batch_size": env_batch_size,
+                "from_text": from_text,
                 "device": device,
                 "has_attention": False,
-                "no_stack": False,
             }
         )
-        env = LLMEnv.from_dataloader(**kwargs)
+        with pytest.warns(UserWarning, match="eos_token_id"):
+            env = LLMEnv.from_dataloader(**kwargs)
         assert env.transform.repeats == repeats
-        assert env.transform.use_buffer
 
         max_steps = 3
         env.append_transform(StepCounter(max_steps=max_steps))
 
         def policy(td):
-            if str2str:
+            if from_text:
                 if not td.shape:
                     td[LLMEnv._DEFAULT_ACTION_STR_KEY] = "<nothing>"
                 else:
@@ -4851,96 +4838,53 @@ class TestLLMEnv:
                 )
             return td
 
-        if batched:
-            r = env.rollout(
-                100,
-                policy,
-                tensordict=TensorDict(batch_size=[3]),
-                break_when_any_done=False,
-            )
-        else:
-            r = env.rollout(100, policy, break_when_any_done=False)
+        r = env.rollout(100, policy, break_when_any_done=False)
         # check that r at reset is always the same
         r_reset = r[..., ::max_steps]
-        if not batched:
-            if str2str:
-                all_strings = r_reset.view(-1)[LLMEnv._DEFAULT_STR_KEY]
-                assert sum(s == all_strings[0] for s in all_strings) == repeats
-                assert sum(s == all_strings[repeats] for s in all_strings) == repeats
-                assert (
-                    sum(s == all_strings[repeats * 2] for s in all_strings) == repeats
-                )
-            else:
-                all_tokens = r_reset.view(-1)[LLMEnv._DEFAULT_TOKEN_KEY]
-                assert sum((s == all_tokens[0]).all() for s in all_tokens) == repeats
-                assert (
-                    sum((s == all_tokens[repeats]).all() for s in all_tokens) == repeats
-                )
-                assert (
-                    sum((s == all_tokens[repeats * 2]).all() for s in all_tokens)
-                    == repeats
-                )
+        if from_text:
+            all_strings = r_reset.view(-1)[LLMEnv._DEFAULT_STR_KEY]
+            assert sum(s == all_strings[0] for s in all_strings) == repeats
+            assert sum(s == all_strings[repeats] for s in all_strings) == repeats
+            assert sum(s == all_strings[repeats * 2] for s in all_strings) == repeats
         else:
-            # When batched, each block contains the 3 reset packs
-            if str2str:
-                assert (
-                    r_reset[0, 0][LLMEnv._DEFAULT_STR_KEY]
-                    == r_reset[1, 0][LLMEnv._DEFAULT_STR_KEY]
-                )
-                assert (
-                    r_reset[0, 0][LLMEnv._DEFAULT_STR_KEY]
-                    == r_reset[2, 0][LLMEnv._DEFAULT_STR_KEY]
-                )
-                assert (
-                    r_reset[0, 0][LLMEnv._DEFAULT_STR_KEY]
-                    != r_reset[0, 1][LLMEnv._DEFAULT_STR_KEY]
-                )
-            else:
-                assert (
-                    r_reset[0, 0][LLMEnv._DEFAULT_TOKEN_KEY]
-                    == r_reset[1, 0][LLMEnv._DEFAULT_TOKEN_KEY]
-                ).all()
-                assert (
-                    r_reset[0, 0][LLMEnv._DEFAULT_TOKEN_KEY]
-                    == r_reset[2, 0][LLMEnv._DEFAULT_TOKEN_KEY]
-                ).all()
-                assert (
-                    r_reset[0, 0][LLMEnv._DEFAULT_TOKEN_KEY]
-                    != r_reset[0, 1][LLMEnv._DEFAULT_TOKEN_KEY]
-                ).any()
+            all_tokens = r_reset.view(-1)[LLMEnv._DEFAULT_TOKEN_KEY]
+            assert sum((s == all_tokens[0]).all() for s in all_tokens) == repeats
+            assert sum((s == all_tokens[repeats]).all() for s in all_tokens) == repeats
+            assert (
+                sum((s == all_tokens[repeats * 2]).all() for s in all_tokens) == repeats
+            )
 
     @pytest.mark.parametrize(
-        "str2str,stack_method",
+        "from_text,stack_method",
         [
             [True, None],
             [False, "as_padded_tensor"],
         ],
     )
     @pytest.mark.parametrize("device", [None])
-    @pytest.mark.parametrize("batch_size,batched", [[0, True], [4, False]])
+    @pytest.mark.parametrize("dl_batch_size", [1, 4])
+    @pytest.mark.parametrize("env_batch_size", [None, 0, (), 4])
     @pytest.mark.parametrize("repeats", [3])
     @pytest.mark.parametrize(
         "assign_reward,assign_done", [[True, False], [True, True], [False, True]]
     )
     def test_done_and_reward(
         self,
-        str2str,
-        batched,
+        from_text,
         stack_method,
         device,
-        batch_size,
+        env_batch_size,
+        dl_batch_size,
         repeats,
         assign_reward,
         assign_done,
     ):
         with pytest.raises(
-            ValueError, match="str2str"
-        ) if str2str else contextlib.nullcontext():
-            if str2str:
+            ValueError, match="from_text"
+        ) if from_text else contextlib.nullcontext():
+            if from_text:
                 kwargs = {
-                    "dataloader": DummyStrDataLoader(batch_size=batch_size),
-                    "data_keys": [LLMEnv._DEFAULT_STR_KEY],
-                    "example_data": "a string!",
+                    "dataloader": DummyStrDataLoader(batch_size=dl_batch_size),
                     "repeats": repeats,
                     "assign_reward": assign_reward,
                     "assign_done": assign_done,
@@ -4950,10 +4894,8 @@ class TestLLMEnv:
                     stack_method = as_padded_tensor
                 kwargs = {
                     "dataloader": DummyTensorDataLoader(
-                        padding=True, batch_size=batch_size
+                        padding=True, batch_size=dl_batch_size
                     ),
-                    "data_keys": [LLMEnv._DEFAULT_TOKEN_KEY],
-                    "data_specs": [Unbounded(shape=(-1,), dtype=torch.int64)],
                     "stack_method": stack_method,
                     "repeats": repeats,
                     "assign_reward": assign_reward,
@@ -4961,13 +4903,14 @@ class TestLLMEnv:
                 }
             kwargs.update(
                 {
-                    "str2str": str2str,
+                    "batch_size": env_batch_size,
+                    "from_text": from_text,
                     "device": device,
                     "has_attention": False,
-                    "no_stack": False,
                 }
             )
-            env = LLMEnv.from_dataloader(**kwargs)
+            with pytest.warns(UserWarning, match="eos_token_id"):
+                env = LLMEnv.from_dataloader(**kwargs)
             # We want to make sure that transforms that rely on the done state work appropriately
             env.append_transform(StepCounter(max_steps=10))
 
@@ -4977,15 +4920,7 @@ class TestLLMEnv:
                 )
                 return td
 
-            if batched:
-                r = env.rollout(
-                    100,
-                    policy,
-                    tensordict=TensorDict(batch_size=[3]),
-                    break_when_any_done=False,
-                )
-            else:
-                r = env.rollout(100, policy, break_when_any_done=False)
+            r = env.rollout(100, policy, break_when_any_done=False)
             if assign_done:
                 assert "terminated" in r
                 assert "done" in r
