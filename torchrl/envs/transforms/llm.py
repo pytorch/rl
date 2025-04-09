@@ -408,7 +408,7 @@ class DataLoadingPrimer(TensorDictPrimer):
         # We deliver all the repeats in the same batch
         if repeats and group_repeats:
             if batch_size == torch.Size([]):
-                batch_size = torch.Size((group_repeats,))
+                batch_size = torch.Size((repeats,))
             else:
                 batch_size = torch.Size([batch_size[0] * repeats])
 
