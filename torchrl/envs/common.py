@@ -2214,7 +2214,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         nondeterministic: bool = False,
         max_episode_steps: int | None = None,
         order_enforce: bool = True,
-        autoreset: bool = False,
+        autoreset: bool | None = None,
         disable_env_checker: bool = False,
         apply_api_compatibility: bool = False,
         **kwargs,
@@ -2276,12 +2276,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 enforcer wrapper should be applied to ensure users run functions
                 in the correct order.
                 Defaults to ``True``.
-            autoreset (bool, optional): [Gym >= 0.14] Whether the autoreset wrapper
+            autoreset (bool, optional): [Gym >= 0.14 and <1.0.0] Whether the autoreset wrapper
                 should be added such that reset does not need to be called.
                 Defaults to ``False``.
             disable_env_checker: [Gym >= 0.14] Whether the environment
                 checker should be disabled for the environment. Defaults to ``False``.
-            apply_api_compatibility: [Gym >= 0.26] If to apply the `StepAPICompatibility` wrapper.
+            apply_api_compatibility: [Gym >= 0.26 and <1.0.0] If to apply the `StepAPICompatibility` wrapper.
                 Defaults to ``False``.
             **kwargs: arbitrary keyword arguments which are passed to the environment constructor.
 
@@ -2403,7 +2403,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         nondeterministic: bool = False,
         max_episode_steps: int | None = None,
         order_enforce: bool = True,
-        autoreset: bool = False,
+        autoreset: bool | None = None,
         disable_env_checker: bool = False,
         apply_api_compatibility: bool = False,
         **kwargs,
@@ -2428,7 +2428,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             nondeterministic=nondeterministic,
             max_episode_steps=max_episode_steps,
             order_enforce=order_enforce,
-            autoreset=autoreset,
+            autoreset=bool(autoreset),
             disable_env_checker=disable_env_checker,
             apply_api_compatibility=apply_api_compatibility,
         )
@@ -2445,7 +2445,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         nondeterministic: bool = False,
         max_episode_steps: int | None = None,
         order_enforce: bool = True,
-        autoreset: bool = False,
+        autoreset: bool | None = None,
         disable_env_checker: bool = False,
         apply_api_compatibility: bool = False,
         **kwargs,
@@ -2477,7 +2477,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             nondeterministic=nondeterministic,
             max_episode_steps=max_episode_steps,
             order_enforce=order_enforce,
-            autoreset=autoreset,
+            autoreset=bool(autoreset),
             disable_env_checker=disable_env_checker,
         )
 
@@ -2493,7 +2493,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         nondeterministic: bool = False,
         max_episode_steps: int | None = None,
         order_enforce: bool = True,
-        autoreset: bool = False,
+        autoreset: bool | None = None,
         disable_env_checker: bool = False,
         apply_api_compatibility: bool = False,
         **kwargs,
@@ -2531,7 +2531,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             nondeterministic=nondeterministic,
             max_episode_steps=max_episode_steps,
             order_enforce=order_enforce,
-            autoreset=autoreset,
+            autoreset=bool(autoreset),
         )
 
     @implement_for("gym", "0.21", "0.24", class_method=True)
@@ -2546,7 +2546,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         nondeterministic: bool = False,
         max_episode_steps: int | None = None,
         order_enforce: bool = True,
-        autoreset: bool = False,
+        autoreset: bool | None = None,
         disable_env_checker: bool = False,
         apply_api_compatibility: bool = False,
         **kwargs,
@@ -2565,7 +2565,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     "disable_env_checker", gym.__version__
                 )
             )
-        if autoreset is not False:
+        if autoreset is not None:
             raise TypeError(
                 cls._GYM_UNRECOGNIZED_KWARG.format("autoreset", gym.__version__)
             )
@@ -2602,7 +2602,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         nondeterministic: bool = False,
         max_episode_steps: int | None = None,
         order_enforce: bool = True,
-        autoreset: bool = False,
+        autoreset: bool | None = None,
         disable_env_checker: bool = False,
         apply_api_compatibility: bool = False,
         **kwargs,
@@ -2620,7 +2620,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     "disable_env_checker", gym.__version__
                 )
             )
-        if autoreset is not False:
+        if autoreset is not None:
             raise TypeError(
                 cls._GYM_UNRECOGNIZED_KWARG.format("autoreset", gym.__version__)
             )
@@ -2648,7 +2648,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             max_episode_steps=max_episode_steps,
         )
 
-    @implement_for("gymnasium", class_method=True)
+    @implement_for("gymnasium", None, "1.0.0", class_method=True)
     def _register_gym(  # noqa: F811
         cls,
         id,
@@ -2660,7 +2660,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         nondeterministic: bool = False,
         max_episode_steps: int | None = None,
         order_enforce: bool = True,
-        autoreset: bool = False,
+        autoreset: bool | None = None,
         disable_env_checker: bool = False,
         apply_api_compatibility: bool = False,
         **kwargs,
@@ -2686,9 +2686,60 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             nondeterministic=nondeterministic,
             max_episode_steps=max_episode_steps,
             order_enforce=order_enforce,
-            autoreset=autoreset,
+            autoreset=bool(autoreset),
             disable_env_checker=disable_env_checker,
             apply_api_compatibility=apply_api_compatibility,
+        )
+
+    @implement_for("gymnasium", "1.1.0", class_method=True)
+    def _register_gym(  # noqa: F811
+        cls,
+        id,
+        entry_point: Callable | None = None,
+        transform: Transform | None = None,  # noqa: F821
+        info_keys: list[NestedKey] | None = None,
+        to_numpy: bool = False,
+        reward_threshold: float | None = None,
+        nondeterministic: bool = False,
+        max_episode_steps: int | None = None,
+        order_enforce: bool = True,
+        autoreset: bool | None = None,
+        disable_env_checker: bool = False,
+        apply_api_compatibility: bool = False,
+        **kwargs,
+    ):
+        import gymnasium
+        from torchrl.envs.libs._gym_utils import _TorchRLGymnasiumWrapper
+
+        if autoreset is not None:
+            raise TypeError(
+                f"the autoreset argument is deprecated in gymnasium>=1.0. Got autoreset={autoreset}"
+            )
+        if entry_point is None:
+            entry_point = cls
+
+        entry_point = partial(
+            _TorchRLGymnasiumWrapper,
+            entry_point=entry_point,
+            info_keys=info_keys,
+            to_numpy=to_numpy,
+            transform=transform,
+            **kwargs,
+        )
+        if apply_api_compatibility is not False:
+            raise TypeError(
+                cls._GYM_UNRECOGNIZED_KWARG.format(
+                    "apply_api_compatibility", gymnasium.__version__
+                )
+            )
+        return gymnasium.register(
+            id=id,
+            entry_point=entry_point,
+            reward_threshold=reward_threshold,
+            nondeterministic=nondeterministic,
+            max_episode_steps=max_episode_steps,
+            order_enforce=order_enforce,
+            disable_env_checker=disable_env_checker,
         )
 
     def forward(self, *args, **kwargs):
