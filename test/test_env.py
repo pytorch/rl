@@ -56,6 +56,7 @@ from torchrl.envs import (
     ParallelEnv,
     PendulumEnv,
     SerialEnv,
+    set_gym_backend,
     TicTacToeEnv,
 )
 from torchrl.envs.batched_envs import _stackable
@@ -2511,6 +2512,7 @@ class TestInfoDict:
             import gymnasium as gym
         except ModuleNotFoundError:
             import gym
+        set_gym_backend(gym).set()
 
         env = GymWrapper(gym.make(HALFCHEETAH_VERSIONED()), device=device)
         env.set_info_dict_reader(
@@ -2542,7 +2544,7 @@ class TestInfoDict:
             ),
             [Unbounded((), dtype=torch.float64)],
         ):
-            env2 = GymWrapper(gym.make("HalfCheetah-v4"))
+            env2 = GymWrapper(gym.make("HalfCheetah-v5"))
             env2.set_info_dict_reader(
                 default_info_dict_reader(["x_position"], spec=spec)
             )
