@@ -318,6 +318,21 @@ class TestGym:
             shape=batch_size,
         )
 
+    @implement_for("gymnasium", "1.1.0")
+    def _make_spec(  # noqa: F811
+        self, batch_size, cat, cat_shape, multicat, multicat_shape
+    ):
+        return Composite(
+            a=Unbounded(shape=(*batch_size, 1)),
+            b=Composite(c=cat(5, shape=cat_shape, dtype=torch.int64), shape=batch_size),
+            d=cat(5, shape=cat_shape, dtype=torch.int64),
+            e=multicat([2, 3], shape=(*batch_size, multicat_shape), dtype=torch.int64),
+            f=Bounded(-3, 4, shape=(*batch_size, 1)),
+            g=UnboundedDiscreteTensorSpec(shape=(*batch_size, 1), dtype=torch.long),
+            h=Binary(n=5, shape=(*batch_size, 5)),
+            shape=batch_size,
+        )
+
     @pytest.mark.parametrize("categorical", [True, False])
     def test_gym_spec_cast(self, categorical):
         batch_size = [3, 4]
@@ -379,10 +394,17 @@ class TestGym:
         torchrl_logger.info("Sequence not available in gym")
         return
 
-    # @pytest.mark.parametrize("order", ["seq_tuple", "tuple_seq"])
+    @pytest.mark.parametrize("order", ["tuple_seq"])
+    @implement_for("gymnasium", "1.1.0")
+    def test_gym_spec_cast_tuple_sequential(self, order):  # noqa: F811
+        self._test_gym_spec_cast_tuple_sequential(order)
+
     @pytest.mark.parametrize("order", ["tuple_seq"])
     @implement_for("gymnasium", None, "1.0.0")
     def test_gym_spec_cast_tuple_sequential(self, order):  # noqa: F811
+        self._test_gym_spec_cast_tuple_sequential(order)
+
+    def _test_gym_spec_cast_tuple_sequential(self, order):  # noqa: F811
         with set_gym_backend("gymnasium"):
             if order == "seq_tuple":
                 # Requires nested tensors to be created along dim=1, disabling
@@ -974,8 +996,15 @@ class TestGym:
         finally:
             set_gym_backend(gb).set()
 
-    @implement_for("gymnasium", None, "1.0.0")
+    @implement_for("gymnasium", "1.1.0")
     def test_one_hot_and_categorical(self):
+        self._test_one_hot_and_categorical()
+
+    @implement_for("gymnasium", None, "1.0.0")
+    def test_one_hot_and_categorical(self):  # noqa
+        self._test_one_hot_and_categorical()
+
+    def _test_one_hot_and_categorical(self):
         # tests that one-hot and categorical work ok when an integer is expected as action
         cliff_walking = GymEnv("CliffWalking-v0", categorical_action_encoding=True)
         cliff_walking.rollout(10)
@@ -993,7 +1022,7 @@ class TestGym:
         # versions.
         return
 
-    @implement_for("gymnasium", None, "1.0.0")
+    @implement_for("gymnasium", "1.1.0")
     @pytest.mark.parametrize(
         "envname",
         ["HalfCheetah-v4", "CartPole-v1", "ALE/Pong-v5"]
@@ -1001,6 +1030,19 @@ class TestGym:
     )
     @pytest.mark.flaky(reruns=5, reruns_delay=1)
     def test_vecenvs_wrapper(self, envname):
+        self._test_vecenvs_wrapper(envname)
+
+    @implement_for("gymnasium", None, "1.0.0")
+    @pytest.mark.parametrize(
+        "envname",
+        ["HalfCheetah-v4", "CartPole-v1", "ALE/Pong-v5"]
+        + (["FetchReach-v2"] if _has_gym_robotics else []),
+    )
+    @pytest.mark.flaky(reruns=5, reruns_delay=1)
+    def test_vecenvs_wrapper(self, envname):  # noqa
+        self._test_vecenvs_wrapper(envname)
+
+    def _test_vecenvs_wrapper(self, envname):
         import gymnasium
 
         # we can't use parametrize with implement_for
@@ -1019,7 +1061,7 @@ class TestGym:
         assert env.batch_size == torch.Size([2])
         check_env_specs(env)
 
-    @implement_for("gymnasium", None, "1.0.0")
+    @implement_for("gymnasium", "1.1.0")
     # this env has Dict-based observation which is a nice thing to test
     @pytest.mark.parametrize(
         "envname",
@@ -1028,6 +1070,21 @@ class TestGym:
     )
     @pytest.mark.flaky(reruns=5, reruns_delay=1)
     def test_vecenvs_env(self, envname):
+        self._test_vecenvs_env(envname)
+
+    @implement_for("gymnasium", None, "1.0.0")
+    # this env has Dict-based observation which is a nice thing to test
+    @pytest.mark.parametrize(
+        "envname",
+        ["HalfCheetah-v4", "CartPole-v1", "ALE/Pong-v5"]
+        + (["FetchReach-v2"] if _has_gym_robotics else []),
+    )
+    @pytest.mark.flaky(reruns=5, reruns_delay=1)
+    def test_vecenvs_env(self, envname):  # noqa
+        self._test_vecenvs_env(envname)
+
+    def _test_vecenvs_env(self, envname):
+
         gb = gym_backend()
         try:
             with set_gym_backend("gymnasium"):
@@ -1181,9 +1238,17 @@ class TestGym:
         finally:
             set_gym_backend(gym).set()
 
+    @implement_for("gymnasium", "1.1.0")
+    @pytest.mark.parametrize("wrapper", [True, False])
+    def test_gym_output_num(self, wrapper):  # noqa: F811
+        self._test_gym_output_num(wrapper)
+
     @implement_for("gymnasium", None, "1.0.0")
     @pytest.mark.parametrize("wrapper", [True, False])
     def test_gym_output_num(self, wrapper):  # noqa: F811
+        self._test_gym_output_num(wrapper)
+
+    def _test_gym_output_num(self, wrapper):  # noqa: F811
         # gym has 5 outputs, with truncation
         gym = gym_backend()
         try:
@@ -1284,8 +1349,15 @@ class TestGym:
         del c
         return
 
+    @implement_for("gymnasium", "1.1.0")
+    def test_vecenvs_nan(self):  # noqa: F811
+        self._test_vecenvs_nan()
+
     @implement_for("gymnasium", None, "1.0.0")
     def test_vecenvs_nan(self):  # noqa: F811
+        self._test_vecenvs_nan()
+
+    def _test_vecenvs_nan(self):  # noqa: F811
         # new versions of gym must never return nan for next values when there is a done state
         torch.manual_seed(0)
         env = GymEnv("CartPole-v1", num_envs=2)
@@ -1351,6 +1423,98 @@ class TestGym:
                     return observation, reward, terminated, truncated, info
 
             return CustomEnv(**kwargs)
+
+    @pytest.fixture(scope="function")
+    def counting_env(self):
+        import gymnasium as gym
+        from gymnasium import Env
+
+        class CountingEnvRandomReset(Env):
+            def __init__(self, i=0):
+                self.counter = 1
+                self.i = i
+                self.observation_space = gym.spaces.Box(-np.inf, np.inf, shape=(1,))
+                self.action_space = gym.spaces.Box(-np.inf, np.inf, shape=(1,))
+                self.rng = np.random.RandomState(0)
+
+            def step(self, action):
+                self.counter += 1
+                done = bool(self.rng.random() < 0.05)
+                return (
+                    np.asarray(
+                        [
+                            self.counter,
+                        ]
+                    ),
+                    0,
+                    done,
+                    done,
+                    {},
+                )
+
+            def reset(
+                self,
+                *,
+                seed: int | None = None,
+                options=None,
+            ):
+                self.counter = 1
+                if seed is not None:
+                    self.rng = np.random.RandomState(seed)
+                return (
+                    np.asarray(
+                        [
+                            self.counter,
+                        ]
+                    ),
+                    {},
+                )
+
+        yield CountingEnvRandomReset
+
+    @implement_for("gym")
+    def test_gymnasium_autoreset(self, venv):
+        return
+
+    @implement_for("gymnasium", None, "1.1.0")
+    def test_gymnasium_autoreset(self, venv):  # noqa
+        return
+
+    @implement_for("gymnasium", "1.1.0")
+    @pytest.mark.parametrize("venv", ["sync", "async"])
+    def test_gymnasium_autoreset(self, venv, counting_env):  # noqa
+        import gymnasium as gym
+
+        if venv == "sync":
+            venv = gym.vector.SyncVectorEnv
+        else:
+            venv = gym.vector.AsyncVectorEnv
+        envs0 = venv(
+            [lambda i=i: counting_env(i) for i in range(2)],
+            autoreset_mode=gym.vector.AutoresetMode.DISABLED,
+        )
+        env = GymWrapper(envs0)
+        envs0.reset(seed=0)
+        torch.manual_seed(0)
+        r0 = env.rollout(20, break_when_any_done=False)
+        envs1 = venv(
+            [lambda i=i: counting_env(i) for i in range(2)],
+            autoreset_mode=gym.vector.AutoresetMode.SAME_STEP,
+        )
+        env = GymWrapper(envs1)
+        envs1.reset(seed=0)
+        # env.set_seed(0)
+        torch.manual_seed(0)
+        r1 = []
+        t_ = env.reset()
+        for s in r0.unbind(-1):
+            t_.set("action", s["action"])
+            t, t_ = env.step_and_maybe_reset(t_)
+            r1.append(t)
+        r1 = torch.stack(r1, -1)
+        torch.testing.assert_close(r0["observation"], r1["observation"])
+        torch.testing.assert_close(r0["next", "observation"], r1["next", "observation"])
+        torch.testing.assert_close(r0["next", "done"], r1["next", "done"])
 
     @pytest.mark.parametrize("heterogeneous", [False, True])
     def test_resetting_strategies(self, heterogeneous):
@@ -1456,6 +1620,12 @@ def _make_gym_environment(env_name):  # noqa: F811
 
 
 @implement_for("gymnasium", None, "1.0.0")
+def _make_gym_environment(env_name):  # noqa: F811
+    gym = gym_backend()
+    return gym.make(env_name, render_mode="rgb_array")
+
+
+@implement_for("gymnasium", "1.1.0")
 def _make_gym_environment(env_name):  # noqa: F811
     gym = gym_backend()
     return gym.make(env_name, render_mode="rgb_array")

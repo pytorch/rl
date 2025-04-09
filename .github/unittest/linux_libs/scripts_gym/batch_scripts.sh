@@ -135,12 +135,27 @@ do
   conda env remove --prefix ./cloned_env -y
 done
 
+# Prev gymnasium
+conda deactivate
+conda create --prefix ./cloned_env --clone ./env -y
+conda activate ./cloned_env
+
+pip3 install 'gymnasium[accept-rom-license,ale-py,atari]<1.0.0' mo-gymnasium gymnasium-robotics -U
+
+$DIR/run_test.sh
+
+# delete the conda copy
+conda deactivate
+conda env remove --prefix ./cloned_env -y
+
+# Skip 1.0.0
+
 # Latest gymnasium
 conda deactivate
 conda create --prefix ./cloned_env --clone ./env -y
 conda activate ./cloned_env
 
-pip3 install 'gymnasium[accept-rom-license,ale-py,atari]<1.0' mo-gymnasium gymnasium-robotics -U
+pip3 install 'gymnasium[accept-rom-license,ale-py,atari]>=1.1.0' mo-gymnasium gymnasium-robotics -U
 
 $DIR/run_test.sh
 
