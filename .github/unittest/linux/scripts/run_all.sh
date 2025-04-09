@@ -97,9 +97,9 @@ echo "installing gymnasium"
 if [[ "$PYTHON_VERSION" == "3.12" ]]; then
   pip3 install ale-py
   pip3 install sympy
-  pip3 install "gymnasium[accept-rom-license,mujoco]<1.0" mo-gymnasium[mujoco]
+  pip3 install "gymnasium[accept-rom-license,mujoco]>=1.1" mo-gymnasium[mujoco]
 else
-  pip3 install "gymnasium[atari,accept-rom-license,mujoco]<1.0" mo-gymnasium[mujoco]
+  pip3 install "gymnasium[atari,accept-rom-license,mujoco]>=1.1" mo-gymnasium[mujoco]
 fi
 pip3 install "mujoco" -U
 
