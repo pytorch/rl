@@ -217,7 +217,7 @@ def get_gym_pixel_wrapper():
 def get_gym_pixel_wrapper():
     # works whenever gym_version > version.parse("0.19")
     PixelObservationWrapper = lambda *args, pixels_only=False, **kwargs: gym_backend(
-        "wrappers.pixel_observation"
+        "wrappers"
     ).AddRenderObservation(*args, render_only=pixels_only, **kwargs)
     return PixelObservationWrapper
 
