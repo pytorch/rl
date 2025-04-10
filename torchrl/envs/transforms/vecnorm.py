@@ -352,7 +352,8 @@ class VecNormV2(Transform):
         if self.out_keys[: len(self.in_keys)] != self.in_keys:
             # map names
             for in_key, out_key in _zip_strict(self._in_keys_safe, self.out_keys):
-                data_update.rename_key_(in_key, out_key)
+                if in_key in data_update:
+                    data_update.rename_key_(in_key, out_key)
         else:
             pass
         return data_update
