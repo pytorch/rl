@@ -374,9 +374,14 @@ class VecNormV2(Transform):
             count = self._count
         count += 1
         data = self._maybe_cast_to_float(data)
-        weight = 1 - self.decay
-        loc.lerp_(end=data, weight=weight)
-        var.lerp_(end=data.pow(2), weight=weight)
+        if self.decay != 1.0:
+            weight = 1 - self.decay
+            loc.lerp_(end=data, weight=weight)
+            var.lerp_(end=data.pow(2), weight=weight)
+        else:
+            weight = 1 / count
+            loc.lerp_(end=data, weight=weight)
+            var.lerp_(end=data.pow(2), weight=weight)
 
     def _maybe_stateless_init(self, data):
         if not self.initialized or f"{self.prefix}_loc" not in data.keys():
@@ -412,7 +417,10 @@ class VecNormV2(Transform):
             return loc, var, count
         count = count + 1
         data = self._maybe_cast_to_float(data)
-        weight = 1 - self.decay
+        if self.decay != 1.0:
+            weight = 1 - self.decay
+        else:
+            weight = 1 / count
         loc = loc.lerp(end=data, weight=weight)
         var = var.lerp(end=data.pow(2), weight=weight)
         return loc, var, count
@@ -565,7 +573,7 @@ class VecNormV2(Transform):
         if self.stateful:
             loc = self._loc
             count = self._count
-            if self.decay < 1.0:
+            if self.decay != 1.0:
                 bias_correction = 1 - (count * math.log(self.decay)).exp()
                 bias_correction = bias_correction.apply(lambda x, y: x.to(y.dtype), loc)
             else:
