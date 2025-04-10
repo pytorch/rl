@@ -1552,17 +1552,16 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
         self._make_specs(self._env)
 
     @implement_for("gym")
-    def _replace_reset(self, reset, kwargs):
+    def replace_reset(self, reset, kwargs):
         return kwargs
 
     @implement_for("gymnasium", None, "1.1.0")
-    def _replace_reset(self, reset, kwargs):  # noqa
+    def replace_reset(self, reset, kwargs):  # noqa
         return kwargs
 
     # From gymnasium 1.1.0, AutoresetMode.DISABLED is like resets in torchrl
     @implement_for("gymnasium", "1.1.0")
-    def _replace_reset(self, reset, kwargs):  # noqa
-        print("backend", gym_backend())
+    def replace_reset(self, reset, kwargs):  # noqa
         import gymnasium as gym
 
         if self._env.autoreset_mode == gym.vector.AutoresetMode.DISABLED:
@@ -1580,7 +1579,7 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
             if tensordict is None:
                 return super()._reset(tensordict, **kwargs)
             reset = tensordict.get("_reset", None)
-            kwargs = self._replace_reset(reset, kwargs)
+            kwargs = self.replace_reset(reset, kwargs)
             if reset is not None:
                 # we must copy the tensordict because the transform
                 # expects a tuple (tensordict, tensordict_reset) where the
