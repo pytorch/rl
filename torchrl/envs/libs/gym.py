@@ -1215,21 +1215,16 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
 
     @implement_for("gymnasium", "1.1.0")
     def _build_gym_env(self, env, pixels_only):  # noqa: F811
-        compatibility = gym_backend("wrappers.compatibility")
-        pixel_observation = gym_backend("wrappers.pixel_observation")
+        wrappers = gym_backend("wrappers")
 
         if env.render_mode:
-            return pixel_observation.PixelObservationWrapper(
-                env, pixels_only=pixels_only
-            )
+            return wrappers.AddRenderObservation(env, render_only=pixels_only)
 
         warnings.warn(
             "Environments provided to GymWrapper that need to be wrapped in PixelObservationWrapper "
             "should be created with `gym.make(env_name, render_mode=mode)` where possible,"
             'where mode is either "rgb_array" or any other supported mode.'
         )
-        # resetting as 0.26 comes with a very 'nice' OrderEnforcing wrapper
-        env = compatibility.EnvCompatibility(env)
         env.reset()
         from torchrl.envs.libs.utils import (
             GymPixelObservationWrapper as LegacyPixelObservationWrapper,
@@ -1556,22 +1551,22 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
         self._env = self._build_env(**self._constructor_kwargs)
         self._make_specs(self._env)
 
+    @implement_for("gym")
+    def _replace_reset(self, reset, kwargs):
+        return kwargs
+
+    @implement_for("gymnasium", None, "1.1.0")
+    def _replace_reset(self, reset, kwargs):  # noqa
+        return kwargs
+
     # From gymnasium 1.1.0, AutoresetMode.DISABLED is like resets in torchrl
     @implement_for("gymnasium", "1.1.0")
-    def _replace_reset(self, reset, kwargs):
+    def _replace_reset(self, reset, kwargs):  # noqa
         import gymnasium as gym
 
         if self._env.autoreset_mode == gym.vector.AutoresetMode.DISABLED:
             options = {"reset_mask": reset.view(self.batch_size).numpy()}
             kwargs.setdefault("options", {}).update(options)
-        return kwargs
-
-    @implement_for("gym")
-    def _replace_reset(self, reset, kwargs):  # noqa
-        return kwargs
-
-    @implement_for("gymnasium", None, "1.1.0")
-    def _replace_reset(self, reset, kwargs):  # noqa
         return kwargs
 
     def _reset(

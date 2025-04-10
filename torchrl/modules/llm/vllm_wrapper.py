@@ -231,6 +231,15 @@ class vLLMWrapper(CategoricalSequential):
         tensordict_out: TensorDictBase | None = None,
         **kwargs,
     ) -> TensorDictBase:
+        if not tensordict.ndim:
+            # unsqueeze - squeeze the input
+            try:
+                return self(lazy_stack([tensordict]))[0]
+            except Exception as e:
+                raise RuntimeError(
+                    f"Unsqueeze/squeeze failed. Inputs to {type(self).__name__} should ideally be 1 dimensional."
+                ) from e
+
         _source_device = None
         if self._device:
             _source_device = tensordict.device
@@ -575,7 +584,7 @@ class _RequestOutput_tc(TensorClass["nocast"]):
 
             if output.logprobs:
                 output.logprobs = get_logprob(output)
-            output.token_ids = torch.tensor(output.token_ids)
+            output.token_ids = torch.as_tensor(output.token_ids)
             return output
 
         if isinstance(self.outputs, list):
@@ -597,8 +606,8 @@ class _RequestOutput_tc(TensorClass["nocast"]):
                         )
                     ]
                 )
-            self.prompt_token_ids = torch.tensor(self.prompt_token_ids)
-            self.num_cached_tokens = torch.tensor(self.num_cached_tokens)
+            self.prompt_token_ids = torch.as_tensor(self.prompt_token_ids)
+            self.num_cached_tokens = torch.as_tensor(self.num_cached_tokens)
 
     @classmethod
     def from_request_output(cls, requests):

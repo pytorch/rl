@@ -149,6 +149,8 @@ class History(TensorClass["nocast"]):
             raise NotImplementedError(
                 "chat_template_name must be one of ('chatml_format',)"
             )
+        if isinstance(text, list):
+            return torch.stack([cls._inv_chatml(text) for text in text])
         return cls._inv_chatml(text)
 
     @classmethod
@@ -164,18 +166,26 @@ class History(TensorClass["nocast"]):
         torchrl_logger.debug(f"Inverting chatml:\n{text}")
         pattern = r"<\|im_start\|>(.*?)\n(.*?)<\|im_end\|>"
         matches = re.findall(pattern, text, flags=re.DOTALL)
-        chat_template = []
+        roles = []
+        contents = []
         for match in matches:
             role = match[0].strip()
 
             # Override role
             # role = "assistant"
             content = match[1].strip()
-            chat_template.append({"role": role, "content": content})
+            roles.append(role)
+            contents.append(content)
+        if not roles:
+            raise RuntimeError(
+                f"Couldn't get a single item out of text {text}. A common cause "
+                f"if that special tokens should not be ommitted, did you set include_stop_str_in_output/skip_special_tokens=False?"
+            )
+
         return cls(
-            role=[chat_template["role"] for chat_template in chat_template],
-            content=[chat_template["content"] for chat_template in chat_template],
-            batch_size=len(chat_template),
+            role=roles,
+            content=contents,
+            batch_size=len(roles),
         )
 
     def append(
@@ -205,14 +215,29 @@ class History(TensorClass["nocast"]):
                 isinstance(self._tensordict, LazyStackedTensorDict)
                 and self._tensordict.stack_dim == dim
             ):
-                self._tensordict.append(history._tensordict)
+                td = history._tensordict
+                if td.device != self.device:
+                    if self.device is None:
+                        td = td.copy().clear_device_()
+                    else:
+                        td = td.to(self.device)
+                self._tensordict.append(td)
                 return self
             else:
-                td = lazy_stack(
-                    list(self._tensordict.unbind(dim)) + [history._tensordict], dim=dim
-                )
+                td = history._tensordict
+                if td.device != self.device:
+                    if self.device is None:
+                        td = td.copy().clear_device_()
+                    else:
+                        td = td.to(self.device)
+                td = lazy_stack(list(self._tensordict.unbind(dim)) + [td], dim=dim)
                 self.__dict__["_tensordict"] = td
                 return self
+        if history.device != self.device:
+            if self.device is None:
+                history = history.copy().clear_device_()
+            else:
+                history = history.to(self.device)
         return torch.stack(list(self.unbind(dim)) + [history], dim=dim)
 
     def extend(
@@ -232,7 +257,13 @@ class History(TensorClass["nocast"]):
                 isinstance(self._tensordict, LazyStackedTensorDict)
                 and self._tensordict.stack_dim == dim
             ):
-                self._tensordict.extend(history._tensordict)
+                td = history._tensordict
+                if td.device != self.device:
+                    if self.device is None:
+                        td = td.copy().clear_device_()
+                    else:
+                        td = td.to(self.device)
+                self._tensordict.extend(td)
                 return self
             else:
                 td = lazy_stack(
@@ -240,8 +271,18 @@ class History(TensorClass["nocast"]):
                     + list(history._tensordict.unbind(dim)),
                     dim=dim,
                 )
+                if td.device != self.device:
+                    if self.device is None:
+                        td = td.copy().clear_device_()
+                    else:
+                        td = td.to(self.device)
                 self.__dict__["_tensordict"] = td
                 return self
+        if history.device != self.device:
+            if self.device is None:
+                history = history.copy().clear_device_()
+            else:
+                history = history.to(self.device)
         return torch.stack(list(self.unbind(dim)) + list(history.unbind(dim)), dim=dim)
 
     @classmethod

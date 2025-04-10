@@ -10,6 +10,9 @@ ln -s /usr/bin/swig3.0 /usr/bin/swig
 
 export PYTORCH_TEST_WITH_SLOW='1'
 export LAZY_LEGACY_OP=False
+
+# to solve RuntimeError: Cannot re-initialize CUDA in forked subprocess. To use CUDA with multiprocessing, you must use the 'spawn' start method
+export VLLM_WORKER_MULTIPROC_METHOD=spawn
 python -m torch.utils.collect_env
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
@@ -22,11 +25,11 @@ conda deactivate && conda activate ./env
 
 python -c "import transformers, datasets"
 
-python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_rlhf.py --instafail -v --durations 200 --capture no --error-for-skips
+pytest test/test_rlhf.py --instafail -v --durations 200 --capture no --error-for-skips
 
-python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_actors.py -k llm --instafail -v --durations 200 --capture no --error-for-skips --runslow
+pytest test/test_actors.py test/test_collector.py -k llm --instafail -v --durations 200 --capture no --error-for-skips --runslow
 
-python .github/unittest/helpers/coverage_run_parallel.py examples/rlhf/train_rlhf.py \
+pytest examples/rlhf/train_rlhf.py \
   sys.device=cuda:0 sys.ref_device=cuda:0 \
   model.name_or_path=gpt2 train.max_epochs=2 \
   data.batch_size=2 train.ppo.ppo_batch_size=2 \

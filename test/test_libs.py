@@ -190,6 +190,7 @@ def maybe_init_minigrid():
         minigrid.register_minigrid_envs()
 
 
+@implement_for("gym")
 def get_gym_pixel_wrapper():
     try:
         # works whenever gym_version > version.parse("0.19")
@@ -200,6 +201,29 @@ def get_gym_pixel_wrapper():
         from torchrl.envs.libs.utils import (
             GymPixelObservationWrapper as PixelObservationWrapper,
         )
+    return PixelObservationWrapper
+
+
+@implement_for("gymnasium", None, "1.1.0")
+def get_gym_pixel_wrapper():  # noqa: F811
+    try:
+        # works whenever gym_version > version.parse("0.19")
+        PixelObservationWrapper = gym_backend(
+            "wrappers.pixel_observation"
+        ).PixelObservationWrapper
+    except Exception:
+        from torchrl.envs.libs.utils import (
+            GymPixelObservationWrapper as PixelObservationWrapper,
+        )
+    return PixelObservationWrapper
+
+
+@implement_for("gymnasium", "1.1.0")
+def get_gym_pixel_wrapper():  # noqa: F811
+    # works whenever gym_version > version.parse("0.19")
+    PixelObservationWrapper = lambda *args, pixels_only=False, **kwargs: gym_backend(
+        "wrappers"
+    ).AddRenderObservation(*args, render_only=pixels_only, **kwargs)
     return PixelObservationWrapper
 
 
@@ -1030,7 +1054,12 @@ class TestGym:
     )
     @pytest.mark.flaky(reruns=5, reruns_delay=1)
     def test_vecenvs_wrapper(self, envname):
-        self._test_vecenvs_wrapper(envname)
+        import gymnasium
+
+        with set_gym_backend("gymnasium"):
+            self._test_vecenvs_wrapper(
+                envname, kwargs={"reset_mode": gymnasium.vector.AutoresetMode.SAME_STEP}
+            )
 
     @implement_for("gymnasium", None, "1.0.0")
     @pytest.mark.parametrize(
@@ -1040,22 +1069,25 @@ class TestGym:
     )
     @pytest.mark.flaky(reruns=5, reruns_delay=1)
     def test_vecenvs_wrapper(self, envname):  # noqa
-        self._test_vecenvs_wrapper(envname)
+        with set_gym_backend("gymnasium"):
+            self._test_vecenvs_wrapper(envname)
 
-    def _test_vecenvs_wrapper(self, envname):
+    def _test_vecenvs_wrapper(self, envname, kwargs=None):
         import gymnasium
 
+        if kwargs is None:
+            kwargs = {}
         # we can't use parametrize with implement_for
         env = GymWrapper(
             gymnasium.vector.SyncVectorEnv(
-                2 * [lambda envname=envname: gymnasium.make(envname)]
+                2 * [lambda envname=envname: gymnasium.make(envname)], **kwargs
             )
         )
         assert env.batch_size == torch.Size([2])
         check_env_specs(env)
         env = GymWrapper(
             gymnasium.vector.AsyncVectorEnv(
-                2 * [lambda envname=envname: gymnasium.make(envname)]
+                2 * [lambda envname=envname: gymnasium.make(envname)], **kwargs
             )
         )
         assert env.batch_size == torch.Size([2])
@@ -1113,25 +1145,26 @@ class TestGym:
     )
     @pytest.mark.flaky(reruns=5, reruns_delay=1)
     def test_vecenvs_wrapper(self, envname):  # noqa: F811
-        gym = gym_backend()
-        # we can't use parametrize with implement_for
-        for envname in ["CartPole-v1", "HalfCheetah-v4"]:
-            env = GymWrapper(
-                gym.vector.SyncVectorEnv(
-                    2 * [lambda envname=envname: gym.make(envname)]
+        with set_gym_backend("gym"):
+            gym = gym_backend()
+            # we can't use parametrize with implement_for
+            for envname in ["CartPole-v1", "HalfCheetah-v4"]:
+                env = GymWrapper(
+                    gym.vector.SyncVectorEnv(
+                        2 * [lambda envname=envname: gym.make(envname)]
+                    )
                 )
-            )
-            assert env.batch_size == torch.Size([2])
-            check_env_specs(env)
-            env = GymWrapper(
-                gym.vector.AsyncVectorEnv(
-                    2 * [lambda envname=envname: gym.make(envname)]
+                assert env.batch_size == torch.Size([2])
+                check_env_specs(env)
+                env = GymWrapper(
+                    gym.vector.AsyncVectorEnv(
+                        2 * [lambda envname=envname: gym.make(envname)]
+                    )
                 )
-            )
-            assert env.batch_size == torch.Size([2])
-            check_env_specs(env)
-            env.close()
-            del env
+                assert env.batch_size == torch.Size([2])
+                check_env_specs(env)
+                env.close()
+                del env
 
     @implement_for("gym", "0.18")
     @pytest.mark.parametrize(
@@ -1150,17 +1183,17 @@ class TestGym:
                 env = GymEnv(envname, num_envs=2, from_pixels=False)
                 env.set_seed(0)
                 assert env.get_library_name(env._env) == "gym"
-            # rollouts can be executed without decorator
-            check_env_specs(env)
-            rollout = env.rollout(100, break_when_any_done=False)
-            for obs_key in env.observation_spec.keys(True, True):
-                rollout_consistency_assertion(
-                    rollout,
-                    done_key="done",
-                    observation_key=obs_key,
-                    done_strict="CartPole" in envname,
-                )
-            env.close()
+                # rollouts can be executed without decorator
+                check_env_specs(env)
+                rollout = env.rollout(100, break_when_any_done=False)
+                for obs_key in env.observation_spec.keys(True, True):
+                    rollout_consistency_assertion(
+                        rollout,
+                        done_key="done",
+                        observation_key=obs_key,
+                        done_strict="CartPole" in envname,
+                    )
+                env.close()
             del env
             if envname != "CartPole-v1":
                 with set_gym_backend("gym"):
@@ -1469,7 +1502,7 @@ class TestGym:
                     {},
                 )
 
-        yield CountingEnvRandomReset
+        return CountingEnvRandomReset
 
     @implement_for("gym")
     def test_gymnasium_autoreset(self, venv):
@@ -1483,6 +1516,8 @@ class TestGym:
     @pytest.mark.parametrize("venv", ["sync", "async"])
     def test_gymnasium_autoreset(self, venv):  # noqa
         import gymnasium as gym
+
+        set_gym_backend("gymnasium").set()
 
         counting_env = self.counting_env()
         if venv == "sync":

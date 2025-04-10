@@ -161,7 +161,7 @@ class LLMEnv(EnvBase):
                 "eos_token_id is missing. This means that the environment will not be able to capture its "
                 "done state automatically. This may lead to undefined behaviors when the generated text reaches "
                 "an eos_token.",
-                UserWarning,
+                category=UserWarning,
             )
 
         # self.action_key = unravel_key(action_key)
