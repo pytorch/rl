@@ -427,10 +427,13 @@ class implement_for:
             delattr(cls, self.fn.__name__)
         except AttributeError:
             pass
+
         if self.class_method:
-            setattr(cls, self.fn.__name__, classmethod(self.fn))
+            fn = classmethod(self.fn)
         else:
-            setattr(cls, self.fn.__name__, self.fn)
+            fn = self.fn
+        setattr(cls, self.fn.__name__, fn)
+        assert getattr(cls, self.fn.__name__) is fn
 
     @classmethod
     def import_module(cls, module_name: Callable | str) -> str:
