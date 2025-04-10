@@ -1032,9 +1032,10 @@ class TestGym:
     def test_vecenvs_wrapper(self, envname):
         import gymnasium
 
-        self._test_vecenvs_wrapper(
-            envname, kwargs={"reset_mode": gymnasium.vector.AutoresetMode.SAME_STEP}
-        )
+        with set_gym_backend("gymnasium"):
+            self._test_vecenvs_wrapper(
+                envname, kwargs={"reset_mode": gymnasium.vector.AutoresetMode.SAME_STEP}
+            )
 
     @implement_for("gymnasium", None, "1.0.0")
     @pytest.mark.parametrize(
@@ -1044,7 +1045,8 @@ class TestGym:
     )
     @pytest.mark.flaky(reruns=5, reruns_delay=1)
     def test_vecenvs_wrapper(self, envname):  # noqa
-        self._test_vecenvs_wrapper(envname)
+        with set_gym_backend("gymnasium"):
+            self._test_vecenvs_wrapper(envname)
 
     def _test_vecenvs_wrapper(self, envname, kwargs=None):
         import gymnasium
@@ -1490,6 +1492,8 @@ class TestGym:
     @pytest.mark.parametrize("venv", ["sync", "async"])
     def test_gymnasium_autoreset(self, venv):  # noqa
         import gymnasium as gym
+
+        set_gym_backend("gymnasium").set()
 
         counting_env = self.counting_env()
         if venv == "sync":
