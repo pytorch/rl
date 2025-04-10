@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import warnings
+
 from typing import Any, Callable, Literal
 
 import torch
@@ -28,7 +30,6 @@ from torchrl.data.tensor_specs import (
     Categorical as CategoricalSpec,
     Composite,
     NonTensor,
-    TensorSpec,
     Unbounded,
 )
 from torchrl.envs import EnvBase
@@ -54,9 +55,9 @@ class LLMEnv(EnvBase):
         the vllm backend (:class:`~torchrl.modules.vLLMWrapper`).
 
     Keyword Args:
-        token_key (NestedKey, optional): The key in the tensordict where the tokens are stored (when `str2str=False`).
+        token_key (NestedKey, optional): The key in the tensordict where the tokens are stored (when `from_text=False`).
             Defaults to ``"tokens"``.
-        str_key (NestedKey, optional): The key in the tensordict where the string input is stored (when `str2str=True`).
+        str_key (NestedKey, optional): The key in the tensordict where the string input is stored (when `from_text=True`).
             Defaults to ``"text"``.
         attention_key (NestedKey, optional): The key in the tensordict where the attention mask is stored.
             Defaults to ``"attention_mask"``.
@@ -64,13 +65,10 @@ class LLMEnv(EnvBase):
             ``"tokens_response"`` or ``"text_response"``.
         reward_key (NestedKey, optional): The key in the tensordict where the reward is stored if `assign_reward=True`.
             Defaults to  ``"reward"``.
-        str2str (bool, optional): Whether the environment should expect strings as input and output. Defaults to ``True``.
+        from_text (bool, optional): Whether the environment should expect strings as input and output. Defaults to ``True``.
         device (torch.device | None, optional): The device on which the environment should run. Defaults to ``None``.
         vocab_size (int | None, optional): The size of the vocabulary. If None, the environment will assume an
             unbounded vocabulary. Defaults to ``None``.
-        no_stack (bool, optional): If ``False`` (default), the environment should stack the action with the past
-            observation, each action being a new, unseen part of a conversation. Otherwise, the action is assumed
-            to be the plain output of the LLM, including the input tokens/strings.
         has_attention (bool, optional): If ``True``, an attention mask is to be used under the key indicated by
             :attr:`attention_key`. Defaults to ``True``.
         assign_reward (bool, optional): If ``True``, a zero-valued reward of shape equal to the action shape
@@ -79,12 +77,13 @@ class LLMEnv(EnvBase):
             action shape is written during calls to `step()`. Defaults to ``False``.
             .. note:: Regardless of the value assigned to `assign_done`, a done state will be written at the root
                 as it is a requirement for all TorchRL environments.
-        batch_size (int or torch.Size, optional): Batch size of the environment. If left empty, the environment
-            is batchless (or batch-unlocked), meaning that it can accept tensordicts of any batch size.
-            Defaults to ``None`` (batch-unlocked).
+        batch_size (int or torch.Size, optional): Batch size of the environment.
+            If left empty, an empty batch-size is assumed.
+            The batch size can be null (`torch.Size([])`) or one-dimensional. Batchless environments are not supported.
 
             .. note:: When using a :class:`~torchrl.envs.DataLoadingPrimer` transform, the batch-size of the env
                 and the transform should match.
+
         eos_token_id (int, optional): The token id of the end of the sequence. If passed, the `done` state
             is set to `True` when detected. Defaults to `None`.
 
@@ -109,10 +108,9 @@ class LLMEnv(EnvBase):
         attention_key: NestedKey | None = None,
         action_key: NestedKey | None = None,
         reward_key: NestedKey = "reward",
-        str2str: bool = True,
+        from_text: bool = True,
         device: torch.device | None = None,
         vocab_size: int | None = None,
-        no_stack: bool = False,
         assign_reward: bool = False,
         assign_done: bool = False,
         batch_size: int | torch.Size | None = None,
@@ -129,36 +127,45 @@ class LLMEnv(EnvBase):
         if attention_key is None:
             attention_key = self._DEFAULT_ATTENTION_KEY
         if action_key is None:
-            if str2str:
+            if from_text:
                 action_key = self._DEFAULT_ACTION_STR_KEY
             else:
                 action_key = self._DEFAULT_ACTION_TOKENS_KEY
+        self._batch_locked = True
         if batch_size is None:
-            self._batch_locked = False
             batch_size = ()
         else:
-            self._batch_locked = True
             if not isinstance(batch_size, (tuple, list)):
                 batch_size = (batch_size,)
+            elif len(batch_size) > 1:
+                raise TypeError(
+                    f"batch-size of LLMEnv must be 0 or 1d. Got batch_size={batch_size}."
+                )
         super().__init__(
             device=device,
             batch_size=batch_size,
         )
         self.has_attention = has_attention
-        self.str2str = str2str
+        self.from_text = from_text
         self.vocab_size = vocab_size
         self.token_key = unravel_key(token_key)
         self.str_key = unravel_key(str_key)
         if attention_key is not None:
             attention_key = unravel_key(attention_key)
         self.attention_key = attention_key
-        self.no_stack = no_stack
         self.assign_reward = assign_reward
         self.assign_done = assign_done
         self.eos_token_id = eos_token_id
+        if eos_token_id is None:
+            warnings.warn(
+                "eos_token_id is missing. This means that the environment will not be able to capture its "
+                "done state automatically. This may lead to undefined behaviors when the generated text reaches "
+                "an eos_token.",
+                UserWarning,
+            )
 
         # self.action_key = unravel_key(action_key)
-        if str2str:
+        if from_text:
             self.full_observation_spec_unbatched = Composite(
                 {
                     self.str_key: NonTensor(
@@ -217,11 +224,11 @@ class LLMEnv(EnvBase):
                     }
                 )
         STR2STR_ERR = ValueError(
-            "str2str cannot be True when either of assign_reward / assign_done are True. "
+            "from_text cannot be True when either of assign_reward / assign_done are True. "
             "Tokens are required to compute the reward shape."
         )
         if self.assign_reward:
-            if self.str2str:
+            if self.from_text:
                 raise STR2STR_ERR
             self.full_reward_spec_unbatched = Composite(
                 {reward_key: Unbounded(shape=(-1,), device=device)}
@@ -235,7 +242,7 @@ class LLMEnv(EnvBase):
                 done=Unbounded(shape=(1,), dtype=torch.bool, device=device),
                 terminated=Unbounded(shape=(1,), dtype=torch.bool, device=device),
             )
-        elif self.str2str:
+        elif self.from_text:
             raise STR2STR_ERR
         else:
             # Use single done
@@ -259,27 +266,20 @@ class LLMEnv(EnvBase):
         attention_key: NestedKey | None = None,
         action_key: NestedKey | None = None,
         reward_key: NestedKey = "reward",
-        str2str: bool = True,
+        from_text: bool = True,
         device: torch.device | None = None,
         vocab_size: int | None = None,
-        no_stack: bool = False,
-        # Experimental
-        as_llm_data: bool = False,
         batch_size: int | torch.Size | None = None,
         has_attention: bool = True,
         assign_reward: bool = False,
         assign_done: bool = False,
         primers: Composite | None = None,
-        data_keys: list[NestedKey] | None = None,
-        data_specs: list[TensorSpec] | None = None,
         example_data: Any = None,
         stack_method: Callable[[Any], Any]
         | Literal["as_nested_tensor", "as_padded_tensor"] = None,
         repeats: int | None = None,
         group_repeats: bool = True,
         eos_token_id: int | None = None,
-        auto_batch_size: bool | None = None,
-        use_buffer: bool | None = None,
     ) -> LLMEnv:
         """Creates an LLMEnv instance from a dataloader.
 
@@ -294,14 +294,14 @@ class LLMEnv(EnvBase):
                 pre-trained tokenizer.
 
                 .. note:: Using the `tokenizer` will append a :class:`~torchrl.envs.Tokenizer` transform to the environment.
-                    If `str2str` is set to `True`, the tokenizer will be called during every iteration and the rollout
+                    If `from_text` is set to `True`, the tokenizer will be called during every iteration and the rollout
                     will contain both tokens and text data.
-                    If `str2str` is set to `False`, the tokenizer will be called during reset only, and the only
+                    If `from_text` is set to `False`, the tokenizer will be called during reset only, and the only
                     text data in the rollout will be the text sampled from the dataset.
 
-            token_key (NestedKey, optional): The key in the tensordict where the tokens are stored (when `str2str=False`).
+            token_key (NestedKey, optional): The key in the tensordict where the tokens are stored (when `from_text=False`).
                 Defaults to ``("tokens_in", "input_ids")``.
-            str_key (NestedKey, optional): The key in the tensordict where the string input is stored (when `str2str=True`).
+            str_key (NestedKey, optional): The key in the tensordict where the string input is stored (when `from_text=True`).
                 Defaults to ``"test"``.
             attention_key (NestedKey, optional): The key in the tensordict where the attention mask is stored.
                 Defaults to ``("tokens_in", "input_ids")``
@@ -309,13 +309,10 @@ class LLMEnv(EnvBase):
                 ``("tokens_out", "sequences")``.
             reward_key (NestedKey, optional): The key in the tensordict where the reward is stored if `assign_reward=True`.
                 Defaults to  ``"reward"``.
-            str2str (bool, optional): Whether the environment should expect strings as input and output. Defaults to ``True``.
+            from_text (bool, optional): Whether the environment should expect strings as input and output. Defaults to ``True``.
             device (torch.device | None, optional): The device on which the environment should run. Defaults to ``None``.
             vocab_size (int | None, optional): The size of the vocabulary. If None, the environment will assume an
                 unbounded vocabulary. Defaults to ``None``.
-            no_stack (bool, optional): If ``False`` (default), the environment should stack the action with the past
-                observation, each action being a new, unseen part of a conversation. Otherwise, the action is assumed
-                to be the plain output of the LLM, including the input tokens / strings.
             has_attention (bool, optional): if ``True``, an attention mask is to be used under the key indicated by
                 :attr:`attention_key`. Defaults to ``True``.
             assign_reward (bool, optional): if ``True``, a zero-valued reward of shape equal to to the action shape
@@ -326,20 +323,16 @@ class LLMEnv(EnvBase):
                 .. note:: regardless of the value assigned to `assign_done`, a done state will be written at the root
                     as it is a requirement for all TorchRL environments.
 
-            batch_size (int or torch.Size, optional): Batch size of the environment. If left empty, the environment
-                is batchless (or batch-unlocked), meaning that it can accept tensordicts of any batch size.
-                Defaults to ``None`` (batch-unlocked).
+            batch_size (int or torch.Size, optional): Batch size of the environment.
+                If left empty, the batch size is inferred from `dataloader.batch_size` if that attribute exists, otherwise
+                it is set to `()`.
+                The batch size can be null (`torch.Size([])`) or one-dimensional. Batchless environments are not supported.
 
                 .. note:: When using a :class:`~torchrl.envs.DataLoadingPrimer` transform, the batch-size of the env
                     and the transform should match.
 
             primers (Composite | None, optional): The primers to use for each key in the dataloader.
-                Defaults to ``None``.
-            data_keys (list[NestedKey] | None, optional): The keys to use for each item in the dataloader. If not passed ``observation_key`` will be populated with the data.
-                Defaults to ``None``.
-            data_specs (list[TensorSpec] | None, optional): The specs to use for each item in the dataloader.
-                Defaults to ``None``.
-            example_data (Any, optional): Example data to use for initializing the primer. Defaults to ``None``.
+                Defaults to ``None`` (inferred automatically from the first batch of data).
             stack_method (Callable[[Any], Any] | Literal["as_nested_tensor", "as_padded_tensor"], optional): The
                 method to use for stacking the data. Defaults to ``None``.
             repeats (int, optional): How many times the same sample needs to appear successively. This can be useful in
@@ -349,14 +342,6 @@ class LLMEnv(EnvBase):
                 all repeats are grouped in a single batch collected from the buffer. Defaults to ``True``.
             eos_token_id (int, optional): The token id of the end of the sequence. If passed, the `done` state
                 is set to `True` when detected. Defaults to `None`.
-        use_buffer (bool, optional): Whether to use a buffer to load the batches. When an environment has a batch-size
-            that differs from the dataloader's, or when partial resets are to be expected, using a buffer to store data
-            ensures that `next()` is called on the dataloader only when necessary, and that elements of the dataset
-            are loaded in order.
-            Defaults to ``True``.
-        auto_batch_size (bool, optional): if ``False``, the resulting tensordicts will have the batch-size of the
-            dataloader (whenever `use_buffer` is set to ``False``). If not passed, its value is set to `True` if a
-            batch-size is passed or found in the dataloader.
 
         Returns:
             LLMEnv: The created LLMEnv instance.
@@ -379,7 +364,7 @@ class LLMEnv(EnvBase):
             )
 
         if tokenizer is not None:
-            if str2str:
+            if from_text:
                 # In this case, the tokenizer is appended to the env after each step
                 if action_key is None:
                     action_key = cls._DEFAULT_ACTION_STR_KEY
@@ -395,42 +380,22 @@ class LLMEnv(EnvBase):
                     missing_tolerance=False,
                 )
             else:
-                # In this case, the tokenizer acts before reset and that's all
-                tokenizer_transform = Tokenizer(
-                    tokenizer=tokenizer,
-                    in_keys=[str_key],
-                    out_keys=[token_key],
-                    call_before_reset=True,
-                    missing_tolerance=True,
+                # FIXME: This is broken - do we need it anyway?
+                raise RuntimeError(
+                    "tokenizers can only be used whenever from_text is set to `True`."
                 )
-
-        if data_keys is None:
-            if str2str:
-                data_keys = [str_key]
-            else:
-                data_keys = [token_key]
-                if has_attention:
-                    if attention_key is None:
-                        data_keys.append(LLMEnv._DEFAULT_ATTENTION_KEY)
-                    else:
-                        data_keys.append(attention_key)
 
         primer = DataLoadingPrimer(
             dataloader=dataloader,
             primers=primers,
-            data_keys=data_keys,
-            data_specs=data_specs,
-            example_data=example_data,
             stack_method=stack_method,
             repeats=repeats,
             device=device,
             group_repeats=group_repeats,
             batch_size=batch_size,
-            auto_batch_size=auto_batch_size,
-            use_buffer=use_buffer,
         )
         env = LLMEnv(
-            str2str=str2str,
+            from_text=from_text,
             device=device,
             token_key=token_key,
             str_key=str_key,
@@ -438,12 +403,10 @@ class LLMEnv(EnvBase):
             action_key=action_key,
             reward_key=reward_key,
             vocab_size=vocab_size,
-            no_stack=no_stack,
             assign_reward=assign_reward,
             assign_done=assign_done,
             batch_size=primer.batch_size,
             has_attention=has_attention,
-            as_llm_data=as_llm_data,
             eos_token_id=eos_token_id,
         )
         if tokenizer is not None:
@@ -506,7 +469,7 @@ class LLMEnv(EnvBase):
                 next_td.get(("tokens_data", "terminated")).any(-1, keepdim=True),
             )
         if not resetting and self.eos_token_id is not None:
-            if self.str2str:
+            if self.from_text:
                 token_action_key = self._DEFAULT_ACTION_TOKENS_KEY
             else:
                 token_action_key = self.action_key
@@ -533,29 +496,8 @@ class LLMEnv(EnvBase):
     def _make_next_obs(
         self, tensordict: TensorDictBase, nex_td: TensorDictBase
     ) -> TensorDictBase:
-        if self.no_stack:
-            action = tensordict.get(self.action_key)
-            if self.str2str:
-                nex_td.set(self.str_key, action)
-            else:
-                nex_td.set(self.token_key, action)
-            if self.has_attention:
-                attention_mask = tensordict.get(self.attention_key)
-                n = action.shape[-1] - attention_mask.shape[-1]
-                if n > 0:
-                    # It can happen that there's only one action (eg rand_action)
-                    attention_mask = torch.cat(
-                        [
-                            attention_mask,
-                            attention_mask.new_ones(attention_mask.shape[:-1] + (n,)),
-                        ],
-                        -1,
-                    )
-                nex_td.set(self.attention_key, attention_mask)
-            return nex_td
-
         # Cat action entry with prev obs
-        if self.str2str:
+        if self.from_text:
             obs = tensordict[self.str_key]
             action = tensordict[self.action_key]
             if not tensordict.batch_size:
@@ -599,7 +541,7 @@ class LLMEnv(EnvBase):
                         nex_td.set(self.attention_key, attention_mask)
             except TypeError:
                 raise TypeError(
-                    "Failed to cat action and observation tensors. Check that str2str argument is correctly "
+                    "Failed to cat action and observation tensors. Check that from_text argument is correctly "
                     f"set in {type(self).__name__}."
                 )
             return nex_td.set(self.token_key, observation)
@@ -607,12 +549,12 @@ class LLMEnv(EnvBase):
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         # We should have an observation by this time, if not raise an exception
         def check_token():
-            return not self.str2str and (
+            return not self.from_text and (
                 self.token_key not in tensordict.keys(isinstance(self.token_key, tuple))
             )
 
         def check_str():
-            return self.str2str and (
+            return self.from_text and (
                 self.str_key not in tensordict.keys(isinstance(self.str_key, tuple))
             )
 

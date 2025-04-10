@@ -91,7 +91,7 @@ class LLMCollector(SyncDataCollector):
         >>> env = LLMEnv.from_dataloader(
         ...    dataloader=dataloader,
         ...    tokenizer=tokenizer,
-        ...    str2str=True,
+        ...    from_text=True,
         ...    batch_size=1,
         ...    group_repeats=True,
         ... )

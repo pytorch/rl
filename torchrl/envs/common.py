@@ -2150,17 +2150,19 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             else next_tensordict_out.shape
         )
         for reward_key in self.reward_keys:
-            reward = next_tensordict_out.get(reward_key)
             expected_reward_shape = torch.Size(
                 [
                     *leading_batch_size,
                     *self.output_spec["full_reward_spec"][reward_key].shape,
                 ]
             )
-            actual_reward_shape = reward.shape
-            if actual_reward_shape != expected_reward_shape:
-                reward = reward.view(expected_reward_shape)
-                next_tensordict_out.set(reward_key, reward)
+            # If the reward has a variable shape, we don't want to perform this check
+            if all(s > 0 for s in expected_reward_shape):
+                reward = next_tensordict_out.get(reward_key)
+                actual_reward_shape = reward.shape
+                if actual_reward_shape != expected_reward_shape:
+                    reward = reward.view(expected_reward_shape)
+                    next_tensordict_out.set(reward_key, reward)
 
         self._complete_done(self.full_done_spec, next_tensordict_out)
 
