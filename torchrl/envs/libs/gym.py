@@ -1551,6 +1551,14 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
         self._env = self._build_env(**self._constructor_kwargs)
         self._make_specs(self._env)
 
+    @implement_for("gym")
+    def _replace_reset(self, reset, kwargs):  # noqa
+        return kwargs
+
+    @implement_for("gymnasium", None, "1.1.0")
+    def _replace_reset(self, reset, kwargs):  # noqa
+        return kwargs
+
     # From gymnasium 1.1.0, AutoresetMode.DISABLED is like resets in torchrl
     @implement_for("gymnasium", "1.1.0")
     def _replace_reset(self, reset, kwargs):
@@ -1559,14 +1567,6 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
         if self._env.autoreset_mode == gym.vector.AutoresetMode.DISABLED:
             options = {"reset_mask": reset.view(self.batch_size).numpy()}
             kwargs.setdefault("options", {}).update(options)
-        return kwargs
-
-    @implement_for("gym")
-    def _replace_reset(self, reset, kwargs):  # noqa
-        return kwargs
-
-    @implement_for("gymnasium", None, "1.1.0")
-    def _replace_reset(self, reset, kwargs):  # noqa
         return kwargs
 
     def _reset(
@@ -1763,8 +1763,23 @@ class GymEnv(GymWrapper):
     ) -> None:
         kwargs.setdefault("disable_env_checker", True)
 
+    @implement_for("gym")
+    def _replace_reset(self, reset, kwargs):  # noqa
+        return kwargs
+
+    @implement_for("gymnasium", None, "1.1.0")
+    def _replace_reset(self, reset, kwargs):  # noqa
+        return kwargs
+
+    # From gymnasium 1.1.0, AutoresetMode.DISABLED is like resets in torchrl
+    @implement_for("gymnasium", "1.1.0")
     def _replace_reset(self, reset, kwargs):
-        return super()._replace_reset(reset, kwargs)
+        import gymnasium as gym
+
+        if self._env.autoreset_mode == gym.vector.AutoresetMode.DISABLED:
+            options = {"reset_mask": reset.view(self.batch_size).numpy()}
+            kwargs.setdefault("options", {}).update(options)
+        return kwargs
 
     def _async_env(self, *args, **kwargs):
         return gym_backend("vector").AsyncVectorEnv(*args, **kwargs)
