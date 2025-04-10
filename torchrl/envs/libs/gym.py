@@ -1552,7 +1552,7 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
         self._make_specs(self._env)
 
     @implement_for("gym")
-    def _replace_reset(self, reset, kwargs):  # noqa
+    def _replace_reset(self, reset, kwargs):
         return kwargs
 
     @implement_for("gymnasium", None, "1.1.0")
@@ -1561,7 +1561,8 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
 
     # From gymnasium 1.1.0, AutoresetMode.DISABLED is like resets in torchrl
     @implement_for("gymnasium", "1.1.0")
-    def _replace_reset(self, reset, kwargs):
+    def _replace_reset(self, reset, kwargs):  # noqa
+        print("backend", gym_backend())
         import gymnasium as gym
 
         if self._env.autoreset_mode == gym.vector.AutoresetMode.DISABLED:
@@ -1764,7 +1765,7 @@ class GymEnv(GymWrapper):
         kwargs.setdefault("disable_env_checker", True)
 
     @implement_for("gym")
-    def _replace_reset(self, reset, kwargs):  # noqa
+    def _replace_reset(self, reset, kwargs):
         return kwargs
 
     @implement_for("gymnasium", None, "1.1.0")
@@ -1773,7 +1774,7 @@ class GymEnv(GymWrapper):
 
     # From gymnasium 1.1.0, AutoresetMode.DISABLED is like resets in torchrl
     @implement_for("gymnasium", "1.1.0")
-    def _replace_reset(self, reset, kwargs):
+    def _replace_reset(self, reset, kwargs):  # noqa
         import gymnasium as gym
 
         if self._env.autoreset_mode == gym.vector.AutoresetMode.DISABLED:
