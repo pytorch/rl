@@ -1215,11 +1215,11 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
 
     @implement_for("gymnasium", "1.1.0")
     def _build_gym_env(self, env, pixels_only):  # noqa: F811
-        pixel_observation = gym_backend("wrappers.pixel_observation")
+        wrappers = gym_backend("wrappers")
 
         if env.render_mode:
-            return pixel_observation.PixelObservationWrapper(
-                env, pixels_only=pixels_only
+            return wrappers.AddRenderObservation(
+                env, render_only=pixels_only
             )
 
         warnings.warn(
