@@ -434,8 +434,6 @@ class implement_for:
         else:
             fn = self.fn
         setattr(cls, name, fn)
-        if getattr(cls, name) is not fn:
-            print('setting', name, 'may have failed')
 
     @classmethod
     def import_module(cls, module_name: Callable | str) -> str:

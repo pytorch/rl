@@ -205,7 +205,7 @@ def get_gym_pixel_wrapper():
 
 
 @implement_for("gymnasium", None, "1.1.0")
-def get_gym_pixel_wrapper():
+def get_gym_pixel_wrapper():  # noqa: F811
     try:
         # works whenever gym_version > version.parse("0.19")
         PixelObservationWrapper = gym_backend(
@@ -219,7 +219,7 @@ def get_gym_pixel_wrapper():
 
 
 @implement_for("gymnasium", "1.1.0")
-def get_gym_pixel_wrapper():
+def get_gym_pixel_wrapper():  # noqa: F811
     # works whenever gym_version > version.parse("0.19")
     PixelObservationWrapper = lambda *args, pixels_only=False, **kwargs: gym_backend(
         "wrappers"
@@ -1183,17 +1183,17 @@ class TestGym:
                 env = GymEnv(envname, num_envs=2, from_pixels=False)
                 env.set_seed(0)
                 assert env.get_library_name(env._env) == "gym"
-            # rollouts can be executed without decorator
-            check_env_specs(env)
-            rollout = env.rollout(100, break_when_any_done=False)
-            for obs_key in env.observation_spec.keys(True, True):
-                rollout_consistency_assertion(
-                    rollout,
-                    done_key="done",
-                    observation_key=obs_key,
-                    done_strict="CartPole" in envname,
-                )
-            env.close()
+                # rollouts can be executed without decorator
+                check_env_specs(env)
+                rollout = env.rollout(100, break_when_any_done=False)
+                for obs_key in env.observation_spec.keys(True, True):
+                    rollout_consistency_assertion(
+                        rollout,
+                        done_key="done",
+                        observation_key=obs_key,
+                        done_strict="CartPole" in envname,
+                    )
+                env.close()
             del env
             if envname != "CartPole-v1":
                 with set_gym_backend("gym"):
