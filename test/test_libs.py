@@ -189,6 +189,7 @@ def maybe_init_minigrid():
 
         minigrid.register_minigrid_envs()
 
+
 @implement_for("gym")
 def get_gym_pixel_wrapper():
     try:
@@ -201,6 +202,8 @@ def get_gym_pixel_wrapper():
             GymPixelObservationWrapper as PixelObservationWrapper,
         )
     return PixelObservationWrapper
+
+
 @implement_for("gymnasium", None, "1.1.0")
 def get_gym_pixel_wrapper():
     try:
@@ -213,6 +216,8 @@ def get_gym_pixel_wrapper():
             GymPixelObservationWrapper as PixelObservationWrapper,
         )
     return PixelObservationWrapper
+
+
 @implement_for("gymnasium", "1.1.0")
 def get_gym_pixel_wrapper():
     # works whenever gym_version > version.parse("0.19")

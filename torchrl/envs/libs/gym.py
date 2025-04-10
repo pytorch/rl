@@ -1218,9 +1218,7 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
         wrappers = gym_backend("wrappers")
 
         if env.render_mode:
-            return wrappers.AddRenderObservation(
-                env, render_only=pixels_only
-            )
+            return wrappers.AddRenderObservation(env, render_only=pixels_only)
 
         warnings.warn(
             "Environments provided to GymWrapper that need to be wrapped in PixelObservationWrapper "
@@ -1764,6 +1762,9 @@ class GymEnv(GymWrapper):
         kwargs,
     ) -> None:
         kwargs.setdefault("disable_env_checker", True)
+
+    def _replace_reset(self, reset, kwargs):
+        return super()._replace_reset(reset, kwargs)
 
     def _async_env(self, *args, **kwargs):
         return gym_backend("vector").AsyncVectorEnv(*args, **kwargs)

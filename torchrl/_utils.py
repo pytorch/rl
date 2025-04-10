@@ -423,6 +423,10 @@ class implement_for:
         else:
             # class not yet defined
             return
+        try:
+            delattr(cls, self.fn.__name__)
+        except AttributeError:
+            pass
         if self.class_method:
             setattr(cls, self.fn.__name__, classmethod(self.fn))
         else:
@@ -543,7 +547,7 @@ class implement_for:
         return (
             f"{self.__class__.__name__}("
             f"module_name={self.module_name}({self.from_version, self.to_version}), "
-            f"fn_name={self.fn.__name__}, cls={self._get_cls(self.fn)}, is_set={self.do_set})"
+            f"fn_name={self.fn.__name__}, cls={self._get_cls(self.fn)})"
         )
 
 
