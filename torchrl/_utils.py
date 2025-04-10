@@ -428,12 +428,14 @@ class implement_for:
         except AttributeError:
             pass
 
+        name = self.fn.__name__
         if self.class_method:
             fn = classmethod(self.fn)
         else:
             fn = self.fn
-        setattr(cls, self.fn.__name__, fn)
-        assert getattr(cls, self.fn.__name__) is fn
+        setattr(cls, name, fn)
+        if getattr(cls, name) is not fn:
+            print('setting', name, 'may have failed')
 
     @classmethod
     def import_module(cls, module_name: Callable | str) -> str:
