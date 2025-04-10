@@ -189,7 +189,7 @@ def maybe_init_minigrid():
 
         minigrid.register_minigrid_envs()
 
-
+@implement_for("gym")
 def get_gym_pixel_wrapper():
     try:
         # works whenever gym_version > version.parse("0.19")
@@ -200,6 +200,25 @@ def get_gym_pixel_wrapper():
         from torchrl.envs.libs.utils import (
             GymPixelObservationWrapper as PixelObservationWrapper,
         )
+    return PixelObservationWrapper
+@implement_for("gymnasium", None, "1.1.0")
+def get_gym_pixel_wrapper():
+    try:
+        # works whenever gym_version > version.parse("0.19")
+        PixelObservationWrapper = gym_backend(
+            "wrappers.pixel_observation"
+        ).PixelObservationWrapper
+    except Exception:
+        from torchrl.envs.libs.utils import (
+            GymPixelObservationWrapper as PixelObservationWrapper,
+        )
+    return PixelObservationWrapper
+@implement_for("gymnasium", "1.1.0")
+def get_gym_pixel_wrapper():
+    # works whenever gym_version > version.parse("0.19")
+    PixelObservationWrapper = lambda *args, pixels_only=False, **kwargs: gym_backend(
+        "wrappers.pixel_observation"
+    ).AddRenderObservation(*args, render_only=pixels_only, **kwargs)
     return PixelObservationWrapper
 
 
