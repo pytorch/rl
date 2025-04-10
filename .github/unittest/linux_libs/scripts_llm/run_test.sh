@@ -10,6 +10,9 @@ ln -s /usr/bin/swig3.0 /usr/bin/swig
 
 export PYTORCH_TEST_WITH_SLOW='1'
 export LAZY_LEGACY_OP=False
+
+# to solve RuntimeError: Cannot re-initialize CUDA in forked subprocess. To use CUDA with multiprocessing, you must use the 'spawn' start method
+export VLLM_WORKER_MULTIPROC_METHOD=spawn
 python -m torch.utils.collect_env
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
