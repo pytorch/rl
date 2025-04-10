@@ -248,8 +248,8 @@ class VecNormV2(Transform):
                 )
                 if self.missing_tolerance and next_tensordict_select.is_empty():
                     return next_tensordict
-                next_tensordict_norm = self._stateful_norm(next_tensordict_select)
                 self._stateful_update(next_tensordict_select)
+                next_tensordict_norm = self._stateful_norm(next_tensordict_select)
             else:
                 self._maybe_stateless_init(tensordict)
                 next_tensordict_select = next_tensordict.select(
@@ -261,10 +261,10 @@ class VecNormV2(Transform):
                 var = tensordict[f"{self.prefix}_var"]
                 count = tensordict[f"{self.prefix}_count"]
 
-                next_tensordict_norm = self._stateless_norm(
+                loc, var, count = self._stateless_update(
                     next_tensordict_select, loc, var, count
                 )
-                loc, var, count = self._stateless_update(
+                next_tensordict_norm = self._stateless_norm(
                     next_tensordict_select, loc, var, count
                 )
                 # updates have been done in-place, we're good
@@ -328,14 +328,24 @@ class VecNormV2(Transform):
             return self.in_keys[:-3]
         return self.in_keys
 
-    def _norm(self, data, loc, var):
+    def _norm(self, data, loc, var, count):
         if self.missing_tolerance:
             loc = loc.select(*data.keys(True, True))
             var = var.select(*data.keys(True, True))
+            count = count.select(*data.keys(True, True))
             if loc.is_empty():
                 return data
 
+        if self.decay < 1.0:
+            bias_correction = 1 - (count * math.log(self.decay)).exp()
+            bias_correction = bias_correction.apply(lambda x, y: x.to(y.dtype), data)
+        else:
+            bias_correction = 1
+
         var = var - loc.pow(2)
+        loc = loc / bias_correction
+        var = var / bias_correction
+
         scale = var.sqrt().clamp_min(self.eps)
 
         data_update = (data - loc) / scale
@@ -348,7 +358,7 @@ class VecNormV2(Transform):
         return data_update
 
     def _stateful_norm(self, data):
-        return self._norm(data, self._loc, self._var)
+        return self._norm(data, self._loc, self._var, self._count)
 
     def _stateful_update(self, data):
         if self.frozen:
@@ -363,12 +373,7 @@ class VecNormV2(Transform):
             count = self._count
         count += 1
         data = self._maybe_cast_to_float(data)
-        if self.decay < 1.0:
-            bias_correction = 1 - (count * math.log(self.decay)).exp()
-            bias_correction = bias_correction.apply(lambda x, y: x.to(y.dtype), data)
-        else:
-            bias_correction = 1
-        weight = (1 - self.decay) / bias_correction
+        weight = 1 - self.decay
         loc.lerp_(end=data, weight=weight)
         var.lerp_(end=data.pow(2), weight=weight)
 
@@ -398,7 +403,7 @@ class VecNormV2(Transform):
             data[f"{self.prefix}_var"] = var
 
     def _stateless_norm(self, data, loc, var, count):
-        data = self._norm(data, loc, var)
+        data = self._norm(data, loc, var, count)
         return data
 
     def _stateless_update(self, data, loc, var, count):
@@ -406,12 +411,7 @@ class VecNormV2(Transform):
             return loc, var, count
         count = count + 1
         data = self._maybe_cast_to_float(data)
-        if self.decay < 1.0:
-            bias_correction = 1 - (count * math.log(self.decay)).exp()
-            bias_correction = bias_correction.apply(lambda x, y: x.to(y.dtype), data)
-        else:
-            bias_correction = 1
-        weight = (1 - self.decay) / bias_correction
+        weight = 1 - self.decay
         loc = loc.lerp(end=data, weight=weight)
         var = var.lerp(end=data.pow(2), weight=weight)
         return loc, var, count
@@ -563,10 +563,18 @@ class VecNormV2(Transform):
     def _get_loc_scale(self, loc_only: bool = False) -> tuple:
         if self.stateful:
             loc = self._loc
+            count = self._count
+            if self.decay < 1.0:
+                bias_correction = 1 - (count * math.log(self.decay)).exp()
+                bias_correction = bias_correction.apply(lambda x, y: x.to(y.dtype), loc)
+            else:
+                bias_correction = 1
             if loc_only:
-                return loc, None
+                return loc / bias_correction, None
             var = self._var
             var = var - loc.pow(2)
+            loc = loc / bias_correction
+            var = var / bias_correction
             scale = var.sqrt().clamp_min(self.eps)
             return loc, scale
         else:
