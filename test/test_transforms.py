@@ -9490,11 +9490,68 @@ class TestVC1(TransformBase):
 class TestVecNormV2:
     SEED = -1
 
-    # @pytest.fixture(scope="class")
-    # def set_dtype(self):
-    #     def_dtype = torch.get_default_dtype()
-    #     yield torch.set_default_dtype(torch.double)
-    #     torch.set_default_dtype(def_dtype)
+    class SimpleEnv(EnvBase):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.full_reward_spec = Composite(reward=Unbounded((1,)))
+            self.full_observation_spec = Composite(observation=Unbounded(()))
+            self.full_action_spec = Composite(action=Unbounded(()))
+
+        def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+            tensordict = (
+                TensorDict()
+                .update(self.full_observation_spec.rand())
+                .update(self.full_done_spec.zero())
+            )
+            return tensordict
+
+        def _step(
+            self,
+            tensordict: TensorDictBase,
+        ) -> TensorDictBase:
+            tensordict = (
+                TensorDict()
+                .update(self.full_observation_spec.rand())
+                .update(self.full_done_spec.zero())
+            )
+            tensordict["reward"] = self.reward_spec.rand()
+            return tensordict
+
+        def _set_seed(self, seed: int | None):
+            ...
+
+    def test_vecnorm2_decay1(self):
+        env = self.SimpleEnv().append_transform(
+            VecNormV2(
+                in_keys=["reward", "observation"],
+                out_keys=["reward_norm", "obs_norm"],
+                decay=1,
+            )
+        )
+        s_ = env.reset()
+        ss = []
+        N = 20
+        for i in range(N):
+            s, s_ = env.step_and_maybe_reset(env.rand_action(s_))
+            ss.append(s)
+            sstack = torch.stack(ss)
+            if i >= 2:
+                for k in ("reward",):
+                    loc = sstack[: i + 1]["next", k].mean(0)
+                    scale = (
+                        sstack[: i + 1]["next", k]
+                        .std(0, unbiased=False)
+                        .clamp_min(1e-6)
+                    )
+                    # Assert that loc and scale match the expected values
+                    torch.testing.assert_close(
+                        loc,
+                        env.transform.loc[k],
+                    ), f"Loc mismatch at step {i}"
+                    torch.testing.assert_close(
+                        scale,
+                        env.transform.scale[k],
+                    ), f"Scale mismatch at step {i}"
 
     @pytest.mark.skipif(not _has_gym, reason="gym not available")
     @pytest.mark.parametrize("stateful", [True, False])
