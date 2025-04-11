@@ -55,18 +55,24 @@ class VecNormV2(Transform):
         out_keys (Sequence[NestedKey] | None): The output keys for the normalized data. Defaults to `in_keys` if
             not provided.
         lock (mp.Lock, optional): A lock for thread safety.
-        stateful (bool, optional): Whether the `VecNorm` is stateful. Defaults to `True`.
+        stateful (bool, optional): Whether the `VecNorm` is stateful. Stateless versions of this
+            transform requires the data to be carried within the input/output tensordicts.
+            Defaults to `True`.
         decay (float, optional): The decay rate for updating statistics. Defaults to `0.9999`.
+            If `decay=1` is used, the normalizing statistics have an infinite memory (each item is weighed
+            identically). Lower values weigh recent data more than old ones.
         eps (float, optional): A small value to prevent division by zero. Defaults to `1e-4`.
-        shapes (list[torch.Size], optional): The shapes of the inputs. Defaults to `None`.
         shared_data (TensorDictBase | None, optional): Shared data for initialization. Defaults to `None`.
+        reduce_batch_dims (bool, optional): If `True`, the batch dimensions are reduced by averaging the data
+            before updating the statistics. This is useful when samples are received in batches, as it allows
+            the moving average to be computed over the entire batch rather than individual elements. Note that
+            this option is only supported in stateful mode (`stateful=True`). Defaults to `False`.
 
     Attributes:
         stateful (bool): Indicates whether the VecNormV2 is stateful or stateless.
         lock (mp.Lock): A multiprocessing lock to ensure thread safety when updating statistics.
         decay (float): The decay rate for updating statistics.
         eps (float): A small value to prevent division by zero during normalization.
-        shapes (list[torch.Size]): The shapes of the inputs to be normalized.
         frozen (bool): Indicates whether the VecNormV2 is frozen, preventing updates to statistics.
         _cast_int_to_float (bool): Indicates whether integer inputs should be cast to float.
 
@@ -99,6 +105,116 @@ class VecNormV2(Transform):
 
     .. seealso:: :class:`~torchrl.envs.transforms.VecNorm` for the first version of this transform.
 
+    Examples:
+        >>> import torch
+        >>> from torchrl.envs import EnvCreator, GymEnv, ParallelEnv, SerialEnv, VecNormV2
+        >>>
+        >>> torch.manual_seed(0)
+        >>> env = GymEnv("Pendulum-v1")
+        >>> env_trsf = env.append_transform(
+        >>>     VecNormV2(in_keys=["observation", "reward"], out_keys=["observation_norm", "reward_norm"])
+        >>> )
+        >>> r = env_trsf.rollout(10)
+        >>> print("Unnormalized rewards", r["next", "reward"])
+        Unnormalized rewards tensor([[ -1.7967],
+                [ -2.1238],
+                [ -2.5911],
+                [ -3.5275],
+                [ -4.8585],
+                [ -6.5028],
+                [ -8.2505],
+                [-10.3169],
+                [-12.1332],
+                [-13.1235]])
+        >>> print("Normalized rewards", r["next", "reward_norm"])
+        Normalized rewards tensor([[-1.6596e-04],
+                [-8.3072e-02],
+                [-1.9170e-01],
+                [-3.9255e-01],
+                [-5.9131e-01],
+                [-7.4671e-01],
+                [-8.3760e-01],
+                [-9.2058e-01],
+                [-9.3484e-01],
+                [-8.6185e-01]])
+        >>> # Aggregate values when using batched envs
+        >>> env = SerialEnv(2, [lambda: GymEnv("Pendulum-v1")] * 2)
+        >>> env_trsf = env.append_transform(
+        >>>     VecNormV2(
+        >>>         in_keys=["observation", "reward"],
+        >>>         out_keys=["observation_norm", "reward_norm"],
+        >>>         # Use reduce_batch_dims=True to aggregate values across batch elements
+        >>>         reduce_batch_dims=True, )
+        >>> )
+        >>> r = env_trsf.rollout(10)
+        >>> print("Unnormalized rewards", r["next", "reward"])
+        Unnormalized rewards tensor([[[-0.1456],
+                 [-0.1862],
+                 [-0.2053],
+                 [-0.2605],
+                 [-0.4046],
+                 [-0.5185],
+                 [-0.8023],
+                 [-1.1364],
+                 [-1.6183],
+                 [-2.5406]],
+
+                [[-0.0920],
+                 [-0.1492],
+                 [-0.2702],
+                 [-0.3917],
+                 [-0.5001],
+                 [-0.7947],
+                 [-1.0160],
+                 [-1.3347],
+                 [-1.9082],
+                 [-2.9679]]])
+        >>> print("Normalized rewards", r["next", "reward_norm"])
+        Normalized rewards tensor([[[-0.2199],
+                 [-0.2918],
+                 [-0.1668],
+                 [-0.2083],
+                 [-0.4981],
+                 [-0.5046],
+                 [-0.7950],
+                 [-0.9791],
+                 [-1.1484],
+                 [-1.4182]],
+
+                [[ 0.2201],
+                 [-0.0403],
+                 [-0.5206],
+                 [-0.7791],
+                 [-0.8282],
+                 [-1.2306],
+                 [-1.2279],
+                 [-1.2907],
+                 [-1.4929],
+                 [-1.7793]]])
+        >>> print("Loc / scale", env_trsf.transform.loc["reward"], env_trsf.transform.scale["reward"])
+        Loc / scale tensor([-0.8626]) tensor([1.1832])
+        >>>
+        >>> # Share values between workers
+        >>> def make_env():
+        ...     env = GymEnv("Pendulum-v1")
+        ...     env_trsf = env.append_transform(
+        ...         VecNormV2(in_keys=["observation", "reward"], out_keys=["observation_norm", "reward_norm"])
+        ...     )
+        ...     return env_trsf
+        ...
+        ...
+        >>> if __name__ == "__main__":
+        ...     # EnvCreator will share the loc/scale vals
+        ...     make_env = EnvCreator(make_env)
+        ...     # Create a local env to track the loc/scale
+        ...     local_env = make_env()
+        ...     env = ParallelEnv(2, [make_env] * 2)
+        ...     r = env.rollout(10)
+        ...     # Non-zero loc and scale testify that the sub-envs share their summary stats with us
+        ...     print("Remotely updated loc / scale", local_env.transform.loc["reward"], local_env.transform.scale["reward"])
+        Remotely updated loc / scale tensor([-0.4307]) tensor([0.9613])
+        ...     env.close()
+
     """
 
     # TODO:
@@ -114,8 +230,8 @@ class VecNormV2(Transform):
         stateful: bool = True,
         decay: float = 0.9999,
         eps: float = 1e-4,
-        shapes: list[torch.Size] = None,
         shared_data: TensorDictBase | None = None,
+        reduce_batch_dims: bool = False,
     ) -> None:
         self.stateful = stateful
         if lock is None:
@@ -126,7 +242,6 @@ class VecNormV2(Transform):
 
         self.lock = lock
         self.decay = decay
-        self.shapes = shapes
         self.eps = eps
         self.frozen = False
         self._cast_int_to_float = False
@@ -145,6 +260,11 @@ class VecNormV2(Transform):
             if shared_data:
                 # FIXME
                 raise NotImplementedError
+        if reduce_batch_dims and not stateful:
+            raise RuntimeError(
+                "reduce_batch_dims=True and stateful=False are not supported."
+            )
+        self.reduce_batch_dims = reduce_batch_dims
 
     @property
     def in_keys(self) -> Sequence[NestedKey]:
@@ -306,7 +426,9 @@ class VecNormV2(Transform):
                 )
                 data_select = data_select.update(data)
                 data_select = data_select.select(*self._in_keys_safe, strict=True)
-
+            if self.reduce_batch_dims and data_select.ndim:
+                # collapse the batch-dims
+                data_select = data_select.mean(dim=tuple(range(data.ndim)))
             # For the count, we must use a TD because some keys (eg Reward) may be missing at some steps (eg, reset)
             #  We use mean() to eliminate all dims - since it's local we don't need to expand the shape
             count = (
@@ -372,16 +494,33 @@ class VecNormV2(Transform):
             var = self._var
             loc = self._loc
             count = self._count
-        count += 1
         data = self._maybe_cast_to_float(data)
-        if self.decay != 1.0:
-            weight = 1 - self.decay
-            loc.lerp_(end=data, weight=weight)
-            var.lerp_(end=data.pow(2), weight=weight)
+        if self.reduce_batch_dims and data.ndim:
+            # The naive way to do this would be to convert the data to a list and iterate over it, but (1) that is
+            #  slow, and (2) it makes the value of the loc/var conditioned on the order we take to iterate over the data.
+            #  The second approach would be to average the data, but that would mean that having one vecnorm per batched
+            #  env or one per sub-env will lead to different results as a batch of N elements will actually be
+            #  considered as a single one.
+            #  What we go for instead is to average the data (and its squared value) then do the moving average with
+            #  adapted decay.
+            n = data.numel()
+            count += n
+            data2 = data.pow(2).mean(dim=tuple(range(data.ndim)))
+            data_mean = data.mean(dim=tuple(range(data.ndim)))
+            if self.decay != 1.0:
+                weight = 1 - self.decay**n
+            else:
+                weight = n / count
         else:
-            weight = 1 / count
-            loc.lerp_(end=data, weight=weight)
-            var.lerp_(end=data.pow(2), weight=weight)
+            count += 1
+            data2 = data.pow(2)
+            data_mean = data
+            if self.decay != 1.0:
+                weight = 1 - self.decay
+            else:
+                weight = 1 / count
+        loc.lerp_(end=data_mean, weight=weight)
+        var.lerp_(end=data2, weight=weight)
 
     def _maybe_stateless_init(self, data):
         if not self.initialized or f"{self.prefix}_loc" not in data.keys():
