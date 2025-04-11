@@ -853,7 +853,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def append_transform(
         self,
         transform: Transform | Callable[[TensorDictBase], TensorDictBase],  # noqa: F821
-    ) -> EnvBase:
+    ) -> torchrl.envs.TransformedEnv:  # noqa
         """Returns a transformed environment where the callable/transform passed is applied.
 
         Args:
