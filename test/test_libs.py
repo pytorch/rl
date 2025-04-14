@@ -237,13 +237,6 @@ if _has_gym:
 
         gym_version = version.parse(gym_version)
 
-if _has_dmc:
-    from dm_control import suite
-    from dm_control.suite.wrappers import pixels
-
-if _has_vmas:
-    import vmas
-
 
 if _has_envpool:
     import envpool
@@ -1058,7 +1051,8 @@ class TestGym:
 
         with set_gym_backend("gymnasium"):
             self._test_vecenvs_wrapper(
-                envname, kwargs={"reset_mode": gymnasium.vector.AutoresetMode.SAME_STEP}
+                envname,
+                kwargs={"autoreset_mode": gymnasium.vector.AutoresetMode.SAME_STEP},
             )
 
     @implement_for("gymnasium", None, "1.0.0")
@@ -1747,8 +1741,12 @@ class TestDMControl:
             assert final_seed0 == final_seed1
             assert_allclose_td(rollout0, rollout1)
 
+        from dm_control import suite
+
         base_env = suite.load(env_name, task)
         if from_pixels:
+            from dm_control.suite.wrappers import pixels
+
             render_kwargs = {"camera_id": 0}
             base_env = pixels.Wrapper(
                 base_env, pixels_only=pixels_only, render_kwargs=render_kwargs
@@ -2634,6 +2632,8 @@ class TestVmas:
     def test_vmas_spec_rollout(
         self, scenario_name, num_envs, n_agents, continuous_actions
     ):
+        import vmas
+
         vmas_env = VmasEnv(
             scenario=scenario_name,
             num_envs=num_envs,
