@@ -9520,12 +9520,17 @@ class TestVecNormV2:
         def _set_seed(self, seed: int | None):
             ...
 
-    def test_vecnorm2_decay1(self):
-        env = self.SimpleEnv().append_transform(
+    @pytest.mark.parametrize("batched", [False, True])
+    def test_vecnorm2_decay1(self, batched):
+        env = self.SimpleEnv()
+        if batched:
+            env = SerialEnv(2, [lambda env=env: env] * 2)
+        env = env.append_transform(
             VecNormV2(
                 in_keys=["reward", "observation"],
                 out_keys=["reward_norm", "obs_norm"],
                 decay=1,
+                reduce_batch_dims=True,
             )
         )
         s_ = env.reset()
@@ -9537,21 +9542,25 @@ class TestVecNormV2:
             sstack = torch.stack(ss)
             if i >= 2:
                 for k in ("reward",):
-                    loc = sstack[: i + 1]["next", k].mean(0)
+                    loc = sstack[: i + 1]["next", k].mean().unsqueeze(-1)
                     scale = (
                         sstack[: i + 1]["next", k]
-                        .std(0, unbiased=False)
+                        .std(unbiased=False)
                         .clamp_min(1e-6)
+                        .unsqueeze(-1)
                     )
                     # Assert that loc and scale match the expected values
                     torch.testing.assert_close(
                         loc,
                         env.transform.loc[k],
-                    ), f"Loc mismatch at step {i}"
+                    )
                     torch.testing.assert_close(
                         scale,
                         env.transform.scale[k],
-                    ), f"Scale mismatch at step {i}"
+                    )
+        if batched:
+            assert env.transform._loc.ndim == 0
+            assert env.transform._var.ndim == 0
 
     @pytest.mark.skipif(not _has_gym, reason="gym not available")
     @pytest.mark.parametrize("stateful", [True, False])
