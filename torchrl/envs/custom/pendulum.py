@@ -365,7 +365,7 @@ class PendulumEnv(EnvBase):
         )
         return composite
 
-    def _set_seed(self, seed: int):
+    def _set_seed(self, seed: int) -> None:
         rng = torch.Generator(device=self.device)
         rng.manual_seed(seed)
         self.rng = rng

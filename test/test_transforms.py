@@ -4329,8 +4329,8 @@ class TestExcludeTransform(TransformBase):
                 {"done": torch.zeros(1, dtype=torch.bool)}
             )
 
-        def _set_seed(self, seed):
-            return seed + 1
+        def _set_seed(self, seed: int | None) -> None:
+            ...
 
     def test_single_trans_env_check(self):
         t = Compose(
@@ -4567,8 +4567,8 @@ class TestSelectTransform(TransformBase):
                 {"done": torch.zeros(1, dtype=torch.bool)}
             )
 
-        def _set_seed(self, seed):
-            return seed + 1
+        def _set_seed(self, seed: int | None) -> None:
+            ...
 
     def test_single_trans_env_check(self):
         t = Compose(
@@ -9517,7 +9517,7 @@ class TestVecNormV2:
             tensordict["reward"] = self.reward_spec.rand()
             return tensordict
 
-        def _set_seed(self, seed: int | None):
+        def _set_seed(self, seed: int | None) -> None:
             ...
 
     @pytest.mark.parametrize("batched", [False, True])
@@ -11880,8 +11880,8 @@ class TestActionMask(TransformBase):
                 td.set("done", ~(mask.any().view(1)))
                 return td
 
-            def _set_seed(self, seed):
-                return seed
+            def _set_seed(self, seed: int | None) -> None:
+                ...
 
         return MaskedEnv
 
@@ -13050,8 +13050,8 @@ class TestRemoveEmptySpecs(TransformBase):
                 .update(self.full_reward_spec.rand())
             )
 
-        def _set_seed(self, seed):
-            return seed + 1
+        def _set_seed(self, seed: int | None) -> None:
+            ...
 
     def test_single_trans_env_check(self):
         env = TransformedEnv(self.DummyEnv(), RemoveEmptySpecs())
@@ -13261,8 +13261,8 @@ class TestBatchSizeTransform(TransformBase):
             result.update(self.full_reward_spec.zero(tensordict.batch_size))
             return result
 
-        def _set_seed(self, seed: int):
-            pass
+        def _set_seed(self, seed: int | None) -> None:
+            ...
 
     @classmethod
     def reset_func(tensordict, tensordict_reset, env):
@@ -13886,7 +13886,7 @@ class TestLineariseRewards(TransformBase):
                 }
             )
 
-        def _set_seed(self) -> None:
+        def _set_seed(self, seed: int | None = None) -> None:
             pass
 
     @pytest.mark.parametrize(

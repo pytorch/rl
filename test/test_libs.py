@@ -289,8 +289,8 @@ class TestGym:
                 batch_size=[],
             )
 
-        def _set_seed(self, seed):
-            return seed + 1
+        def _set_seed(self, seed: int | None) -> None:
+            ...
 
     @implement_for("gym", None, "0.18")
     def _make_spec(self, batch_size, cat, cat_shape, multicat, multicat_shape):

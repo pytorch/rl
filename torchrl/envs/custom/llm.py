@@ -577,7 +577,7 @@ class LLMEnv(EnvBase):
             raise NotImplementedError()
         return tensordict
 
-    def _set_seed(self, seed: int | None):
+    def _set_seed(self, seed: int | None) -> None:
         return seed
 
 
@@ -766,7 +766,7 @@ class LLMHashingEnv(EnvBase):
         )
         return out.update(kwargs)
 
-    def _set_seed(self, *args):
+    def _set_seed(self, *args) -> None:
         """Sets the seed for the environment's randomness.
 
         .. note:: This environment has no randomness, so this method does nothing.

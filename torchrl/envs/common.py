@@ -2899,7 +2899,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return seed
 
     @abc.abstractmethod
-    def _set_seed(self, seed: int | None):
+    def _set_seed(self, seed: int | None) -> None:
         raise NotImplementedError
 
     def set_state(self):

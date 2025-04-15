@@ -305,7 +305,7 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
             return results, *other_results, idx
         return results, idx
 
-    def _set_seed(self, seed: int | None):
+    def _set_seed(self, seed: int | None) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod

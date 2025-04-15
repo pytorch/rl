@@ -1167,7 +1167,7 @@ but got an object of type {type(transform)}."""
         """Set the seeds of the environment."""
         return self.base_env.set_seed(seed, static_seed=static_seed)
 
-    def _set_seed(self, seed: int | None):
+    def _set_seed(self, seed: int | None) -> None:
         """This method is not used in transformed envs."""
 
     def _reset(self, tensordict: TensorDictBase | None = None, **kwargs):
@@ -3991,7 +3991,7 @@ class DTypeCastTransform(Transform):
         ...         assert reward.dtype == torch.float64
         ...         assert obs["obs"].dtype == torch.float64
         ...         return obs.empty().set("next", obs.update({"reward": reward, "done": done}))
-        ...     def _set_seed(self, seed):
+        ...     def _set_seed(self, seed) -> None:
         ...         pass
         >>> env = TransformedEnv(MyEnv(), DTypeCastTransform(torch.double, torch.float))
         >>> assert env.action_spec.dtype == torch.float32
@@ -4361,7 +4361,7 @@ class DoubleToFloat(DTypeCastTransform):
         ...         assert reward.dtype == torch.float64
         ...         assert obs["obs"].dtype == torch.float64
         ...         return obs.empty().set("next", obs.update({"reward": reward, "done": done}))
-        ...     def _set_seed(self, seed):
+        ...     def _set_seed(self, seed) -> None:
         ...         pass
         >>> env = TransformedEnv(MyEnv(), DoubleToFloat())
         >>> assert env.action_spec.dtype == torch.float32
@@ -8764,8 +8764,8 @@ class ActionMask(Transform):
         ...         td.set("done", ~mask.any().view(1))
         ...         return td
         ...
-        ...     def _set_seed(self, seed):
-        ...         return seed
+        ...     def _set_seed(self, seed) -> None:
+        ...         pass
         ...
         >>> torch.manual_seed(0)
         >>> base_env = MaskedEnv()
@@ -9286,8 +9286,8 @@ class RemoveEmptySpecs(Transform):
         ...             self.full_done_spec.zero()
         ...             ).update(self.full_reward_spec.rand())
         ...
-        ...     def _set_seed(self, seed):
-        ...         return seed + 1
+        ...     def _set_seed(self, seed) -> None:
+        ...         pass
         >>>
         >>>
         >>> base_env = DummyEnv()
@@ -9620,7 +9620,7 @@ class BatchSizeTransform(Transform):
         ...         result.update(self.full_reward_spec.zero(tensordict.batch_size))
         ...         return result
         ...
-        ...     def _set_seed(self, seed: Optional[int]):
+        ...     def _set_seed(self, seed: Optional[int]) -> None:
         ...         pass
         ...
         >>> env = TransformedEnv(MyEnv(), BatchSizeTransform([5]))
