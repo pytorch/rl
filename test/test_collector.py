@@ -915,7 +915,7 @@ class EnvThatWaitsFor1Sec(EnvBase):
             .update(self.full_reward_spec.zero())
         )
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: Optional[int]) -> None:
         ...
 
 if __name__ == "__main__":
@@ -1617,8 +1617,8 @@ class TestCollectorDevices:
                     device=None,
                 )
 
-        def _set_seed(self, seed: int | None = None):
-            return seed
+        def _set_seed(self, seed: int | None = None) -> None:
+            ...
 
     class EnvWithDevice(EnvBase):
         def __init__(self, default_device):
@@ -1674,8 +1674,8 @@ class TestCollectorDevices:
                     device=self.default_device,
                 )
 
-        def _set_seed(self, seed: int | None = None):
-            return seed
+        def _set_seed(self, seed: int | None = None) -> None:
+            ...
 
     class DeviceLessPolicy(TensorDictModuleBase):
         in_keys = ["observation"]
@@ -1840,8 +1840,8 @@ class TestCollectorDevices:
         def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
             return self.full_done_specs.zeros().update(self.observation_spec.zeros())
 
-        def _set_seed(self, seed: int | None):
-            return seed
+        def _set_seed(self, seed: int | None) -> None:
+            ...
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
     @pytest.mark.parametrize("env_device", ["cuda:0", "cpu"])
@@ -2660,8 +2660,8 @@ class TestUpdateParams:
                 {"state": self.state.clone()}, self.batch_size, device=self.device
             )
 
-        def _set_seed(self, seed):
-            return seed
+        def _set_seed(self, seed: int | None) -> None:
+            ...
 
     class Policy(TensorDictModuleBase):
         def __init__(self):

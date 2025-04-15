@@ -340,7 +340,7 @@ class MeltingpotWrapper(_EnvWrapper):
         # Caching
         self.cached_full_done_spec_zero = self.full_done_spec.zero()
 
-    def _set_seed(self, seed: int | None):
+    def _set_seed(self, seed: int | None) -> None:
         raise NotImplementedError(
             "It is currently unclear how to set a seed in Meltingpot. "
             "see https://github.com/google-deepmind/meltingpot/issues/129 to track the issue."

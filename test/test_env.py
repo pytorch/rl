@@ -291,7 +291,7 @@ class TestEnvBase:
         ) -> TensorDictBase:
             ...
 
-        def _set_seed(self, seed: int | None):
+        def _set_seed(self, seed: int | None) -> None:
             ...
 
     def test_env_lock(self):
@@ -453,9 +453,8 @@ class TestEnvBase:
                 )
                 self.seed = 0
 
-            def _set_seed(self, seed):
+            def _set_seed(self, seed: int | None) -> None:
                 self.seed = seed
-                return seed
 
             def _reset(self, tensordict):
                 td = self.observation_spec.zero().update(self.done_spec.zero())
