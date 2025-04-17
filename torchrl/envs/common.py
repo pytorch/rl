@@ -22,7 +22,6 @@ from tensordict import (
 )
 from tensordict.base import _is_leaf_nontensor, NO_DEFAULT
 from tensordict.utils import is_non_tensor, NestedKey
-from torch.autograd.profiler import record_function
 from torchrl._utils import (
     _ends_with,
     _make_ordinal_device,
@@ -1997,7 +1996,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         result.update(next_tensordict.exclude(*keys).filter_empty_())
         return result
 
-    @record_function("step")
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.
 
@@ -3541,7 +3539,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         return tensordicts
 
-    @record_function("step_and_maybe_reset")
     def step_and_maybe_reset(
         self, tensordict: TensorDictBase
     ) -> tuple[TensorDictBase, TensorDictBase]:
@@ -3638,7 +3635,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             )
         return any_done
 
-    @record_function("maybe_reset")
     def maybe_reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Checks the done keys of the input tensordict and, if needed, resets the environment where it is done.
 

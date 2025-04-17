@@ -33,7 +33,6 @@ from tensordict.base import NO_DEFAULT
 from tensordict.nn import CudaGraphModule, TensorDictModule
 from tensordict.utils import Buffer
 from torch import multiprocessing as mp
-from torch.autograd.profiler import record_function
 from torch.nn import Parameter
 from torch.utils.data import IterableDataset
 
@@ -1204,40 +1203,38 @@ class SyncDataCollector(DataCollectorBase):
                 stack.enter_context(torch.cuda.stream(stream))
 
             while self._frames < self.total_frames:
-                with record_function("one iter"):
-                    self._iter += 1
-                    tensordict_out = self.rollout()
-                    if tensordict_out is None:
-                        # if a replay buffer is passed and self.extend_buffer=False, there is no tensordict_out
-                        #  frames are updated within the rollout function
-                        yield
-                        continue
-                    self._increment_frames(tensordict_out.numel())
-                    tensordict_out = self._postproc(tensordict_out)
-                    if self.return_same_td:
-                        # This is used with multiprocessed collectors to use the buffers
-                        # stored in the tensordict.
-                        if events:
-                            for event in events:
-                                event.record()
-                                event.synchronize()
-                        yield tensordict_out
-                    elif self.replay_buffer is not None:
-                        self.replay_buffer.extend(tensordict_out)
-                        yield
-                    else:
-                        # we must clone the values, as the tensordict is updated in-place.
-                        # otherwise the following code may break:
-                        # >>> for i, data in enumerate(collector):
-                        # >>>      if i == 0:
-                        # >>>          data0 = data
-                        # >>>      elif i == 1:
-                        # >>>          data1 = data
-                        # >>>      else:
-                        # >>>          break
-                        # >>> assert data0["done"] is not data1["done"]
-                        with record_function("clone"):
-                            yield tensordict_out.clone()
+                self._iter += 1
+                tensordict_out = self.rollout()
+                if tensordict_out is None:
+                    # if a replay buffer is passed and self.extend_buffer=False, there is no tensordict_out
+                    #  frames are updated within the rollout function
+                    yield
+                    continue
+                self._increment_frames(tensordict_out.numel())
+                tensordict_out = self._postproc(tensordict_out)
+                if self.return_same_td:
+                    # This is used with multiprocessed collectors to use the buffers
+                    # stored in the tensordict.
+                    if events:
+                        for event in events:
+                            event.record()
+                            event.synchronize()
+                    yield tensordict_out
+                elif self.replay_buffer is not None:
+                    self.replay_buffer.extend(tensordict_out)
+                    yield
+                else:
+                    # we must clone the values, as the tensordict is updated in-place.
+                    # otherwise the following code may break:
+                    # >>> for i, data in enumerate(collector):
+                    # >>>      if i == 0:
+                    # >>>          data0 = data
+                    # >>>      elif i == 1:
+                    # >>>          data1 = data
+                    # >>>      else:
+                    # >>>          break
+                    # >>> assert data0["done"] is not data1["done"]
+                    yield tensordict_out.clone()
 
     def start(self):
         """Starts the RayCollector."""
@@ -1305,7 +1302,6 @@ class SyncDataCollector(DataCollectorBase):
             self._shuttle.set(("collector", "traj_ids"), traj_ids)
 
     @torch.no_grad()
-    @record_function("rollout")
     def rollout(self) -> TensorDictBase:
         """Computes a rollout in the environment using the provided policy.
 
@@ -1345,122 +1341,116 @@ class SyncDataCollector(DataCollectorBase):
                             nested_keys=True,
                         )
                 else:
-                    with record_function("policy"):
-                        if self._cast_to_policy_device:
-                            if self.policy_device is not None:
-                                # This is unsafe if the shuttle is in pin_memory -- otherwise cuda will be happy with non_blocking
-                                non_blocking = (
-                                    not self.no_cuda_sync
-                                    or self.policy_device.type == "cuda"
-                                )
-                                policy_input = self._shuttle.to(
-                                    self.policy_device,
-                                    non_blocking=non_blocking,
-                                )
-                                if not self.no_cuda_sync:
-                                    self._sync_policy()
-                            elif self.policy_device is None:
-                                # we know the tensordict has a device otherwise we would not be here
-                                # we can pass this, clear_device_ must have been called earlier
-                                # policy_input = self._shuttle.clear_device_()
-                                policy_input = self._shuttle
-                        else:
-                            policy_input = self._shuttle
-                        # we still do the assignment for security
-                        if self.compiled_policy:
-                            cudagraph_mark_step_begin()
-                        policy_output = self.policy(policy_input)
-                        if self.compiled_policy:
-                            policy_output = policy_output.clone()
-                        if self._shuttle is not policy_output:
-                            # ad-hoc update shuttle
-                            self._shuttle.update(
-                                policy_output, keys_to_update=self._policy_output_keys
-                            )
-
-                with record_function("step"):
-                    if self._cast_to_env_device:
-                        if self.env_device is not None:
-                            non_blocking = (
-                                not self.no_cuda_sync or self.env_device.type == "cuda"
-                            )
-                            env_input = self._shuttle.to(
-                                self.env_device, non_blocking=non_blocking
-                            )
-                            if not self.no_cuda_sync:
-                                self._sync_env()
-                        elif self.env_device is None:
-                            # we know the tensordict has a device otherwise we would not be here
-                            # we can pass this, clear_device_ must have been called earlier
-                            # env_input = self._shuttle.clear_device_()
-                            env_input = self._shuttle
-                    else:
-                        env_input = self._shuttle
-                    env_output, env_next_output = self.env.step_and_maybe_reset(
-                        env_input
-                    )
-
-                with record_function("other"):
-                    if self._shuttle is not env_output:
-                        # ad-hoc update shuttle
-                        next_data = env_output.get("next")
-                        if self._shuttle_has_no_device:
-                            # Make sure
-                            next_data.clear_device_()
-                        self._shuttle.set("next", next_data)
-
-                    if self.replay_buffer is not None and not self.extend_buffer:
-                        self.replay_buffer.add(self._shuttle)
-                        if self._increment_frames(self._shuttle.numel()):
-                            return
-                    else:
-                        if self.storing_device is not None:
+                    if self._cast_to_policy_device:
+                        if self.policy_device is not None:
+                            # This is unsafe if the shuttle is in pin_memory -- otherwise cuda will be happy with non_blocking
                             non_blocking = (
                                 not self.no_cuda_sync
-                                or self.storing_device.type == "cuda"
+                                or self.policy_device.type == "cuda"
                             )
-                            tensordicts.append(
-                                self._shuttle.to(
-                                    self.storing_device, non_blocking=non_blocking
-                                )
+                            policy_input = self._shuttle.to(
+                                self.policy_device,
+                                non_blocking=non_blocking,
                             )
                             if not self.no_cuda_sync:
-                                self._sync_storage()
-                        else:
-                            tensordicts.append(self._shuttle)
+                                self._sync_policy()
+                        elif self.policy_device is None:
+                            # we know the tensordict has a device otherwise we would not be here
+                            # we can pass this, clear_device_ must have been called earlier
+                            # policy_input = self._shuttle.clear_device_()
+                            policy_input = self._shuttle
+                    else:
+                        policy_input = self._shuttle
+                    # we still do the assignment for security
+                    if self.compiled_policy:
+                        cudagraph_mark_step_begin()
+                    policy_output = self.policy(policy_input)
+                    if self.compiled_policy:
+                        policy_output = policy_output.clone()
+                    if self._shuttle is not policy_output:
+                        # ad-hoc update shuttle
+                        self._shuttle.update(
+                            policy_output, keys_to_update=self._policy_output_keys
+                        )
 
-                    # carry over collector data without messing up devices
-                    collector_data = self._shuttle.get("collector").copy()
-                    self._shuttle = env_next_output
+                if self._cast_to_env_device:
+                    if self.env_device is not None:
+                        non_blocking = (
+                            not self.no_cuda_sync or self.env_device.type == "cuda"
+                        )
+                        env_input = self._shuttle.to(
+                            self.env_device, non_blocking=non_blocking
+                        )
+                        if not self.no_cuda_sync:
+                            self._sync_env()
+                    elif self.env_device is None:
+                        # we know the tensordict has a device otherwise we would not be here
+                        # we can pass this, clear_device_ must have been called earlier
+                        # env_input = self._shuttle.clear_device_()
+                        env_input = self._shuttle
+                else:
+                    env_input = self._shuttle
+                env_output, env_next_output = self.env.step_and_maybe_reset(env_input)
+
+                if self._shuttle is not env_output:
+                    # ad-hoc update shuttle
+                    next_data = env_output.get("next")
                     if self._shuttle_has_no_device:
-                        self._shuttle.clear_device_()
-                    self._shuttle.set("collector", collector_data)
-                    self._update_traj_ids(env_output)
+                        # Make sure
+                        next_data.clear_device_()
+                    self._shuttle.set("next", next_data)
 
-                    if (
-                        self.interruptor is not None
-                        and self.interruptor.collection_stopped()
-                    ):
-                        if self.replay_buffer is not None and not self.extend_buffer:
-                            return
-                        result = self._final_rollout
-                        if self._use_buffers:
-                            try:
+                if self.replay_buffer is not None and not self.extend_buffer:
+                    self.replay_buffer.add(self._shuttle)
+                    if self._increment_frames(self._shuttle.numel()):
+                        return
+                else:
+                    if self.storing_device is not None:
+                        non_blocking = (
+                            not self.no_cuda_sync or self.storing_device.type == "cuda"
+                        )
+                        tensordicts.append(
+                            self._shuttle.to(
+                                self.storing_device, non_blocking=non_blocking
+                            )
+                        )
+                        if not self.no_cuda_sync:
+                            self._sync_storage()
+                    else:
+                        tensordicts.append(self._shuttle)
+
+                # carry over collector data without messing up devices
+                collector_data = self._shuttle.get("collector").copy()
+                self._shuttle = env_next_output
+                if self._shuttle_has_no_device:
+                    self._shuttle.clear_device_()
+                self._shuttle.set("collector", collector_data)
+                self._update_traj_ids(env_output)
+
+                if (
+                    self.interruptor is not None
+                    and self.interruptor.collection_stopped()
+                ):
+                    if self.replay_buffer is not None and not self.extend_buffer:
+                        return
+                    result = self._final_rollout
+                    if self._use_buffers:
+                        try:
+                            torch.stack(
+                                tensordicts,
+                                self._final_rollout.ndim - 1,
+                                out=self._final_rollout[..., : t + 1],
+                            )
+                        except RuntimeError:
+                            with self._final_rollout.unlock_():
                                 torch.stack(
                                     tensordicts,
                                     self._final_rollout.ndim - 1,
                                     out=self._final_rollout[..., : t + 1],
                                 )
-                            except RuntimeError:
-                                with self._final_rollout.unlock_():
-                                    torch.stack(
-                                        tensordicts,
-                                        self._final_rollout.ndim - 1,
-                                        out=self._final_rollout[..., : t + 1],
-                                    )
-                        else:
-                            result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
-                        break
+                    else:
+                        result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
+                    break
             else:
                 if self._use_buffers:
                     result = self._final_rollout

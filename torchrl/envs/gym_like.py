@@ -13,7 +13,6 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 import torch
 from tensordict import NonTensorData, TensorDict, TensorDictBase
-from torch.autograd.profiler import record_function
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.tensor_specs import Composite, NonTensor, TensorSpec, Unbounded
@@ -335,7 +334,6 @@ class GymLikeEnv(_EnvWrapper):
             )
         return self._read_obs(observations)
 
-    @record_function("_step")
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         if len(self.action_keys) == 1:
             # Use brackets to get non-tensor data
@@ -347,56 +345,51 @@ class GymLikeEnv(_EnvWrapper):
 
         reward = 0
         for _ in range(self.wrapper_frame_skip):
-            with record_function("env.step"):
-                step_result = self._env.step(action)
-            with record_function("self._output_transform"):
-                (
-                    obs,
-                    _reward,
-                    terminated,
-                    truncated,
-                    done,
-                    info_dict,
-                ) = self._output_transform(step_result)
+            step_result = self._env.step(action)
+            (
+                obs,
+                _reward,
+                terminated,
+                truncated,
+                done,
+                info_dict,
+            ) = self._output_transform(step_result)
 
             if _reward is not None:
                 reward = reward + _reward
-            with record_function("read done"):
-                terminated, truncated, done, do_break = self.read_done(
-                    terminated=terminated, truncated=truncated, done=done
-                )
+            terminated, truncated, done, do_break = self.read_done(
+                terminated=terminated, truncated=truncated, done=done
+            )
             if do_break:
                 break
 
-        with record_function("read reward and obs"):
-            reward = self.read_reward(reward)
-            obs_dict = self.read_obs(obs)
+        reward = self.read_reward(reward)
+        obs_dict = self.read_obs(obs)
         obs_dict[self.reward_key] = reward
 
         # if truncated/terminated is not in the keys, we just don't pass it even if it
         # is defined.
-        with record_function("create td"):
-            if terminated is None:
-                terminated = done.clone()
-            if truncated is not None:
-                obs_dict["truncated"] = truncated
-            obs_dict["done"] = done
-            obs_dict["terminated"] = terminated
-            validated = self.validated
-            if not validated:
-                tensordict_out = TensorDict(obs_dict, batch_size=tensordict.batch_size)
-                if validated is None:
-                    # check if any value has to be recast to something else. If not, we can safely
-                    # build the tensordict without running checks
-                    self.validated = all(
-                        val is tensordict_out.get(key)
-                        for key, val in TensorDict(obs_dict, []).items(True, True)
-                    )
-            else:
-                tensordict_out = TensorDict._new_unsafe(
-                    obs_dict,
-                    batch_size=tensordict.batch_size,
+        if terminated is None:
+            terminated = done.clone()
+        if truncated is not None:
+            obs_dict["truncated"] = truncated
+        obs_dict["done"] = done
+        obs_dict["terminated"] = terminated
+        validated = self.validated
+        if not validated:
+            tensordict_out = TensorDict(obs_dict, batch_size=tensordict.batch_size)
+            if validated is None:
+                # check if any value has to be recast to something else. If not, we can safely
+                # build the tensordict without running checks
+                self.validated = all(
+                    val is tensordict_out.get(key)
+                    for key, val in TensorDict(obs_dict, []).items(True, True)
                 )
+        else:
+            tensordict_out = TensorDict._new_unsafe(
+                obs_dict,
+                batch_size=tensordict.batch_size,
+            )
         if self.device is not None:
             tensordict_out = tensordict_out.to(self.device)
 
