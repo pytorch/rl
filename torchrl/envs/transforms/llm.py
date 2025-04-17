@@ -765,7 +765,7 @@ class KLRewardTransform(Transform):
         kl = curr_log_prob - log_prob
         if reward is None:
             reward = 0
-        next_tensordict.set(self.out_keys[0], reward + self.coef * kl)
+        next_tensordict.set(self.out_keys[0], reward - self.coef * kl)
         return next_tensordict
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
