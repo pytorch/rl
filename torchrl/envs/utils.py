@@ -36,6 +36,7 @@ from tensordict.nn.probabilistic import (  # noqa
 )
 from tensordict.utils import is_non_tensor, NestedKey
 from torch import nn as nn
+from torch.autograd.profiler import record_function
 from torch.utils._pytree import tree_map
 from torchrl._utils import _replace_last, _rng_decorator, logger as torchrl_logger
 
@@ -280,6 +281,7 @@ class _StepMDP:
         if has_set:
             return out
 
+    @record_function("step_mdp")
     def __call__(self, tensordict):
         if isinstance(tensordict, LazyStackedTensorDict):
             out = LazyStackedTensorDict.lazy_stack(

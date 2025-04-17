@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import abc
 import enum
+import functools
 import gc
 import math
 import warnings
@@ -615,9 +616,11 @@ class TensorSpec(metaclass=abc.ABCMeta):
         """
         ...
 
+    _encode: list[Callable[[Any], Any]] | None = None
+
     def encode(
         self,
-        val: np.ndarray | torch.Tensor | TensorDictBase,
+        val: np.ndarray | list | torch.Tensor | TensorDictBase,
         *,
         ignore_device: bool = False,
     ) -> torch.Tensor | TensorDictBase:
@@ -639,6 +642,11 @@ class TensorSpec(metaclass=abc.ABCMeta):
             torch.Tensor matching the required tensor specs.
 
         """
+        funcs = self._encode
+        if funcs is not None:
+            return funcs(val)
+
+        funcs = []
         if not isinstance(val, torch.Tensor):
             if isinstance(val, list):
                 if len(val) == 1:
@@ -646,33 +654,54 @@ class TensorSpec(metaclass=abc.ABCMeta):
                     # We convert these lists in np.array or take the first element
                     # if there is just one.
                     # See https://github.com/pytorch/rl/pull/403/commits/73d77d033152c61d96126ccd10a2817fecd285a1
-                    val = val[0]
+                    funcs.append(lambda val: val[0])
+                    # val = val[0]
                 else:
-                    val = np.array(val)
+                    funcs.append(lambda val: np.array(val))
+                    # val = np.array(val)
             if isinstance(val, np.ndarray) and not all(
                 stride > 0 for stride in val.strides
             ):
-                val = val.copy()
+                funcs.append(lambda val: val.copy())
+                # val = val.copy()
             if not ignore_device:
-                val = torch.as_tensor(val, device=self.device, dtype=self.dtype)
+                funcs.append(
+                    lambda val: torch.as_tensor(
+                        val, device=self.device, dtype=self.dtype
+                    )
+                )
+                # val = torch.as_tensor(val, device=self.device, dtype=self.dtype)
             else:
-                val = torch.as_tensor(val, dtype=self.dtype)
+                funcs.append(lambda val: torch.as_tensor(val, dtype=self.dtype))
+                # val = torch.as_tensor(val, dtype=self.dtype)
             if val.shape != self.shape:
                 # if val.shape[-len(self.shape) :] != self.shape:
                 # option 1: add a singleton dim at the end
                 if val.shape == self.shape and self.shape[-1] == 1:
-                    val = val.unsqueeze(-1)
+                    funcs.append(lambda val: val.unsqueeze(-1))
+                    # val = val.unsqueeze(-1)
                 else:
-                    try:
-                        val = val.reshape(self.shape)
-                    except Exception as err:
-                        raise RuntimeError(
-                            f"Shape mismatch: the value has shape {val.shape} which "
-                            f"is incompatible with the spec shape {self.shape}."
-                        ) from err
+                    funcs.append(lambda val: val.reshape(self.shape))
+                    # try:
+                    #     val = val.reshape(self.shape)
+                    # except Exception as err:
+                    #     raise RuntimeError(
+                    #         f"Shape mismatch: the value has shape {val.shape} which "
+                    #         f"is incompatible with the spec shape {self.shape}."
+                    #     ) from err
         if _CHECK_SPEC_ENCODE:
-            self.assert_is_in(val)
-        return val
+
+            def check(val):
+                self.assert_is_in(val)
+                return val
+
+            funcs.append(check)
+            # self.assert_is_in(val)
+        if len(funcs) == 1:
+            self._encode = funcs[0]
+        else:
+            self._encode = functools.partial(functools.reduce, lambda x, f: f(x), funcs)
+        return self._encode(val)
 
     @abc.abstractmethod
     def __eq__(self, other: Any) -> bool:
