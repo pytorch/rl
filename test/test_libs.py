@@ -1793,7 +1793,7 @@ class TestDMControl:
         env0.set_seed(0)
         r0 = env0.rollout(100, break_when_any_done=False)
         assert r0.device == torch.device("cpu")
-        actions = collections.deque(r0["actions"].unbind(0))
+        actions = collections.deque(r0["action"].unbind(0))
         policy = lambda td: td.set("action", actions.popleft())
         env1.set_seed(0)
         r1 = env1.rollout(100, policy, break_when_any_done=False)
