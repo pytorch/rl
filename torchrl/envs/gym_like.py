@@ -240,57 +240,99 @@ class GymLikeEnv(_EnvWrapper):
             do_break.any() if not isinstance(do_break, bool) else do_break,
         )
 
+    _read_reward: Callable[[Any], Any] | None = None
+
     def read_reward(self, reward):
         """Reads the reward and maps it to the reward space.
-
         Args:
             reward (torch.Tensor or TensorDict): reward to be mapped.
-
         """
+        func = self._read_reward
+        if func is not None:
+            return func(reward)
+        funcs = []
         if isinstance(reward, int) and reward == 0:
-            return self.reward_spec.zero()
-        reward = self.reward_spec.encode(reward, ignore_device=True)
+
+            def process_zero(reward):
+                return self.reward_spec.zero()
+
+            funcs.append(process_zero)
+        else:
+
+            def encode_reward(reward):
+                return self.reward_spec.encode(reward, ignore_device=True)
+
+            funcs.append(encode_reward)
 
         if reward is None:
-            reward = torch.tensor(np.nan).expand(self.reward_spec.shape)
 
-        return reward
+            def check_none(reward):
+                return torch.tensor(np.nan).expand(self.reward_spec.shape)
+
+            funcs.append(check_none)
+
+        if len(funcs) == 1:
+            self._read_reward = funcs[0]
+        else:
+            self._read_reward = functools.partial(
+                functools.reduce, lambda x, f: f(x), funcs
+            )
+        return self._read_reward(reward)
+
+    _read_obs: Callable[[Any], Any] | None = None
 
     def read_obs(
         self, observations: dict[str, Any] | torch.Tensor | np.ndarray
     ) -> dict[str, Any]:
         """Reads an observation from the environment and returns an observation compatible with the output TensorDict.
-
         Args:
             observations (observation under a format dictated by the inner env): observation to be read.
-
         """
-        if isinstance(observations, dict):
+        func = self._read_obs
+        if func is not None:
+            return func(observations)
+        funcs = []
+        if isinstance(observations, (dict, Mapping)):
             if "state" in observations and "observation" not in observations:
-                # we rename "state" in "observation" as "observation" is the conventional name
-                # for single observation in torchrl.
-                # naming it 'state' will result in envs that have a different name for the state vector
-                # when queried with and without pixels
-                observations["observation"] = observations.pop("state")
-        if not isinstance(observations, Mapping):
-            for key, spec in self.observation_spec.items(True, True):
-                observations_dict = {}
-                observations_dict[key] = spec.encode(observations, ignore_device=True)
-                # we don't check that there is only one spec because obs spec also
-                # contains the data spec of the info dict.
-                break
-            else:
-                raise RuntimeError("Could not find any element in observation_spec.")
-            observations = observations_dict
-        else:
-            for key, val in observations.items():
+
+                def process_dict_pop(observations):
+                    observations["observation"] = observations.pop("state")
+                    return observations
+
+                funcs.append(process_dict_pop)
+            for key in observations.keys():
                 if isinstance(self.observation_spec[key], NonTensor):
-                    observations[key] = NonTensorData(val)
+
+                    def process_dict(observations):
+                        observations[key] = NonTensorData(observations[key])
+                        return observations
+
                 else:
-                    observations[key] = self.observation_spec[key].encode(
-                        val, ignore_device=True
-                    )
-        return observations
+
+                    def process_dict(observations):
+                        observations[key] = self.observation_spec[key].encode(
+                            observations[key], ignore_device=True
+                        )
+                        return observations
+
+                funcs.append(process_dict)
+        else:
+            key = next(iter(self.observation_spec.keys(True, True)), None)
+            if key is None:
+                raise RuntimeError("Could not find any element in observation_spec.")
+            spec = self.observation_spec[key]
+
+            def process_non_dict(observations, spec=spec):
+                return {key: spec.encode(observations, ignore_device=True)}
+
+            funcs.append(process_non_dict)
+        if len(funcs) == 1:
+            self._read_obs = funcs[0]
+        else:
+            self._read_obs = functools.partial(
+                functools.reduce, lambda x, f: f(x), funcs
+            )
+        return self._read_obs(observations)
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         if len(self.action_keys) == 1:
@@ -303,6 +345,7 @@ class GymLikeEnv(_EnvWrapper):
 
         reward = 0
         for _ in range(self.wrapper_frame_skip):
+            step_result = self._env.step(action)
             (
                 obs,
                 _reward,
@@ -310,7 +353,7 @@ class GymLikeEnv(_EnvWrapper):
                 truncated,
                 done,
                 info_dict,
-            ) = self._output_transform(self._env.step(action))
+            ) = self._output_transform(step_result)
 
             if _reward is not None:
                 reward = reward + _reward
