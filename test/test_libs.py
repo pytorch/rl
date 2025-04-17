@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import collections
 import functools
 import gc
 import importlib.util
@@ -1761,6 +1762,43 @@ class TestDMControl:
         assert_allclose_td(tdreset0, tdreset2)
         assert final_seed0 == final_seed2
         assert_allclose_td(rollout0, rollout2)
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires cuda")
+    @pytest.mark.parametrize("env_name,task", [["cheetah", "run"]])
+    @pytest.mark.parametrize("frame_skip", [1, 3])
+    @pytest.mark.parametrize(
+        "from_pixels,pixels_only", [[True, True], [True, False], [False, False]]
+    )
+    def test_dmcontrol_device_consistency(
+        self, env_name, task, frame_skip, from_pixels, pixels_only
+    ):
+        env0 = DMControlEnv(
+            env_name,
+            task,
+            frame_skip=frame_skip,
+            from_pixels=from_pixels,
+            pixels_only=pixels_only,
+            device="cpu",
+        )
+
+        env1 = DMControlEnv(
+            env_name,
+            task,
+            frame_skip=frame_skip,
+            from_pixels=from_pixels,
+            pixels_only=pixels_only,
+            device="cuda",
+        )
+
+        env0.set_seed(0)
+        r0 = env0.rollout(100, break_when_any_done=False)
+        assert r0.device == torch.device("cpu")
+        actions = collections.deque(r0["actions"].unbind(0))
+        policy = lambda td: td.set("action", actions.popleft())
+        env1.set_seed(0)
+        r1 = env1.rollout(100, policy, break_when_any_done=False)
+        assert r1.device == torch.device("cuda:0")
+        assert_allclose_td(r0, r1.cpu())
 
     @pytest.mark.parametrize("env_name,task", [["cheetah", "run"]])
     @pytest.mark.parametrize("frame_skip", [1, 3])
