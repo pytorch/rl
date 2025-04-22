@@ -1236,7 +1236,7 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
     def lib(self) -> ModuleType:
         return gym_backend()
 
-    def _set_seed(self, seed: int) -> int:  # noqa: F811
+    def _set_seed(self, seed: int | None) -> None:  # noqa: F811
         if self._seed_calls_reset is None:
             # Determine basing on gym version whether `reset` is called when setting seed.
             self._set_seed_initial(seed)
@@ -1244,8 +1244,6 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
             self.reset(seed=seed)
         else:
             self._env.seed(seed=seed)
-
-        return seed
 
     @implement_for("gym", None, "0.15.0")
     def _set_seed_initial(self, seed: int) -> None:  # noqa: F811

@@ -280,7 +280,7 @@ class MARLEnv(EnvBase):
     def _reset(self, tensordic):
         ...
 
-    def _set_seed(self, seed: int | None):
+    def _set_seed(self, seed: int | None) -> None:
         ...
 
 

@@ -814,7 +814,7 @@ Here is a working example:
     ...         reward = self.full_reward_spec.zero()
     ...         return observation.update(done).update(reward)
     ...
-    ...     def _set_seed(self, seed: Optional[int]):
+    ...     def _set_seed(self, seed: Optional[int]) -> None:
     ...         self.manual_seed = seed
     ...         return seed
     >>> env = EnvWithDynamicSpec()

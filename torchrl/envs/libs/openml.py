@@ -149,5 +149,5 @@ class OpenMLEnv(EnvBase):
         )
         return td
 
-    def _set_seed(self, seed):
+    def _set_seed(self, seed: int | None) -> None:
         self.rng = torch.random.manual_seed(seed)
