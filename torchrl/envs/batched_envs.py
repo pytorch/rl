@@ -878,8 +878,9 @@ class BatchedEnvBase(EnvBase):
     def _shutdown_workers(self) -> None:
         raise NotImplementedError
 
-    def _set_seed(self, seed: int | None):
+    def _set_seed(self, seed: int | None) -> None:
         """This method is not used in batched envs."""
+        pass
 
     @lazy
     def start(self) -> None:
