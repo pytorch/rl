@@ -128,29 +128,29 @@ class _MockEnv(EnvBase):
         self.is_closed = False
 
     @property
-    def maxstep(self):
+    def maxstep(self) -> int:
         return 100
 
-    def _set_seed(self, seed: int | None):
+    def _set_seed(self, seed: int | None) -> None:
         self.seed = seed
         self.counter = seed % 17  # make counter a small number
 
-    def custom_fun(self):
+    def custom_fun(self) -> int:
         return 0
 
     custom_attr = 1
 
     @property
-    def custom_prop(self):
+    def custom_prop(self) -> int:
         return 2
 
     @property
-    def custom_td(self):
+    def custom_td(self) -> TensorDict:
         return TensorDict({"a": torch.zeros(3)}, [])
 
 
 class MockSerialEnv(EnvBase):
-    """A simple counting env that is reset after a predifined max number of steps."""
+    """A simple counting env that is reset after a predefined max number of steps."""
 
     @classmethod
     def __new__(
@@ -219,13 +219,13 @@ class MockSerialEnv(EnvBase):
         super().__init__(device=device)
         self.is_closed = False
 
-    def _set_seed(self, seed: int | None):
+    def _set_seed(self, seed: int | None) -> None:
         assert seed >= 1
         self.seed = seed
         self.counter = seed % 17  # make counter a small number
         self.max_val = max(self.counter + 100, self.counter * 2)
 
-    def _step(self, tensordict):
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         self.counter += 1
         n = torch.tensor(
             [self.counter], device=self.device, dtype=torch.get_default_dtype()
@@ -341,13 +341,13 @@ class MockBatchedLockedEnv(EnvBase):
 
     rand_step = MockSerialEnv.rand_step
 
-    def _set_seed(self, seed: int | None):
+    def _set_seed(self, seed: int | None) -> None:
         assert seed >= 1
         self.seed = seed
         self.counter = seed % 17  # make counter a small number
         self.max_val = max(self.counter + 100, self.counter * 2)
 
-    def _step(self, tensordict):
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         if len(self.batch_size):
             leading_batch_size = (
                 tensordict.shape[: -len(self.batch_size)]
@@ -506,7 +506,7 @@ class StateLessCountingEnv(EnvBase):
             device=tensordict.device,
         )
 
-    def _set_seed(self, seed: int | None):
+    def _set_seed(self, seed: int | None) -> None:
         ...
 
 
@@ -738,7 +738,7 @@ class DiscreteActionVecPolicy(TensorDictModuleBase):
         obs = tensordict.get(*self.in_keys)
         return obs
 
-    def __call__(self, tensordict):
+    def __call__(self, tensordict: TensorDictBase) -> TensorDictBase:
         obs = self._get_in_obs(tensordict)
         max_obs = (obs == obs.max(dim=-1, keepdim=True)[0]).cumsum(-1).argmax(-1)
         k = tensordict.get(*self.in_keys).shape[-1]
@@ -1106,7 +1106,7 @@ class CountingEnv(EnvBase):
             torch.zeros((*self.batch_size, 1), device=self.device, dtype=torch.int),
         )
 
-    def _set_seed(self, seed: int | None):
+    def _set_seed(self, seed: int | None) -> None:
         torch.manual_seed(seed)
 
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
@@ -1285,7 +1285,7 @@ class MultiAgentCountingEnv(EnvBase):
             torch.zeros((*self.batch_size, 1), device=self.device, dtype=torch.int),
         )
 
-    def _set_seed(self, seed: int | None):
+    def _set_seed(self, seed: int | None) -> None:
         torch.manual_seed(seed)
 
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
@@ -1611,7 +1611,7 @@ class CountingBatchedEnv(EnvBase):
         elif start_val.numel() <= 1:
             self.start_val = start_val.expand_as(self.count)
 
-    def _set_seed(self, seed: int | None):
+    def _set_seed(self, seed: int | None) -> None:
         torch.manual_seed(seed)
 
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
@@ -1827,7 +1827,7 @@ class HeterogeneousCountingEnv(EnvBase):
 
         return td
 
-    def _set_seed(self, seed: int | None):
+    def _set_seed(self, seed: int | None) -> None:
         torch.manual_seed(seed)
 
 
@@ -2058,7 +2058,7 @@ class MultiKeyCountingEnv(EnvBase):
         assert td.batch_size == self.batch_size
         return td
 
-    def _set_seed(self, seed: int | None):
+    def _set_seed(self, seed: int | None) -> None:
         torch.manual_seed(seed)
 
 
@@ -2095,8 +2095,8 @@ class EnvWithMetadata(EnvBase):
         data.update(self._saved_full_reward_spec.zero())
         return data
 
-    def _set_seed(self, seed: int | None):
-        return seed
+    def _set_seed(self, seed: int | None) -> None:
+        ...
 
 
 class AutoResettingCountingEnv(CountingEnv):
@@ -2221,9 +2221,8 @@ class EnvWithDynamicSpec(EnvBase):
         reward = self.full_reward_spec.zero()
         return observation.update(done).update(reward)
 
-    def _set_seed(self, seed: int | None):
+    def _set_seed(self, seed: int | None) -> None:
         self.manual_seed = seed
-        return seed
 
 
 class EnvWithScalarAction(EnvBase):
@@ -2291,7 +2290,7 @@ class EnvWithScalarAction(EnvBase):
             ),
         )
 
-    def _set_seed(self, seed: int | None):
+    def _set_seed(self, seed: int | None) -> None:
         ...
 
 
@@ -2305,7 +2304,7 @@ class EnvThatDoesNothing(EnvBase):
     ) -> TensorDictBase:
         return TensorDict(batch_size=self.batch_size, device=self.device)
 
-    def _set_seed(self, seed):
+    def _set_seed(self, seed: int | None) -> None:
         ...
 
 
@@ -2339,10 +2338,9 @@ class Str2StrEnv(EnvBase):
     def get_random_string(self):
         return get_random_string(self.min_size, self.max_size)
 
-    def _set_seed(self, seed: int | None):
+    def _set_seed(self, seed: int | None) -> None:
         random.seed(seed)
         torch.manual_seed(0)
-        return seed
 
 
 class EnvThatErrorsAfter10Iters(EnvBase):
@@ -2367,7 +2365,7 @@ class EnvThatErrorsAfter10Iters(EnvBase):
             .update(self.full_reward_spec.zero())
         )
 
-    def _set_seed(self, seed: int | None):
+    def _set_seed(self, seed: int | None) -> None:
         ...
 
 

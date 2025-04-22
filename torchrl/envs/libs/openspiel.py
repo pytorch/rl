@@ -334,7 +334,7 @@ class OpenSpielWrapper(_EnvWrapper):
         self.action_spec = Composite(action_spec)
         self.reward_spec = Composite(reward_spec)
 
-    def _set_seed(self, seed):
+    def _set_seed(self, seed: int | None) -> None:
         if seed is not None:
             raise NotImplementedError("This environment has no seed.")
 
