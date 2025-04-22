@@ -159,23 +159,29 @@ class EGreedyModule(TensorDictModuleBase):
                 action_tensordict = tensordict
                 action_key = self.action_key
 
-            out = action_tensordict.get(action_key)
+            action = action_tensordict.get(action_key)
             eps = self.eps
-            cond = torch.rand(action_tensordict.shape, device=out.device) < eps
+            device = eps.device
+            action_device = action.device
+            if action_device is not None and action_device != device:
+                raise RuntimeError(
+                    f"Expected action and e-greedy module to be on the same device, but got {action.device=} and e-greedy device={device}."
+                )
+            cond = torch.rand(action_tensordict.shape, device=device) < eps
             # cond = torch.zeros(action_tensordict.shape, device=out.device, dtype=torch.bool).bernoulli_(eps)
-            cond = expand_as_right(cond, out)
+            cond = expand_as_right(cond, action)
             spec = self.spec
             if spec is not None:
                 if isinstance(spec, Composite):
                     spec = spec[self.action_key]
-                if spec.shape != out.shape:
+                if spec.shape != action.shape:
                     # In batched envs if the spec is passed unbatched, the rand() will not
                     # cover all batched dims
                     if (
                         not len(spec.shape)
-                        or out.shape[-len(spec.shape) :] == spec.shape
+                        or action.shape[-len(spec.shape) :] == spec.shape
                     ):
-                        spec = spec.expand(out.shape)
+                        spec = spec.expand(action.shape)
                     else:
                         raise ValueError(
                             "Action spec shape does not match the action shape"
@@ -188,12 +194,12 @@ class EGreedyModule(TensorDictModuleBase):
                         )
                     spec.update_mask(action_mask)
                 r = spec.rand()
-                if r.device != out.device:
-                    r = r.to(out.device)
-                out = torch.where(cond, r, out)
+                if r.device != device:
+                    r = r.to(device)
+                action = torch.where(cond, r, action)
             else:
                 raise RuntimeError("spec must be provided to the exploration wrapper.")
-            action_tensordict.set(action_key, out)
+            action_tensordict.set(action_key, action)
         return tensordict
 
 

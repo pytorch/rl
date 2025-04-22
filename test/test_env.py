@@ -1217,38 +1217,44 @@ class TestParallel:
     @pytest.mark.skipif(not _has_dmc, reason="no dm_control")
     @pytest.mark.parametrize("env_task", ["stand,stand,stand", "stand,walk,stand"])
     @pytest.mark.parametrize("share_individual_td", [True, False])
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_multi_task_serial_parallel(
-        self, env_task, share_individual_td, maybe_fork_ParallelEnv
+        self, env_task, share_individual_td, maybe_fork_ParallelEnv, device
     ):
+        tasks = env_task.split(",")
+        if len(tasks) == 1:
+            single_task = True
+
+            def env_make():
+                return DMControlEnv("humanoid", tasks[0], device=device)
+
+        elif len(set(tasks)) == 1 and len(tasks) == 3:
+            single_task = True
+            env_make = [lambda: DMControlEnv("humanoid", tasks[0], device=device)] * 3
+        else:
+            single_task = False
+            env_make = [
+                lambda task=task: DMControlEnv("humanoid", task, device=device)
+                for task in tasks
+            ]
+
+        env_serial = SerialEnv(3, env_make, share_individual_td=share_individual_td)
         try:
-            tasks = env_task.split(",")
-            if len(tasks) == 1:
-                single_task = True
-
-                def env_make():
-                    return DMControlEnv("humanoid", tasks[0])
-
-            elif len(set(tasks)) == 1 and len(tasks) == 3:
-                single_task = True
-                env_make = [lambda: DMControlEnv("humanoid", tasks[0])] * 3
-            else:
-                single_task = False
-                env_make = [
-                    lambda task=task: DMControlEnv("humanoid", task) for task in tasks
-                ]
-
-            env_serial = SerialEnv(3, env_make, share_individual_td=share_individual_td)
             env_serial.start()
             assert env_serial._single_task is single_task
+
+            env_serial.set_seed(0)
+            torch.manual_seed(0)
+            td_serial = env_serial.rollout(max_steps=50)
+        finally:
+            env_serial.close(raise_if_closed=False)
+
+        try:
             env_parallel = maybe_fork_ParallelEnv(
                 3, env_make, share_individual_td=share_individual_td
             )
             env_parallel.start()
             assert env_parallel._single_task is single_task
-
-            env_serial.set_seed(0)
-            torch.manual_seed(0)
-            td_serial = env_serial.rollout(max_steps=50)
 
             env_parallel.set_seed(0)
             torch.manual_seed(0)
@@ -1257,7 +1263,6 @@ class TestParallel:
             assert_allclose_td(td_serial, td_parallel)
         finally:
             env_parallel.close(raise_if_closed=False)
-            env_serial.close(raise_if_closed=False)
 
     @pytest.mark.skipif(not _has_dmc, reason="no dm_control")
     def test_multitask(self, maybe_fork_ParallelEnv):
