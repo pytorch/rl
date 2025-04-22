@@ -521,7 +521,6 @@ TorchRL offers a series of custom built-in environments.
     ChessEnv
     PendulumEnv
     TicTacToeEnv
-    LLMEnv
     LLMHashingEnv
 
 
