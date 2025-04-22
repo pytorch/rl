@@ -69,6 +69,7 @@ else:
 
 pytestmark = [
     pytest.mark.filterwarnings("error"),
+    pytest.mark.filterwarnings("ignore: memoized encoding is an experimental feature"),
 ]
 
 
@@ -76,7 +77,8 @@ class TestRanges:
     @pytest.mark.parametrize(
         "dtype", [torch.float32, torch.float16, torch.float64, None]
     )
-    def test_bounded(self, dtype):
+    @pytest.mark.parametrize("memo", [True, False])
+    def test_bounded(self, dtype, memo):
         torch.manual_seed(0)
         np.random.seed(0)
         for _ in range(100):
@@ -84,6 +86,7 @@ class TestRanges:
             ts = Bounded(
                 bounds[0].item(), bounds[1].item(), torch.Size((1,)), dtype=dtype
             )
+            ts.memoize_encode(mode=memo)
             _dtype = dtype
             if dtype is None:
                 _dtype = torch.get_default_dtype()
@@ -93,28 +96,36 @@ class TestRanges:
             assert ts.is_in(r)
             assert r.dtype is _dtype
             ts.is_in(ts.encode(bounds.mean()))
+            ts.erase_memoize_cache()
             ts.is_in(ts.encode(bounds.mean().item()))
+            ts.erase_memoize_cache()
             assert (ts.encode(ts.to_numpy(r)) == r).all()
 
     @pytest.mark.parametrize("cls", [OneHot, Categorical])
-    def test_discrete(self, cls):
+    @pytest.mark.parametrize("memo", [True, False])
+    def test_discrete(self, cls, memo):
         torch.manual_seed(0)
         np.random.seed(0)
 
         ts = cls(10)
+        ts.memoize_encode(memo)
         for _ in range(100):
             r = ts.rand()
             assert (ts._project(r) == r).all()
             ts.to_numpy(r)
             ts.encode(torch.tensor([5]))
+            ts.erase_memoize_cache()
             ts.encode(torch.tensor(5).numpy())
+            ts.erase_memoize_cache()
             ts.encode(9)
             with pytest.raises(AssertionError), set_global_var(
                 torchrl.data.tensor_specs, "_CHECK_SPEC_ENCODE", True
             ):
+                ts.erase_memoize_cache()
                 ts.encode(torch.tensor([11]))  # out of bounds
             assert not torchrl.data.tensor_specs._CHECK_SPEC_ENCODE
             assert ts.is_in(r)
+            ts.erase_memoize_cache()
             assert (ts.encode(ts.to_numpy(r)) == r).all()
 
     @pytest.mark.parametrize(
@@ -139,7 +150,8 @@ class TestRanges:
         "dtype", [torch.float32, torch.float16, torch.float64, None]
     )
     @pytest.mark.parametrize("shape", [[], torch.Size([3])])
-    def test_ndbounded(self, dtype, shape):
+    @pytest.mark.parametrize("memo", [True, False])
+    def test_ndbounded(self, dtype, shape, memo):
         torch.manual_seed(0)
         np.random.seed(0)
 
@@ -147,6 +159,7 @@ class TestRanges:
             lb = torch.rand(10) - 1
             ub = torch.rand(10) + 1
             ts = Bounded(lb, ub, dtype=dtype)
+            ts.memoize_encode(memo)
             _dtype = dtype
             if dtype is None:
                 _dtype = torch.get_default_dtype()
@@ -160,19 +173,23 @@ class TestRanges:
             ).all(), f"{r[r <= lb] - lb.expand_as(r)[r <= lb]} -- {r[r >= ub] - ub.expand_as(r)[r >= ub]} "
             ts.to_numpy(r)
             assert ts.is_in(r)
+            ts.erase_memoize_cache()
             ts.encode(lb + torch.rand(10) * (ub - lb))
+            ts.erase_memoize_cache()
             ts.encode((lb + torch.rand(10) * (ub - lb)).numpy())
 
             if not shape:
                 assert (ts.encode(ts.to_numpy(r)) == r).all()
             else:
                 with pytest.raises(RuntimeError, match="Shape mismatch"):
+                    ts.erase_memoize_cache()
                     ts.encode(ts.to_numpy(r))
                 assert (ts.expand(*shape, *ts.shape).encode(ts.to_numpy(r)) == r).all()
 
             with pytest.raises(AssertionError), set_global_var(
                 torchrl.data.tensor_specs, "_CHECK_SPEC_ENCODE", True
             ):
+                ts.erase_memoize_cache()
                 ts.encode(torch.rand(10) + 3)  # out of bounds
             with pytest.raises(AssertionError), set_global_var(
                 torchrl.data.tensor_specs, "_CHECK_SPEC_ENCODE", True
@@ -242,10 +259,12 @@ class TestRanges:
         ],
     )
     @pytest.mark.parametrize("shape", [(), torch.Size([3])])
-    def test_mult_onehot(self, shape, ns):
+    @pytest.mark.parametrize("memo", [True, False])
+    def test_mult_onehot(self, shape, ns, memo):
         torch.manual_seed(0)
         np.random.seed(0)
         ts = MultiOneHot(nvec=ns)
+        ts.memoize_encode(memo)
         for _ in range(100):
             r = ts.rand(shape)
             assert (ts._project(r) == r).all()
@@ -260,9 +279,11 @@ class TestRanges:
             assert not ts.is_in(categorical)
             # assert (ts.encode(categorical) == r).all()
             if not shape:
+                ts.erase_memoize_cache()
                 assert (ts.encode(categorical) == r).all()
             else:
                 with pytest.raises(RuntimeError, match="is invalid for input of size"):
+                    ts.erase_memoize_cache()
                     ts.encode(categorical)
                 assert (ts.expand(*shape, *ts.shape).encode(categorical) == r).all()
 
@@ -455,8 +476,10 @@ class TestComposite:
         assert "obs" not in ts.keys()
         assert "act" in ts.keys()
 
-    def test_encode(self, shape, is_complete, device, dtype):
+    @pytest.mark.parametrize("memo", [True, False])
+    def test_encode(self, shape, is_complete, device, dtype, memo):
         ts = self._composite_spec(shape, is_complete, device, dtype)
+        ts.memoize_encode(memo)
         if dtype is None:
             dtype = torch.get_default_dtype()
 
@@ -465,6 +488,7 @@ class TestComposite:
             raw_vals = {"obs": r["obs"].cpu().numpy()}
             if is_complete:
                 raw_vals["act"] = r["act"].cpu().numpy()
+            ts.erase_memoize_cache()
             encoded_vals = ts.encode(raw_vals)
 
             assert encoded_vals["obs"].dtype == dtype
