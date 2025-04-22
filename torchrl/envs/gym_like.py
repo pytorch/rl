@@ -343,7 +343,7 @@ class GymLikeEnv(_EnvWrapper):
                     for key, val in TensorDict(obs_dict, []).items(True, True)
                 )
         else:
-            tensordict_out = TensorDict(
+            tensordict_out = TensorDict._new_unsafe(
                 obs_dict,
                 batch_size=tensordict.batch_size,
             )
