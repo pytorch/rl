@@ -111,9 +111,9 @@ class IsaacGymWrapper(GymWrapper):
         )
         return envs
 
-    def _set_seed(self, seed: int) -> int:
+    def _set_seed(self, seed: int | None) -> None:
         # as of #665c32170d84b4be66722eea405a1e08b6e7f761 the seed points nowhere in gym.make for IsaacGymEnvs
-        return seed
+        ...
 
     def read_action(self, action):
         """Reads the action obtained from the input TensorDict and transforms it in the format expected by the contained environment.

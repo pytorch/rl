@@ -612,7 +612,7 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
             dest.set("pixels", self._get_tensor_image(board=self.board))
         return dest
 
-    def _set_seed(self, *args, **kwargs):
+    def _set_seed(self, *args, **kwargs) -> None:
         ...
 
     def cardinality(self, tensordict: TensorDictBase | None = None) -> int:

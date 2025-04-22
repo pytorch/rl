@@ -6,9 +6,10 @@
 from __future__ import annotations
 
 import abc
+import functools
 import re
 import warnings
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence, TypeVar
 
 import numpy as np
 import torch
@@ -17,6 +18,8 @@ from tensordict import NonTensorData, TensorDict, TensorDictBase
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.tensor_specs import Composite, NonTensor, TensorSpec, Unbounded
 from torchrl.envs.common import _EnvWrapper, _maybe_unlock, EnvBase
+
+T = TypeVar("T", bound=EnvBase)
 
 
 class BaseInfoDictReader(metaclass=abc.ABCMeta):
@@ -175,6 +178,50 @@ class GymLikeEnv(_EnvWrapper):
 
         return self
 
+    def fast_encoding(self, mode: bool = True) -> T:
+        """Skips several checks during encoding of the environment output to accelerate the execution of the environment.
+
+        Args:
+            mode (bool, optional): the memoization mode. If ``True``, input checks will be executed only once and then
+                the encoding pipeline will be pre-recorded.
+
+        .. seealso:: :meth:`~torchrl.data.TensorSpec.memoize_cache`.
+
+        Example:
+            >>> from torchrl.envs import GymEnv
+            >>> from torch.utils.benchmark import Timer
+            >>>
+            >>> env = GymEnv("Pendulum-v1")
+            >>> t = Timer("env.rollout(1000, break_when_any_done=False)", globals=globals(), num_threads=32).adaptive_autorange()
+            >>> m = t.median
+            >>> print(f"Speed without memoizing: {1000/t.median: 4.4f}fps")
+            Speed without memoizing:  10141.5742fps
+            >>>
+            >>> env.fast_encoding()
+            >>> t = Timer("env.rollout(1000, break_when_any_done=False)", globals=globals(), num_threads=32).adaptive_autorange()
+            >>> m = t.median
+            >>> print(f"Speed with memoizing: {1000/t.median: 4.4f}fps")
+            Speed with memoizing:  10576.8388fps
+
+        """
+        self.specs.memoize_encode(mode=mode)
+        if mode:
+            if type(self).read_obs is not GymLikeEnv.read_obs:
+                raise RuntimeError(
+                    "Cannot use fast_encoding as the read_obs method has been overwritten."
+                )
+            if type(self).read_reward is not GymLikeEnv.read_reward:
+                raise RuntimeError(
+                    "Cannot use fast_encoding as the read_reward method has been overwritten."
+                )
+
+        if mode:
+            self.read_reward = self._read_reward_memo
+            self.read_obs = self._read_obs_memo
+        else:
+            self.read_reward = self._read_reward_eager
+            self.read_obs = self._read_obs_eager
+
     def read_action(self, action):
         """Reads the action obtained from the input TensorDict and transforms it in the format expected by the contained environment.
 
@@ -244,9 +291,24 @@ class GymLikeEnv(_EnvWrapper):
 
     def read_reward(self, reward):
         """Reads the reward and maps it to the reward space.
+
         Args:
             reward (torch.Tensor or TensorDict): reward to be mapped.
+
         """
+        return self._read_reward_eager(reward)
+
+    def _read_reward_eager(self, reward):
+        if isinstance(reward, int) and reward == 0:
+            return self.reward_spec.zero()
+        reward = self.reward_spec.encode(reward, ignore_device=True)
+
+        if reward is None:
+            reward = torch.tensor(np.nan).expand(self.reward_spec.shape)
+
+        return reward
+
+    def _read_reward_memo(self, reward):
         func = self._read_reward
         if func is not None:
             return func(reward)
@@ -279,15 +341,52 @@ class GymLikeEnv(_EnvWrapper):
             )
         return self._read_reward(reward)
 
-    _read_obs: Callable[[Any], Any] | None = None
-
     def read_obs(
         self, observations: dict[str, Any] | torch.Tensor | np.ndarray
     ) -> dict[str, Any]:
         """Reads an observation from the environment and returns an observation compatible with the output TensorDict.
+
         Args:
             observations (observation under a format dictated by the inner env): observation to be read.
+
         """
+        return self._read_obs_eager(observations)
+
+    def _read_obs_eager(
+        self, observations: dict[str, Any] | torch.Tensor | np.ndarray
+    ) -> dict[str, Any]:
+        if isinstance(observations, dict):
+            if "state" in observations and "observation" not in observations:
+                # we rename "state" in "observation" as "observation" is the conventional name
+                # for single observation in torchrl.
+                # naming it 'state' will result in envs that have a different name for the state vector
+                # when queried with and without pixels
+                observations["observation"] = observations.pop("state")
+        if not isinstance(observations, Mapping):
+            for key, spec in self.observation_spec.items(True, True):
+                observations_dict = {}
+                observations_dict[key] = spec.encode(observations, ignore_device=True)
+                # we don't check that there is only one spec because obs spec also
+                # contains the data spec of the info dict.
+                break
+            else:
+                raise RuntimeError("Could not find any element in observation_spec.")
+            observations = observations_dict
+        else:
+            for key, val in observations.items():
+                if isinstance(self.observation_spec[key], NonTensor):
+                    observations[key] = NonTensorData(val)
+                else:
+                    observations[key] = self.observation_spec[key].encode(
+                        val, ignore_device=True
+                    )
+        return observations
+
+    _read_obs: Callable[[Any], Any] | None = None
+
+    def _read_obs_memo(
+        self, observations: dict[str, Any] | torch.Tensor | np.ndarray
+    ) -> dict[str, Any]:
         func = self._read_obs
         if func is not None:
             return func(observations)
@@ -303,13 +402,13 @@ class GymLikeEnv(_EnvWrapper):
             for key in observations.keys():
                 if isinstance(self.observation_spec[key], NonTensor):
 
-                    def process_dict(observations):
+                    def process_dict(observations, key=key):
                         observations[key] = NonTensorData(observations[key])
                         return observations
 
                 else:
 
-                    def process_dict(observations):
+                    def process_dict(observations, key=key):
                         observations[key] = self.observation_spec[key].encode(
                             observations[key], ignore_device=True
                         )

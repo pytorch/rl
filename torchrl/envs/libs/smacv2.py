@@ -311,7 +311,7 @@ class SMACv2Wrapper(_EnvWrapper):
         )
         return spec
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: Optional[int]) -> None:
         if seed is not None:
             raise NotImplementedError(
                 "Seed cannot be changed once environment was created."
