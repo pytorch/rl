@@ -8,10 +8,6 @@ from .llm import (
     ConstantKLController,
     create_infinite_iterator,
     get_dataloader,
-    History,
-    LLMData,
-    LLMInput,
-    LLMOutput,
     PairwiseDataset,
     PromptData,
     PromptTensorDictTokenizer,
@@ -109,7 +105,6 @@ from .utils import check_no_exclusive_keys, consolidate_spec, contains_lazy_spec
 
 __all__ = [
     "AdaptiveKLController",
-    "History",
     "Binary",
     "BinaryDiscreteTensorSpec",
     "BinaryToDecimal",
@@ -131,9 +126,6 @@ __all__ = [
     "H5StorageCheckpointer",
     "HashToInt",
     "ImmutableDatasetWriter",
-    "LLMData",
-    "LLMInput",
-    "LLMOutput",
     "LazyMemmapStorage",
     "LazyStackStorage",
     "LazyStackedCompositeSpec",

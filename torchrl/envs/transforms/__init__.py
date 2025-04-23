@@ -5,9 +5,6 @@
 
 from .gym_transforms import EndOfLifeTransform
 from .llm import (
-    as_nested_tensor,
-    as_padded_tensor,
-    DataLoadingPrimer,
     KLRewardTransform,
 )
 from .r3m import R3MTransform
@@ -93,7 +90,6 @@ __all__ = [
     "ConditionalSkip",
     "Crop",
     "DTypeCastTransform",
-    "DataLoadingPrimer",
     "DeviceCastTransform",
     "DiscreteActionProjection",
     "DoubleToFloat",
@@ -145,7 +141,5 @@ __all__ = [
     "VecGymEnvTransform",
     "VecNorm",
     "VecNormV2",
-    "as_nested_tensor",
-    "as_padded_tensor",
     "gSDENoise",
 ]
