@@ -4,12 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from .gym_transforms import EndOfLifeTransform
-from .llm import (
-    as_nested_tensor,
-    as_padded_tensor,
-    DataLoadingPrimer,
-    KLRewardTransform,
-)
+from .llm import KLRewardTransform
 from .r3m import R3MTransform
 from .rb_transforms import MultiStepTransform
 from .transforms import (
@@ -93,7 +88,6 @@ __all__ = [
     "ConditionalSkip",
     "Crop",
     "DTypeCastTransform",
-    "DataLoadingPrimer",
     "DeviceCastTransform",
     "DiscreteActionProjection",
     "DoubleToFloat",
@@ -145,7 +139,5 @@ __all__ = [
     "VecGymEnvTransform",
     "VecNorm",
     "VecNormV2",
-    "as_nested_tensor",
-    "as_padded_tensor",
     "gSDENoise",
 ]
