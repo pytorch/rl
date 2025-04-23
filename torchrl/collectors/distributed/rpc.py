@@ -887,7 +887,7 @@ class RPCWeightUpdaterBase(WeightUpdateSenderBase):
     def all_worker_ids(self) -> list[int] | list[torch.device]:
         raise NotImplementedError
 
-    def update_weights(
+    def push_weights(
         self,
         weights: TensorDictBase | None = None,
         worker_ids: torch.device | int | list[int] | list[torch.device] | None = None,

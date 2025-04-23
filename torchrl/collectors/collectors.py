@@ -52,7 +52,8 @@ from torchrl._utils import (
 from torchrl.collectors.utils import split_trajectories
 from torchrl.collectors.weight_update import (
     MultiProcessedWeightUpdate,
-    VanillaWeightUpdater,
+    VanillaWeightReceiver,
+    VanillaWeightSender,
     WeightUpdateReceiverBase,
     WeightUpdateSenderBase,
 )
@@ -299,9 +300,8 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 for the update. If not provided, the method will attempt to fetch the weights using the configured
                 weight updater.
             worker_ids (int | List[int] | torch.device | List[torch.device] | None, optional): Identifiers for the
-                workers that need to be updated. This is relevant when using a remote weights updater, which must
-                be specified during the data collector's initialization. If `worker_ids` is provided without a
-                configured remote weights updater, a TypeError will be raised.
+                workers that need to be updated. This is relevant when the collector has more than one worker associated
+                with it.
 
         Raises:
             TypeError: If `worker_ids` is provided but no `weight_update_sender` is configured.
@@ -318,11 +318,8 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
 
         """
         if self.weight_update_receiver is not None:
-            self.weight_update_receiver(policy_weights, **kwargs)
-        if self.weight_update_sender is not None:
-            self.weight_update_sender(policy_weights, worker_ids=worker_ids, **kwargs)
-        elif worker_ids is not None:
-            raise TypeError("worker_ids was passed but weight_update_sender was None.")
+            policy_weights = self.weight_update_receiver(policy_weights, **kwargs)
+        self.weight_update_sender(policy_weights, worker_ids=worker_ids, **kwargs)
 
     def __iter__(self) -> Iterator[TensorDictBase]:
         try:
@@ -539,7 +536,7 @@ class SyncDataCollector(DataCollectorBase):
             Defaults to ``False``.
         weight_update_receiver (WeightUpdateReceiverBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdateReceiverBase`
             or its subclass, responsible for updating the policy weights on the local inference worker.
-            If not provided, a :class:`~torchrl.collectors.VanillaLocalWeightUpdater` will be used by default,
+            If not provided, a :class:`~torchrl.collectors.VanillaWeightSender` will be used by default,
             which directly fetches and applies the weights from the server.
             Consider using a constructor if the updater needs to be serialized.
         weight_update_sender (WeightUpdateSenderBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdateSenderBase`
@@ -893,9 +890,20 @@ class SyncDataCollector(DataCollectorBase):
         self._frames = 0
         self._iter = -1
 
-        if weight_update_receiver is None:
-            weight_update_receiver = VanillaWeightUpdater(
+        if weight_update_sender is None:
+            weight_update_sender = VanillaWeightSender(
                 weight_getter=self.get_weights_fn, policy_weights=self.policy_weights
+            )
+        elif not isinstance(weight_update_sender, WeightUpdateSenderBase):
+            raise TypeError(
+                "weight_update_sender must be a subclass of WeightUpdateSenderBase"
+            )
+
+        if weight_update_receiver is None:
+            weight_update_receiver = VanillaWeightReceiver()
+        elif not isinstance(weight_update_receiver, WeightUpdateReceiverBase):
+            raise TypeError(
+                "weight_update_receiver must be a subclass of WeightUpdateReceiverBase"
             )
 
         self.weight_update_receiver = weight_update_receiver

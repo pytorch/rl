@@ -15,7 +15,8 @@ from .collectors import (
 from .weight_update import (
     MultiProcessedWeightUpdate,
     RayWeightUpdater,
-    VanillaWeightUpdater,
+    VanillaWeightReceiver,
+    VanillaWeightSender,
     WeightUpdateReceiverBase,
     WeightUpdateSenderBase,
 )
@@ -24,7 +25,8 @@ __all__ = [
     "RandomPolicy",
     "WeightUpdateReceiverBase",
     "WeightUpdateSenderBase",
-    "VanillaWeightUpdater",
+    "VanillaWeightSender",
+    "VanillaWeightReceiver",
     "RayWeightUpdater",
     "MultiProcessedWeightUpdate",
     "aSyncDataCollector",

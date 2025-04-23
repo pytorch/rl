@@ -70,7 +70,7 @@ class LLMCollector(SyncDataCollector):
             Defaults to `True` when `replay_buffer` is provided, `False` otherwise.
         weight_update_receiver (WeightUpdateReceiverBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdateReceiverBase`
             or its subclass, responsible for updating the policy weights on the local inference worker.
-            If not provided, a :class:`~torchrl.collectors.VanillaLocalWeightUpdater` will be used by default,
+            If not provided, a :class:`~torchrl.collectors.VanillaWeightSender` will be used by default,
             which directly fetches and applies the weights from the server.
             Consider using a constructor if the updater needs to be serialized.
         weight_update_sender (WeightUpdateSenderBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdateSenderBase`
