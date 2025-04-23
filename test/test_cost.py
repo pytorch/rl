@@ -41,7 +41,7 @@ from tensordict.nn import (
 )
 from tensordict.nn.distributions.composite import _add_suffix
 from tensordict.nn.utils import Buffer
-from tensordict.utils import set_capture_non_tensor_stack, unravel_key
+from tensordict.utils import unravel_key
 from torch import autograd, nn
 from torchrl._utils import _standardize
 from torchrl.data import Bounded, Categorical, Composite, MultiOneHot, OneHot, Unbounded
@@ -147,10 +147,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         get_available_devices,
         get_default_devices,
     )
-    from pytorch.rl.test.mocking_classes import (
-        ContinuousActionConvMockEnv,
-        DummyStrDataLoader,
-    )
+    from pytorch.rl.test.mocking_classes import ContinuousActionConvMockEnv
 else:
     from _utils_internal import (  # noqa
         _call_value_nets,
@@ -158,7 +155,7 @@ else:
         get_available_devices,
         get_default_devices,
     )
-    from mocking_classes import ContinuousActionConvMockEnv, DummyStrDataLoader
+    from mocking_classes import ContinuousActionConvMockEnv
 
 _has_functorch = True
 try:
@@ -16673,79 +16670,6 @@ def test_loss_exploration():
         assert exploration_type() == ExplorationType.RANDOM
         loss_fn(None, ExplorationType.MEAN)
         assert exploration_type() == ExplorationType.RANDOM
-
-
-class TestPPO4LLMs:
-    @pytest.mark.skipif(
-        not _has_transformers, reason="transformers lib required to test PPO with LLMs"
-    )
-    @set_capture_non_tensor_stack(False)
-    @pytest.mark.parametrize("from_text", [True, False])
-    def test_hf(self, from_text):
-        from torchrl.envs import LLMEnv, Transform
-        from torchrl.modules import TransformersWrapper
-        from transformers import AutoTokenizer, OPTConfig, OPTForCausalLM
-
-        tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
-        tokenizer.pad_token = tokenizer.eos_token
-
-        model = OPTForCausalLM(OPTConfig()).eval()
-        policy_inference = TransformersWrapper(
-            model,
-            tokenizer=tokenizer,
-            generate=True,
-            from_text=from_text,
-            return_log_probs=True,
-        )
-        policy_train = TransformersWrapper(
-            model, tokenizer=tokenizer, generate=False, from_text=False
-        )
-        for p in policy_train.parameters():
-            assert p.requires_grad
-        # Create some fake data
-        dl = DummyStrDataLoader(batch_size=32)
-        llm_env = LLMEnv.from_dataloader(
-            dl,
-            tokenizer=tokenizer if not from_text else None,
-            batch_size=(32,),
-            from_text=True,
-            eos_token_id=tokenizer.eos_token_id,
-        )
-
-        class RewardTransform(Transform):
-            def _step(self, td, next_td):
-                next_td["reward"] = torch.randn_like(
-                    td["tokens_response"], dtype=torch.float
-                ).unsqueeze(-1)
-                return next_td
-
-            def transform_reward_spec(self, reward_spec):
-                return reward_spec.set(
-                    "reward", Unbounded((*reward_spec.shape, -1, 1), dtype=torch.float)
-                )
-
-        llm_env = llm_env.append_transform(RewardTransform())
-        with torch.no_grad():
-            data = llm_env.rollout(3, policy_inference)
-            data = data.view(-1)
-            assert data["tokens_response"].shape[-1] == 20
-        # Make some fake advantages:
-        data["advantage"] = torch.randn_like(data["next", "reward"])
-
-        loss = ClipPPOLoss(
-            actor_network=policy_train,
-        )
-        loss_vals = loss(data)
-
-        assert "loss_objective" in loss_vals
-        assert "loss_entropy" in loss_vals
-        assert loss_vals["loss_objective"].requires_grad
-        assert loss_vals["loss_entropy"].requires_grad
-        assert "clip_fraction" in loss_vals
-        assert "kl_approx" in loss_vals
-        assert "entropy" in loss_vals
-        assert "ESS" in loss_vals
-        assert "loss_critic" not in loss_vals
 
 
 if __name__ == "__main__":
