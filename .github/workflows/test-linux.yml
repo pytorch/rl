@@ -100,7 +100,7 @@ jobs:
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvidia/cudagl:11.4.0-base"
+      docker-image: "nvidia/cuda:11.6.2-devel-ubuntu20.04"
       timeout: 120
       script: |
         set -euo pipefail
