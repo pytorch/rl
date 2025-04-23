@@ -4,8 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 
 from .chess import ChessEnv
-from .llm import LLMEnv, LLMHashingEnv
+from .llm import LLMHashingEnv
 from .pendulum import PendulumEnv
 from .tictactoeenv import TicTacToeEnv
 
-__all__ = ["ChessEnv", "LLMHashingEnv", "PendulumEnv", "TicTacToeEnv", "LLMEnv"]
+__all__ = ["ChessEnv", "LLMHashingEnv", "PendulumEnv", "TicTacToeEnv"]
