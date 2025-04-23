@@ -70,11 +70,7 @@ printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
-if [ "${CU_VERSION:-}" == cpu ] ; then
-  export MUJOCO_GL=glfw
-else
-  export MUJOCO_GL=egl
-fi
+export MUJOCO_GL=egl
 
 export DISPLAY=:0
 export SDL_VIDEODRIVER=dummy
