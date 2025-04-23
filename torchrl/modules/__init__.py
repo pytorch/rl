@@ -93,7 +93,6 @@ from .tensordict_module import (
 )
 from .utils import get_primers_from_module
 from .planners import CEMPlanner, MPCPlannerBase, MPPIPlanner  # usort:skip
-from .llm import CategoricalSequential, TransformersWrapper, vLLMWrapper
 
 __all__ = [
     "Actor",
@@ -109,7 +108,6 @@ __all__ = [
     "Conv3dNet",
     "ConvNet",
     "DTActor",
-    "CategoricalSequential",
     "DdpgCnnActor",
     "DdpgCnnQNet",
     "DdpgMlpActor",
@@ -178,8 +176,6 @@ __all__ = [
     "VmapModule",
     "WorldModelWrapper",
     "distributions_maps",
-    "TransformersWrapper",
-    "vLLMWrapper",
     "get_primers_from_module",
     "recurrent_mode",
     "reset_noise",
