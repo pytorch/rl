@@ -2809,18 +2809,23 @@ class TestNestedSpecs:
         else:
             raise NotImplementedError
         reset = env.reset()
-        with pytest.warns(
-            DeprecationWarning, match="non-trivial"
-        ) if envclass == "NestedCountingEnv" else contextlib.nullcontext():
+        if envclass == "NestedCountingEnv":
+            assert isinstance(env.reward_spec, Composite)
+        else:
             assert not isinstance(env.reward_spec, Composite)
         for done_key in env.done_keys:
             assert (
                 env.full_done_spec[done_key]
                 == env.output_spec[("full_done_spec", *_unravel_key_to_tuple(done_key))]
             )
-        with pytest.warns(
-            DeprecationWarning, match="non-trivial"
-        ) if envclass == "NestedCountingEnv" else contextlib.nullcontext():
+        if envclass == "NestedCountingEnv":
+            assert (
+                env.full_reward_spec[env.reward_key]
+                == env.output_spec[
+                    ("full_reward_spec", *_unravel_key_to_tuple(env.reward_key))
+                ]
+            )
+        else:
             assert (
                 env.reward_spec
                 == env.output_spec[
