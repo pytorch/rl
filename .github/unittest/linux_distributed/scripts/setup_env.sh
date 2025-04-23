@@ -54,13 +54,7 @@ echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
 
-if [[ $OSTYPE == 'darwin'* ]]; then
-  PRIVATE_MUJOCO_GL=glfw
-elif [ "${CU_VERSION:-}" == cpu ]; then
-  PRIVATE_MUJOCO_GL=osmesa
-else
-  PRIVATE_MUJOCO_GL=egl
-fi
+PRIVATE_MUJOCO_GL=egl
 
 export MUJOCO_GL=$PRIVATE_MUJOCO_GL
 conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
