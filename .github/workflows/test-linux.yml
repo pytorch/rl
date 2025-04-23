@@ -100,12 +100,12 @@ jobs:
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvidia/cuda:11.6.2-devel-ubuntu20.04"
+      docker-image: "nvidia/cuda:11.8.0-cudnn8-devel-ubuntu20.04"
       timeout: 120
       script: |
         set -euo pipefail
         export PYTHON_VERSION="3.9"
-        export CU_VERSION="cu116"
+        export CU_VERSION="cu118"
         export TAR_OPTIONS="--no-same-owner"
         if [[ "${{ github.ref }}" =~ release/* ]]; then
           export RELEASE=1
