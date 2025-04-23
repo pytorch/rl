@@ -6323,7 +6323,7 @@ class TensorDictPrimer(Transform):
             elif self.expand_specs is None:
                 raise RuntimeError(
                     f"expand_specs wasn't specified in the {type(self).__name__} constructor, and the shape of the primers "
-                    f"and observation specs mismatch - indicating a batch-size incongruency. Make sure the expand_specs arg "
+                    f"and observation specs mismatch ({self.primers.shape=} and {observation_spec.shape=}) - indicating a batch-size incongruency. Make sure the expand_specs arg "
                     f"is properly set or that the primer shape matches the environment batch-size."
                 )
             else:
@@ -6545,8 +6545,8 @@ class gSDENoise(TensorDictPrimer):
             (1,) if state_dim is None or action_dim is None else (action_dim, state_dim)
         )
         random = state_dim is not None and action_dim is not None
-        shape = tuple(shape) + tail_dim
-        primers = {"_eps_gSDE": Unbounded(shape=shape)}
+        feat_shape = tuple(shape) + tail_dim
+        primers = Composite({"_eps_gSDE": Unbounded(shape=feat_shape)}, shape=shape)
         super().__init__(primers=primers, random=random, **kwargs)
 
 

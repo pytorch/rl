@@ -1045,6 +1045,7 @@ class ActionObsMergeLinear(nn.Module):
 class CountingEnvCountPolicy(TensorDictModuleBase):
     def __init__(self, action_spec: TensorSpec, action_key: NestedKey = "action"):
         super().__init__()
+        assert not isinstance(action_spec, Composite)
         self.action_spec = action_spec
         self.action_key = action_key
         self.in_keys = []
@@ -1411,11 +1412,13 @@ class NestedCountingEnv(CountingEnv):
                 },
                 shape=self.batch_size,
             )
-            self.action_spec = Composite(
+            action_spec = self.full_action_spec[self.action_key]
+            assert not isinstance(action_spec, Composite)
+            self.full_action_spec = Composite(
                 {
                     "data": Composite(
                         {
-                            "action": self.action_spec.unsqueeze(-1).expand(
+                            "action": action_spec.unsqueeze(-1).expand(
                                 *self.batch_size, self.nested_dim, 1
                             )
                         },
