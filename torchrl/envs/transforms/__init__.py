@@ -4,9 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from .gym_transforms import EndOfLifeTransform
-from .llm import (
-    KLRewardTransform,
-)
+from .llm import KLRewardTransform
 from .r3m import R3MTransform
 from .rb_transforms import MultiStepTransform
 from .transforms import (
