@@ -94,7 +94,7 @@ jobs:
   tests-olddeps:
     strategy:
       matrix:
-        python_version: ["3.8"]
+        python_version: ["3.9"]
         cuda_arch_version: ["11.6"]
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -104,7 +104,7 @@ jobs:
       timeout: 120
       script: |
         set -euo pipefail
-        export PYTHON_VERSION="3.8"
+        export PYTHON_VERSION="3.9"
         export CU_VERSION="cu116"
         export TAR_OPTIONS="--no-same-owner"
         if [[ "${{ github.ref }}" =~ release/* ]]; then
