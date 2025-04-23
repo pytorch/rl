@@ -43,18 +43,18 @@ else
 fi
 
 # Solving circular import: https://stackoverflow.com/questions/75501048/how-to-fix-attributeerror-partially-initialized-module-charset-normalizer-has
-pip install -U charset-normalizer
+#pip install -U charset-normalizer
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  pip3 install git+https://github.com/pytorch/tensordict.git
+  python3 -m pip install git+https://github.com/pytorch/tensordict.git
 else
-  pip3 install tensordict
+  python3 -m pip install tensordict
 fi
 
 # smoke test
-python -c "import tensordict"
+python3 -c "import tensordict"
 
 printf "* Installing torchrl\n"
-python setup.py develop
-python -c "import torchrl"
+python3 setup.py develop
+python3 -c "import torchrl"
