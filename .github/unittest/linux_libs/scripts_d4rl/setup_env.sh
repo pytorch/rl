@@ -110,6 +110,7 @@ export MUJOCO_GL=$PRIVATE_MUJOCO_GL
 conda env config vars set \
   MAX_IDLE_COUNT=1000 \
   MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco200_linux \
+  DISPLAY=unix:0.0 \
   MJLIB_PATH=$root_dir/.mujoco/mujoco200_linux/bin/libmujoco200.so \
   LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco200_linux/bin \
   MUJOCO_PY_MJKEY_PATH=$root_dir/.mujoco/mjkey.txt \
