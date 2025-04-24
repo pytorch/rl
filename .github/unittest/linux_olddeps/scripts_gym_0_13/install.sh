@@ -37,24 +37,25 @@ git submodule sync && git submodule update --init --recursive
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
-    conda install pytorch==2.0 torchvision==0.15 cpuonly -c pytorch -y
+    conda install pytorch==2.1 torchvision==0.16 cpuonly -c pytorch -y
 else
-    conda install pytorch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 pytorch-cuda=11.8 "numpy<2.0" -c pytorch -c nvidia -y
+    pip install torch==2.1.1 torchvision==0.16.1 torchaudio==2.1.1 --index-url https://download.pytorch.org/whl/cu118
+#    conda install pytorch==2.1 torchvision==0.16 pytorch-cuda=11.8 "numpy<2.0" -c pytorch -c nvidia -y
 fi
 
 # Solving circular import: https://stackoverflow.com/questions/75501048/how-to-fix-attributeerror-partially-initialized-module-charset-normalizer-has
-pip install -U charset-normalizer
+#pip install -U charset-normalizer
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  pip3 install git+https://github.com/pytorch/tensordict.git
+  python3 -m pip install git+https://github.com/pytorch/tensordict.git
 else
-  pip3 install tensordict
+  python3 -m pip install tensordict
 fi
 
 # smoke test
-python -c "import tensordict"
+python3 -c "import tensordict"
 
 printf "* Installing torchrl\n"
-python setup.py develop
-python -c "import torchrl"
+python3 setup.py develop
+python3 -c "import torchrl"

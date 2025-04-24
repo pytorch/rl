@@ -1119,6 +1119,9 @@ class TestStorages:
         assert (rb[:, 10:20] == 0).all()
         assert len(rb) == 100
 
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+    )
     @pytest.mark.parametrize("max_size", [1000, None])
     @pytest.mark.parametrize("stack_dim", [-1, 0])
     def test_lazy_stack_storage(self, max_size, stack_dim):

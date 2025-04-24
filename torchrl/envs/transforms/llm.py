@@ -117,9 +117,7 @@ class KLRewardTransform(Transform):
         self.in_keys = [unravel_key(in_key) for in_key in self.in_keys]
 
         if functional is None:
-            from torchrl.modules.llm import CategoricalSequential
-
-            functional = not isinstance(actor, CategoricalSequential)
+            functional = True
         self.functional = functional
         # check that the model has parameters
         if functional:
@@ -227,17 +225,13 @@ class KLRewardTransform(Transform):
                 td_device = tensordict.to(self.device)
             else:
                 td_device = tensordict
-            log_prob = self.functional_actor.log_prob(
-                td_device, as_nested_tensor=True, layout=torch.strided
-            )
+            log_prob = self.functional_actor.log_prob(td_device)
         else:
             log_prob = self.functional_actor(tensordict).get(self.sample_log_prob_key)
 
         reward_key = self.in_keys[0]
         reward = next_tensordict.get(reward_key)
-        curr_log_prob = tensordict.get(
-            self.sample_log_prob_key, as_nested_tensor=True, layout=torch.strided
-        )
+        curr_log_prob = tensordict.get(self.sample_log_prob_key)
         log_prob = log_prob.to(curr_log_prob.device)
         # We want the log-probs to have a similar dim to the reward
         curr_log_prob = curr_log_prob.unsqueeze(-1)

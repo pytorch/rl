@@ -30,7 +30,7 @@ jobs:
         echo '::group::Setup environment'
         CONDA_PATH=$(which conda)
         eval "$(${CONDA_PATH} shell.bash hook)"
-        conda create --name ci --quiet --yes python=3.8 pip
+        conda create --name ci --quiet --yes python=3.9 pip
         conda activate ci
         echo '::endgroup::'
         
@@ -58,7 +58,7 @@ jobs:
         echo '::group::Setup environment'
         CONDA_PATH=$(which conda)
         eval "$(${CONDA_PATH} shell.bash hook)"
-        conda create --name ci --quiet --yes -c conda-forge python=3.8 ncurses=5 libgcc
+        conda create --name ci --quiet --yes -c conda-forge python=3.9 ncurses=5 libgcc
         conda activate ci
         export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib:${LD_LIBRARY_PATH}"
         echo '::endgroup::'
