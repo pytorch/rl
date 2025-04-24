@@ -9,9 +9,11 @@ set -e
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
-apt-get update && apt-get install -y \
-  git wget gcc g++ vim mesa-utils libgl1-mesa-glx libsdl2-dev libsdl2-2.0-0 \
-  libglfw3 libosmesa6 libglew-dev libglvnd0 libgl1 libglx0 libegl1 libgles2 xvfb
+apt-get update
+apt-get install -y git wget gcc g++ vim
+apt-get install -y mesa-utils libgl1-mesa-glx libsdl2-dev libsdl2-2.0-0
+apt-get install -y libglfw3 libosmesa6 libglew-dev libglvnd0 libgl1 libglx0
+apt-get install -y libegl1 libgles2 xvfb
 
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
