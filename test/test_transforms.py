@@ -895,7 +895,7 @@ class TestCatFrames(TransformBase):
             max_steps=20, nested_dim=nested_dim, batch_size=batch_size
         )
         policy = CountingEnvCountPolicy(
-            action_spec=env.action_spec, action_key=env.action_key
+            action_spec=env.full_action_spec[env.action_key], action_key=env.action_key
         )
         td = env.rollout(rollout_length, policy=policy)
         assert td[("data", "states")].shape == (
@@ -1868,7 +1868,7 @@ class TestStepCounter(TransformBase):
             max_steps=20, nest_done=nested_done, batch_size=batch_size
         )
         policy = CountingEnvCountPolicy(
-            action_spec=env.action_spec, action_key=env.action_key
+            action_spec=env.full_action_spec[env.action_key], action_key=env.action_key
         )
         transformed_env = TransformedEnv(
             env,
@@ -5065,7 +5065,7 @@ class TestFrameSkipTransform(TransformBase):
     def test_nested(self, skip=4):
         env = NestedCountingEnv(max_steps=20)
         policy = CountingEnvCountPolicy(
-            action_spec=env.action_spec, action_key=env.action_key
+            action_spec=env.full_action_spec[env.action_key], action_key=env.action_key
         )
         trnasformed_env = TransformedEnv(env, FrameSkipTransform(frame_skip=skip))
         td = trnasformed_env.rollout(2, policy=policy)
@@ -8133,7 +8133,7 @@ class TestTensorDictPrimer(TransformBase):
     def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
         env = TransformedEnv(
             maybe_fork_ParallelEnv(2, ContinuousActionVecMockEnv),
-            TensorDictPrimer(mykey=Unbounded([4])),
+            TensorDictPrimer(mykey=Unbounded([4]), expand_specs=True),
         )
         try:
             check_env_specs(env)
@@ -8151,7 +8151,7 @@ class TestTensorDictPrimer(TransformBase):
     @pytest.mark.parametrize("expand_specs", [True, False, None])
     def test_trans_serial_env_check(self, spec_shape, expand_specs):
         if expand_specs is None:
-            with pytest.warns(FutureWarning, match=""):
+            with pytest.raises(RuntimeError):
                 env = TransformedEnv(
                     SerialEnv(2, ContinuousActionVecMockEnv),
                     TensorDictPrimer(
@@ -8159,6 +8159,7 @@ class TestTensorDictPrimer(TransformBase):
                     ),
                 )
                 env.observation_spec
+            return
         elif expand_specs is True:
             shape = spec_shape[:-1]
             env = TransformedEnv(
@@ -8665,7 +8666,12 @@ class TestgSDE(TransformBase):
         action_dim = 7
         env = TransformedEnv(
             SerialEnv(2, ContinuousActionVecMockEnv),
-            gSDENoise(state_dim=state_dim, action_dim=action_dim, shape=shape),
+            gSDENoise(
+                state_dim=state_dim,
+                action_dim=action_dim,
+                shape=shape,
+                expand_specs=True,
+            ),
         )
         try:
             check_env_specs(env)
@@ -8685,10 +8691,7 @@ class TestgSDE(TransformBase):
         try:
             check_env_specs(env)
         finally:
-            try:
-                env.close()
-            except RuntimeError:
-                pass
+            env.close(raise_if_closed=False)
 
     def test_transform_no_env(self):
         state_dim = 7
@@ -11532,7 +11535,7 @@ class TestInitTracker(TransformBase):
             max_steps=max_steps, nest_done=nested_done, batch_size=batch_size
         )
         policy = CountingEnvCountPolicy(
-            action_spec=env.action_spec, action_key=env.action_key
+            action_spec=env.full_action_spec[env.action_key], action_key=env.action_key
         )
         transformed_env = TransformedEnv(
             env,

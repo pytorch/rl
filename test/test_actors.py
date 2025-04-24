@@ -218,7 +218,10 @@ class TestQValue:
             nest_obs_action=nested_action, batch_size=batch_size, nested_dim=nested_dim
         )
         action_spec = env._input_spec["full_action_spec"]
-        leaf_action_spec = env.action_spec
+        if nested_action:
+            leaf_action_spec = env.full_action_spec[env.action_keys[0]]
+        else:
+            leaf_action_spec = env.action_spec
 
         space_str, spec = _process_action_space_spec(None, action_spec)
         assert spec == action_spec

@@ -391,7 +391,9 @@ class TestOrnsteinUhlenbeckProcess:
             exploratory_policy = TensorDictSequential(
                 policy,
                 OrnsteinUhlenbeckProcessModule(
-                    spec=action_spec, action_key=env.action_key, is_init_key=is_init_key
+                    spec=action_spec.clone(),
+                    action_key=env.action_key,
+                    is_init_key=is_init_key,
                 ).to(device),
             )
         else:
