@@ -16,6 +16,7 @@ dependencies:
     - pytest-rerunfailures
     - pytest-error-for-skips
     - expecttest
+    - pybind11[global]
     - pyyaml
     - scipy
     - hydra-core

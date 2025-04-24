@@ -97,7 +97,7 @@ jobs:
           export TZ=Europe/London
           export DEBIAN_FRONTEND=noninteractive  # tzdata bug
           apt-get update -y
-          apt-get install software-properties-common -y
+          apt-get install software-properties-common cmake -y
           add-apt-repository ppa:git-core/candidate -y
           apt-get update -y
           apt-get upgrade -y

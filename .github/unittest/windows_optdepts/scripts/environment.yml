@@ -13,6 +13,7 @@ dependencies:
     - pytest-instafail
     - pytest-rerunfailures
     - expecttest
+    - pybind11[global]
     - pyyaml
     - scipy
     - coverage

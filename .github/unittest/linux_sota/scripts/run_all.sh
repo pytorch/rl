@@ -8,7 +8,7 @@ set -v
 
 
 apt-get update && apt-get upgrade -y
-apt-get install -y vim git wget
+apt-get install -y vim git wget cmake
 
 apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev libosmesa6-dev
 apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2

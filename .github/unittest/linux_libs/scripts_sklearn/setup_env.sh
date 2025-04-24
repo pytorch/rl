@@ -7,7 +7,7 @@
 
 set -e
 
-apt-get update && apt-get upgrade -y && apt-get install -y git
+apt-get update && apt-get upgrade -y && apt-get install -y git cmake
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
 apt-get install -y wget \

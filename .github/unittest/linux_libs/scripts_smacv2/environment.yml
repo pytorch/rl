@@ -16,6 +16,7 @@ dependencies:
     - pytest-error-for-skips
     - pytest-asyncio
     - expecttest
+    - pybind11[global]
     - pyyaml
     - numpy==1.23.0
     - git+https://github.com/oxwhirl/smacv2.git

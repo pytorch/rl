@@ -37,7 +37,7 @@ jobs:
       script: |
         set -e
         set -v
-        # apt-get update && apt-get install -y -f git wget gcc g++ dialog apt-utils
+        # apt-get update && apt-get install -y -f git wget gcc g++ dialog apt-utils cmake
         yum makecache
         # Install Mesa and OpenGL Libraries:
         yum install -y glfw mesa-libGL mesa-libGL-devel egl-utils freeglut mesa-libGLU mesa-libEGL
