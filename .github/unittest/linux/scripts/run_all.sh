@@ -76,13 +76,12 @@ else
   export MUJOCO_GL=egl
 fi
 
-export DISPLAY=:0
 export SDL_VIDEODRIVER=dummy
 
 # legacy from bash scripts: remove?
 conda env config vars set \
   MAX_IDLE_COUNT=1000 \
-  MUJOCO_GL=$MUJOCO_GL PYOPENGL_PLATFORM=$MUJOCO_GL DISPLAY=:0 SDL_VIDEODRIVER=dummy LAZY_LEGACY_OP=False RL_LOGGING_LEVEL=DEBUG TOKENIZERS_PARALLELISM=true
+  MUJOCO_GL=$MUJOCO_GL PYOPENGL_PLATFORM=$MUJOCO_GL DISPLAY=unix:0.0 SDL_VIDEODRIVER=dummy LAZY_LEGACY_OP=False RL_LOGGING_LEVEL=DEBUG TOKENIZERS_PARALLELISM=true
 
 pip3 install pip --upgrade
 pip install virtualenv

@@ -5965,13 +5965,7 @@ class Composite(TensorSpec):
             # TODO: See what to do when compiling
             pass
         if recurse is None:
-            warnings.warn(
-                "You have not specified a value for recurse when calling CompositeSpec.lock_(). "
-                "The current default is False but it will be turned to True in v0.8. To adapt to these changes "
-                "and silence this warning, pass the value of recurse explicitly.",
-                category=DeprecationWarning,
-            )
-            recurse = False
+            recurse = True
         self._propagate_lock(recurse=recurse, is_compiling=is_comp)
         return self
 
@@ -6031,13 +6025,7 @@ class Composite(TensorSpec):
         """
         try:
             if recurse is None:
-                warnings.warn(
-                    "You have not specified a value for recurse when calling CompositeSpec.unlock_(). "
-                    "The current default is False but it will be turned to True in v0.8. To adapt to these changes "
-                    "and silence this warning, pass the value of recurse explicitly.",
-                    category=DeprecationWarning,
-                )
-                recurse = False
+                recurse = True
             sub_specs = self._propagate_unlock(recurse=recurse)
             if recurse:
                 for sub_spec in sub_specs:

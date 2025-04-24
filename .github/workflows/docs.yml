@@ -47,7 +47,6 @@ jobs:
         yum install -y xorg-x11-server-Xvfb
         # xhost +local:docker
         # Xvfb :1 -screen 0 1024x768x24 &
-        # export DISPLAY=:1
 
         root_dir="$(pwd)"
         conda_dir="${root_dir}/conda"

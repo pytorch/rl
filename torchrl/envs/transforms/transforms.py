@@ -6321,20 +6321,11 @@ class TensorDictPrimer(Transform):
             if self.expand_specs:
                 self.primers = self._expand_shape(self.primers)
             elif self.expand_specs is None:
-                warnings.warn(
-                    f"expand_specs wasn't specified in the {type(self).__name__} constructor. "
-                    f"The current behaviour is that the transform will attempt to set the shape of the composite "
-                    f"spec, and if this can't be done it will be expanded. "
-                    f"From v0.8, a mismatched shape between the spec of the transform and the env's batch_size "
-                    f"will raise an exception.",
-                    category=FutureWarning,
+                raise RuntimeError(
+                    f"expand_specs wasn't specified in the {type(self).__name__} constructor, and the shape of the primers "
+                    f"and observation specs mismatch ({self.primers.shape=} and {observation_spec.shape=}) - indicating a batch-size incongruency. Make sure the expand_specs arg "
+                    f"is properly set or that the primer shape matches the environment batch-size."
                 )
-                try:
-                    # We try to set the primer shape to the observation spec shape
-                    self.primers.shape = observation_spec.shape
-                except ValueError:
-                    # If we fail, we expand them to that shape
-                    self.primers = self._expand_shape(self.primers)
             else:
                 self.primers.shape = observation_spec.shape
 
@@ -6554,8 +6545,8 @@ class gSDENoise(TensorDictPrimer):
             (1,) if state_dim is None or action_dim is None else (action_dim, state_dim)
         )
         random = state_dim is not None and action_dim is not None
-        shape = tuple(shape) + tail_dim
-        primers = {"_eps_gSDE": Unbounded(shape=shape)}
+        feat_shape = tuple(shape) + tail_dim
+        primers = Composite({"_eps_gSDE": Unbounded(shape=feat_shape)}, shape=shape)
         super().__init__(primers=primers, random=random, **kwargs)
 
 
