@@ -74,7 +74,7 @@ conda env config vars set \
   MAX_IDLE_COUNT=1000 \
   MUJOCO_GL=egl \
   SDL_VIDEODRIVER=dummy \
-  DISPLAY=unix:0.0 \
+  DISPLAY=:99 \
   PYOPENGL_PLATFORM=egl \
   LD_PRELOAD=$glew_path \
   NVIDIA_PATH=/usr/src/nvidia-470.63.01 \
