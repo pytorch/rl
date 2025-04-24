@@ -2833,7 +2833,7 @@ class TestVmas:
 
         env = maybe_fork_ParallelEnv(n_workers, env_fun)
 
-        n_actions_per_agent = env.action_spec.shape[-1]
+        n_actions_per_agent = env.full_action_spec[env.action_key].shape[-1]
         n_observations_per_agent = env.observation_spec["agents", "observation"].shape[
             -1
         ]
@@ -2845,7 +2845,7 @@ class TestVmas:
             ),
             in_keys=[("agents", "observation")],
             out_keys=[env.action_key],
-            spec=env.action_spec,
+            spec=env.full_action_spec[env.action_key],
             safe=True,
         )
         ccollector = SyncDataCollector(
@@ -4207,7 +4207,7 @@ class TestSmacv2:
     def test_collector(self):
         env = SMACv2Env(map_name="MMM2", seed=0, categorical_actions=True)
         in_feats = env.observation_spec["agents", "observation"].shape[-1]
-        out_feats = env.action_spec.space.n
+        out_feats = env.full_action_spec[env.action_key].space.n
 
         module = TensorDictModule(
             nn.Linear(in_feats, out_feats),
