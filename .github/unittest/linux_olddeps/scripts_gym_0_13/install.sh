@@ -4,7 +4,7 @@ unset PYTORCH_VERSION
 # For unittest, nightly PyTorch is used as the following section,
 # so no need to set PYTORCH_VERSION.
 # In fact, keeping PYTORCH_VERSION forces us to hardcode PyTorch version in config.
-apt-get update && apt-get install -y git wget libglew-dev libx11-dev x11proto-dev g++ gcc
+apt-get update && apt-get install -y git wget libglew-dev libx11-dev x11proto-dev g++ gcc cmake
 
 set -e
 

@@ -15,6 +15,7 @@ dependencies:
     - pytest-rerunfailures
     - pytest-asyncio
     - expecttest
+    - pybind11[global]
     - pyyaml
     - scipy==1.9.1
     - hydra-core
