@@ -70,15 +70,18 @@ printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
-export MUJOCO_GL=egl
+if [ "${CU_VERSION:-}" == cpu ] ; then
+  export MUJOCO_GL=glfw
+else
+  export MUJOCO_GL=egl
+fi
 
-export DISPLAY=:0
 export SDL_VIDEODRIVER=dummy
 
 # legacy from bash scripts: remove?
 conda env config vars set \
   MAX_IDLE_COUNT=1000 \
-  MUJOCO_GL=$MUJOCO_GL PYOPENGL_PLATFORM=$MUJOCO_GL DISPLAY=:0 SDL_VIDEODRIVER=dummy LAZY_LEGACY_OP=False RL_LOGGING_LEVEL=DEBUG TOKENIZERS_PARALLELISM=true
+  MUJOCO_GL=$MUJOCO_GL PYOPENGL_PLATFORM=$MUJOCO_GL SDL_VIDEODRIVER=dummy LAZY_LEGACY_OP=False RL_LOGGING_LEVEL=DEBUG TOKENIZERS_PARALLELISM=true
 
 pip3 install pip --upgrade
 pip install virtualenv

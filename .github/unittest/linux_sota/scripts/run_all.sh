@@ -68,7 +68,6 @@ echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
 export MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210
-export DISPLAY=unix:0.0
 #export MJLIB_PATH=$root_dir/.mujoco/mujoco-2.1.1/lib/libmujoco.so.2.1.1
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin
 export SDL_VIDEODRIVER=dummy
@@ -80,7 +79,6 @@ export COMPOSITE_LP_AGGREGATE=0
 conda env config vars set \
   MAX_IDLE_COUNT=1000 \
   MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
-  DISPLAY=unix:0.0 \
   LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin \
   SDL_VIDEODRIVER=dummy \
   MUJOCO_GL=egl \

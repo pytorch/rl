@@ -21,7 +21,6 @@ export MKL_THREADING_LAYER=GNU
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test.py -v --durations 200
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test_deps.py -v --durations 200 -k 'test_gym'
 
-export DISPLAY=':99.0'
 Xvfb :99 -screen 0 1400x900x24 > /dev/null 2>&1 &
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 -k "gym and not isaac" --error-for-skips --mp_fork
 coverage combine
