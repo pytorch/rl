@@ -111,7 +111,7 @@ python -c """import gym;import d4rl"""
 
 # install ale-py: manylinux names are broken for CentOS so we need to manually download and
 # rename them
-pip install "gymnasium[atari]>=1.1.0"
+pip install "gymnasium[atari,ale-py]>=1.1.0"
 
 # ============================================================================================ #
 # ================================ PyTorch & TorchRL ========================================= #
