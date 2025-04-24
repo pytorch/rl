@@ -31,7 +31,7 @@ if _has_tv:
         version.parse(torchvision.__version__).base_version
     )
 else:
-    TORCHVISION_VERSION = version.parse("0.0.1").base_version
+    TORCHVISION_VERSION = version.parse("0.0.1")
 
 if _has_tb:
     from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
