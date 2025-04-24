@@ -87,6 +87,7 @@ pytestmark = [
     pytest.mark.filterwarnings(
         "ignore:Got multiple backends for torchrl.data.replay_buffers.storages"
     ),
+    pytest.mark.filterwarnings("ignore:unclosed file"),
 ]
 
 gym_version = None
@@ -1241,6 +1242,7 @@ class TestParallel:
             td_serial = env_serial.rollout(max_steps=50)
         finally:
             env_serial.close(raise_if_closed=False)
+            gc.collect()
 
         try:
             env_parallel = maybe_fork_ParallelEnv(
@@ -1256,6 +1258,7 @@ class TestParallel:
             assert_allclose_td(td_serial, td_parallel)
         finally:
             env_parallel.close(raise_if_closed=False)
+            gc.collect()
 
     @pytest.mark.skipif(not _has_dmc, reason="no dm_control")
     def test_multitask(self, maybe_fork_ParallelEnv):
