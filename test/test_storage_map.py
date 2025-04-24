@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import functools
 import importlib.util
+import os
 
 import pytest
 
@@ -22,6 +23,11 @@ from torchrl.data.map import (
     TensorDictMap,
 )
 from torchrl.envs import GymEnv
+
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import PENDULUM_VERSIONED
+else:
+    from _utils_internal import PENDULUM_VERSIONED
 
 _has_gym = importlib.util.find_spec("gymnasium", None) or importlib.util.find_spec(
     "gym", None
@@ -603,7 +609,7 @@ class TestMCTSForest:
     def test_simple_tree(self):
         from torchrl.envs import GymEnv
 
-        env = GymEnv("Pendulum-v1")
+        env = GymEnv(PENDULUM_VERSIONED())
         r = env.rollout(10)
         state0 = r[0]
         forest = MCTSForest()
@@ -630,7 +636,7 @@ class TestMCTSForest:
                 pytest.skip("requires gym")
             from torchrl.envs import GymEnv
 
-            env = GymEnv("Pendulum-v1")
+            env = GymEnv(PENDULUM_VERSIONED())
             r = env.rollout(10)
             state0 = r[0]
             forest = MCTSForest()
