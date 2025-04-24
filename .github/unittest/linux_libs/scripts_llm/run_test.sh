@@ -27,7 +27,7 @@ python -c "import transformers, datasets"
 
 pytest test/test_rlhf.py --instafail -v --durations 200 --capture no --error-for-skips
 
-pytest examples/rlhf/train_rlhf.py \
+python examples/rlhf/train_rlhf.py \
   sys.device=cuda:0 sys.ref_device=cuda:0 \
   model.name_or_path=gpt2 train.max_epochs=2 \
   data.batch_size=2 train.ppo.ppo_batch_size=2 \
