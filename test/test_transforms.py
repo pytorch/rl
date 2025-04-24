@@ -766,7 +766,7 @@ class TestCatFrames(TransformBase):
     @pytest.mark.parametrize("cat_dim", [-1, -2])
     def test_with_permute_env(self, cat_dim):
         env0 = TransformedEnv(
-            GymEnv("Pendulum-v1"),
+            GymEnv(PENDULUM_VERSIONED()),
             Compose(
                 UnsqueezeTransform(-1, in_keys=["observation"]),
                 CatFrames(N=4, dim=cat_dim, in_keys=["observation"]),
@@ -774,7 +774,7 @@ class TestCatFrames(TransformBase):
         )
 
         env1 = TransformedEnv(
-            GymEnv("Pendulum-v1"),
+            GymEnv(PENDULUM_VERSIONED()),
             Compose(
                 UnsqueezeTransform(-1, in_keys=["observation"]),
                 PermuteTransform((-1, -2), in_keys=["observation"]),
@@ -9566,7 +9566,7 @@ class TestVecNormV2:
     @pytest.mark.parametrize("stateful", [True, False])
     def test_stateful_and_stateless_specs(self, stateful):
         torch.manual_seed(0)
-        env = GymEnv("Pendulum-v1")
+        env = GymEnv(PENDULUM_VERSIONED())
         env.set_seed(0)
         env = env.append_transform(
             VecNorm(
@@ -9588,7 +9588,7 @@ class TestVecNormV2:
         counts = []
         for stateful in [True, False]:
             torch.manual_seed(0)
-            env = GymEnv("Pendulum-v1")
+            env = GymEnv(PENDULUM_VERSIONED())
             env.set_seed(0)
             env = env.append_transform(
                 VecNorm(
