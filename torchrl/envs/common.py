@@ -1119,18 +1119,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             raise KeyError("Failed to find the action_spec.")
 
         if len(self.action_keys) > 1:
-            out = action_spec
+            return action_spec
         else:
             if len(self.action_keys) == 1 and self.action_keys[0] != "action":
-                warnings.warn(
-                    "You are querying a non-trivial, single action_spec, i.e., there is only "
-                    "one action known by the environment but it is not named `'action'`. "
-                    "Currently, env.action_spec returns the leaf but for consistency with the "
-                    "setter, this will return the full spec instead (from v0.8 and on).",
-                    category=DeprecationWarning,
-                )
+                return action_spec
             try:
-                out = action_spec[self.action_key]
+                return action_spec[self.action_key]
             except KeyError:
                 # the key may have changed
                 raise KeyError(
@@ -1140,8 +1134,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     "Make sure you rely on this  type of command "
                     "to set the action and other specs."
                 )
-
-        return out
 
     @action_spec.setter
     @_maybe_unlock
@@ -1335,13 +1327,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             return reward_spec
         else:
             if len(self.reward_keys) == 1 and self.reward_keys[0] != "reward":
-                warnings.warn(
-                    "You are querying a non-trivial, single reward_spec, i.e., there is only "
-                    "one reward known by the environment but it is not named `'reward'`. "
-                    "Currently, env.reward_spec returns the leaf but for consistency with the "
-                    "setter, this will return the full spec instead (from v0.8 and on).",
-                    category=DeprecationWarning,
-                )
+                return reward_spec
             return reward_spec[self.reward_keys[0]]
 
     @reward_spec.setter
