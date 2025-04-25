@@ -4,7 +4,7 @@ set -e
 
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
-apt-get update && apt-get install -y git wget
+apt-get update && apt-get install -y git wget cmake
 
 
 export PYTORCH_TEST_WITH_SLOW='1'

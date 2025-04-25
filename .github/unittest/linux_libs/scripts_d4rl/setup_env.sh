@@ -9,7 +9,7 @@ set -e
 set -v
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-apt-get update && apt-get upgrade -y && apt-get install -y git
+apt-get update && apt-get upgrade -y && apt-get install -y git cmake
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
 apt-get install -y wget \

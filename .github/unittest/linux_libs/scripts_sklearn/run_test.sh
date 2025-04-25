@@ -5,7 +5,7 @@ set -e
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
-apt-get update && apt-get install -y git gcc
+apt-get update && apt-get install -y git gcc cmake
 ln -s /usr/bin/swig3.0 /usr/bin/swig
 
 export PYTORCH_TEST_WITH_SLOW='1'

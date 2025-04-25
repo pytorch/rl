@@ -15,7 +15,7 @@ conda activate ./env
 $DIR/install.sh
 
 # Extracted from run_test.sh to run once.
-apt-get update && apt-get install -y git wget libglew-dev libx11-dev x11proto-dev g++
+apt-get update && apt-get install -y git wget libglew-dev libx11-dev x11proto-dev g++ cmake
 
 # solves "'extras_require' must be a dictionary"
 pip install setuptools==65.3.0
