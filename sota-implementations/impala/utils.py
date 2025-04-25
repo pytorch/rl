@@ -143,9 +143,7 @@ def make_ppo_modules_pixels(proof_environment):
 
 def make_ppo_models(env_name, gym_backend):
 
-    proof_environment = make_env(
-        env_name, device="cpu", gym_backend=gym_backend
-    )
+    proof_environment = make_env(env_name, device="cpu", gym_backend=gym_backend)
     common_module, policy_module, value_module = make_ppo_modules_pixels(
         proof_environment
     )
