@@ -8798,24 +8798,8 @@ class ActionMask(Transform):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         raise RuntimeError(FORWARD_NOT_IMPLEMENTED.format(type(self)))
 
-    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
-        parent = self.parent
-        if parent is None:
-            raise RuntimeError(
-                f"{type(self)}.parent cannot be None: make sure this transform is executed within an environment."
-            )
-        mask = next_tensordict.get(self.in_keys[1])
-        action_spec = self.container.action_spec
-        if not isinstance(action_spec, self.ACCEPTED_SPECS):
-            raise ValueError(
-                self.SPEC_TYPE_ERROR.format(self.ACCEPTED_SPECS, type(action_spec))
-            )
-        action_spec.update_mask(mask.to(action_spec.device))
-        return next_tensordict
-
-    def _reset(
-        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
-    ) -> TensorDictBase:
+    @property
+    def action_spec(self):
         action_spec = self.container.full_action_spec
         keys = self.container.action_keys
         if len(keys) == 1:
@@ -8828,6 +8812,23 @@ class ActionMask(Transform):
             raise ValueError(
                 self.SPEC_TYPE_ERROR.format(self.ACCEPTED_SPECS, type(action_spec))
             )
+        return action_spec
+
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+        parent = self.parent
+        if parent is None:
+            raise RuntimeError(
+                f"{type(self)}.parent cannot be None: make sure this transform is executed within an environment."
+            )
+        mask = next_tensordict.get(self.in_keys[1])
+        action_spec = self.action_spec
+        action_spec.update_mask(mask.to(action_spec.device))
+        return next_tensordict
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        action_spec = self.action_spec
         mask = tensordict.get(self.in_keys[1], None)
         if mask is not None:
             mask = mask.to(action_spec.device)
