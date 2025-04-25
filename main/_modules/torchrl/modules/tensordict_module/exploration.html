@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+fd10fe2) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.8.0+e4733b8) &#x25BC</span></a>
     </div>
     
 
@@ -580,23 +580,29 @@
                 <span class="n">action_tensordict</span> <span class="o">=</span> <span class="n">tensordict</span>
                 <span class="n">action_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">action_key</span>
 
-            <span class="n">out</span> <span class="o">=</span> <span class="n">action_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">action_key</span><span class="p">)</span>
+            <span class="n">action</span> <span class="o">=</span> <span class="n">action_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">action_key</span><span class="p">)</span>
             <span class="n">eps</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eps</span>
-            <span class="n">cond</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="n">action_tensordict</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">out</span><span class="o">.</span><span class="n">device</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">eps</span>
+            <span class="n">device</span> <span class="o">=</span> <span class="n">eps</span><span class="o">.</span><span class="n">device</span>
+            <span class="n">action_device</span> <span class="o">=</span> <span class="n">action</span><span class="o">.</span><span class="n">device</span>
+            <span class="k">if</span> <span class="n">action_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">action_device</span> <span class="o">!=</span> <span class="n">device</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Expected action and e-greedy module to be on the same device, but got </span><span class="si">{</span><span class="n">action</span><span class="o">.</span><span class="n">device</span><span class="si">=}</span><span class="s2"> and e-greedy device=</span><span class="si">{</span><span class="n">device</span><span class="si">}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">cond</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="n">action_tensordict</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">eps</span>
             <span class="c1"># cond = torch.zeros(action_tensordict.shape, device=out.device, dtype=torch.bool).bernoulli_(eps)</span>
-            <span class="n">cond</span> <span class="o">=</span> <span class="n">expand_as_right</span><span class="p">(</span><span class="n">cond</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span>
+            <span class="n">cond</span> <span class="o">=</span> <span class="n">expand_as_right</span><span class="p">(</span><span class="n">cond</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
             <span class="n">spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">spec</span>
             <span class="k">if</span> <span class="n">spec</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">Composite</span><span class="p">):</span>
                     <span class="n">spec</span> <span class="o">=</span> <span class="n">spec</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">action_key</span><span class="p">]</span>
-                <span class="k">if</span> <span class="n">spec</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">out</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">spec</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">action</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
                     <span class="c1"># In batched envs if the spec is passed unbatched, the rand() will not</span>
                     <span class="c1"># cover all batched dims</span>
                     <span class="k">if</span> <span class="p">(</span>
                         <span class="ow">not</span> <span class="nb">len</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
-                        <span class="ow">or</span> <span class="n">out</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="nb">len</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="p">:]</span> <span class="o">==</span> <span class="n">spec</span><span class="o">.</span><span class="n">shape</span>
+                        <span class="ow">or</span> <span class="n">action</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="nb">len</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="p">:]</span> <span class="o">==</span> <span class="n">spec</span><span class="o">.</span><span class="n">shape</span>
                     <span class="p">):</span>
-                        <span class="n">spec</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+                        <span class="n">spec</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">action</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
                     <span class="k">else</span><span class="p">:</span>
                         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                             <span class="s2">&quot;Action spec shape does not match the action shape&quot;</span>
@@ -609,12 +615,12 @@
                         <span class="p">)</span>
                     <span class="n">spec</span><span class="o">.</span><span class="n">update_mask</span><span class="p">(</span><span class="n">action_mask</span><span class="p">)</span>
                 <span class="n">r</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">rand</span><span class="p">()</span>
-                <span class="k">if</span> <span class="n">r</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">out</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
-                    <span class="n">r</span> <span class="o">=</span> <span class="n">r</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
-                <span class="n">out</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">cond</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">r</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">device</span><span class="p">:</span>
+                    <span class="n">r</span> <span class="o">=</span> <span class="n">r</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+                <span class="n">action</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">cond</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;spec must be provided to the exploration wrapper.&quot;</span><span class="p">)</span>
-            <span class="n">action_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">action_key</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span>
+            <span class="n">action_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">action_key</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">tensordict</span></div></div>
 
 

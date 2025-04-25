@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+fd10fe2) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.8.0+e4733b8) &#x25BC</span></a>
     </div>
     
 
@@ -1588,7 +1588,7 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Set the seeds of the environment.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_env</span><span class="o">.</span><span class="n">set_seed</span><span class="p">(</span><span class="n">seed</span><span class="p">,</span> <span class="n">static_seed</span><span class="o">=</span><span class="n">static_seed</span><span class="p">)</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;This method is not used in transformed envs.&quot;&quot;&quot;</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
@@ -4412,7 +4412,7 @@
 <span class="sd">        ...         assert reward.dtype == torch.float64</span>
 <span class="sd">        ...         assert obs[&quot;obs&quot;].dtype == torch.float64</span>
 <span class="sd">        ...         return obs.empty().set(&quot;next&quot;, obs.update({&quot;reward&quot;: reward, &quot;done&quot;: done}))</span>
-<span class="sd">        ...     def _set_seed(self, seed):</span>
+<span class="sd">        ...     def _set_seed(self, seed) -&gt; None:</span>
 <span class="sd">        ...         pass</span>
 <span class="sd">        &gt;&gt;&gt; env = TransformedEnv(MyEnv(), DTypeCastTransform(torch.double, torch.float))</span>
 <span class="sd">        &gt;&gt;&gt; assert env.action_spec.dtype == torch.float32</span>
@@ -4782,7 +4782,7 @@
 <span class="sd">        ...         assert reward.dtype == torch.float64</span>
 <span class="sd">        ...         assert obs[&quot;obs&quot;].dtype == torch.float64</span>
 <span class="sd">        ...         return obs.empty().set(&quot;next&quot;, obs.update({&quot;reward&quot;: reward, &quot;done&quot;: done}))</span>
-<span class="sd">        ...     def _set_seed(self, seed):</span>
+<span class="sd">        ...     def _set_seed(self, seed) -&gt; None:</span>
 <span class="sd">        ...         pass</span>
 <span class="sd">        &gt;&gt;&gt; env = TransformedEnv(MyEnv(), DoubleToFloat())</span>
 <span class="sd">        &gt;&gt;&gt; assert env.action_spec.dtype == torch.float32</span>
@@ -5892,14 +5892,27 @@
             <span class="k">return</span> <span class="n">out</span><span class="p">,</span> <span class="n">attention_mask</span>
         <span class="k">return</span> <span class="n">out</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">_inv_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="c1"># Override _inv_call to account for ragged dims</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys_inv</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">tensordict</span>
+        <span class="k">for</span> <span class="n">in_key</span><span class="p">,</span> <span class="n">out_key</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys_inv</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys_inv</span><span class="p">):</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">out_key</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">item</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_inv_apply_transform</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+                <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">in_key</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">missing_tolerance</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="n">out_key</span><span class="si">}</span><span class="s2">&#39; not found in tensordict </span><span class="si">{</span><span class="n">tensordict</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tensordict</span>
+
     <span class="k">def</span><span class="w"> </span><span class="nf">call_tokenizer_inv_fn</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">value</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
             <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span>
-                <span class="n">value</span><span class="p">,</span> <span class="n">skip_special_tokens</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">skip_special_tokens</span>
+                <span class="n">value</span><span class="o">.</span><span class="n">int</span><span class="p">(),</span> <span class="n">skip_special_tokens</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">skip_special_tokens</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">batch_decode</span><span class="p">(</span>
-                <span class="n">value</span><span class="p">,</span> <span class="n">skip_special_tokens</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">skip_special_tokens</span>
+                <span class="n">value</span><span class="o">.</span><span class="n">int</span><span class="p">(),</span> <span class="n">skip_special_tokens</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">skip_special_tokens</span>
             <span class="p">)</span>
         <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_str_device</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
@@ -6729,20 +6742,11 @@
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">expand_specs</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">primers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_expand_shape</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">primers</span><span class="p">)</span>
             <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">expand_specs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;expand_specs wasn&#39;t specified in the </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> constructor. &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;The current behaviour is that the transform will attempt to set the shape of the composite &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;spec, and if this can&#39;t be done it will be expanded. &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;From v0.8, a mismatched shape between the spec of the transform and the env&#39;s batch_size &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;will raise an exception.&quot;</span><span class="p">,</span>
-                    <span class="n">category</span><span class="o">=</span><span class="ne">FutureWarning</span><span class="p">,</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;expand_specs wasn&#39;t specified in the </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> constructor, and the shape of the primers &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;and observation specs mismatch (</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">primers</span><span class="o">.</span><span class="n">shape</span><span class="si">=}</span><span class="s2"> and </span><span class="si">{</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">shape</span><span class="si">=}</span><span class="s2">) - indicating a batch-size incongruency. Make sure the expand_specs arg &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;is properly set or that the primer shape matches the environment batch-size.&quot;</span>
                 <span class="p">)</span>
-                <span class="k">try</span><span class="p">:</span>
-                    <span class="c1"># We try to set the primer shape to the observation spec shape</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">primers</span><span class="o">.</span><span class="n">shape</span> <span class="o">=</span> <span class="n">observation_spec</span><span class="o">.</span><span class="n">shape</span>
-                <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
-                    <span class="c1"># If we fail, we expand them to that shape</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">primers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_expand_shape</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">primers</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">primers</span><span class="o">.</span><span class="n">shape</span> <span class="o">=</span> <span class="n">observation_spec</span><span class="o">.</span><span class="n">shape</span>
 
@@ -6809,7 +6813,9 @@
         <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">primers</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
-            <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+            <span class="c1"># We relax a bit the condition here, allowing nested but not leaf values to</span>
+            <span class="c1">#  be checked against</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">is_leaf</span><span class="o">=</span><span class="n">_is_leaf_nontensor</span><span class="p">):</span>
                 <span class="n">prev_val</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
                 <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">prev_val</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">next_tensordict</span>
@@ -6854,11 +6860,16 @@
         <span class="k">if</span> <span class="n">_reset</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">single_default_value</span> <span class="ow">and</span> <span class="nb">callable</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">default_value</span><span class="p">):</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="n">_reset</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
-                    <span class="n">tensordict_reset</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
-                        <span class="n">_reset</span><span class="p">,</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">default_value</span><span class="p">(</span><span class="n">reset</span><span class="o">=</span><span class="n">_reset</span><span class="p">),</span>
-                        <span class="n">tensordict_reset</span><span class="p">[</span><span class="n">_reset</span><span class="p">],</span>
+                    <span class="c1"># FIXME: use masked op</span>
+                    <span class="n">tensordict_reset</span> <span class="o">=</span> <span class="n">tensordict_reset</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+                    <span class="n">reset_val</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">default_value</span><span class="p">(</span><span class="n">reset</span><span class="o">=</span><span class="n">_reset</span><span class="p">)</span>
+                    <span class="c1"># This is safe because env.reset calls _update_during_reset which will discard the new data</span>
+                    <span class="n">tensordict_reset</span> <span class="o">=</span> <span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">container</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="o">.</span><span class="n">zero</span><span class="p">()</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
+                            <span class="o">*</span><span class="n">reset_val</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+                        <span class="p">)</span>
                     <span class="p">)</span>
+                    <span class="n">tensordict_reset</span><span class="p">[</span><span class="n">_reset</span><span class="p">]</span> <span class="o">=</span> <span class="n">reset_val</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">resets</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">default_value</span><span class="p">(</span><span class="n">reset</span><span class="o">=</span><span class="n">_reset</span><span class="p">)</span>
                     <span class="n">tensordict_reset</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">resets</span><span class="p">)</span>
@@ -6955,8 +6966,8 @@
             <span class="p">(</span><span class="mi">1</span><span class="p">,)</span> <span class="k">if</span> <span class="n">state_dim</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">action_dim</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">(</span><span class="n">action_dim</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">)</span>
         <span class="p">)</span>
         <span class="n">random</span> <span class="o">=</span> <span class="n">state_dim</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">action_dim</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-        <span class="n">shape</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span> <span class="o">+</span> <span class="n">tail_dim</span>
-        <span class="n">primers</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;_eps_gSDE&quot;</span><span class="p">:</span> <span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">)}</span>
+        <span class="n">feat_shape</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span> <span class="o">+</span> <span class="n">tail_dim</span>
+        <span class="n">primers</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">({</span><span class="s2">&quot;_eps_gSDE&quot;</span><span class="p">:</span> <span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="n">feat_shape</span><span class="p">)},</span> <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">)</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">primers</span><span class="o">=</span><span class="n">primers</span><span class="p">,</span> <span class="n">random</span><span class="o">=</span><span class="n">random</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
 
 
@@ -9165,8 +9176,8 @@
 <span class="sd">        ...         td.set(&quot;done&quot;, ~mask.any().view(1))</span>
 <span class="sd">        ...         return td</span>
 <span class="sd">        ...</span>
-<span class="sd">        ...     def _set_seed(self, seed):</span>
-<span class="sd">        ...         return seed</span>
+<span class="sd">        ...     def _set_seed(self, seed) -&gt; None:</span>
+<span class="sd">        ...         pass</span>
 <span class="sd">        ...</span>
 <span class="sd">        &gt;&gt;&gt; torch.manual_seed(0)</span>
 <span class="sd">        &gt;&gt;&gt; base_env = MaskedEnv()</span>
@@ -9687,8 +9698,8 @@
 <span class="sd">        ...             self.full_done_spec.zero()</span>
 <span class="sd">        ...             ).update(self.full_reward_spec.rand())</span>
 <span class="sd">        ...</span>
-<span class="sd">        ...     def _set_seed(self, seed):</span>
-<span class="sd">        ...         return seed + 1</span>
+<span class="sd">        ...     def _set_seed(self, seed) -&gt; None:</span>
+<span class="sd">        ...         pass</span>
 <span class="sd">        &gt;&gt;&gt;</span>
 <span class="sd">        &gt;&gt;&gt;</span>
 <span class="sd">        &gt;&gt;&gt; base_env = DummyEnv()</span>
@@ -10021,7 +10032,7 @@
 <span class="sd">        ...         result.update(self.full_reward_spec.zero(tensordict.batch_size))</span>
 <span class="sd">        ...         return result</span>
 <span class="sd">        ...</span>
-<span class="sd">        ...     def _set_seed(self, seed: Optional[int]):</span>
+<span class="sd">        ...     def _set_seed(self, seed: Optional[int]) -&gt; None:</span>
 <span class="sd">        ...         pass</span>
 <span class="sd">        ...</span>
 <span class="sd">        &gt;&gt;&gt; env = TransformedEnv(MyEnv(), BatchSizeTransform([5]))</span>

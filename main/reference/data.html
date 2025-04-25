@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.7.0+fd10fe2) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.8.0+e4733b8) &#x25BC</span></a>
     </div>
     
 
@@ -904,7 +904,7 @@ within a storage of shape <code class="docutils literal notranslate"><span class
 </div>
 <p>Whenever saving data using <a class="reference internal" href="generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.dumps" title="torchrl.data.ReplayBuffer.dumps"><code class="xref py py-meth docutils literal notranslate"><span class="pre">dumps()</span></code></a> is not possible, an
 alternative way is to use <code class="xref py py-meth docutils literal notranslate"><span class="pre">state_dict()</span></code>, which returns a data
-structure that can be saved using <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.6)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.save()</span></code></a> and loaded using <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.load.html#torch.load" title="(in PyTorch v2.6)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.load()</span></code></a>
+structure that can be saved using <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.7)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.save()</span></code></a> and loaded using <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.load.html#torch.load" title="(in PyTorch v2.7)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.load()</span></code></a>
 before calling <code class="xref py py-meth docutils literal notranslate"><span class="pre">load_state_dict()</span></code>. The drawback
 of this method is that it will struggle to save big data structures, which is a
 common setting when using replay buffers.</p>
@@ -1306,19 +1306,19 @@ See these classes for further information.</p>
 combined together, TorchRL assumes that the data will be presented as dictionaries (more specifically, as
 <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code> or related formats). The corresponding <a class="reference internal" href="generated/torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorSpec</span></code></a> class in these
 cases is the <a class="reference internal" href="generated/torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.Composite"><code class="xref py py-class docutils literal notranslate"><span class="pre">Composite</span></code></a> spec.</p>
-<p>Nevertheless, specs can be stacked together using <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.6)"><code class="xref py py-func docutils literal notranslate"><span class="pre">stack()</span></code></a>: if they are identical, their shape will be
+<p>Nevertheless, specs can be stacked together using <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.7)"><code class="xref py py-func docutils literal notranslate"><span class="pre">stack()</span></code></a>: if they are identical, their shape will be
 expanded accordingly.
 Otherwise, a lazy stack will be created through the <a class="reference internal" href="generated/torchrl.data.Stacked.html#torchrl.data.Stacked" title="torchrl.data.Stacked"><code class="xref py py-class docutils literal notranslate"><span class="pre">Stacked</span></code></a> class.</p>
-<p>Similarly, <code class="docutils literal notranslate"><span class="pre">TensorSpecs</span></code> possess some common behavior with <a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.6)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a> and
+<p>Similarly, <code class="docutils literal notranslate"><span class="pre">TensorSpecs</span></code> possess some common behavior with <a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a> and
 <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code>: they can be reshaped, indexed, squeezed, unsqueezed, moved to another device (<code class="docutils literal notranslate"><span class="pre">to</span></code>)
-or unbound (<code class="docutils literal notranslate"><span class="pre">unbind</span></code>) as regular <a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.6)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a> instances would be.</p>
+or unbound (<code class="docutils literal notranslate"><span class="pre">unbind</span></code>) as regular <a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a> instances would be.</p>
 <p>Specs where some dimensions are <code class="docutils literal notranslate"><span class="pre">-1</span></code> are said to be “dynamic” and the negative dimensions indicate that the corresponding
 data has an inconsistent shape. When seen by an optimizer or an environment (e.g., batched environment such as
 <a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a>), these negative shapes tell TorchRL to avoid using buffers as the tensor shapes are
 not predictable.</p>
 <table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorSpec</span></code></a>(shape, space, device, dtype, domain)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorSpec</span></code></a>(shape, space, device, dtype, ...)</p></td>
 <td><p>Parent class of the tensor meta-data containers.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.Binary.html#torchrl.data.Binary" title="torchrl.data.Binary"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Binary</span></code></a>([n, shape, device, dtype])</p></td>
@@ -1515,50 +1515,38 @@ it in a manner suitable for TorchRL modules, and optimizing storage for
 efficient sampling.</p>
 <table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.History.html#torchrl.data.History" title="torchrl.data.History"><code class="xref py py-obj docutils literal notranslate"><span class="pre">History</span></code></a>(role, content, *, batch_size[, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset" title="torchrl.data.PairwiseDataset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PairwiseDataset</span></code></a>(chosen_data, rejected_data, ...)</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset" title="torchrl.data.PairwiseDataset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PairwiseDataset</span></code></a>(chosen_data, rejected_data, ...)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.PromptData.html#torchrl.data.PromptData" title="torchrl.data.PromptData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PromptData</span></code></a>(input_ids, attention_mask, ...[, ...])</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.PromptData.html#torchrl.data.PromptData" title="torchrl.data.PromptData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PromptData</span></code></a>(input_ids, attention_mask, ...[, ...])</p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.PromptTensorDictTokenizer.html#torchrl.data.PromptTensorDictTokenizer" title="torchrl.data.PromptTensorDictTokenizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PromptTensorDictTokenizer</span></code></a>(tokenizer, max_length)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.PromptTensorDictTokenizer.html#torchrl.data.PromptTensorDictTokenizer" title="torchrl.data.PromptTensorDictTokenizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PromptTensorDictTokenizer</span></code></a>(tokenizer, max_length)</p></td>
 <td><p>Tokenization recipe for prompt datasets.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.RewardData.html#torchrl.data.RewardData" title="torchrl.data.RewardData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RewardData</span></code></a>(input_ids, attention_mask[, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.RewardData.html#torchrl.data.RewardData" title="torchrl.data.RewardData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RewardData</span></code></a>(input_ids, attention_mask[, ...])</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.RolloutFromModel.html#torchrl.data.RolloutFromModel" title="torchrl.data.RolloutFromModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RolloutFromModel</span></code></a>(model, ref_model, reward_model)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.RolloutFromModel.html#torchrl.data.RolloutFromModel" title="torchrl.data.RolloutFromModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RolloutFromModel</span></code></a>(model, ref_model, reward_model)</p></td>
 <td><p>A class for performing rollouts with causal language models.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.TensorDictTokenizer.html#torchrl.data.TensorDictTokenizer" title="torchrl.data.TensorDictTokenizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictTokenizer</span></code></a>(tokenizer, max_length[, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.TensorDictTokenizer.html#torchrl.data.TensorDictTokenizer" title="torchrl.data.TensorDictTokenizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictTokenizer</span></code></a>(tokenizer, max_length[, ...])</p></td>
 <td><p>Factory for a process function that applies a tokenizer over a text example.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.TokenizedDatasetLoader.html#torchrl.data.TokenizedDatasetLoader" title="torchrl.data.TokenizedDatasetLoader"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TokenizedDatasetLoader</span></code></a>(split, max_length, ...)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.TokenizedDatasetLoader.html#torchrl.data.TokenizedDatasetLoader" title="torchrl.data.TokenizedDatasetLoader"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TokenizedDatasetLoader</span></code></a>(split, max_length, ...)</p></td>
 <td><p>Loads a tokenizes dataset, and caches a memory-mapped copy of it.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.create_infinite_iterator.html#torchrl.data.create_infinite_iterator" title="torchrl.data.create_infinite_iterator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_infinite_iterator</span></code></a>(iterator)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.create_infinite_iterator.html#torchrl.data.create_infinite_iterator" title="torchrl.data.create_infinite_iterator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_infinite_iterator</span></code></a>(iterator)</p></td>
 <td><p>Iterates indefinitely over an iterator.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.get_dataloader.html#torchrl.data.get_dataloader" title="torchrl.data.get_dataloader"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_dataloader</span></code></a>(batch_size, block_size, ...)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.get_dataloader.html#torchrl.data.get_dataloader" title="torchrl.data.get_dataloader"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_dataloader</span></code></a>(batch_size, block_size, ...)</p></td>
 <td><p>Creates a dataset and returns a dataloader from it.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.ConstantKLController.html#torchrl.data.ConstantKLController" title="torchrl.data.ConstantKLController"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConstantKLController</span></code></a>(*[, kl_coef, model])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.ConstantKLController.html#torchrl.data.ConstantKLController" title="torchrl.data.ConstantKLController"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConstantKLController</span></code></a>(*[, kl_coef, model])</p></td>
 <td><p>Constant KL Controller.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.AdaptiveKLController.html#torchrl.data.AdaptiveKLController" title="torchrl.data.AdaptiveKLController"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AdaptiveKLController</span></code></a>(*, init_kl_coef, ...[, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.AdaptiveKLController.html#torchrl.data.AdaptiveKLController" title="torchrl.data.AdaptiveKLController"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AdaptiveKLController</span></code></a>(*, init_kl_coef, ...[, ...])</p></td>
 <td><p>Adaptive KL Controller as described in Ziegler et al. &quot;Fine-Tuning Language Models from Human Preferences&quot;.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.LLMData.html#torchrl.data.LLMData" title="torchrl.data.LLMData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LLMData</span></code></a>([tokens, tokens_response, ...])</p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.LLMInput.html#torchrl.data.LLMInput" title="torchrl.data.LLMInput"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LLMInput</span></code></a>(tokens[, attention_mask, ...])</p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.LLMOutput.html#torchrl.data.LLMOutput" title="torchrl.data.LLMOutput"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LLMOutput</span></code></a>(tokens[, tokens_response, ...])</p></td>
-<td><p></p></td>
 </tr>
 </tbody>
 </table>

@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+fd10fe2) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+e4733b8) &#x25BC</span></a>
     </div>
     
 
@@ -437,7 +437,7 @@
 such that the action values are used to select an action.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>module</strong> (<em>nn.Module</em>) – a <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.6)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a> used to map the input to
+<dd class="field-odd"><p><strong>module</strong> (<em>nn.Module</em>) – a <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a> used to map the input to
 the output parameter space.
 If the module isn’t of type <a class="reference internal" href="torchrl.modules.DistributionalDQNnet.html#torchrl.modules.DistributionalDQNnet" title="torchrl.modules.DistributionalDQNnet"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl.modules.DistributionalDQNnet</span></code></a>,
 <a class="reference internal" href="#torchrl.modules.tensordict_module.DistributionalQValueActor" title="torchrl.modules.tensordict_module.DistributionalQValueActor"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributionalQValueActor</span></code></a> will ensure that a log-softmax
@@ -466,7 +466,7 @@ method. Default is <code class="docutils literal notranslate"><span class="pre">
 <li><p><strong>var_nums</strong> (<em>int</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">action_space</span> <span class="pre">=</span> <span class="pre">&quot;mult-one-hot&quot;</span></code>,
 this value represents the cardinality of each
 action component.</p></li>
-<li><p><strong>support</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.6)"><em>torch.Tensor</em></a>) – support of the action values.</p></li>
+<li><p><strong>support</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><em>torch.Tensor</em></a>) – support of the action values.</p></li>
 <li><p><strong>action_space</strong> (<em>str</em><em>, </em><em>optional</em>) – Action space. Must be one of
 <code class="docutils literal notranslate"><span class="pre">&quot;one-hot&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;mult-one-hot&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;binary&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;categorical&quot;</span></code>.
 This argument is exclusive with <code class="docutils literal notranslate"><span class="pre">spec</span></code>, since <code class="docutils literal notranslate"><span class="pre">spec</span></code>

@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+fd10fe2) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+e4733b8) &#x25BC</span></a>
     </div>
     
 
@@ -431,7 +431,7 @@
 <h1>VecNormV2<a class="headerlink" href="#vecnormv2" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.envs.transforms.VecNormV2">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.transforms.</span></span><span class="sig-name descname"><span class="pre">VecNormV2</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">in_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lock</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">mp.Lock</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stateful</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">decay</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.9999</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shapes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.6)"><span class="pre">torch.Size</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shared_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/vecnorm.html#VecNormV2"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.VecNormV2" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.transforms.</span></span><span class="sig-name descname"><span class="pre">VecNormV2</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">in_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lock</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">mp.Lock</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stateful</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">decay</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.9999</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shared_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reduce_batch_dims</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/vecnorm.html#VecNormV2"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.VecNormV2" title="Permalink to this definition">¶</a></dt>
 <dd><p>A class for normalizing vectorized observations and rewards in reinforcement learning environments.</p>
 <p><cite>VecNormV2</cite> can operate in either a stateful or stateless mode. In stateful mode, it maintains
 internal statistics (mean and variance) to normalize inputs. In stateless mode, it requires
@@ -471,11 +471,18 @@ transform will be switched to the new api by default.</p>
 <li><p><strong>out_keys</strong> (<em>Sequence</em><em>[</em><em>NestedKey</em><em>] </em><em>| </em><em>None</em>) – The output keys for the normalized data. Defaults to <cite>in_keys</cite> if
 not provided.</p></li>
 <li><p><strong>lock</strong> (<em>mp.Lock</em><em>, </em><em>optional</em>) – A lock for thread safety.</p></li>
-<li><p><strong>stateful</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether the <cite>VecNorm</cite> is stateful. Defaults to <cite>True</cite>.</p></li>
-<li><p><strong>decay</strong> (<em>float</em><em>, </em><em>optional</em>) – The decay rate for updating statistics. Defaults to <cite>0.9999</cite>.</p></li>
+<li><p><strong>stateful</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether the <cite>VecNorm</cite> is stateful. Stateless versions of this
+transform requires the data to be carried within the input/output tensordicts.
+Defaults to <cite>True</cite>.</p></li>
+<li><p><strong>decay</strong> (<em>float</em><em>, </em><em>optional</em>) – The decay rate for updating statistics. Defaults to <cite>0.9999</cite>.
+If <cite>decay=1</cite> is used, the normalizing statistics have an infinite memory (each item is weighed
+identically). Lower values weigh recent data more than old ones.</p></li>
 <li><p><strong>eps</strong> (<em>float</em><em>, </em><em>optional</em>) – A small value to prevent division by zero. Defaults to <cite>1e-4</cite>.</p></li>
-<li><p><strong>shapes</strong> (<em>list</em><em>[</em><a class="reference external" href="https://pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.6)"><em>torch.Size</em></a><em>]</em><em>, </em><em>optional</em>) – The shapes of the inputs. Defaults to <cite>None</cite>.</p></li>
 <li><p><strong>shared_data</strong> (<em>TensorDictBase</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – Shared data for initialization. Defaults to <cite>None</cite>.</p></li>
+<li><p><strong>reduce_batch_dims</strong> (<em>bool</em><em>, </em><em>optional</em>) – If <cite>True</cite>, the batch dimensions are reduced by averaging the data
+before updating the statistics. This is useful when samples are received in batches, as it allows
+the moving average to be computed over the entire batch rather than individual elements. Note that
+this option is only supported in stateful mode (<cite>stateful=True</cite>). Defaults to <cite>False</cite>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Variables<span class="colon">:</span></dt>
@@ -484,7 +491,6 @@ not provided.</p></li>
 <li><p><strong>lock</strong> (<em>mp.Lock</em>) – A multiprocessing lock to ensure thread safety when updating statistics.</p></li>
 <li><p><strong>decay</strong> (<em>float</em>) – The decay rate for updating statistics.</p></li>
 <li><p><strong>eps</strong> (<em>float</em>) – A small value to prevent division by zero during normalization.</p></li>
-<li><p><strong>shapes</strong> (<em>list</em><em>[</em><a class="reference external" href="https://pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.6)"><em>torch.Size</em></a><em>]</em>) – The shapes of the inputs to be normalized.</p></li>
 <li><p><strong>frozen</strong> (<em>bool</em>) – Indicates whether the VecNormV2 is frozen, preventing updates to statistics.</p></li>
 <li><p><strong>_cast_int_to_float</strong> (<em>bool</em>) – Indicates whether integer inputs should be cast to float.</p></li>
 </ul>
@@ -587,6 +593,127 @@ These can be used to share the tensors across processes (this method is automati
 <div class="admonition seealso">
 <p class="admonition-title">See also</p>
 <p><a class="reference internal" href="torchrl.envs.transforms.VecNorm.html#torchrl.envs.transforms.VecNorm" title="torchrl.envs.transforms.VecNorm"><code class="xref py py-class docutils literal notranslate"><span class="pre">VecNorm</span></code></a> for the first version of this transform.</p>
+</div>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvCreator</span><span class="p">,</span> <span class="n">GymEnv</span><span class="p">,</span> <span class="n">ParallelEnv</span><span class="p">,</span> <span class="n">SerialEnv</span><span class="p">,</span> <span class="n">VecNormV2</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env_trsf</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">VecNormV2</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation_norm&quot;</span><span class="p">,</span> <span class="s2">&quot;reward_norm&quot;</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">r</span> <span class="o">=</span> <span class="n">env_trsf</span><span class="o">.</span><span class="n">rollout</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Unnormalized rewards&quot;</span><span class="p">,</span> <span class="n">r</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">])</span>
+<span class="go">Unnormalized rewards tensor([[ -1.7967],</span>
+<span class="go">        [ -2.1238],</span>
+<span class="go">        [ -2.5911],</span>
+<span class="go">        [ -3.5275],</span>
+<span class="go">        [ -4.8585],</span>
+<span class="go">        [ -6.5028],</span>
+<span class="go">        [ -8.2505],</span>
+<span class="go">        [-10.3169],</span>
+<span class="go">        [-12.1332],</span>
+<span class="go">        [-13.1235]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Normalized rewards&quot;</span><span class="p">,</span> <span class="n">r</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward_norm&quot;</span><span class="p">])</span>
+<span class="go">Normalized rewards tensor([[-1.6596e-04],</span>
+<span class="go">        [-8.3072e-02],</span>
+<span class="go">        [-1.9170e-01],</span>
+<span class="go">        [-3.9255e-01],</span>
+<span class="go">        [-5.9131e-01],</span>
+<span class="go">        [-7.4671e-01],</span>
+<span class="go">        [-8.3760e-01],</span>
+<span class="go">        [-9.2058e-01],</span>
+<span class="go">        [-9.3484e-01],</span>
+<span class="go">        [-8.6185e-01]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Aggregate values when using batched envs</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">SerialEnv</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="p">[</span><span class="k">lambda</span><span class="p">:</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">)]</span> <span class="o">*</span> <span class="mi">2</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env_trsf</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">VecNormV2</span><span class="p">(</span>
+<span class="gp">&gt;&gt;&gt; </span>        <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">],</span>
+<span class="gp">&gt;&gt;&gt; </span>        <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation_norm&quot;</span><span class="p">,</span> <span class="s2">&quot;reward_norm&quot;</span><span class="p">],</span>
+<span class="gp">&gt;&gt;&gt; </span>        <span class="c1"># Use reduce_batch_dims=True to aggregate values across batch elements</span>
+<span class="gp">&gt;&gt;&gt; </span>        <span class="n">reduce_batch_dims</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">r</span> <span class="o">=</span> <span class="n">env_trsf</span><span class="o">.</span><span class="n">rollout</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Unnormalized rewards&quot;</span><span class="p">,</span> <span class="n">r</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">])</span>
+<span class="go">Unnormalized rewards tensor([[[-0.1456],</span>
+<span class="go">         [-0.1862],</span>
+<span class="go">         [-0.2053],</span>
+<span class="go">         [-0.2605],</span>
+<span class="go">         [-0.4046],</span>
+<span class="go">         [-0.5185],</span>
+<span class="go">         [-0.8023],</span>
+<span class="go">         [-1.1364],</span>
+<span class="go">         [-1.6183],</span>
+<span class="go">         [-2.5406]],</span>
+</pre></div>
+</div>
+<blockquote>
+<div><dl class="simple">
+<dt>[[-0.0920],</dt><dd><p>[-0.1492],
+[-0.2702],
+[-0.3917],
+[-0.5001],
+[-0.7947],
+[-1.0160],
+[-1.3347],
+[-1.9082],
+[-2.9679]]])</p>
+</dd>
+</dl>
+</div></blockquote>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Normalized rewards&quot;</span><span class="p">,</span> <span class="n">r</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward_norm&quot;</span><span class="p">])</span>
+<span class="go">Normalized rewards tensor([[[-0.2199],</span>
+<span class="go">         [-0.2918],</span>
+<span class="go">         [-0.1668],</span>
+<span class="go">         [-0.2083],</span>
+<span class="go">         [-0.4981],</span>
+<span class="go">         [-0.5046],</span>
+<span class="go">         [-0.7950],</span>
+<span class="go">         [-0.9791],</span>
+<span class="go">         [-1.1484],</span>
+<span class="go">         [-1.4182]],</span>
+</pre></div>
+</div>
+<blockquote>
+<div><dl class="simple">
+<dt>[[ 0.2201],</dt><dd><p>[-0.0403],
+[-0.5206],
+[-0.7791],
+[-0.8282],
+[-1.2306],
+[-1.2279],
+[-1.2907],
+[-1.4929],
+[-1.7793]]])</p>
+</dd>
+</dl>
+</div></blockquote>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Loc / scale&quot;</span><span class="p">,</span> <span class="n">env_trsf</span><span class="o">.</span><span class="n">transform</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="s2">&quot;reward&quot;</span><span class="p">],</span> <span class="n">env_trsf</span><span class="o">.</span><span class="n">transform</span><span class="o">.</span><span class="n">scale</span><span class="p">[</span><span class="s2">&quot;reward&quot;</span><span class="p">])</span>
+<span class="go">Loc / scale tensor([-0.8626]) tensor([1.1832])</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Share values between workers</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">make_env</span><span class="p">():</span>
+<span class="gp">... </span>    <span class="n">env</span> <span class="o">=</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">env_trsf</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span>
+<span class="gp">... </span>        <span class="n">VecNormV2</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation_norm&quot;</span><span class="p">,</span> <span class="s2">&quot;reward_norm&quot;</span><span class="p">])</span>
+<span class="gp">... </span>    <span class="p">)</span>
+<span class="gp">... </span>    <span class="k">return</span> <span class="n">env_trsf</span>
+<span class="gp">...</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="c1"># EnvCreator will share the loc/scale vals</span>
+<span class="gp">... </span>    <span class="n">make_env</span> <span class="o">=</span> <span class="n">EnvCreator</span><span class="p">(</span><span class="n">make_env</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="c1"># Create a local env to track the loc/scale</span>
+<span class="gp">... </span>    <span class="n">local_env</span> <span class="o">=</span> <span class="n">make_env</span><span class="p">()</span>
+<span class="gp">... </span>    <span class="n">env</span> <span class="o">=</span> <span class="n">ParallelEnv</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="p">[</span><span class="n">make_env</span><span class="p">]</span> <span class="o">*</span> <span class="mi">2</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">r</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">rollout</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="c1"># Non-zero loc and scale testify that the sub-envs share their summary stats with us</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Remotely updated loc / scale&quot;</span><span class="p">,</span> <span class="n">local_env</span><span class="o">.</span><span class="n">transform</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="s2">&quot;reward&quot;</span><span class="p">],</span> <span class="n">local_env</span><span class="o">.</span><span class="n">transform</span><span class="o">.</span><span class="n">scale</span><span class="p">[</span><span class="s2">&quot;reward&quot;</span><span class="p">])</span>
+<span class="go">Remotely updated loc / scale tensor([-0.4307]) tensor([0.9613])</span>
+<span class="go">...     env.close()</span>
+</pre></div>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="id0">

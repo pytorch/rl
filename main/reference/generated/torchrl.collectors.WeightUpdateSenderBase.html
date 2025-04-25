@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>MultiProcessedRemoteWeightUpdate &mdash; torchrl main documentation</title>
+  <title>WeightUpdateSenderBase &mdash; torchrl main documentation</title>
   
 
   
@@ -39,8 +39,8 @@
   <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="RayRemoteWeightUpdater" href="torchrl.collectors.RayRemoteWeightUpdater.html" />
-    <link rel="prev" title="VanillaLocalWeightUpdater" href="torchrl.collectors.VanillaLocalWeightUpdater.html" />
+    <link rel="next" title="DataCollectorBase" href="torchrl.collectors.DataCollectorBase.html" />
+    <link rel="prev" title="WeightUpdateReceiverBase" href="torchrl.collectors.WeightUpdateReceiverBase.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+fd10fe2) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+e4733b8) &#x25BC</span></a>
     </div>
     
 
@@ -389,13 +389,13 @@
         
           <li><a href="../collectors.html">torchrl.collectors package</a> &gt;</li>
         
-      <li>MultiProcessedRemoteWeightUpdate</li>
+      <li>WeightUpdateSenderBase</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
         
             
-            <a href="../../_sources/reference/generated/torchrl.collectors.MultiProcessedRemoteWeightUpdate.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
+            <a href="../../_sources/reference/generated/torchrl.collectors.WeightUpdateSenderBase.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
           
         
       </li>
@@ -427,66 +427,48 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="multiprocessedremoteweightupdate">
-<h1>MultiProcessedRemoteWeightUpdate<a class="headerlink" href="#multiprocessedremoteweightupdate" title="Permalink to this heading">¶</a></h1>
+  <section id="weightupdatesenderbase">
+<h1>WeightUpdateSenderBase<a class="headerlink" href="#weightupdatesenderbase" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="torchrl.collectors.MultiProcessedRemoteWeightUpdate">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.collectors.</span></span><span class="sig-name descname"><span class="pre">MultiProcessedRemoteWeightUpdate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">get_server_weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">TensorDictBase</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">policy_weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.6)"><span class="pre">torch.device</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">TensorDictBase</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/weight_update.html#MultiProcessedRemoteWeightUpdate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.MultiProcessedRemoteWeightUpdate" title="Permalink to this definition">¶</a></dt>
-<dd><p>A remote weight updater for synchronizing policy weights across multiple processes or devices.</p>
-<p>The <cite>MultiProcessedRemoteWeightUpdate</cite> class provides a mechanism for updating the weights
-of a policy across multiple inference workers in a multiprocessed environment. It is designed
-to handle the distribution of weights from a central server to various devices or processes
-that are running the policy.
-This class is typically used in multiprocessed data collectors where each process or device
-requires an up-to-date copy of the policy weights.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>get_server_weights</strong> (<em>Callable</em><em>[</em><em>[</em><em>]</em><em>, </em><em>TensorDictBase</em><em>] </em><em>| </em><em>None</em>) – A callable that retrieves the
-latest policy weights from the server or another centralized source.</p></li>
-<li><p><strong>policy_weights</strong> (<em>Dict</em><em>[</em><a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.6)"><em>torch.device</em></a><em>, </em><em>TensorDictBase</em><em>]</em>) – A dictionary mapping each device or
-process to its current policy weights, which will be updated.</p></li>
+<dt class="sig sig-object py" id="torchrl.collectors.WeightUpdateSenderBase">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.collectors.</span></span><span class="sig-name descname"><span class="pre">WeightUpdateSenderBase</span></span><a class="reference internal" href="../../_modules/torchrl/collectors/weight_update.html#WeightUpdateSenderBase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.WeightUpdateSenderBase" title="Permalink to this definition">¶</a></dt>
+<dd><p>A base class for updating remote policy weights on inference workers.</p>
+<p>This class provides an interface for uploading and synchronizing the weights of a policy
+across remote inference workers. The update process is centralized, meaning the server
+is responsible for distributing the weights to the inference nodes.</p>
+<p>To extend this class, implement the following abstract methods:</p>
+<ul class="simple">
+<li><p><cite>_sync_weights_with_worker</cite>: Define how to synchronize weights with a specific worker.</p></li>
+<li><p><cite>_get_server_weights</cite>: Define how to retrieve the weights from the server.</p></li>
+<li><p><cite>_maybe_map_weights</cite>: Optionally transform the server weights before distribution.</p></li>
+<li><p><cite>all_worker_ids</cite>: Provide a list of all worker identifiers.</p></li>
 </ul>
+<dl class="field-list simple">
+<dt class="field-odd">Variables<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>policy</strong> (<em>Policy</em><em>, </em><em>optional</em>) – The policy whose weights are to be updated.</p>
 </dd>
 </dl>
 <dl class="py method">
-<dt class="sig sig-object py" id="torchrl.collectors.MultiProcessedRemoteWeightUpdate.all_worker_ids">
-<span class="sig-name descname"><span class="pre">all_worker_ids</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/weight_update.html#MultiProcessedRemoteWeightUpdate.all_worker_ids"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.MultiProcessedRemoteWeightUpdate.all_worker_ids" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns a list of all worker identifiers (devices or processes).</p>
+<dt class="sig sig-object py" id="torchrl.collectors.WeightUpdateSenderBase.update_weights">
+<span class="sig-name descname"><span class="pre">update_weights</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/weight_update.html#WeightUpdateSenderBase.update_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.WeightUpdateSenderBase.update_weights" title="Permalink to this definition">¶</a></dt>
+<dd><p>Updates the weights on specified or all remote workers.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="torchrl.collectors.MultiProcessedRemoteWeightUpdate._sync_weights_with_worker">
-<span class="sig-name descname"><span class="pre">_sync_weights_with_worker</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/weight_update.html#MultiProcessedRemoteWeightUpdate._sync_weights_with_worker"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.MultiProcessedRemoteWeightUpdate._sync_weights_with_worker" title="Permalink to this definition">¶</a></dt>
-<dd><p>Synchronizes the server weights with a specific worker.</p>
+<dt class="sig sig-object py" id="torchrl.collectors.WeightUpdateSenderBase.register_collector">
+<span class="sig-name descname"><span class="pre">register_collector</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/weight_update.html#WeightUpdateSenderBase.register_collector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.WeightUpdateSenderBase.register_collector" title="Permalink to this definition">¶</a></dt>
+<dd><p>Registers a collector. This should be called automatically by the collector
+upon registration of the updater.</p>
 </dd></dl>
 
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.collectors.MultiProcessedRemoteWeightUpdate._get_server_weights">
-<span class="sig-name descname"><span class="pre">_get_server_weights</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/weight_update.html#MultiProcessedRemoteWeightUpdate._get_server_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.MultiProcessedRemoteWeightUpdate._get_server_weights" title="Permalink to this definition">¶</a></dt>
-<dd><p>Retrieves the latest weights from the server.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.collectors.MultiProcessedRemoteWeightUpdate._maybe_map_weights">
-<span class="sig-name descname"><span class="pre">_maybe_map_weights</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/weight_update.html#MultiProcessedRemoteWeightUpdate._maybe_map_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.MultiProcessedRemoteWeightUpdate._maybe_map_weights" title="Permalink to this definition">¶</a></dt>
-<dd><p>Optionally maps server weights before distribution (no-op in this implementation).</p>
-</dd></dl>
-
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>This class assumes that the server weights can be directly applied to the workers without
-any additional processing. If your use case requires more complex weight mapping or synchronization
-logic, consider extending <cite>RemoteWeightUpdaterBase</cite> with a custom implementation.</p>
-</div>
 <div class="admonition seealso">
 <p class="admonition-title">See also</p>
-<p><a class="reference internal" href="torchrl.collectors.RemoteWeightUpdaterBase.html#torchrl.collectors.RemoteWeightUpdaterBase" title="torchrl.collectors.RemoteWeightUpdaterBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">RemoteWeightUpdaterBase</span></code></a> and
-<a class="reference internal" href="torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase" title="torchrl.collectors.DataCollectorBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataCollectorBase</span></code></a>.</p>
+<p><code class="xref py py-class docutils literal notranslate"><span class="pre">LocalWeightsUpdaterBase</span></code> and
+<a class="reference internal" href="torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase.update_policy_weights_" title="torchrl.collectors.DataCollectorBase.update_policy_weights_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update_policy_weights_()</span></code></a>.</p>
 </div>
 <dl class="py method">
-<dt class="sig sig-object py" id="torchrl.collectors.MultiProcessedRemoteWeightUpdate.register_collector">
-<span class="sig-name descname"><span class="pre">register_collector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">collector</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase" title="torchrl.collectors.DataCollectorBase"><span class="pre">DataCollectorBase</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.collectors.MultiProcessedRemoteWeightUpdate.register_collector" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="id0">
+<span class="sig-name descname"><span class="pre">register_collector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">collector</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase" title="torchrl.collectors.DataCollectorBase"><span class="pre">DataCollectorBase</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/weight_update.html#WeightUpdateSenderBase.register_collector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#id0" title="Permalink to this definition">¶</a></dt>
 <dd><p>Register a collector in the updater.</p>
 <p>Once registered, the updater will not accept another collector.</p>
 <dl class="field-list simple">
@@ -508,10 +490,10 @@ logic, consider extending <cite>RemoteWeightUpdaterBase</cite> with a custom imp
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrl.collectors.RayRemoteWeightUpdater.html" class="btn btn-neutral float-right" title="RayRemoteWeightUpdater" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrl.collectors.DataCollectorBase.html" class="btn btn-neutral float-right" title="DataCollectorBase" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.collectors.VanillaLocalWeightUpdater.html" class="btn btn-neutral" title="VanillaLocalWeightUpdater" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="torchrl.collectors.WeightUpdateReceiverBase.html" class="btn btn-neutral" title="WeightUpdateReceiverBase" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -545,7 +527,7 @@ logic, consider extending <cite>RemoteWeightUpdaterBase</cite> with a custom imp
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">MultiProcessedRemoteWeightUpdate</a></li>
+<li><a class="reference internal" href="#">WeightUpdateSenderBase</a></li>
 </ul>
 
             </div>

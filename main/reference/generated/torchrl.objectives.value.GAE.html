@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+fd10fe2) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+e4733b8) &#x25BC</span></a>
     </div>
     
 
@@ -472,7 +472,7 @@ only one time step (which is not the case with multi-step value
 estimation, for instance) and (2) when the parameters used at time
 <code class="docutils literal notranslate"><span class="pre">t</span></code> and <code class="docutils literal notranslate"><span class="pre">t+1</span></code> are identical (which is not the case when target
 parameters are to be used). Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>device</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.6)"><em>torch.device</em></a><em>, </em><em>optional</em>) – the device where the buffers will be instantiated.
+<li><p><strong>device</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em>, </em><em>optional</em>) – the device where the buffers will be instantiated.
 Defaults to <code class="docutils literal notranslate"><span class="pre">torch.get_default_device()</span></code>.</p></li>
 <li><p><strong>time_dim</strong> (<em>int</em><em>, </em><em>optional</em>) – the dimension corresponding to the time
 in the input tensordict. If not provided, defaults to the dimension
@@ -481,6 +481,9 @@ otherwise. Can be overridden during a call to
 <a class="reference internal" href="#torchrl.objectives.value.GAE.value_estimate" title="torchrl.objectives.value.GAE.value_estimate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">value_estimate()</span></code></a>.
 Negative dimensions are considered with respect to the input
 tensordict.</p></li>
+<li><p><strong>auto_reset_env</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the last <code class="docutils literal notranslate"><span class="pre">&quot;next&quot;</span></code> state
+of the episode isn’t valid, so the GAE calculation will use the <code class="docutils literal notranslate"><span class="pre">value</span></code>
+instead of <code class="docutils literal notranslate"><span class="pre">next_value</span></code> to bootstrap truncated episodes.</p></li>
 </ul>
 </dd>
 </dl>
@@ -584,7 +587,7 @@ then this value will be used without recurring to the value network.</p>
 read.</p></li>
 <li><p><strong>target_params</strong> (<em>TensorDictBase</em><em>, </em><em>optional</em>) – A nested TensorDict containing the
 target params to be passed to the functional value network module.</p></li>
-<li><p><strong>next_value</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.6)"><em>torch.Tensor</em></a><em>, </em><em>optional</em>) – the value of the next state
+<li><p><strong>next_value</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><em>torch.Tensor</em></a><em>, </em><em>optional</em>) – the value of the next state
 or state-action pair. Exclusive with <code class="docutils literal notranslate"><span class="pre">target_params</span></code>.</p></li>
 <li><p><strong>**kwargs</strong> – the keyword arguments to be passed to the value network.</p></li>
 </ul>

@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>VanillaLocalWeightUpdater &mdash; torchrl main documentation</title>
+  <title>WeightUpdateReceiverBase &mdash; torchrl main documentation</title>
   
 
   
@@ -39,8 +39,8 @@
   <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="MultiProcessedRemoteWeightUpdate" href="torchrl.collectors.MultiProcessedRemoteWeightUpdate.html" />
-    <link rel="prev" title="RemoteWeightUpdaterBase" href="torchrl.collectors.RemoteWeightUpdaterBase.html" />
+    <link rel="next" title="WeightUpdateSenderBase" href="torchrl.collectors.WeightUpdateSenderBase.html" />
+    <link rel="prev" title="torchrl.collectors package" href="../collectors.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.7.0+fd10fe2) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+e4733b8) &#x25BC</span></a>
     </div>
     
 
@@ -389,13 +389,13 @@
         
           <li><a href="../collectors.html">torchrl.collectors package</a> &gt;</li>
         
-      <li>VanillaLocalWeightUpdater</li>
+      <li>WeightUpdateReceiverBase</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
         
             
-            <a href="../../_sources/reference/generated/torchrl.collectors.VanillaLocalWeightUpdater.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
+            <a href="../../_sources/reference/generated/torchrl.collectors.WeightUpdateReceiverBase.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
           
         
       </li>
@@ -427,70 +427,46 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="vanillalocalweightupdater">
-<h1>VanillaLocalWeightUpdater<a class="headerlink" href="#vanillalocalweightupdater" title="Permalink to this heading">¶</a></h1>
+  <section id="weightupdatereceiverbase">
+<h1>WeightUpdateReceiverBase<a class="headerlink" href="#weightupdatereceiverbase" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="torchrl.collectors.VanillaLocalWeightUpdater">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.collectors.</span></span><span class="sig-name descname"><span class="pre">VanillaLocalWeightUpdater</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">weight_getter</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">TensorDictBase</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">policy_weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/weight_update.html#VanillaLocalWeightUpdater"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.VanillaLocalWeightUpdater" title="Permalink to this definition">¶</a></dt>
-<dd><p>A simple implementation of <cite>LocalWeightUpdaterBase</cite> for updating local policy weights.</p>
-<p>The <cite>VanillaLocalWeightUpdater</cite> class provides a basic mechanism for updating the weights
-of a local policy by directly fetching them from a specified source. It is typically used
-in scenarios where the weight update logic is straightforward and does not require any
-complex mapping or transformation.</p>
-<p>This class is used by default in the <cite>SyncDataCollector</cite> when no custom local weights updater
-is provided.</p>
+<dt class="sig sig-object py" id="torchrl.collectors.WeightUpdateReceiverBase">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.collectors.</span></span><span class="sig-name descname"><span class="pre">WeightUpdateReceiverBase</span></span><a class="reference internal" href="../../_modules/torchrl/collectors/weight_update.html#WeightUpdateReceiverBase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.WeightUpdateReceiverBase" title="Permalink to this definition">¶</a></dt>
+<dd><p>A base class for updating local policy weights from a server.</p>
+<p>This class provides an interface for downloading and updating the weights of a policy
+on a local inference worker. The update process is decentralized, meaning the inference
+worker is responsible for fetching the weights from the server.</p>
+<p>To extend this class, implement the following abstract methods:</p>
+<ul class="simple">
+<li><p><cite>_get_server_weights</cite>: Define how to retrieve the weights from the server.</p></li>
+<li><p><cite>_get_local_weights</cite>: Define how to access the current local weights.</p></li>
+<li><p><cite>_maybe_map_weights</cite>: Optionally transform the server weights to match the local weights.</p></li>
+</ul>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dt class="field-odd">Variables<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>weight_getter</strong> (<em>Callable</em><em>[</em><em>[</em><em>]</em><em>, </em><em>TensorDictBase</em><em>]</em>) – A callable that returns the latest policy
-weights from the server or another source.</p></li>
-<li><p><strong>policy_weights</strong> (<em>TensorDictBase</em>) – The current weights of the local policy that need to be updated.</p></li>
+<li><p><strong>policy</strong> (<em>Policy</em><em>, </em><em>optional</em>) – The policy whose weights are to be updated.</p></li>
+<li><p><strong>get_weights_from_policy</strong> (<em>Callable</em><em>, </em><em>optional</em>) – A function to extract weights from the policy.</p></li>
+<li><p><strong>get_weights_from_server</strong> (<em>Callable</em><em>, </em><em>optional</em>) – A function to fetch weights from the server.</p></li>
+<li><p><strong>weight_map_fn</strong> (<em>Callable</em><em>, </em><em>optional</em>) – A function to map server weights to local weights.</p></li>
+<li><p><strong>cache_policy_weights</strong> (<em>bool</em>) – Whether to cache the policy weights locally.</p></li>
 </ul>
 </dd>
 </dl>
 <dl class="py method">
-<dt class="sig sig-object py" id="torchrl.collectors.VanillaLocalWeightUpdater._get_server_weights">
-<span class="sig-name descname"><span class="pre">_get_server_weights</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/weight_update.html#VanillaLocalWeightUpdater._get_server_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.VanillaLocalWeightUpdater._get_server_weights" title="Permalink to this definition">¶</a></dt>
-<dd><p>Retrieves the latest weights from the specified source.</p>
+<dt class="sig sig-object py" id="torchrl.collectors.WeightUpdateReceiverBase.update_weights">
+<span class="sig-name descname"><span class="pre">update_weights</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/weight_update.html#WeightUpdateReceiverBase.update_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.WeightUpdateReceiverBase.update_weights" title="Permalink to this definition">¶</a></dt>
+<dd><p>Updates the local weights with the server weights.</p>
 </dd></dl>
 
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.collectors.VanillaLocalWeightUpdater._get_local_weights">
-<span class="sig-name descname"><span class="pre">_get_local_weights</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/weight_update.html#VanillaLocalWeightUpdater._get_local_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.VanillaLocalWeightUpdater._get_local_weights" title="Permalink to this definition">¶</a></dt>
-<dd><p>Accesses the current local policy weights.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.collectors.VanillaLocalWeightUpdater._map_weights">
-<span class="sig-name descname"><span class="pre">_map_weights</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/weight_update.html#VanillaLocalWeightUpdater._map_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.VanillaLocalWeightUpdater._map_weights" title="Permalink to this definition">¶</a></dt>
-<dd><p>Directly maps server weights to local weights without transformation.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.collectors.VanillaLocalWeightUpdater._maybe_map_weights">
-<span class="sig-name descname"><span class="pre">_maybe_map_weights</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/weight_update.html#VanillaLocalWeightUpdater._maybe_map_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.VanillaLocalWeightUpdater._maybe_map_weights" title="Permalink to this definition">¶</a></dt>
-<dd><p>Optionally maps server weights to local weights (no-op in this implementation).</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.collectors.VanillaLocalWeightUpdater._update_local_weights">
-<span class="sig-name descname"><span class="pre">_update_local_weights</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/weight_update.html#VanillaLocalWeightUpdater._update_local_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.VanillaLocalWeightUpdater._update_local_weights" title="Permalink to this definition">¶</a></dt>
-<dd><p>Updates the local policy weights with the mapped weights.</p>
-</dd></dl>
-
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>This class assumes that the server weights can be directly applied to the local policy
-without any additional processing. If your use case requires more complex weight mapping,
-consider extending <cite>LocalWeightUpdaterBase</cite> with a custom implementation.</p>
-</div>
 <div class="admonition seealso">
 <p class="admonition-title">See also</p>
-<p><a class="reference internal" href="torchrl.collectors.LocalWeightUpdaterBase.html#torchrl.collectors.LocalWeightUpdaterBase" title="torchrl.collectors.LocalWeightUpdaterBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">LocalWeightUpdaterBase</span></code></a> and <a class="reference internal" href="torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector" title="torchrl.collectors.SyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">SyncDataCollector</span></code></a>.</p>
+<p><code class="xref py py-class docutils literal notranslate"><span class="pre">RemoteWeightsUpdaterBase</span></code> and
+<a class="reference internal" href="torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase.update_policy_weights_" title="torchrl.collectors.DataCollectorBase.update_policy_weights_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update_policy_weights_()</span></code></a>.</p>
 </div>
 <dl class="py method">
-<dt class="sig sig-object py" id="torchrl.collectors.VanillaLocalWeightUpdater.register_collector">
-<span class="sig-name descname"><span class="pre">register_collector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">collector</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase" title="torchrl.collectors.DataCollectorBase"><span class="pre">DataCollectorBase</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.collectors.VanillaLocalWeightUpdater.register_collector" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="torchrl.collectors.WeightUpdateReceiverBase.register_collector">
+<span class="sig-name descname"><span class="pre">register_collector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">collector</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase" title="torchrl.collectors.DataCollectorBase"><span class="pre">DataCollectorBase</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/weight_update.html#WeightUpdateReceiverBase.register_collector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.WeightUpdateReceiverBase.register_collector" title="Permalink to this definition">¶</a></dt>
 <dd><p>Register a collector in the updater.</p>
 <p>Once registered, the updater will not accept another collector.</p>
 <dl class="field-list simple">
@@ -512,10 +488,10 @@ consider extending <cite>LocalWeightUpdaterBase</cite> with a custom implementat
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrl.collectors.MultiProcessedRemoteWeightUpdate.html" class="btn btn-neutral float-right" title="MultiProcessedRemoteWeightUpdate" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrl.collectors.WeightUpdateSenderBase.html" class="btn btn-neutral float-right" title="WeightUpdateSenderBase" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.collectors.RemoteWeightUpdaterBase.html" class="btn btn-neutral" title="RemoteWeightUpdaterBase" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="../collectors.html" class="btn btn-neutral" title="torchrl.collectors package" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -549,7 +525,7 @@ consider extending <cite>LocalWeightUpdaterBase</cite> with a custom implementat
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">VanillaLocalWeightUpdater</a></li>
+<li><a class="reference internal" href="#">WeightUpdateReceiverBase</a></li>
 </ul>
 
             </div>

@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+fd10fe2) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.8.0+e4733b8) &#x25BC</span></a>
     </div>
     
 
@@ -444,9 +444,9 @@
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_NON_NN_POLICY_WEIGHTS</span><span class="p">,</span> <span class="n">split_trajectories</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.weight_update</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">LocalWeightUpdaterBase</span><span class="p">,</span>
-    <span class="n">RayRemoteWeightUpdater</span><span class="p">,</span>
-    <span class="n">RemoteWeightUpdaterBase</span><span class="p">,</span>
+    <span class="n">RayWeightUpdater</span><span class="p">,</span>
+    <span class="n">WeightUpdateReceiverBase</span><span class="p">,</span>
+    <span class="n">WeightUpdateSenderBase</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReplayBuffer</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span>
@@ -698,14 +698,14 @@
 
 <span class="sd">            .. note:: although it is not enfoced (to allow users to implement their own replay buffer class), a</span>
 <span class="sd">                :class:`~torchrl.data.RayReplayBuffer` instance should be used here.</span>
-<span class="sd">        local_weight_updater (LocalWeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.LocalWeightUpdaterBase`</span>
+<span class="sd">        weight_update_receiver (WeightUpdateReceiverBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdateReceiverBase`</span>
 <span class="sd">            or its subclass, responsible for updating the policy weights on the local inference worker.</span>
 <span class="sd">            This is typically not used in :class:`~torchrl.collectors.RayCollector` as it focuses on distributed</span>
 <span class="sd">            environments.</span>
 <span class="sd">            Consider using a constructor if the updater needs to be serialized.</span>
-<span class="sd">        remote_weight_updater (RemoteWeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.RemoteWeightUpdaterBase`</span>
+<span class="sd">        weight_update_sender (WeightUpdateSenderBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdateSenderBase`</span>
 <span class="sd">            or its subclass, responsible for updating the policy weights on remote inference workers managed by Ray.</span>
-<span class="sd">            If not provided, a :class:`~torchrl.collectors.RayRemoteWeightUpdater` will be used by default, leveraging</span>
+<span class="sd">            If not provided, a :class:`~torchrl.collectors.RayWeightUpdateSender` will be used by default, leveraging</span>
 <span class="sd">            Ray&#39;s distributed capabilities.</span>
 <span class="sd">            Consider using a constructor if the updater needs to be serialized.</span>
 
@@ -768,11 +768,11 @@
         <span class="n">update_after_each_batch</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">max_weight_update_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
         <span class="n">replay_buffer</span><span class="p">:</span> <span class="n">ReplayBuffer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">remote_weight_updater</span><span class="p">:</span> <span class="n">RemoteWeightUpdaterBase</span>
-        <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">RemoteWeightUpdaterBase</span><span class="p">]</span>
+        <span class="n">weight_update_sender</span><span class="p">:</span> <span class="n">WeightUpdateSenderBase</span>
+        <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">WeightUpdateSenderBase</span><span class="p">]</span>
         <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">local_weight_updater</span><span class="p">:</span> <span class="n">LocalWeightUpdaterBase</span>
-        <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">LocalWeightUpdaterBase</span><span class="p">]</span>
+        <span class="n">weight_update_receiver</span><span class="p">:</span> <span class="n">WeightUpdateReceiverBase</span>
+        <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">WeightUpdateReceiverBase</span><span class="p">]</span>
         <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch</span> <span class="o">=</span> <span class="n">frames_per_batch</span>
@@ -890,7 +890,7 @@
             <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">policy_weights</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">lock_</span><span class="p">()</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">policy_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">lock</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">remote_weight_updater</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">weight_update_sender</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">_NON_NN_POLICY_WEIGHTS</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span> <span class="o">=</span> <span class="n">policy_weights</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">collector_class</span> <span class="o">=</span> <span class="n">collector_class</span>
@@ -958,14 +958,14 @@
                 <span class="n">collector_kwargs</span><span class="p">,</span>
                 <span class="n">remote_configs</span><span class="p">,</span>
             <span class="p">)</span>
-        <span class="k">if</span> <span class="n">remote_weight_updater</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">remote_weight_updater</span> <span class="o">=</span> <span class="n">RayRemoteWeightUpdater</span><span class="p">(</span>
+        <span class="k">if</span> <span class="n">weight_update_sender</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">weight_update_sender</span> <span class="o">=</span> <span class="n">RayWeightUpdater</span><span class="p">(</span>
                 <span class="n">policy_weights</span><span class="o">=</span><span class="n">policy_weights</span><span class="p">,</span>
                 <span class="n">remote_collectors</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">,</span>
                 <span class="n">max_interval</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_weight_update_interval</span><span class="p">,</span>
             <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">remote_weight_updater</span> <span class="o">=</span> <span class="n">remote_weight_updater</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">local_weight_updater</span> <span class="o">=</span> <span class="n">local_weight_updater</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">weight_update_sender</span> <span class="o">=</span> <span class="n">weight_update_sender</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">weight_update_receiver</span> <span class="o">=</span> <span class="n">weight_update_receiver</span>
 
         <span class="c1"># Print info of all remote workers</span>
         <span class="n">pending_samples</span> <span class="o">=</span> <span class="p">[</span>

@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data
-
-
-LLMInput
-========
-
-.. autoclass:: LLMInput
-    :members:
-    :inherited-members:

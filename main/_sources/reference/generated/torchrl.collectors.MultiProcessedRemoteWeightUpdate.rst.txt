@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.collectors
-
-
-MultiProcessedRemoteWeightUpdate
-================================
-
-.. autoclass:: MultiProcessedRemoteWeightUpdate
-    :members:
-    :inherited-members:

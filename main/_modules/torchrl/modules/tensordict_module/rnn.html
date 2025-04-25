@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+fd10fe2) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.8.0+e4733b8) &#x25BC</span></a>
     </div>
     
 
@@ -426,7 +426,6 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">typing</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
@@ -1090,47 +1089,11 @@
         <span class="p">)</span>
 
 <div class="viewcode-block" id="LSTMModule.set_recurrent_mode"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.LSTMModule.html#torchrl.modules.LSTMModule.set_recurrent_mode">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">set_recurrent_mode</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mode</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;[DEPRECATED - use :class:`torchrl.modules.set_recurrent_mode` context manager instead] Returns a new copy of the module that shares the same lstm model but with a different ``recurrent_mode`` attribute (if it differs).</span>
-
-<span class="sd">        A copy is created such that the module can be used with divergent behavior</span>
-<span class="sd">        in various parts of the code (inference vs training):</span>
-
-<span class="sd">        Examples:</span>
-<span class="sd">            &gt;&gt;&gt; from torchrl.envs import TransformedEnv, InitTracker, step_mdp</span>
-<span class="sd">            &gt;&gt;&gt; from torchrl.envs import GymEnv</span>
-<span class="sd">            &gt;&gt;&gt; from torchrl.modules import MLP</span>
-<span class="sd">            &gt;&gt;&gt; from tensordict import TensorDict</span>
-<span class="sd">            &gt;&gt;&gt; from torch import nn</span>
-<span class="sd">            &gt;&gt;&gt; from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod</span>
-<span class="sd">            &gt;&gt;&gt; env = TransformedEnv(GymEnv(&quot;Pendulum-v1&quot;), InitTracker())</span>
-<span class="sd">            &gt;&gt;&gt; lstm = nn.LSTM(input_size=env.observation_spec[&quot;observation&quot;].shape[-1], hidden_size=64, batch_first=True)</span>
-<span class="sd">            &gt;&gt;&gt; lstm_module = LSTMModule(lstm=lstm, in_keys=[&quot;observation&quot;, &quot;hidden0&quot;, &quot;hidden1&quot;], out_keys=[&quot;intermediate&quot;, (&quot;next&quot;, &quot;hidden0&quot;), (&quot;next&quot;, &quot;hidden1&quot;)])</span>
-<span class="sd">            &gt;&gt;&gt; mlp = MLP(num_cells=[64], out_features=1)</span>
-<span class="sd">            &gt;&gt;&gt; # building two policies with different behaviors:</span>
-<span class="sd">            &gt;&gt;&gt; policy_inference = Seq(lstm_module, Mod(mlp, in_keys=[&quot;intermediate&quot;], out_keys=[&quot;action&quot;]))</span>
-<span class="sd">            &gt;&gt;&gt; policy_training = Seq(lstm_module.set_recurrent_mode(True), Mod(mlp, in_keys=[&quot;intermediate&quot;], out_keys=[&quot;action&quot;]))</span>
-<span class="sd">            &gt;&gt;&gt; traj_td = env.rollout(3) # some random temporal data</span>
-<span class="sd">            &gt;&gt;&gt; traj_td = policy_training(traj_td)</span>
-<span class="sd">            &gt;&gt;&gt; # let&#39;s check that both return the same results</span>
-<span class="sd">            &gt;&gt;&gt; td_inf = TensorDict(batch_size=traj_td.shape[:-1])</span>
-<span class="sd">            &gt;&gt;&gt; for td in traj_td.unbind(-1):</span>
-<span class="sd">            ...     td_inf = td_inf.update(td.select(&quot;is_init&quot;, &quot;observation&quot;, (&quot;next&quot;, &quot;observation&quot;)))</span>
-<span class="sd">            ...     td_inf = policy_inference(td_inf)</span>
-<span class="sd">            ...     td_inf = step_mdp(td_inf)</span>
-<span class="sd">            ...</span>
-<span class="sd">            &gt;&gt;&gt; torch.testing.assert_close(td_inf[&quot;hidden0&quot;], traj_td[..., -1][&quot;next&quot;, &quot;hidden0&quot;])</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-            <span class="s2">&quot;The lstm.set_recurrent_mode() API is deprecated and will be removed in v0.8. &quot;</span>
-            <span class="s2">&quot;To set the recurent mode, use the :class:`~torchrl.modules.set_recurrent_mode` context manager or &quot;</span>
-            <span class="s2">&quot;the `default_recurrent_mode` keyword argument in the constructor.&quot;</span><span class="p">,</span>
-            <span class="n">category</span><span class="o">=</span><span class="ne">DeprecationWarning</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="k">if</span> <span class="n">mode</span> <span class="ow">is</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span><span class="p">:</span>
-            <span class="k">return</span> <span class="bp">self</span>
-        <span class="n">out</span> <span class="o">=</span> <span class="n">LSTMModule</span><span class="p">(</span><span class="n">lstm</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">out_keys</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">)</span>
-        <span class="n">out</span><span class="o">.</span><span class="n">_recurrent_mode</span> <span class="o">=</span> <span class="n">mode</span>
-        <span class="k">return</span> <span class="n">out</span></div>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="s2">&quot;The lstm.set_recurrent_mode() API has been removed in v0.8. &quot;</span>
+            <span class="s2">&quot;To set the recurrent mode, use the :class:`~torchrl.modules.set_recurrent_mode` context manager or &quot;</span>
+            <span class="s2">&quot;the `default_recurrent_mode` keyword argument in the constructor.&quot;</span>
+        <span class="p">)</span></div>
 
 <div class="viewcode-block" id="LSTMModule.forward"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.LSTMModule.html#torchrl.modules.LSTMModule.forward">[docs]</a>    <span class="nd">@dispatch</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">):</span>
@@ -1912,46 +1875,11 @@
         <span class="p">)</span>
 
 <div class="viewcode-block" id="GRUModule.set_recurrent_mode"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.GRUModule.html#torchrl.modules.GRUModule.set_recurrent_mode">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">set_recurrent_mode</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mode</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;[DEPRECATED - use :class:`torchrl.modules.set_recurrent_mode` context manager instead] Returns a new copy of the module that shares the same gru model but with a different ``recurrent_mode`` attribute (if it differs).</span>
-
-<span class="sd">        A copy is created such that the module can be used with divergent behavior</span>
-<span class="sd">        in various parts of the code (inference vs training):</span>
-
-<span class="sd">        Examples:</span>
-<span class="sd">            &gt;&gt;&gt; from torchrl.envs import GymEnv, TransformedEnv, InitTracker, step_mdp</span>
-<span class="sd">            &gt;&gt;&gt; from torchrl.modules import MLP</span>
-<span class="sd">            &gt;&gt;&gt; from tensordict import TensorDict</span>
-<span class="sd">            &gt;&gt;&gt; from torch import nn</span>
-<span class="sd">            &gt;&gt;&gt; from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod</span>
-<span class="sd">            &gt;&gt;&gt; env = TransformedEnv(GymEnv(&quot;Pendulum-v1&quot;), InitTracker())</span>
-<span class="sd">            &gt;&gt;&gt; gru = nn.GRU(input_size=env.observation_spec[&quot;observation&quot;].shape[-1], hidden_size=64, batch_first=True)</span>
-<span class="sd">            &gt;&gt;&gt; gru_module = GRUModule(gru=gru, in_keys=[&quot;observation&quot;, &quot;hidden&quot;], out_keys=[&quot;intermediate&quot;, (&quot;next&quot;, &quot;hidden&quot;)])</span>
-<span class="sd">            &gt;&gt;&gt; mlp = MLP(num_cells=[64], out_features=1)</span>
-<span class="sd">            &gt;&gt;&gt; # building two policies with different behaviors:</span>
-<span class="sd">            &gt;&gt;&gt; policy_inference = Seq(gru_module, Mod(mlp, in_keys=[&quot;intermediate&quot;], out_keys=[&quot;action&quot;]))</span>
-<span class="sd">            &gt;&gt;&gt; policy_training = Seq(gru_module.set_recurrent_mode(True), Mod(mlp, in_keys=[&quot;intermediate&quot;], out_keys=[&quot;action&quot;]))</span>
-<span class="sd">            &gt;&gt;&gt; traj_td = env.rollout(3) # some random temporal data</span>
-<span class="sd">            &gt;&gt;&gt; traj_td = policy_training(traj_td)</span>
-<span class="sd">            &gt;&gt;&gt; # let&#39;s check that both return the same results</span>
-<span class="sd">            &gt;&gt;&gt; td_inf = TensorDict(batch_size=traj_td.shape[:-1])</span>
-<span class="sd">            &gt;&gt;&gt; for td in traj_td.unbind(-1):</span>
-<span class="sd">            ...     td_inf = td_inf.update(td.select(&quot;is_init&quot;, &quot;observation&quot;, (&quot;next&quot;, &quot;observation&quot;)))</span>
-<span class="sd">            ...     td_inf = policy_inference(td_inf)</span>
-<span class="sd">            ...     td_inf = step_mdp(td_inf)</span>
-<span class="sd">            ...</span>
-<span class="sd">            &gt;&gt;&gt; torch.testing.assert_close(td_inf[&quot;hidden&quot;], traj_td[..., -1][&quot;next&quot;, &quot;hidden&quot;])</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-            <span class="s2">&quot;The gru.set_recurrent_mode() API is deprecated and will be removed in v0.8. &quot;</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="s2">&quot;The gru.set_recurrent_mode() API has been removed in v0.8. &quot;</span>
             <span class="s2">&quot;To set the recurent mode, use the :class:`~torchrl.modules.set_recurrent_mode` context manager or &quot;</span>
             <span class="s2">&quot;the `default_recurrent_mode` keyword argument in the constructor.&quot;</span><span class="p">,</span>
-            <span class="n">category</span><span class="o">=</span><span class="ne">DeprecationWarning</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="k">if</span> <span class="n">mode</span> <span class="ow">is</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span><span class="p">:</span>
-            <span class="k">return</span> <span class="bp">self</span>
-        <span class="n">out</span> <span class="o">=</span> <span class="n">GRUModule</span><span class="p">(</span><span class="n">gru</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">out_keys</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">)</span>
-        <span class="n">out</span><span class="o">.</span><span class="n">_recurrent_mode</span> <span class="o">=</span> <span class="n">mode</span>
-        <span class="k">return</span> <span class="n">out</span></div>
+        <span class="p">)</span></div>
 
 <div class="viewcode-block" id="GRUModule.forward"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.GRUModule.html#torchrl.modules.GRUModule.forward">[docs]</a>    <span class="nd">@dispatch</span>
     <span class="nd">@set_lazy_legacy</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>

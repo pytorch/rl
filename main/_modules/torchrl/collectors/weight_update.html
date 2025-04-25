@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.7.0+fd10fe2) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.8.0+e4733b8) &#x25BC</span></a>
     </div>
     
 
@@ -438,7 +438,7 @@
 <span class="n">Policy</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;Policy&quot;</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="n">TensorDictModuleBase</span><span class="p">)</span>
 
 
-<div class="viewcode-block" id="LocalWeightUpdaterBase"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.LocalWeightUpdaterBase.html#torchrl.collectors.LocalWeightUpdaterBase">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">LocalWeightUpdaterBase</span><span class="p">(</span><span class="n">metaclass</span><span class="o">=</span><span class="n">abc</span><span class="o">.</span><span class="n">ABCMeta</span><span class="p">):</span>
+<div class="viewcode-block" id="WeightUpdateReceiverBase"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.WeightUpdateReceiverBase.html#torchrl.collectors.WeightUpdateReceiverBase">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">WeightUpdateReceiverBase</span><span class="p">(</span><span class="n">metaclass</span><span class="o">=</span><span class="n">abc</span><span class="o">.</span><span class="n">ABCMeta</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A base class for updating local policy weights from a server.</span>
 
 <span class="sd">    This class provides an interface for downloading and updating the weights of a policy</span>
@@ -469,7 +469,7 @@
 
     <span class="n">_collector_wr</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
 
-<div class="viewcode-block" id="LocalWeightUpdaterBase.register_collector"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.LocalWeightUpdaterBase.html#torchrl.collectors.LocalWeightUpdaterBase.register_collector">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">register_collector</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">collector</span><span class="p">:</span> <span class="n">DataCollectorBase</span><span class="p">):</span>  <span class="c1"># noqa</span>
+<div class="viewcode-block" id="WeightUpdateReceiverBase.register_collector"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.WeightUpdateReceiverBase.html#torchrl.collectors.WeightUpdateReceiverBase.register_collector">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">register_collector</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">collector</span><span class="p">:</span> <span class="n">DataCollectorBase</span><span class="p">):</span>  <span class="c1"># noqa</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Register a collector in the updater.</span>
 
 <span class="sd">        Once registered, the updater will not accept another collector.</span>
@@ -511,7 +511,7 @@
     <span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">update_weights</span><span class="p">(</span><span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">)</span>
 
-<div class="viewcode-block" id="LocalWeightUpdaterBase.update_weights"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.LocalWeightUpdaterBase.html#torchrl.collectors.LocalWeightUpdaterBase.update_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">update_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<div class="viewcode-block" id="WeightUpdateReceiverBase.update_weights"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.WeightUpdateReceiverBase.html#torchrl.collectors.WeightUpdateReceiverBase.update_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">update_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># get server weights (source)</span>
             <span class="n">server_weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_server_weights</span><span class="p">()</span>
@@ -527,7 +527,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_update_local_weights</span><span class="p">(</span><span class="n">local_weights</span><span class="p">,</span> <span class="n">mapped_weights</span><span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="RemoteWeightUpdaterBase"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.RemoteWeightUpdaterBase.html#torchrl.collectors.RemoteWeightUpdaterBase">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">RemoteWeightUpdaterBase</span><span class="p">(</span><span class="n">metaclass</span><span class="o">=</span><span class="n">abc</span><span class="o">.</span><span class="n">ABCMeta</span><span class="p">):</span>
+<div class="viewcode-block" id="WeightUpdateSenderBase"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.WeightUpdateSenderBase.html#torchrl.collectors.WeightUpdateSenderBase">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">WeightUpdateSenderBase</span><span class="p">(</span><span class="n">metaclass</span><span class="o">=</span><span class="n">abc</span><span class="o">.</span><span class="n">ABCMeta</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A base class for updating remote policy weights on inference workers.</span>
 
 <span class="sd">    This class provides an interface for uploading and synchronizing the weights of a policy</span>
@@ -556,7 +556,7 @@
 
     <span class="n">_collector_wr</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
 
-<div class="viewcode-block" id="RemoteWeightUpdaterBase.register_collector"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.RemoteWeightUpdaterBase.html#torchrl.collectors.RemoteWeightUpdaterBase.register_collector">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">register_collector</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">collector</span><span class="p">:</span> <span class="n">DataCollectorBase</span><span class="p">):</span>  <span class="c1"># noqa</span>
+<div class="viewcode-block" id="WeightUpdateSenderBase.register_collector"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.WeightUpdateSenderBase.html#torchrl.collectors.WeightUpdateSenderBase.register_collector">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">register_collector</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">collector</span><span class="p">:</span> <span class="n">DataCollectorBase</span><span class="p">):</span>  <span class="c1"># noqa</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Register a collector in the updater.</span>
 
 <span class="sd">        Once registered, the updater will not accept another collector.</span>
@@ -601,7 +601,7 @@
     <span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">update_weights</span><span class="p">(</span><span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">)</span>
 
-<div class="viewcode-block" id="RemoteWeightUpdaterBase.update_weights"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.RemoteWeightUpdaterBase.html#torchrl.collectors.RemoteWeightUpdaterBase.update_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">update_weights</span><span class="p">(</span>
+<div class="viewcode-block" id="WeightUpdateSenderBase.update_weights"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.WeightUpdateSenderBase.html#torchrl.collectors.WeightUpdateSenderBase.update_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">update_weights</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">worker_ids</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -626,8 +626,8 @@
 
 
 <span class="c1"># Specialized classes</span>
-<div class="viewcode-block" id="VanillaLocalWeightUpdater"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.VanillaLocalWeightUpdater.html#torchrl.collectors.VanillaLocalWeightUpdater">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">VanillaLocalWeightUpdater</span><span class="p">(</span><span class="n">LocalWeightUpdaterBase</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A simple implementation of `LocalWeightUpdaterBase` for updating local policy weights.</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">VanillaWeightUpdater</span><span class="p">(</span><span class="n">WeightUpdateReceiverBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A simple implementation of `WeightUpdateReceiverBase` for updating local policy weights.</span>
 
 <span class="sd">    The `VanillaLocalWeightUpdater` class provides a basic mechanism for updating the weights</span>
 <span class="sd">    of a local policy by directly fetching them from a specified source. It is typically used</span>
@@ -652,9 +652,9 @@
 <span class="sd">    .. note::</span>
 <span class="sd">        This class assumes that the server weights can be directly applied to the local policy</span>
 <span class="sd">        without any additional processing. If your use case requires more complex weight mapping,</span>
-<span class="sd">        consider extending `LocalWeightUpdaterBase` with a custom implementation.</span>
+<span class="sd">        consider extending `WeightUpdateReceiverBase` with a custom implementation.</span>
 
-<span class="sd">    .. seealso:: :class:`~torchrl.collectors.LocalWeightUpdaterBase` and :class:`~torchrl.collectors.SyncDataCollector`.</span>
+<span class="sd">    .. seealso:: :class:`~torchrl.collectors.WeightUpdateReceiverBase` and :class:`~torchrl.collectors.SyncDataCollector`.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
@@ -665,29 +665,29 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">weight_getter</span> <span class="o">=</span> <span class="n">weight_getter</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span> <span class="o">=</span> <span class="n">policy_weights</span>
 
-<div class="viewcode-block" id="VanillaLocalWeightUpdater._get_server_weights"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.VanillaLocalWeightUpdater.html#torchrl.collectors.VanillaLocalWeightUpdater._get_server_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">_get_server_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_getter</span><span class="p">()</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_getter</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span></div>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_server_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_getter</span><span class="p">()</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_getter</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
 
-<div class="viewcode-block" id="VanillaLocalWeightUpdater._get_local_weights"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.VanillaLocalWeightUpdater.html#torchrl.collectors.VanillaLocalWeightUpdater._get_local_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">_get_local_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span></div>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_local_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span>
 
-<div class="viewcode-block" id="VanillaLocalWeightUpdater._map_weights"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.VanillaLocalWeightUpdater.html#torchrl.collectors.VanillaLocalWeightUpdater._map_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">_map_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">server_weights</span></div>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_map_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">server_weights</span>
 
-<div class="viewcode-block" id="VanillaLocalWeightUpdater._maybe_map_weights"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.VanillaLocalWeightUpdater.html#torchrl.collectors.VanillaLocalWeightUpdater._maybe_map_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_map_weights</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_map_weights</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">local_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">server_weights</span></div>
+        <span class="k">return</span> <span class="n">server_weights</span>
 
-<div class="viewcode-block" id="VanillaLocalWeightUpdater._update_local_weights"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.VanillaLocalWeightUpdater.html#torchrl.collectors.VanillaLocalWeightUpdater._update_local_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">_update_local_weights</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_update_local_weights</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">local_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">mapped_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">local_weights</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">mapped_weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span>
-        <span class="n">local_weights</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">mapped_weights</span><span class="p">)</span></div></div>
+        <span class="n">local_weights</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">mapped_weights</span><span class="p">)</span>
 
 
-<div class="viewcode-block" id="MultiProcessedRemoteWeightUpdate"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiProcessedRemoteWeightUpdate.html#torchrl.collectors.MultiProcessedRemoteWeightUpdate">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">MultiProcessedRemoteWeightUpdate</span><span class="p">(</span><span class="n">RemoteWeightUpdaterBase</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">MultiProcessedWeightUpdate</span><span class="p">(</span><span class="n">WeightUpdateSenderBase</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A remote weight updater for synchronizing policy weights across multiple processes or devices.</span>
 
 <span class="sd">    The `MultiProcessedRemoteWeightUpdate` class provides a mechanism for updating the weights</span>
@@ -712,9 +712,9 @@
 <span class="sd">    .. note::</span>
 <span class="sd">        This class assumes that the server weights can be directly applied to the workers without</span>
 <span class="sd">        any additional processing. If your use case requires more complex weight mapping or synchronization</span>
-<span class="sd">        logic, consider extending `RemoteWeightUpdaterBase` with a custom implementation.</span>
+<span class="sd">        logic, consider extending `WeightUpdateSenderBase` with a custom implementation.</span>
 
-<span class="sd">    .. seealso:: :class:`~torchrl.collectors.RemoteWeightUpdaterBase` and</span>
+<span class="sd">    .. seealso:: :class:`~torchrl.collectors.WeightUpdateSenderBase` and</span>
 <span class="sd">        :class:`~torchrl.collectors.DataCollectorBase`.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -727,33 +727,33 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">weights_getter</span> <span class="o">=</span> <span class="n">get_server_weights</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_policy_weights</span> <span class="o">=</span> <span class="n">policy_weights</span>
 
-<div class="viewcode-block" id="MultiProcessedRemoteWeightUpdate.all_worker_ids"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiProcessedRemoteWeightUpdate.html#torchrl.collectors.MultiProcessedRemoteWeightUpdate.all_worker_ids">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">all_worker_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_policy_weights</span><span class="p">)</span></div>
+    <span class="k">def</span><span class="w"> </span><span class="nf">all_worker_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_policy_weights</span><span class="p">)</span>
 
-<div class="viewcode-block" id="MultiProcessedRemoteWeightUpdate._sync_weights_with_worker"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiProcessedRemoteWeightUpdate.html#torchrl.collectors.MultiProcessedRemoteWeightUpdate._sync_weights_with_worker">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">_sync_weights_with_worker</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_sync_weights_with_worker</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">worker_id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">server_weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_policy_weights</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">server_weights</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_policy_weights</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">server_weights</span><span class="p">)</span>
 
-<div class="viewcode-block" id="MultiProcessedRemoteWeightUpdate._get_server_weights"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiProcessedRemoteWeightUpdate.html#torchrl.collectors.MultiProcessedRemoteWeightUpdate._get_server_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">_get_server_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_server_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="c1"># The weights getter can be none if no mapping is required</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">weights_getter</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span>
         <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">weights_getter</span><span class="p">()</span>
         <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span>
-        <span class="k">return</span> <span class="n">weights</span><span class="o">.</span><span class="n">data</span></div>
+        <span class="k">return</span> <span class="n">weights</span><span class="o">.</span><span class="n">data</span>
 
-<div class="viewcode-block" id="MultiProcessedRemoteWeightUpdate._maybe_map_weights"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiProcessedRemoteWeightUpdate.html#torchrl.collectors.MultiProcessedRemoteWeightUpdate._maybe_map_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_map_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">server_weights</span></div></div>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_map_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">server_weights</span>
 
 
-<div class="viewcode-block" id="RayRemoteWeightUpdater"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.RayRemoteWeightUpdater.html#torchrl.collectors.RayRemoteWeightUpdater">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">RayRemoteWeightUpdater</span><span class="p">(</span><span class="n">RemoteWeightUpdaterBase</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">RayWeightUpdater</span><span class="p">(</span><span class="n">WeightUpdateSenderBase</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A remote weight updater for synchronizing policy weights across remote workers using Ray.</span>
 
-<span class="sd">    The `RayRemoteWeightUpdater` class provides a mechanism for updating the weights of a policy</span>
+<span class="sd">    The `RayWeightUpdateSender` class provides a mechanism for updating the weights of a policy</span>
 <span class="sd">    across remote inference workers managed by Ray. It leverages Ray&#39;s distributed computing</span>
 <span class="sd">    capabilities to efficiently distribute policy weights to remote collectors.</span>
 <span class="sd">    This class is typically used in distributed data collectors where each remote worker requires</span>
@@ -776,9 +776,9 @@
 <span class="sd">    .. note::</span>
 <span class="sd">        This class assumes that the server weights can be directly applied to the remote workers without</span>
 <span class="sd">        any additional processing. If your use case requires more complex weight mapping or synchronization</span>
-<span class="sd">        logic, consider extending `RemoteWeightUpdaterBase` with a custom implementation.</span>
+<span class="sd">        logic, consider extending `WeightUpdateSenderBase` with a custom implementation.</span>
 
-<span class="sd">    .. seealso:: :class:`~torchrl.collectors.RemoteWeightUpdaterBase` and</span>
+<span class="sd">    .. seealso:: :class:`~torchrl.collectors.WeightUpdateSenderBase` and</span>
 <span class="sd">        :class:`~torchrl.collectors.distributed.RayCollector`.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -794,31 +794,31 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">max_interval</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">max_interval</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">)</span>
 
-<div class="viewcode-block" id="RayRemoteWeightUpdater.all_worker_ids"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.RayRemoteWeightUpdater.html#torchrl.collectors.RayRemoteWeightUpdater.all_worker_ids">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">all_worker_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">)))</span></div>
+    <span class="k">def</span><span class="w"> </span><span class="nf">all_worker_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">)))</span>
 
-<div class="viewcode-block" id="RayRemoteWeightUpdater._get_server_weights"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.RayRemoteWeightUpdater.html#torchrl.collectors.RayRemoteWeightUpdater._get_server_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">_get_server_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_server_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
 
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span><span class="o">.</span><span class="n">data</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
 
-<div class="viewcode-block" id="RayRemoteWeightUpdater._maybe_map_weights"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.RayRemoteWeightUpdater.html#torchrl.collectors.RayRemoteWeightUpdater._maybe_map_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_map_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">server_weights</span></div>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_map_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">server_weights</span>
 
-<div class="viewcode-block" id="RayRemoteWeightUpdater._sync_weights_with_worker"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.RayRemoteWeightUpdater.html#torchrl.collectors.RayRemoteWeightUpdater._sync_weights_with_worker">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">_sync_weights_with_worker</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_sync_weights_with_worker</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">worker_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;syncing weights with worker </span><span class="si">{</span><span class="n">worker_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="n">c</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span>
         <span class="n">c</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">policy_weights</span><span class="o">=</span><span class="n">server_weights</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
 
-<div class="viewcode-block" id="RayRemoteWeightUpdater._skip_update"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.RayRemoteWeightUpdater.html#torchrl.collectors.RayRemoteWeightUpdater._skip_update">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">_skip_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">worker_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_skip_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">worker_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
         <span class="c1"># Use gt because we just incremented it</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_batches_since_weight_update</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_interval</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">False</span>
-        <span class="k">return</span> <span class="kc">True</span></div></div>
+        <span class="k">return</span> <span class="kc">True</span>
 </pre></div>
 
              </article>

@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.7.0+fd10fe2) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.8.0+e4733b8) &#x25BC</span></a>
     </div>
     
 
@@ -476,18 +476,24 @@
 <span class="sd">        out_keys (Sequence[NestedKey] | None): The output keys for the normalized data. Defaults to `in_keys` if</span>
 <span class="sd">            not provided.</span>
 <span class="sd">        lock (mp.Lock, optional): A lock for thread safety.</span>
-<span class="sd">        stateful (bool, optional): Whether the `VecNorm` is stateful. Defaults to `True`.</span>
+<span class="sd">        stateful (bool, optional): Whether the `VecNorm` is stateful. Stateless versions of this</span>
+<span class="sd">            transform requires the data to be carried within the input/output tensordicts.</span>
+<span class="sd">            Defaults to `True`.</span>
 <span class="sd">        decay (float, optional): The decay rate for updating statistics. Defaults to `0.9999`.</span>
+<span class="sd">            If `decay=1` is used, the normalizing statistics have an infinite memory (each item is weighed</span>
+<span class="sd">            identically). Lower values weigh recent data more than old ones.</span>
 <span class="sd">        eps (float, optional): A small value to prevent division by zero. Defaults to `1e-4`.</span>
-<span class="sd">        shapes (list[torch.Size], optional): The shapes of the inputs. Defaults to `None`.</span>
 <span class="sd">        shared_data (TensorDictBase | None, optional): Shared data for initialization. Defaults to `None`.</span>
+<span class="sd">        reduce_batch_dims (bool, optional): If `True`, the batch dimensions are reduced by averaging the data</span>
+<span class="sd">            before updating the statistics. This is useful when samples are received in batches, as it allows</span>
+<span class="sd">            the moving average to be computed over the entire batch rather than individual elements. Note that</span>
+<span class="sd">            this option is only supported in stateful mode (`stateful=True`). Defaults to `False`.</span>
 
 <span class="sd">    Attributes:</span>
 <span class="sd">        stateful (bool): Indicates whether the VecNormV2 is stateful or stateless.</span>
 <span class="sd">        lock (mp.Lock): A multiprocessing lock to ensure thread safety when updating statistics.</span>
 <span class="sd">        decay (float): The decay rate for updating statistics.</span>
 <span class="sd">        eps (float): A small value to prevent division by zero during normalization.</span>
-<span class="sd">        shapes (list[torch.Size]): The shapes of the inputs to be normalized.</span>
 <span class="sd">        frozen (bool): Indicates whether the VecNormV2 is frozen, preventing updates to statistics.</span>
 <span class="sd">        _cast_int_to_float (bool): Indicates whether integer inputs should be cast to float.</span>
 
@@ -520,6 +526,116 @@
 
 <span class="sd">    .. seealso:: :class:`~torchrl.envs.transforms.VecNorm` for the first version of this transform.</span>
 
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import EnvCreator, GymEnv, ParallelEnv, SerialEnv, VecNormV2</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; torch.manual_seed(0)</span>
+<span class="sd">        &gt;&gt;&gt; env = GymEnv(&quot;Pendulum-v1&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; env_trsf = env.append_transform(</span>
+<span class="sd">        &gt;&gt;&gt;     VecNormV2(in_keys=[&quot;observation&quot;, &quot;reward&quot;], out_keys=[&quot;observation_norm&quot;, &quot;reward_norm&quot;])</span>
+<span class="sd">        &gt;&gt;&gt; )</span>
+<span class="sd">        &gt;&gt;&gt; r = env_trsf.rollout(10)</span>
+<span class="sd">        &gt;&gt;&gt; print(&quot;Unnormalized rewards&quot;, r[&quot;next&quot;, &quot;reward&quot;])</span>
+<span class="sd">        Unnormalized rewards tensor([[ -1.7967],</span>
+<span class="sd">                [ -2.1238],</span>
+<span class="sd">                [ -2.5911],</span>
+<span class="sd">                [ -3.5275],</span>
+<span class="sd">                [ -4.8585],</span>
+<span class="sd">                [ -6.5028],</span>
+<span class="sd">                [ -8.2505],</span>
+<span class="sd">                [-10.3169],</span>
+<span class="sd">                [-12.1332],</span>
+<span class="sd">                [-13.1235]])</span>
+<span class="sd">        &gt;&gt;&gt; print(&quot;Normalized rewards&quot;, r[&quot;next&quot;, &quot;reward_norm&quot;])</span>
+<span class="sd">        Normalized rewards tensor([[-1.6596e-04],</span>
+<span class="sd">                [-8.3072e-02],</span>
+<span class="sd">                [-1.9170e-01],</span>
+<span class="sd">                [-3.9255e-01],</span>
+<span class="sd">                [-5.9131e-01],</span>
+<span class="sd">                [-7.4671e-01],</span>
+<span class="sd">                [-8.3760e-01],</span>
+<span class="sd">                [-9.2058e-01],</span>
+<span class="sd">                [-9.3484e-01],</span>
+<span class="sd">                [-8.6185e-01]])</span>
+<span class="sd">        &gt;&gt;&gt; # Aggregate values when using batched envs</span>
+<span class="sd">        &gt;&gt;&gt; env = SerialEnv(2, [lambda: GymEnv(&quot;Pendulum-v1&quot;)] * 2)</span>
+<span class="sd">        &gt;&gt;&gt; env_trsf = env.append_transform(</span>
+<span class="sd">        &gt;&gt;&gt;     VecNormV2(</span>
+<span class="sd">        &gt;&gt;&gt;         in_keys=[&quot;observation&quot;, &quot;reward&quot;],</span>
+<span class="sd">        &gt;&gt;&gt;         out_keys=[&quot;observation_norm&quot;, &quot;reward_norm&quot;],</span>
+<span class="sd">        &gt;&gt;&gt;         # Use reduce_batch_dims=True to aggregate values across batch elements</span>
+<span class="sd">        &gt;&gt;&gt;         reduce_batch_dims=True, )</span>
+<span class="sd">        &gt;&gt;&gt; )</span>
+<span class="sd">        &gt;&gt;&gt; r = env_trsf.rollout(10)</span>
+<span class="sd">        &gt;&gt;&gt; print(&quot;Unnormalized rewards&quot;, r[&quot;next&quot;, &quot;reward&quot;])</span>
+<span class="sd">        Unnormalized rewards tensor([[[-0.1456],</span>
+<span class="sd">                 [-0.1862],</span>
+<span class="sd">                 [-0.2053],</span>
+<span class="sd">                 [-0.2605],</span>
+<span class="sd">                 [-0.4046],</span>
+<span class="sd">                 [-0.5185],</span>
+<span class="sd">                 [-0.8023],</span>
+<span class="sd">                 [-1.1364],</span>
+<span class="sd">                 [-1.6183],</span>
+<span class="sd">                 [-2.5406]],</span>
+
+<span class="sd">                [[-0.0920],</span>
+<span class="sd">                 [-0.1492],</span>
+<span class="sd">                 [-0.2702],</span>
+<span class="sd">                 [-0.3917],</span>
+<span class="sd">                 [-0.5001],</span>
+<span class="sd">                 [-0.7947],</span>
+<span class="sd">                 [-1.0160],</span>
+<span class="sd">                 [-1.3347],</span>
+<span class="sd">                 [-1.9082],</span>
+<span class="sd">                 [-2.9679]]])</span>
+<span class="sd">        &gt;&gt;&gt; print(&quot;Normalized rewards&quot;, r[&quot;next&quot;, &quot;reward_norm&quot;])</span>
+<span class="sd">        Normalized rewards tensor([[[-0.2199],</span>
+<span class="sd">                 [-0.2918],</span>
+<span class="sd">                 [-0.1668],</span>
+<span class="sd">                 [-0.2083],</span>
+<span class="sd">                 [-0.4981],</span>
+<span class="sd">                 [-0.5046],</span>
+<span class="sd">                 [-0.7950],</span>
+<span class="sd">                 [-0.9791],</span>
+<span class="sd">                 [-1.1484],</span>
+<span class="sd">                 [-1.4182]],</span>
+
+<span class="sd">                [[ 0.2201],</span>
+<span class="sd">                 [-0.0403],</span>
+<span class="sd">                 [-0.5206],</span>
+<span class="sd">                 [-0.7791],</span>
+<span class="sd">                 [-0.8282],</span>
+<span class="sd">                 [-1.2306],</span>
+<span class="sd">                 [-1.2279],</span>
+<span class="sd">                 [-1.2907],</span>
+<span class="sd">                 [-1.4929],</span>
+<span class="sd">                 [-1.7793]]])</span>
+<span class="sd">        &gt;&gt;&gt; print(&quot;Loc / scale&quot;, env_trsf.transform.loc[&quot;reward&quot;], env_trsf.transform.scale[&quot;reward&quot;])</span>
+<span class="sd">        Loc / scale tensor([-0.8626]) tensor([1.1832])</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Share values between workers</span>
+<span class="sd">        &gt;&gt;&gt; def make_env():</span>
+<span class="sd">        ...     env = GymEnv(&quot;Pendulum-v1&quot;)</span>
+<span class="sd">        ...     env_trsf = env.append_transform(</span>
+<span class="sd">        ...         VecNormV2(in_keys=[&quot;observation&quot;, &quot;reward&quot;], out_keys=[&quot;observation_norm&quot;, &quot;reward_norm&quot;])</span>
+<span class="sd">        ...     )</span>
+<span class="sd">        ...     return env_trsf</span>
+<span class="sd">        ...</span>
+<span class="sd">        ...</span>
+<span class="sd">        &gt;&gt;&gt; if __name__ == &quot;__main__&quot;:</span>
+<span class="sd">        ...     # EnvCreator will share the loc/scale vals</span>
+<span class="sd">        ...     make_env = EnvCreator(make_env)</span>
+<span class="sd">        ...     # Create a local env to track the loc/scale</span>
+<span class="sd">        ...     local_env = make_env()</span>
+<span class="sd">        ...     env = ParallelEnv(2, [make_env] * 2)</span>
+<span class="sd">        ...     r = env.rollout(10)</span>
+<span class="sd">        ...     # Non-zero loc and scale testify that the sub-envs share their summary stats with us</span>
+<span class="sd">        ...     print(&quot;Remotely updated loc / scale&quot;, local_env.transform.loc[&quot;reward&quot;], local_env.transform.scale[&quot;reward&quot;])</span>
+<span class="sd">        Remotely updated loc / scale tensor([-0.4307]) tensor([0.9613])</span>
+<span class="sd">        ...     env.close()</span>
+
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="c1"># TODO:</span>
@@ -535,8 +651,8 @@
         <span class="n">stateful</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">decay</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.9999</span><span class="p">,</span>
         <span class="n">eps</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-4</span><span class="p">,</span>
-        <span class="n">shapes</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">shared_data</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">reduce_batch_dims</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">stateful</span> <span class="o">=</span> <span class="n">stateful</span>
         <span class="k">if</span> <span class="n">lock</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -547,7 +663,6 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">lock</span> <span class="o">=</span> <span class="n">lock</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">decay</span> <span class="o">=</span> <span class="n">decay</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">shapes</span> <span class="o">=</span> <span class="n">shapes</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">eps</span> <span class="o">=</span> <span class="n">eps</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">frozen</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cast_int_to_float</span> <span class="o">=</span> <span class="kc">False</span>
@@ -566,6 +681,11 @@
             <span class="k">if</span> <span class="n">shared_data</span><span class="p">:</span>
                 <span class="c1"># FIXME</span>
                 <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+        <span class="k">if</span> <span class="n">reduce_batch_dims</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">stateful</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;reduce_batch_dims=True and stateful=False are not supported.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reduce_batch_dims</span> <span class="o">=</span> <span class="n">reduce_batch_dims</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">in_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]:</span>
@@ -669,8 +789,8 @@
                 <span class="p">)</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">missing_tolerance</span> <span class="ow">and</span> <span class="n">next_tensordict_select</span><span class="o">.</span><span class="n">is_empty</span><span class="p">():</span>
                     <span class="k">return</span> <span class="n">next_tensordict</span>
-                <span class="n">next_tensordict_norm</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stateful_norm</span><span class="p">(</span><span class="n">next_tensordict_select</span><span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_stateful_update</span><span class="p">(</span><span class="n">next_tensordict_select</span><span class="p">)</span>
+                <span class="n">next_tensordict_norm</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stateful_norm</span><span class="p">(</span><span class="n">next_tensordict_select</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_stateless_init</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
                 <span class="n">next_tensordict_select</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
@@ -682,10 +802,10 @@
                 <span class="n">var</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">prefix</span><span class="si">}</span><span class="s2">_var&quot;</span><span class="p">]</span>
                 <span class="n">count</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">prefix</span><span class="si">}</span><span class="s2">_count&quot;</span><span class="p">]</span>
 
-                <span class="n">next_tensordict_norm</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stateless_norm</span><span class="p">(</span>
+                <span class="n">loc</span><span class="p">,</span> <span class="n">var</span><span class="p">,</span> <span class="n">count</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stateless_update</span><span class="p">(</span>
                     <span class="n">next_tensordict_select</span><span class="p">,</span> <span class="n">loc</span><span class="p">,</span> <span class="n">var</span><span class="p">,</span> <span class="n">count</span>
                 <span class="p">)</span>
-                <span class="n">loc</span><span class="p">,</span> <span class="n">var</span><span class="p">,</span> <span class="n">count</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stateless_update</span><span class="p">(</span>
+                <span class="n">next_tensordict_norm</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stateless_norm</span><span class="p">(</span>
                     <span class="n">next_tensordict_select</span><span class="p">,</span> <span class="n">loc</span><span class="p">,</span> <span class="n">var</span><span class="p">,</span> <span class="n">count</span>
                 <span class="p">)</span>
                 <span class="c1"># updates have been done in-place, we&#39;re good</span>
@@ -727,7 +847,9 @@
                 <span class="p">)</span>
                 <span class="n">data_select</span> <span class="o">=</span> <span class="n">data_select</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
                 <span class="n">data_select</span> <span class="o">=</span> <span class="n">data_select</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_in_keys_safe</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">reduce_batch_dims</span> <span class="ow">and</span> <span class="n">data_select</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
+                <span class="c1"># collapse the batch-dims</span>
+                <span class="n">data_select</span> <span class="o">=</span> <span class="n">data_select</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">ndim</span><span class="p">)))</span>
             <span class="c1"># For the count, we must use a TD because some keys (eg Reward) may be missing at some steps (eg, reset)</span>
             <span class="c1">#  We use mean() to eliminate all dims - since it&#39;s local we don&#39;t need to expand the shape</span>
             <span class="n">count</span> <span class="o">=</span> <span class="p">(</span>
@@ -749,27 +871,38 @@
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">[:</span><span class="o">-</span><span class="mi">3</span><span class="p">]</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_norm</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">loc</span><span class="p">,</span> <span class="n">var</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_norm</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">loc</span><span class="p">,</span> <span class="n">var</span><span class="p">,</span> <span class="n">count</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">missing_tolerance</span><span class="p">:</span>
             <span class="n">loc</span> <span class="o">=</span> <span class="n">loc</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
             <span class="n">var</span> <span class="o">=</span> <span class="n">var</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
+            <span class="n">count</span> <span class="o">=</span> <span class="n">count</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
             <span class="k">if</span> <span class="n">loc</span><span class="o">.</span><span class="n">is_empty</span><span class="p">():</span>
                 <span class="k">return</span> <span class="n">data</span>
 
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">decay</span> <span class="o">&lt;</span> <span class="mf">1.0</span><span class="p">:</span>
+            <span class="n">bias_correction</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="p">(</span><span class="n">count</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">decay</span><span class="p">))</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span>
+            <span class="n">bias_correction</span> <span class="o">=</span> <span class="n">bias_correction</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">y</span><span class="o">.</span><span class="n">dtype</span><span class="p">),</span> <span class="n">data</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">bias_correction</span> <span class="o">=</span> <span class="mi">1</span>
+
         <span class="n">var</span> <span class="o">=</span> <span class="n">var</span> <span class="o">-</span> <span class="n">loc</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">loc</span> <span class="o">=</span> <span class="n">loc</span> <span class="o">/</span> <span class="n">bias_correction</span>
+        <span class="n">var</span> <span class="o">=</span> <span class="n">var</span> <span class="o">/</span> <span class="n">bias_correction</span>
+
         <span class="n">scale</span> <span class="o">=</span> <span class="n">var</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">eps</span><span class="p">)</span>
 
         <span class="n">data_update</span> <span class="o">=</span> <span class="p">(</span><span class="n">data</span> <span class="o">-</span> <span class="n">loc</span><span class="p">)</span> <span class="o">/</span> <span class="n">scale</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[:</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">)]</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">:</span>
             <span class="c1"># map names</span>
             <span class="k">for</span> <span class="n">in_key</span><span class="p">,</span> <span class="n">out_key</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_in_keys_safe</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">):</span>
-                <span class="n">data_update</span><span class="o">.</span><span class="n">rename_key_</span><span class="p">(</span><span class="n">in_key</span><span class="p">,</span> <span class="n">out_key</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">in_key</span> <span class="ow">in</span> <span class="n">data_update</span><span class="p">:</span>
+                    <span class="n">data_update</span><span class="o">.</span><span class="n">rename_key_</span><span class="p">(</span><span class="n">in_key</span><span class="p">,</span> <span class="n">out_key</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">pass</span>
         <span class="k">return</span> <span class="n">data_update</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_stateful_norm</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_norm</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loc</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_var</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_norm</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loc</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_var</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_count</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_stateful_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">frozen</span><span class="p">:</span>
@@ -782,16 +915,33 @@
             <span class="n">var</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_var</span>
             <span class="n">loc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loc</span>
             <span class="n">count</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_count</span>
-        <span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
         <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_cast_to_float</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">decay</span> <span class="o">&lt;</span> <span class="mf">1.0</span><span class="p">:</span>
-            <span class="n">bias_correction</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="p">(</span><span class="n">count</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">decay</span><span class="p">))</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span>
-            <span class="n">bias_correction</span> <span class="o">=</span> <span class="n">bias_correction</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">y</span><span class="o">.</span><span class="n">dtype</span><span class="p">),</span> <span class="n">data</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">reduce_batch_dims</span> <span class="ow">and</span> <span class="n">data</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
+            <span class="c1"># The naive way to do this would be to convert the data to a list and iterate over it, but (1) that is</span>
+            <span class="c1">#  slow, and (2) it makes the value of the loc/var conditioned on the order we take to iterate over the data.</span>
+            <span class="c1">#  The second approach would be to average the data, but that would mean that having one vecnorm per batched</span>
+            <span class="c1">#  env or one per sub-env will lead to different results as a batch of N elements will actually be</span>
+            <span class="c1">#  considered as a single one.</span>
+            <span class="c1">#  What we go for instead is to average the data (and its squared value) then do the moving average with</span>
+            <span class="c1">#  adapted decay.</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+            <span class="n">count</span> <span class="o">+=</span> <span class="n">n</span>
+            <span class="n">data2</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">ndim</span><span class="p">)))</span>
+            <span class="n">data_mean</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">ndim</span><span class="p">)))</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">decay</span> <span class="o">!=</span> <span class="mf">1.0</span><span class="p">:</span>
+                <span class="n">weight</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">decay</span><span class="o">**</span><span class="n">n</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">weight</span> <span class="o">=</span> <span class="n">n</span> <span class="o">/</span> <span class="n">count</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">bias_correction</span> <span class="o">=</span> <span class="mi">1</span>
-        <span class="n">weight</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">decay</span><span class="p">)</span> <span class="o">/</span> <span class="n">bias_correction</span>
-        <span class="n">loc</span><span class="o">.</span><span class="n">lerp_</span><span class="p">(</span><span class="n">end</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="n">weight</span><span class="p">)</span>
-        <span class="n">var</span><span class="o">.</span><span class="n">lerp_</span><span class="p">(</span><span class="n">end</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">weight</span><span class="o">=</span><span class="n">weight</span><span class="p">)</span>
+            <span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="n">data2</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+            <span class="n">data_mean</span> <span class="o">=</span> <span class="n">data</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">decay</span> <span class="o">!=</span> <span class="mf">1.0</span><span class="p">:</span>
+                <span class="n">weight</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">decay</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">weight</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">/</span> <span class="n">count</span>
+        <span class="n">loc</span><span class="o">.</span><span class="n">lerp_</span><span class="p">(</span><span class="n">end</span><span class="o">=</span><span class="n">data_mean</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="n">weight</span><span class="p">)</span>
+        <span class="n">var</span><span class="o">.</span><span class="n">lerp_</span><span class="p">(</span><span class="n">end</span><span class="o">=</span><span class="n">data2</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="n">weight</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_stateless_init</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialized</span> <span class="ow">or</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">prefix</span><span class="si">}</span><span class="s2">_loc&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
@@ -819,7 +969,7 @@
             <span class="n">data</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">prefix</span><span class="si">}</span><span class="s2">_var&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">var</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_stateless_norm</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">loc</span><span class="p">,</span> <span class="n">var</span><span class="p">,</span> <span class="n">count</span><span class="p">):</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_norm</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">loc</span><span class="p">,</span> <span class="n">var</span><span class="p">)</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_norm</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">loc</span><span class="p">,</span> <span class="n">var</span><span class="p">,</span> <span class="n">count</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">data</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_stateless_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">loc</span><span class="p">,</span> <span class="n">var</span><span class="p">,</span> <span class="n">count</span><span class="p">):</span>
@@ -827,12 +977,10 @@
             <span class="k">return</span> <span class="n">loc</span><span class="p">,</span> <span class="n">var</span><span class="p">,</span> <span class="n">count</span>
         <span class="n">count</span> <span class="o">=</span> <span class="n">count</span> <span class="o">+</span> <span class="mi">1</span>
         <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_cast_to_float</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">decay</span> <span class="o">&lt;</span> <span class="mf">1.0</span><span class="p">:</span>
-            <span class="n">bias_correction</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="p">(</span><span class="n">count</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">decay</span><span class="p">))</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span>
-            <span class="n">bias_correction</span> <span class="o">=</span> <span class="n">bias_correction</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">y</span><span class="o">.</span><span class="n">dtype</span><span class="p">),</span> <span class="n">data</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">decay</span> <span class="o">!=</span> <span class="mf">1.0</span><span class="p">:</span>
+            <span class="n">weight</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">decay</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">bias_correction</span> <span class="o">=</span> <span class="mi">1</span>
-        <span class="n">weight</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">decay</span><span class="p">)</span> <span class="o">/</span> <span class="n">bias_correction</span>
+            <span class="n">weight</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">/</span> <span class="n">count</span>
         <span class="n">loc</span> <span class="o">=</span> <span class="n">loc</span><span class="o">.</span><span class="n">lerp</span><span class="p">(</span><span class="n">end</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="n">weight</span><span class="p">)</span>
         <span class="n">var</span> <span class="o">=</span> <span class="n">var</span><span class="o">.</span><span class="n">lerp</span><span class="p">(</span><span class="n">end</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">weight</span><span class="o">=</span><span class="n">weight</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">loc</span><span class="p">,</span> <span class="n">var</span><span class="p">,</span> <span class="n">count</span>
@@ -984,10 +1132,18 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_get_loc_scale</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">loc_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">stateful</span><span class="p">:</span>
             <span class="n">loc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loc</span>
+            <span class="n">count</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_count</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">decay</span> <span class="o">!=</span> <span class="mf">1.0</span><span class="p">:</span>
+                <span class="n">bias_correction</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="p">(</span><span class="n">count</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">decay</span><span class="p">))</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span>
+                <span class="n">bias_correction</span> <span class="o">=</span> <span class="n">bias_correction</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">y</span><span class="o">.</span><span class="n">dtype</span><span class="p">),</span> <span class="n">loc</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">bias_correction</span> <span class="o">=</span> <span class="mi">1</span>
             <span class="k">if</span> <span class="n">loc_only</span><span class="p">:</span>
-                <span class="k">return</span> <span class="n">loc</span><span class="p">,</span> <span class="kc">None</span>
+                <span class="k">return</span> <span class="n">loc</span> <span class="o">/</span> <span class="n">bias_correction</span><span class="p">,</span> <span class="kc">None</span>
             <span class="n">var</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_var</span>
             <span class="n">var</span> <span class="o">=</span> <span class="n">var</span> <span class="o">-</span> <span class="n">loc</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+            <span class="n">loc</span> <span class="o">=</span> <span class="n">loc</span> <span class="o">/</span> <span class="n">bias_correction</span>
+            <span class="n">var</span> <span class="o">=</span> <span class="n">var</span> <span class="o">/</span> <span class="n">bias_correction</span>
             <span class="n">scale</span> <span class="o">=</span> <span class="n">var</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">eps</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">loc</span><span class="p">,</span> <span class="n">scale</span>
         <span class="k">else</span><span class="p">:</span>

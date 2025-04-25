@@ -1124,7 +1124,6 @@ efficient sampling.
     :toctree: generated/
     :template: rl_template.rst
 
-    History
     PairwiseDataset
     PromptData
     PromptTensorDictTokenizer
