@@ -62,9 +62,7 @@ def main(cfg: DictConfig):  # noqa: F821
 
     # Create collector
     collector = MultiaSyncDataCollector(
-        create_env_fn=[
-            make_env(cfg.env.env_name, device, gym_backend=cfg.env.backend)
-        ]
+        create_env_fn=[make_env(cfg.env.env_name, device, gym_backend=cfg.env.backend)]
         * num_workers,
         policy=actor,
         frames_per_batch=frames_per_batch,
