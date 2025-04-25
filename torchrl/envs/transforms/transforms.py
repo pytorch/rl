@@ -8816,7 +8816,14 @@ class ActionMask(Transform):
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
-        action_spec = self.container.action_spec
+        action_spec = self.container.full_action_spec
+        keys = self.container.action_keys
+        if len(keys) == 1:
+            action_spec = action_spec[keys[0]]
+        else:
+            raise ValueError(
+                f"Too many action keys for {self.__class__.__name__}: {keys=}"
+            )
         if not isinstance(action_spec, self.ACCEPTED_SPECS):
             raise ValueError(
                 self.SPEC_TYPE_ERROR.format(self.ACCEPTED_SPECS, type(action_spec))
