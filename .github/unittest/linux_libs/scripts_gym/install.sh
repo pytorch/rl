@@ -48,6 +48,8 @@ pip install -U charset-normalizer
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
+  conda install anaconda::cmake -y
+  pip3 install "pybind11[global]"
   pip3 install git+https://github.com/pytorch/tensordict.git
 else
   pip3 install tensordict
