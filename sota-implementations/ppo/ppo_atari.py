@@ -62,7 +62,9 @@ def main(cfg: DictConfig):  # noqa: F821
                 compile_mode = "reduce-overhead"
 
     # Create models (check utils_atari.py)
-    actor, critic = make_ppo_models(cfg.env.env_name, device=device)
+    actor, critic = make_ppo_models(
+        cfg.env.env_name, device=device, gym_backend=cfg.env.backend
+    )
 
     # Create collector
     collector = SyncDataCollector(

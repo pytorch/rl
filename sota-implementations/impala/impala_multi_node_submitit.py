@@ -81,9 +81,7 @@ def main(cfg: DictConfig):  # noqa: F821
             f"device assignment not implemented for backend {cfg.collector.backend}"
         )
     collector = DistributedDataCollector(
-        create_env_fn=[
-            make_env(cfg.env.env_name, device, gym_backend=cfg.env.backend)
-        ]
+        create_env_fn=[make_env(cfg.env.env_name, device, gym_backend=cfg.env.backend)]
         * num_workers,
         policy=actor,
         num_workers_per_collector=1,
