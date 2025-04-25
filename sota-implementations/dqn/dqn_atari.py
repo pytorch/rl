@@ -49,7 +49,7 @@ def main(cfg: DictConfig):  # noqa: F821
     test_interval = cfg.logger.test_interval // frame_skip
 
     # Make the components
-    model = make_dqn_model(cfg.env.env_name, frame_skip, device=device)
+    model = make_dqn_model(cfg.env.env_name, cfg.env.backend, frame_skip, device=device)
     greedy_module = EGreedyModule(
         annealing_num_steps=cfg.collector.annealing_frames,
         eps_init=cfg.collector.eps_start,
@@ -118,7 +118,7 @@ def main(cfg: DictConfig):  # noqa: F821
         cfg.env.env_name,
         frame_skip,
         device,
-        gym_backend=cfg.env.gym_backend,
+        gym_backend=cfg.env.backend,
         is_test=True,
     )
     if cfg.logger.video:
@@ -161,7 +161,7 @@ def main(cfg: DictConfig):  # noqa: F821
     # Create the collector
     collector = SyncDataCollector(
         create_env_fn=make_env(
-            cfg.env.env_name, frame_skip, device, gym_backend=cfg.env.gym_backend
+            cfg.env.env_name, frame_skip, device, gym_backend=cfg.env.backend
         ),
         policy=model_explore,
         frames_per_batch=frames_per_batch,
