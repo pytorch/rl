@@ -15,7 +15,7 @@ printf "* Installing vim - git - wget\n"
 apt-get install -y vim git wget
 
 printf "* Installing glfw - glew - osmesa part 1\n"
-apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2
+apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2 xvfb
 
 #printf "* Installing glfw - glew - osmesa part 2\n"
 #apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev libsdl2-dev libsdl2-2.0-0
