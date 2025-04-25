@@ -37,7 +37,6 @@ jobs:
       script: |
         set -e
         set -v
-        # apt-get update && apt-get install -y -f git wget gcc g++ dialog apt-utils cmake
         yum makecache
         # Install Mesa and OpenGL Libraries:
         yum install -y glfw mesa-libGL mesa-libGL-devel egl-utils freeglut mesa-libGLU mesa-libEGL
@@ -64,9 +63,9 @@ jobs:
         conda activate "${env_dir}"
 
         # 2. upgrade pip, ninja and packaging
-        # apt-get install python3-pip unzip -y -f
+        conda install anaconda::cmake -y
         python3 -m pip install --upgrade pip
-        python3 -m pip install setuptools ninja packaging cmake -U
+        python3 -m pip install setuptools ninja packaging "pybind11[global]" -U
         
         # 3. check python version
         python3 --version
