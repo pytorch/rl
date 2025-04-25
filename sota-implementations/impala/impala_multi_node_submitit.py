@@ -61,7 +61,7 @@ def main(cfg: DictConfig):  # noqa: F821
     ) * cfg.loss.sgd_updates
 
     # Create models (check utils.py)
-    actor, critic = make_ppo_models(cfg.env.env_name, cfg.env.gym_backend)
+    actor, critic = make_ppo_models(cfg.env.env_name, cfg.env.backend)
     actor, critic = actor.to(device), critic.to(device)
 
     slurm_kwargs = {
@@ -82,7 +82,7 @@ def main(cfg: DictConfig):  # noqa: F821
         )
     collector = DistributedDataCollector(
         create_env_fn=[
-            make_env(cfg.env.env_name, device, gym_backend=cfg.env.gym_backend)
+            make_env(cfg.env.env_name, device, gym_backend=cfg.env.backend)
         ]
         * num_workers,
         policy=actor,
@@ -150,7 +150,7 @@ def main(cfg: DictConfig):  # noqa: F821
 
     # Create test environment
     test_env = make_env(
-        cfg.env.env_name, device, gym_backend=cfg.env.gym_backend, is_test=True
+        cfg.env.env_name, device, gym_backend=cfg.env.backend, is_test=True
     )
     test_env.eval()
 
