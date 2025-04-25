@@ -6,14 +6,24 @@
 # Do not install PyTorch and torchvision here, otherwise they also get cached.
 
 set -e
+set -v
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-# Avoid error: "fatal: unsafe repository"
-apt-get update
-apt-get install -y git wget gcc g++ vim cmake
-apt-get install -y mesa-utils libgl1-mesa-glx libsdl2-dev libsdl2-2.0-0
-apt-get install -y libglfw3 libosmesa6 libglew-dev libglvnd0 libgl1 libglx0
-apt-get install -y libegl1 libgles2 xvfb
+
+apt-get update && apt-get upgrade -y
+apt-get install -y vim git wget libsdl2-dev libsdl2-2.0-0 cmake
+
+apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev
+apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2
+
+if [ "${CU_VERSION:-}" == cpu ] ; then
+  # solves version `GLIBCXX_3.4.29' not found for tensorboard
+#    apt-get install -y gcc-4.9
+  apt-get upgrade -y libstdc++6
+  apt-get dist-upgrade -y
+else
+  apt-get install -y g++ gcc
+fi
 
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
@@ -84,7 +94,7 @@ conda env config vars set \
   MAX_IDLE_COUNT=1000 \
   MUJOCO_GL=egl \
   SDL_VIDEODRIVER=dummy \
-  DISPLAY=:99 \
+  DISPLAY=unix:0.0 \
   PYOPENGL_PLATFORM=egl \
   LD_PRELOAD=$glew_path \
   NVIDIA_PATH=/usr/src/nvidia-470.63.01 \
