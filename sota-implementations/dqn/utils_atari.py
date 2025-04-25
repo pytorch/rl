@@ -96,8 +96,8 @@ def make_dqn_modules_pixels(proof_environment, device):
     return qvalue_module
 
 
-def make_dqn_model(env_name, frame_skip, device):
-    proof_environment = make_env(env_name, frame_skip, device=device)
+def make_dqn_model(env_name, gym_backend, frame_skip, device):
+    proof_environment = make_env(env_name, frame_skip, gym_backend=gym_backend, device=device)
     qvalue_module = make_dqn_modules_pixels(proof_environment, device=device)
     del proof_environment
     return qvalue_module
