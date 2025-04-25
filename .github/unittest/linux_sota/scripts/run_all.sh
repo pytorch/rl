@@ -111,7 +111,6 @@ python -c """import gym;import d4rl"""
 
 # install ale-py: manylinux names are broken for CentOS so we need to manually download and
 # rename them
-pip install "gymnasium[atari]>=1.1.0"
 
 # ============================================================================================ #
 # ================================ PyTorch & TorchRL ========================================= #
@@ -127,6 +126,8 @@ version="$(python -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
 
 # submodules
 git submodule sync && git submodule update --init --recursive
+
+pip3 install "gym" "gymnasium[atari,ale-py]>=1.1.0" -U
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
