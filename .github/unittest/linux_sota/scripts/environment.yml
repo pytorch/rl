@@ -30,4 +30,4 @@ dependencies:
     - vmas
     - transformers
     - gym[atari,accept-rom-license,ale-py]
-    - gymnasium[atari,ale-py]>=1.1.0"
+    - gymnasium[atari,ale-py]>=1.1.0
