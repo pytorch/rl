@@ -11,10 +11,14 @@ set -v
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 apt-get update && apt-get upgrade -y
-apt-get install -y vim git wget libsdl2-dev libsdl2-2.0-0 cmake
+printf "* Installing vim - git - wget - cmake\n"
+apt-get install -y vim git wget cmake
 
-apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev
+printf "* Installing glfw - glew - osmesa part 1\n"
 apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2
+
+printf "* Installing glfw - glew - osmesa part 2\n"
+apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev libsdl2-dev libsdl2-2.0-0
 
 if [ "${CU_VERSION:-}" == cpu ] ; then
   # solves version `GLIBCXX_3.4.29' not found for tensorboard
