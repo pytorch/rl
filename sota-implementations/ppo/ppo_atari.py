@@ -67,7 +67,7 @@ def main(cfg: DictConfig):  # noqa: F821
     # Create collector
     collector = SyncDataCollector(
         create_env_fn=make_parallel_env(
-            cfg.env.env_name, cfg.env.num_envs, device, gym_backend=cfg.env.gym_backend
+            cfg.env.env_name, cfg.env.num_envs, device, gym_backend=cfg.env.backend
         ),
         policy=actor,
         frames_per_batch=frames_per_batch,
@@ -140,7 +140,7 @@ def main(cfg: DictConfig):  # noqa: F821
 
     # Create test environment
     test_env = make_parallel_env(
-        cfg.env.env_name, 1, device, is_test=True, gym_backend=cfg.env.gym_backend
+        cfg.env.env_name, 1, device, is_test=True, gym_backend=cfg.env.backend
     )
     if logger_video:
         test_env = test_env.append_transform(
