@@ -48,6 +48,8 @@ fi
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
+  conda install anaconda::cmake -y
+  python3 -m pip install "pybind11[global]"
   python3 -m pip install git+https://github.com/pytorch/tensordict.git
 else
   python3 -m pip install tensordict
