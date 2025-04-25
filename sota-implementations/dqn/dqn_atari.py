@@ -114,7 +114,13 @@ def main(cfg: DictConfig):  # noqa: F821
         )
 
     # Create the test environment
-    test_env = make_env(cfg.env.env_name, frame_skip, device, is_test=True)
+    test_env = make_env(
+        cfg.env.env_name,
+        frame_skip,
+        device,
+        gym_backend=cfg.env.gym_backend,
+        is_test=True,
+    )
     if cfg.logger.video:
         test_env.insert_transform(
             0,
@@ -154,7 +160,9 @@ def main(cfg: DictConfig):  # noqa: F821
 
     # Create the collector
     collector = SyncDataCollector(
-        create_env_fn=make_env(cfg.env.env_name, frame_skip, device),
+        create_env_fn=make_env(
+            cfg.env.env_name, frame_skip, device, gym_backend=cfg.env.gym_backend
+        ),
         policy=model_explore,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
