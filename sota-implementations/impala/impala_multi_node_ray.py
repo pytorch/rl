@@ -91,9 +91,7 @@ def main(cfg: DictConfig):  # noqa: F821
         "memory": cfg.remote_worker_resources.memory,
     }
     collector = RayCollector(
-        create_env_fn=[
-            make_env(cfg.env.env_name, device, gym_backend=cfg.env.backend)
-        ]
+        create_env_fn=[make_env(cfg.env.env_name, device, gym_backend=cfg.env.backend)]
         * num_workers,
         policy=actor,
         collector_class=SyncDataCollector,
