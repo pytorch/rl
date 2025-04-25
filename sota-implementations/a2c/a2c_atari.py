@@ -107,7 +107,9 @@ def main(cfg: DictConfig):  # noqa: F821
         )
 
     # Create test environment
-    test_env = make_parallel_env(cfg.env.env_name, 1, device, is_test=True)
+    test_env = make_parallel_env(
+        cfg.env.env_name, 1, device, gym_backend=cfg.env.gym_backend, is_test=True
+    )
     test_env.set_seed(0)
     if cfg.logger.video:
         test_env = test_env.insert_transform(

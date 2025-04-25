@@ -58,11 +58,14 @@ def main(cfg: DictConfig):  # noqa: F821
     ) * cfg.loss.sgd_updates
 
     # Create models (check utils.py)
-    actor, critic = make_ppo_models(cfg.env.env_name)
+    actor, critic = make_ppo_models(cfg.env.env_name, cfg.env.gym_backend)
 
     # Create collector
     collector = MultiaSyncDataCollector(
-        create_env_fn=[make_env(cfg.env.env_name, device)] * num_workers,
+        create_env_fn=[
+            make_env(cfg.env.env_name, device, gym_backend=cfg.env.gym_backend)
+        ]
+        * num_workers,
         policy=actor,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
@@ -123,7 +126,9 @@ def main(cfg: DictConfig):  # noqa: F821
         )
 
     # Create test environment
-    test_env = make_env(cfg.env.env_name, device, is_test=True)
+    test_env = make_env(
+        cfg.env.env_name, device, gym_backend=cfg.env.gym_backend, is_test=True
+    )
     test_env.eval()
 
     # Main loop
