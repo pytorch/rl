@@ -65,7 +65,7 @@ jobs:
         # 2. upgrade pip, ninja and packaging
         conda install anaconda::cmake -y
         python3 -m pip install --upgrade pip
-        python3 -m pip install setuptools ninja packaging -U
+        python3 -m pip install setuptools ninja packaging "pybind11[global]" -U
         
         # 3. check python version
         python3 --version
