@@ -10,7 +10,7 @@ if pip list | grep -q torch; then
     echo "Torch is installed."
     if [[ "$ARCH" == "aarch64" ]]; then
         ${CONDA_RUN} pip install "pybind11[global]"
-        ${CONDA_RUN} conda install anaconda::cmake
+        ${CONDA_RUN} conda install anaconda::cmake -y
         ${CONDA_RUN} pip install git+https://github.com/pytorch/tensordict.git -U --no-deps
     else
         ${CONDA_RUN} pip install tensordict-nightly -U
@@ -19,7 +19,7 @@ elif [[ -n "${SMOKE_TEST_SCRIPT:-}" ]]; then
     ${CONDA_RUN} ${PIP_INSTALL_TORCH}
     if [[ "$ARCH" == "aarch64" ]]; then
         ${CONDA_RUN} pip install "pybind11[global]"
-        ${CONDA_RUN} conda install anaconda::cmake
+        ${CONDA_RUN} conda install anaconda::cmake -y
         ${CONDA_RUN} pip install git+https://github.com/pytorch/tensordict.git -U --no-deps
     else
         ${CONDA_RUN} pip install tensordict-nightly -U
