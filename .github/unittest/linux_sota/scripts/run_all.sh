@@ -128,7 +128,7 @@ version="$(python -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
 git submodule sync && git submodule update --init --recursive
 
 pip3 install ale-py -U
-pip3 install "gym" "gymnasium[atari,ale-py]>=1.1.0" -U
+pip3 install "gym[atari,accept-rom-license]" "gymnasium>=1.1.0" -U
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
