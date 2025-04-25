@@ -181,9 +181,11 @@ def make_ppo_modules_pixels(proof_environment, device):
     return common_module, policy_module, value_module
 
 
-def make_ppo_models(env_name, device):
+def make_ppo_models(env_name, device, gym_backend):
 
-    proof_environment = make_parallel_env(env_name, 1, device=device)
+    proof_environment = make_parallel_env(
+        env_name, 1, device=device, gym_backend=gym_backend
+    )
     common_module, policy_module, value_module = make_ppo_modules_pixels(
         proof_environment,
         device=device,

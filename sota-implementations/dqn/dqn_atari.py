@@ -49,7 +49,12 @@ def main(cfg: DictConfig):  # noqa: F821
     test_interval = cfg.logger.test_interval // frame_skip
 
     # Make the components
-    model = make_dqn_model(cfg.env.env_name, cfg.env.backend, frame_skip, device=device)
+    model = make_dqn_model(
+        cfg.env.env_name,
+        gym_backend=cfg.env.backend,
+        frame_skip=frame_skip,
+        device=device,
+    )
     greedy_module = EGreedyModule(
         annealing_num_steps=cfg.collector.annealing_frames,
         eps_init=cfg.collector.eps_start,
