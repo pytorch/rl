@@ -69,7 +69,7 @@ def make_base_env(
 def make_parallel_env(env_name, num_envs, device, gym_backend, is_test=False):
     env = ParallelEnv(
         num_envs,
-        EnvCreator(lambda: make_base_env(env_name, gym_backend)),
+        EnvCreator(lambda: make_base_env(env_name, gym_backend=gym_backend)),
         serial_for_single=True,
         device=device,
     )
