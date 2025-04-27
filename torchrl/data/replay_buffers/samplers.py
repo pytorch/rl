@@ -526,8 +526,6 @@ class PrioritizedSampler(Sampler):
             index = unravel_index(index, storage.shape)
         return index, {"_weight": weight}
 
-        return index, {"_weight": weight}
-
     def add(self, index: torch.Tensor | int) -> None:
         super().add(index)
         self._maybe_erase_max_priority(index)
