@@ -407,7 +407,7 @@ class SMACv2Wrapper(_EnvWrapper):
         mask = torch.tensor(
             self.get_avail_actions(), dtype=torch.bool, device=self.device
         )
-        self.action_spec.update_mask(mask)
+        self.full_action_spec[self.action_key].update_mask(mask)
         return mask
 
     def close(self, *, raise_if_closed: bool = True):

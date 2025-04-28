@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import typing
-import warnings
 from typing import Any
 
 import torch
@@ -669,47 +668,11 @@ class LSTMModule(ModuleBase):
         )
 
     def set_recurrent_mode(self, mode: bool = True):
-        """[DEPRECATED - use :class:`torchrl.modules.set_recurrent_mode` context manager instead] Returns a new copy of the module that shares the same lstm model but with a different ``recurrent_mode`` attribute (if it differs).
-
-        A copy is created such that the module can be used with divergent behavior
-        in various parts of the code (inference vs training):
-
-        Examples:
-            >>> from torchrl.envs import TransformedEnv, InitTracker, step_mdp
-            >>> from torchrl.envs import GymEnv
-            >>> from torchrl.modules import MLP
-            >>> from tensordict import TensorDict
-            >>> from torch import nn
-            >>> from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod
-            >>> env = TransformedEnv(GymEnv("Pendulum-v1"), InitTracker())
-            >>> lstm = nn.LSTM(input_size=env.observation_spec["observation"].shape[-1], hidden_size=64, batch_first=True)
-            >>> lstm_module = LSTMModule(lstm=lstm, in_keys=["observation", "hidden0", "hidden1"], out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")])
-            >>> mlp = MLP(num_cells=[64], out_features=1)
-            >>> # building two policies with different behaviors:
-            >>> policy_inference = Seq(lstm_module, Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
-            >>> policy_training = Seq(lstm_module.set_recurrent_mode(True), Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
-            >>> traj_td = env.rollout(3) # some random temporal data
-            >>> traj_td = policy_training(traj_td)
-            >>> # let's check that both return the same results
-            >>> td_inf = TensorDict(batch_size=traj_td.shape[:-1])
-            >>> for td in traj_td.unbind(-1):
-            ...     td_inf = td_inf.update(td.select("is_init", "observation", ("next", "observation")))
-            ...     td_inf = policy_inference(td_inf)
-            ...     td_inf = step_mdp(td_inf)
-            ...
-            >>> torch.testing.assert_close(td_inf["hidden0"], traj_td[..., -1]["next", "hidden0"])
-        """
-        warnings.warn(
-            "The lstm.set_recurrent_mode() API is deprecated and will be removed in v0.8. "
-            "To set the recurent mode, use the :class:`~torchrl.modules.set_recurrent_mode` context manager or "
-            "the `default_recurrent_mode` keyword argument in the constructor.",
-            category=DeprecationWarning,
+        raise RuntimeError(
+            "The lstm.set_recurrent_mode() API has been removed in v0.8. "
+            "To set the recurrent mode, use the :class:`~torchrl.modules.set_recurrent_mode` context manager or "
+            "the `default_recurrent_mode` keyword argument in the constructor."
         )
-        if mode is self.recurrent_mode:
-            return self
-        out = LSTMModule(lstm=self.lstm, in_keys=self.in_keys, out_keys=self.out_keys)
-        out._recurrent_mode = mode
-        return out
 
     @dispatch
     def forward(self, tensordict: TensorDictBase):
@@ -1491,46 +1454,11 @@ class GRUModule(ModuleBase):
         )
 
     def set_recurrent_mode(self, mode: bool = True):
-        """[DEPRECATED - use :class:`torchrl.modules.set_recurrent_mode` context manager instead] Returns a new copy of the module that shares the same gru model but with a different ``recurrent_mode`` attribute (if it differs).
-
-        A copy is created such that the module can be used with divergent behavior
-        in various parts of the code (inference vs training):
-
-        Examples:
-            >>> from torchrl.envs import GymEnv, TransformedEnv, InitTracker, step_mdp
-            >>> from torchrl.modules import MLP
-            >>> from tensordict import TensorDict
-            >>> from torch import nn
-            >>> from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod
-            >>> env = TransformedEnv(GymEnv("Pendulum-v1"), InitTracker())
-            >>> gru = nn.GRU(input_size=env.observation_spec["observation"].shape[-1], hidden_size=64, batch_first=True)
-            >>> gru_module = GRUModule(gru=gru, in_keys=["observation", "hidden"], out_keys=["intermediate", ("next", "hidden")])
-            >>> mlp = MLP(num_cells=[64], out_features=1)
-            >>> # building two policies with different behaviors:
-            >>> policy_inference = Seq(gru_module, Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
-            >>> policy_training = Seq(gru_module.set_recurrent_mode(True), Mod(mlp, in_keys=["intermediate"], out_keys=["action"]))
-            >>> traj_td = env.rollout(3) # some random temporal data
-            >>> traj_td = policy_training(traj_td)
-            >>> # let's check that both return the same results
-            >>> td_inf = TensorDict(batch_size=traj_td.shape[:-1])
-            >>> for td in traj_td.unbind(-1):
-            ...     td_inf = td_inf.update(td.select("is_init", "observation", ("next", "observation")))
-            ...     td_inf = policy_inference(td_inf)
-            ...     td_inf = step_mdp(td_inf)
-            ...
-            >>> torch.testing.assert_close(td_inf["hidden"], traj_td[..., -1]["next", "hidden"])
-        """
-        warnings.warn(
-            "The gru.set_recurrent_mode() API is deprecated and will be removed in v0.8. "
+        raise RuntimeError(
+            "The gru.set_recurrent_mode() API has been removed in v0.8. "
             "To set the recurent mode, use the :class:`~torchrl.modules.set_recurrent_mode` context manager or "
             "the `default_recurrent_mode` keyword argument in the constructor.",
-            category=DeprecationWarning,
         )
-        if mode is self.recurrent_mode:
-            return self
-        out = GRUModule(gru=self.gru, in_keys=self.in_keys, out_keys=self.out_keys)
-        out._recurrent_mode = mode
-        return out
 
     @dispatch
     @set_lazy_legacy(False)

@@ -1,6 +1,7 @@
 # Environment
 env:
   env_name: PongNoFrameskip-v4
+  backend: gymnasium
 
 # Device for the forward and backward passes
 device:

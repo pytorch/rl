@@ -6,10 +6,28 @@
 # Do not install PyTorch and torchvision here, otherwise they also get cached.
 
 set -e
+set -v
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-# Avoid error: "fatal: unsafe repository"
-apt-get update && apt-get install -y git wget gcc g++
+
+apt-get update && apt-get upgrade -y
+printf "* Installing vim - git - wget\n"
+apt-get install -y vim git wget
+
+printf "* Installing glfw - glew - osmesa part 1\n"
+apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2 xvfb
+
+#printf "* Installing glfw - glew - osmesa part 2\n"
+#apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev libsdl2-dev libsdl2-2.0-0
+
+if [ "${CU_VERSION:-}" == cpu ] ; then
+  # solves version `GLIBCXX_3.4.29' not found for tensorboard
+#    apt-get install -y gcc-4.9
+  apt-get upgrade -y libstdc++6
+  apt-get dist-upgrade -y
+else
+  apt-get install -y g++ gcc
+fi
 
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"

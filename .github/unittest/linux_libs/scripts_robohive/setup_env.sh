@@ -9,7 +9,7 @@ set -e
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
-apt-get update && apt-get install -y git wget gcc g++
+apt-get update && apt-get install -y git wget gcc g++ cmake
 
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
@@ -64,7 +64,7 @@ conda env config vars set \
   MAX_IDLE_COUNT=1000 \
   MUJOCO_GL=egl \
   SDL_VIDEODRIVER=dummy \
-  DISPLAY=unix:0.0 \
+  DISPLAY=:99 \
   PYOPENGL_PLATFORM=egl \
   NVIDIA_PATH=/usr/src/nvidia-470.63.01 \
   sim_backend=MUJOCO \

@@ -820,12 +820,6 @@ def test_create_composite_nested(shape, device):
 class TestLock:
     @pytest.mark.parametrize("recurse", [None, True, False])
     def test_lock(self, recurse):
-        catch_warn = (
-            pytest.warns(DeprecationWarning, match="recurse")
-            if recurse is None
-            else contextlib.nullcontext()
-        )
-
         shape = [3, 4, 5]
         spec = Composite(
             a=Composite(b=Composite(shape=shape[:3], device="cpu"), shape=shape[:2]),
@@ -834,14 +828,13 @@ class TestLock:
         spec["a"] = spec["a"].clone()
         spec["a", "b"] = spec["a", "b"].clone()
         assert not spec.locked
-        with catch_warn:
-            spec.lock_(recurse=recurse)
+        spec.lock_(recurse=recurse)
         assert spec.locked
         with pytest.raises(RuntimeError, match="Cannot modify a locked Composite."):
             spec["a"] = spec["a"].clone()
         with pytest.raises(RuntimeError, match="Cannot modify a locked Composite."):
             spec.set("a", spec["a"].clone())
-        if recurse:
+        if recurse in (None, True):
             assert spec["a"].locked
             with pytest.raises(RuntimeError, match="Cannot modify a locked Composite."):
                 spec["a"].set("b", spec["a", "b"].clone())
@@ -851,8 +844,7 @@ class TestLock:
             assert not spec["a"].locked
             spec["a", "b"] = spec["a", "b"].clone()
             spec["a"].set("b", spec["a", "b"].clone())
-        with catch_warn:
-            spec.unlock_(recurse=recurse)
+        spec.unlock_(recurse=recurse)
         spec["a"] = spec["a"].clone()
         spec["a", "b"] = spec["a", "b"].clone()
         spec["a"].set("b", spec["a", "b"].clone())
