@@ -2232,8 +2232,14 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
             for channel in self.parent_channels:
                 channel.close()
+            start_time = time.time()
+            while (
+                any(proc.is_alive() for proc in self._workers)
+                and (time.time() - start_time) < self._timeout
+            ):
+                time.sleep(0.01)
             for proc in self._workers:
-                proc.join(timeout=self._timeout)
+                proc.join()
         finally:
             for proc in self._workers:
                 if proc.is_alive():
@@ -2731,16 +2737,13 @@ def _run_worker_pipe_direct(
             if not initialized:
                 raise RuntimeError("call 'init' before closing")
             env.close()
-            del (
-                env,
-                data,
-            )
             mp_event.set()
             child_pipe.close()
             if verbose:
                 torchrl_logger.info(f"{pid} closed")
+            del (env, data, child_pipe, mp_event)
             gc.collect()
-            break
+            return
 
         elif cmd == "load_state_dict":
             env.load_state_dict(data)

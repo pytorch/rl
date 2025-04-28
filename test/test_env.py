@@ -3716,14 +3716,15 @@ class TestNonTensorEnv:
 
     @pytest.mark.parametrize("bwad", [True, False])
     @pytest.mark.parametrize("use_buffers", [False, True])
-    def test_parallel(self, bwad, use_buffers):
+    def test_parallel(self, bwad, use_buffers, maybe_fork_ParallelEnv):
         N = 50
-        env = ParallelEnv(2, EnvWithMetadata, use_buffers=use_buffers)
+        env = maybe_fork_ParallelEnv(2, EnvWithMetadata, use_buffers=use_buffers)
         try:
             r = env.rollout(N, break_when_any_done=bwad)
             assert r.get("non_tensor").tolist() == [list(range(N))] * 2
         finally:
             env.close(raise_if_closed=False)
+            del env
 
     class AddString(Transform):
         def __init__(self):
