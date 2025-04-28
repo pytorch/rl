@@ -5,7 +5,7 @@ unset PYTORCH_VERSION
 # so no need to set PYTORCH_VERSION.
 # In fact, keeping PYTORCH_VERSION forces us to hardcode PyTorch version in config.
 apt-get update && apt-get install -y git wget gcc g++
-
+apt-get install -y cmake
 set -e
 set -v
 
@@ -48,7 +48,7 @@ pip install -U charset-normalizer
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  conda install anaconda::cmake -y
+#  conda install anaconda::cmake -y
   pip3 install "pybind11[global]"
   pip3 install git+https://github.com/pytorch/tensordict.git
 else
