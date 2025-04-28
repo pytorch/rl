@@ -53,8 +53,7 @@ from torchrl.collectors.utils import split_trajectories
 from torchrl.collectors.weight_update import (
     MultiProcessedWeightUpdate,
     VanillaWeightUpdater,
-    WeightUpdateReceiverBase,
-    WeightUpdateSenderBase,
+    WeightUpdaterBase,
 )
 from torchrl.data import ReplayBuffer
 from torchrl.data.tensor_specs import TensorSpec
@@ -155,41 +154,22 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     trust_policy: bool
     compiled_policy: bool
     cudagraphed_policy: bool
-    _weight_update_receiver: WeightUpdateReceiverBase | None = None
-    _weight_update_sender: WeightUpdateSenderBase | None = None
+    _weight_updater: WeightUpdaterBase | None = None
 
     @property
-    def weight_update_receiver(self) -> WeightUpdateReceiverBase:
-        return self._weight_update_receiver
+    def weight_updater(self) -> WeightUpdaterBase:
+        return self._weight_updater
 
-    @weight_update_receiver.setter
-    def weight_update_receiver(
-        self,
-        value: WeightUpdateReceiverBase | Callable[[], WeightUpdateReceiverBase] | None,
-    ):
+    @weight_updater.setter
+    def weight_updater(self, value: WeightUpdaterBase | None):
         if value is not None:
-            if not isinstance(value, WeightUpdateReceiverBase) and callable(value):
+            if not isinstance(value, WeightUpdaterBase) and callable(value):
                 # then it's a constructor
                 value = value()
             value.register_collector(self)
             if value.collector is not self:
                 raise RuntimeError("Failed to register collector.")
-        self._weight_update_receiver = value
-
-    @property
-    def weight_update_sender(self) -> WeightUpdateSenderBase:
-        return self._weight_update_sender
-
-    @weight_update_sender.setter
-    def weight_update_sender(self, value: WeightUpdateSenderBase | None):
-        if value is not None:
-            if not isinstance(value, WeightUpdateSenderBase) and callable(value):
-                # then it's a constructor
-                value = value()
-            value.register_collector(self)
-            if value.collector is not self:
-                raise RuntimeError("Failed to register collector.")
-        self._weight_update_sender = value
+        self._weight_updater = value
 
     def _get_policy_and_device(
         self,
@@ -299,30 +279,20 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 for the update. If not provided, the method will attempt to fetch the weights using the configured
                 weight updater.
             worker_ids (int | List[int] | torch.device | List[torch.device] | None, optional): Identifiers for the
-                workers that need to be updated. This is relevant when using a remote weights updater, which must
-                be specified during the data collector's initialization. If `worker_ids` is provided without a
-                configured remote weights updater, a TypeError will be raised.
+                workers that need to be updated. This is relevant when the collector has more than one worker associated
+                with it.
 
         Raises:
-            TypeError: If `worker_ids` is provided but no `weight_update_sender` is configured.
+            TypeError: If `worker_ids` is provided but no `weight_updater` is configured.
 
-        .. note::
-
-            - The method first attempts to update weights locally using `weight_update_receiver`, if available.
-            - If a `weight_update_sender` is configured, it will be used to update the specified remote workers.
-            - Users can extend the `WeightUpdateReceiverBase` and `WeightUpdateSenderBase` classes to customize
-              the weight update logic for specific use cases. This method should not be overwritten.
+        .. note:: Users should extend the `WeightUpdaterBase` classes to customize
+            the weight update logic for specific use cases. This method should not be overwritten.
 
         .. seealso:: :class:`~torchrl.collectors.LocalWeightsUpdaterBase` and
             :meth:`~torchrl.collectors.RemoteWeightsUpdaterBase`.
 
         """
-        if self.weight_update_receiver is not None:
-            self.weight_update_receiver(policy_weights, **kwargs)
-        if self.weight_update_sender is not None:
-            self.weight_update_sender(policy_weights, worker_ids=worker_ids, **kwargs)
-        elif worker_ids is not None:
-            raise TypeError("worker_ids was passed but weight_update_sender was None.")
+        self.weight_updater(policy_weights, worker_ids=worker_ids, **kwargs)
 
     def __iter__(self) -> Iterator[TensorDictBase]:
         try:
@@ -537,12 +507,7 @@ class SyncDataCollector(DataCollectorBase):
             or `ManiSkills <https://github.com/haosulab/ManiSkill/>`_) cuda synchronization may cause unexpected
             crashes.
             Defaults to ``False``.
-        weight_update_receiver (WeightUpdateReceiverBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdateReceiverBase`
-            or its subclass, responsible for updating the policy weights on the local inference worker.
-            If not provided, a :class:`~torchrl.collectors.VanillaLocalWeightUpdater` will be used by default,
-            which directly fetches and applies the weights from the server.
-            Consider using a constructor if the updater needs to be serialized.
-        weight_update_sender (WeightUpdateSenderBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdateSenderBase`
+        weight_updater (WeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on remote inference workers.
             This is typically not used in :class:`~torchrl.collectors.SyncDataCollector` as it operates in a single-process environment.
             Consider using a constructor if the updater needs to be serialized.
@@ -637,11 +602,8 @@ class SyncDataCollector(DataCollectorBase):
         compile_policy: bool | dict[str, Any] | None = None,
         cudagraph_policy: bool | dict[str, Any] | None = None,
         no_cuda_sync: bool = False,
-        weight_update_receiver: WeightUpdateReceiverBase
-        | Callable[[], WeightUpdateReceiverBase]
-        | None = None,
-        weight_update_sender: WeightUpdateSenderBase
-        | Callable[[], WeightUpdateSenderBase]
+        weight_updater: WeightUpdaterBase
+        | Callable[[], WeightUpdaterBase]
         | None = None,
         **kwargs,
     ):
@@ -893,13 +855,14 @@ class SyncDataCollector(DataCollectorBase):
         self._frames = 0
         self._iter = -1
 
-        if weight_update_receiver is None:
-            weight_update_receiver = VanillaWeightUpdater(
+        if weight_updater is None:
+            weight_updater = VanillaWeightUpdater(
                 weight_getter=self.get_weights_fn, policy_weights=self.policy_weights
             )
+        elif not isinstance(weight_updater, WeightUpdaterBase):
+            raise TypeError("weight_updater must be a subclass of WeightUpdaterBase")
 
-        self.weight_update_receiver = weight_update_receiver
-        self.weight_update_sender = weight_update_sender
+        self.weight_updater = weight_updater
 
     @property
     def _traj_pool(self):
@@ -1698,10 +1661,6 @@ class _MultiDataCollector(DataCollectorBase):
             :class:`~torchrl.collectors.MultiaSyncDataCollector`
             or a derived class of these.
             Defaults to :class:`~torchrl.collectors.SyncDataCollector`.
-
-            .. note:: This keyword argument is particularly handy when local attributes need to be
-                set, such as `weight_update_receiver`.
-
         max_frames_per_traj (int, optional): Maximum steps per trajectory.
             Note that a trajectory can span across multiple batches (unless
             ``reset_at_each_iter`` is set to ``True``, see below).
@@ -1735,7 +1694,7 @@ class _MultiDataCollector(DataCollectorBase):
         reset_when_done (bool, optional): if ``True`` (default), an environment
             that return a ``True`` value in its ``"done"`` or ``"truncated"``
             entry will be reset at the corresponding indices.
-        update_at_each_batch (boolm optional): if ``True``, :meth:`update_policy_weight_()`
+        update_at_each_batch (boolm optional): if ``True``, :meth:`update_policy_weights_()`
             will be called before (sync) or after (async) each data collection.
             Defaults to ``False``.
         preemptive_threshold (:obj:`float`, optional): a value between 0.0 and 1.0 that specifies the ratio of workers
@@ -1788,33 +1747,10 @@ class _MultiDataCollector(DataCollectorBase):
             or `ManiSkills <https://github.com/haosulab/ManiSkill/>`_) cuda synchronization may cause unexpected
             crashes.
             Defaults to ``False``.
-        weight_update_receiver (WeightUpdateReceiverBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdateReceiverBase`
-            or its subclass, responsible for updating the policy weights on the server worker.
-            If not provided, left unused.
-            Consider using a constructor if the updater needs to be serialized.
-
-            .. note:: This instance or constructor is not passed to the workers. To specify the workers `weight_update_receiver`
-                instance, you can pass a `collector_class` argument containing the constructor:
-
-                >>> from functools import partial
-                >>> # the weight receiver - called when `worker_collector.update_policy_weight_() is called
-                >>> worker_weight_updater_receiver = ...
-                >>> # The weight sender - called when `server_collector.update_policy_weight_()` is called
-                >>> server_weight_updater_sender = ...
-                >>> collector = MultiaSyncDataCollector(
-                ...     create_env_fn=[func, func],
-                ...     policy=policy,
-                ...     frames_per_batch=100,
-                ...     total_frames=1000,
-                ...     collector_class=partial(SyncDataCollector, weight_update_receiver=worker_weight_updater_receiver),
-                ...     weight_update_sender=server_weight_updater_sender,
-                ... )
-
-        weight_update_sender (WeightUpdateSenderBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdateSenderBase`
+        weight_updater (WeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on remote inference workers.
-            If not provided, a :class:`~torchrl.collectors.MultiProcessedRemoteWeightUpdate` will be used by default,
+            If not provided, a :class:`~torchrl.collectors.MultiProcessedWeightUpdater` will be used by default,
             which handles weight synchronization across multiple processes.
-            See `weight_update_receiver` for details on the server / worker weight update API.
             Consider using a constructor if the updater needs to be serialized.
 
     """
@@ -1857,11 +1793,8 @@ class _MultiDataCollector(DataCollectorBase):
         compile_policy: bool | dict[str, Any] | None = None,
         cudagraph_policy: bool | dict[str, Any] | None = None,
         no_cuda_sync: bool = False,
-        weight_update_sender: WeightUpdateSenderBase
-        | Callable[[], WeightUpdateReceiverBase]
-        | None = None,
-        weight_update_receiver: WeightUpdateReceiverBase
-        | Callable[[], WeightUpdateReceiverBase]
+        weight_updater: WeightUpdaterBase
+        | Callable[[], WeightUpdaterBase]
         | None = None,
     ):
         self.closed = True
@@ -1956,21 +1889,20 @@ class _MultiDataCollector(DataCollectorBase):
                 )
                 self._policy_weights_dict[policy_device] = weights
             self._get_weights_fn = get_weights_fn
-            if weight_update_sender is None:
-                weight_update_sender = MultiProcessedWeightUpdate(
+            if weight_updater is None:
+                weight_updater = MultiProcessedWeightUpdate(
                     get_server_weights=self._get_weights_fn,
                     policy_weights=self._policy_weights_dict,
                 )
-        elif weight_update_sender is None:
+        elif weight_updater is None:
             warnings.warn(
-                "weight_update_sender is None, but policy_factory is provided. This means that the server will "
+                "weight_updater is None, but policy_factory is provided. This means that the server will "
                 "not know how to send the weights to the workers. If the workers can handle their weight synchronization "
                 "on their own (via some specialized worker type / constructor) this may well work, but make sure "
                 "your weight synchronization strategy is properly set."
             )
 
-        self.weight_update_sender = weight_update_sender
-        self.weight_update_receiver = weight_update_receiver
+        self.weight_updater = weight_updater
 
         self.policy = policy
         self.policy_factory = policy_factory
@@ -3137,7 +3069,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         reset_when_done (bool, optional): if ``True`` (default), an environment
             that return a ``True`` value in its ``"done"`` or ``"truncated"``
             entry will be reset at the corresponding indices.
-        update_at_each_batch (boolm optional): if ``True``, :meth:`update_policy_weight_()`
+        update_at_each_batch (boolm optional): if ``True``, :meth:`update_policy_weights_()`
             will be called before (sync) or after (async) each data collection.
             Defaults to ``False``.
         preemptive_threshold (:obj:`float`, optional): a value between 0.0 and 1.0 that specifies the ratio of workers
