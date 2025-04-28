@@ -11,7 +11,7 @@ if pip list | grep -q torch; then
 
     ${CONDA_RUN} pip install "pybind11[global]"
 
-    ${CONDA_RUN} conda install 'anaconda::cmake>=3.22' -y --no-update-deps
+    ${CONDA_RUN} conda install 'anaconda::cmake>=3.22' -y
 
     ${CONDA_RUN} pip install git+https://github.com/pytorch/tensordict.git -U --no-deps
 elif [[ -n "${SMOKE_TEST_SCRIPT:-}" ]]; then
@@ -21,7 +21,7 @@ elif [[ -n "${SMOKE_TEST_SCRIPT:-}" ]]; then
 
     ${CONDA_RUN} pip install "pybind11[global]"
 
-    ${CONDA_RUN} conda install 'anaconda::cmake>=3.22' -y --no-update-deps
+    ${CONDA_RUN} conda install 'anaconda::cmake>=3.22' -y
 
     ${CONDA_RUN} pip install git+https://github.com/pytorch/tensordict.git -U --no-deps
 else
