@@ -31,10 +31,7 @@ from torchrl.collectors.distributed.default_configs import (
     TCP_PORT,
 )
 from torchrl.collectors.utils import _NON_NN_POLICY_WEIGHTS, split_trajectories
-from torchrl.collectors.weight_update import (
-    WeightUpdateReceiverBase,
-    WeightUpdateSenderBase,
-)
+from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import EnvCreator
@@ -181,7 +178,7 @@ def _run_collector(
         policy_weights = TensorDict.from_module(policy)
         policy_weights = policy_weights.data.lock_()
     else:
-        if collector_kwargs.get("weight_update_sender") is None and (
+        if collector_kwargs.get("weight_updater") is None and (
             policy_factory is None
             or (isinstance(policy_factory, Sequence) and not any(policy_factory))
         ):
@@ -419,14 +416,9 @@ class DistributedDataCollector(DataCollectorBase):
             to learn more.
             Defaults to ``"submitit"``.
         tcp_port (int, optional): the TCP port to be used. Defaults to 10003.
-        weight_update_receiver (WeightUpdateReceiverBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdateReceiverBase`
-            or its subclass, responsible for updating the policy weights on the local inference worker.
-            This is typically not used in :class:`~torchrl.collectors.distributed.DistributedDataCollector` as it
-            focuses on distributed environments.
-            Consider using a constructor if the updater needs to be serialized.
-        weight_update_sender (WeightUpdateSenderBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdateSenderBase`
+        weight_updater (WeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on distributed inference workers.
-            If not provided, a :class:`~torchrl.collectors.distributed.DistributedWeightUpdateSender` will be used by
+            If not provided, a :class:`~torchrl.collectors.distributed.DistributedWeightUpdater` will be used by
             default, which handles weight synchronization across distributed workers.
             Consider using a constructor if the updater needs to be serialized.
 
@@ -464,11 +456,8 @@ class DistributedDataCollector(DataCollectorBase):
         max_weight_update_interval: int = -1,
         launcher: str = "submitit",
         tcp_port: int | None = None,
-        weight_update_sender: WeightUpdateSenderBase
-        | Callable[[], WeightUpdateSenderBase]
-        | None = None,
-        weight_update_receiver: WeightUpdateReceiverBase
-        | Callable[[], WeightUpdateReceiverBase]
+        weight_updater: WeightUpdaterBase
+        | Callable[[], WeightUpdaterBase]
         | None = None,
     ):
 
@@ -489,10 +478,9 @@ class DistributedDataCollector(DataCollectorBase):
             policy_weights = policy_weights.data.lock_()
         elif any(policy_factory):
             policy_weights = None
-            if weight_update_sender is None:
+            if weight_updater is None:
                 raise RuntimeError(
-                    "weight_update_sender must be passed along with "
-                    "a policy_factory."
+                    "weight_updater must be passed along with " "a policy_factory."
                 )
         else:
             if not any(policy_factory):
@@ -576,15 +564,14 @@ class DistributedDataCollector(DataCollectorBase):
 
         self._init_workers()
         self._make_container()
-        if weight_update_sender is None:
-            weight_update_sender = DistributedWeightUpdater(
+        if weight_updater is None:
+            weight_updater = DistributedWeightUpdater(
                 store=self._store,
                 policy_weights=self.policy_weights,
                 num_workers=self.num_workers,
                 sync=self._sync,
             )
-        self.weight_update_sender = weight_update_sender
-        self.weight_update_receiver = weight_update_receiver
+        self.weight_updater = weight_updater
 
     @property
     def device(self) -> list[torch.device]:
@@ -986,10 +973,10 @@ class DistributedDataCollector(DataCollectorBase):
             torchrl_logger.info("collector shut down")
 
 
-class DistributedWeightUpdater(WeightUpdateSenderBase):
+class DistributedWeightUpdater(WeightUpdaterBase):
     """A remote weight updater for synchronizing policy weights across distributed workers.
 
-    The `DistributedWeightUpdateSender` class provides a mechanism for updating the weights
+    The `DistributedWeightUpdater` class provides a mechanism for updating the weights
     of a policy across distributed inference workers. It is designed to work with the
     :class:`~torchrl.collectors.distributed.DistributedDataCollector` to ensure that each worker receives the latest policy weights.
     This class is typically used in distributed data collection scenarios where multiple workers
@@ -1014,12 +1001,12 @@ class DistributedWeightUpdater(WeightUpdateSenderBase):
     .. note::
         This class assumes that the server weights can be directly applied to the distributed workers
         without any additional processing. If your use case requires more complex weight mapping or
-        synchronization logic, consider extending `WeightUpdateSenderBase` with a custom implementation.
+        synchronization logic, consider extending `WeightUpdaterBase` with a custom implementation.
 
     Raises:
         RuntimeError: If the worker rank is less than 1 or if the status returned by the store is not "updated".
 
-    .. seealso:: :class:`~torchrl.collectors.WeightUpdateSenderBase` and
+    .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase` and
         :class:`~torchrl.collectors.distributed.DistributedDataCollector`.
 
     """

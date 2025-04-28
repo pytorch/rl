@@ -127,53 +127,27 @@ mechanism for updating policy weights across different devices and processes, ac
 Sending and receiving model weights with WeightUpdaters
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The weight synchronization process is facilitated by two main components: :class:`~torchrl.collectors.WeightUpdateReceiverBase`
-and :class:`~torchrl.collectors.WeightUpdateSenderBase`. These base classes provide a structured interface for
+The weight synchronization process is facilitated by one dedicated extension point:
+:class:`~torchrl.collectors.WeightUpdaterBase`. These base class provides a structured interface for
 implementing custom weight update logic, allowing users to tailor the synchronization process to their specific needs.
 
-- :class:`~torchrl.collectors.WeightUpdateSenderBase`: This component handles the distribution of policy weights to
-  the policy or to remote inference workers. Every collector -- server or worker -- should have a `WeightUpdateSenderBase`
-  instance to handle the "push" operation of the weights to the policy.
-  Users can extend this class to implement custom logic for synchronizing weights across a network of devices or processes.
-  For "regular", single node collectors, the :class:`~torchrl.collectors.VanillaWeightSender` will be used by default.
-- :class:`~torchrl.collectors.WeightUpdateReceiverBase`: This component is responsible for "pulling" the weights from a
-  distant parameter server. In many cases, it can be discarded as weights are forcibly pushed to the workers and policy
-  through `WeightUpdateSenderBase` instances, and a call to `WeightUpdateReceiverBase.update_weights` will be a no-op.
-  `WeightUpdateReceiverBase` is particularly useful when the training and inference occur on the same machine but on
-  different devices. Users can extend this class to define how weights are fetched from a server and applied locally.
-  It is also the extension point for collectors where the workers need to ask for weight updates (in contrast with
-  situations where the server decides when to update the worker policies).
+:class:`~torchrl.collectors.WeightUpdaterBase` handles the distribution of policy weights to
+the policy or to remote inference workers, as well as formatting / gathering the weights from a server if necessary.
+Every collector -- server or worker -- should have a `WeightUpdaterBase` instance to handle the
+weight synchronization with the policy.
+Even the simplest collectors use a :class:`~torchrl.collectors.VanillaWeightUpdater` instance to update the policy
+state-dict (assuming it is a :class:`~torch.nn.Module` instance).
 
-Each of these classes has a private `_maybe_map_weights` method that can be overwritten, where a weight transform or
-formatting logic can be implemented.
-
-The following figure showcases how a somewhat complex weight update scheme can be implemented using these primitives.
-
-.. figure:: /_static/img/param-update.svg
-
-   In this setting, a parameter server holds various copies of the parameters. The "pulling" of the weights from the
-    parameter server is handled by the main collector receiver. The main collector server sender instance sends the
-    parameters to the workers and triggers a remote call to `udpate_policy_weights_` in each or some workers.
-    Because this is a "push" operation, the receivers in the workers do not need to do anything. The senders
-    are responsible for writing the parameters to their copy of the policy.
-
-Extending the Updater Classes
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Extending the Updater Class
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 To accommodate diverse use cases, the API allows users to extend the updater classes with custom implementations.
+The goal is to be able to customize the weight sync strategy while leaving the collector and policy implementation
+untouched.
 This flexibility is particularly beneficial in scenarios involving complex network architectures or specialized hardware
-setups. By implementing the abstract methods in these base classes, users can define how weights are retrieved,
+setups.
+By implementing the abstract methods in these base classes, users can define how weights are retrieved,
 transformed, and applied, ensuring seamless integration with their existing infrastructure.
-
-Default Implementations
-~~~~~~~~~~~~~~~~~~~~~~~
-
-For common scenarios, the API provides default implementations of these updaters, such as
-:class:`~torchrl.collectors.VanillaWeightReceiver`,, :class:`~torchrl.collectors.VanillaWeightSender`,
-:class:`~torchrl.collectors.MultiProcessedRemoteWeightUpdate`, :class:`~torchrl.collectors.RayWeightUpdateSender`,
-:class:`~torchrl.collectors.RPCWeightUpdateSender`, and :class:`~torchrl.collectors.DistributedWeightUpdateSender`.
-These implementations cover a range of typical deployment configurations, from single-device setups to large-scale
-distributed systems.
 
 .. currentmodule:: torchrl.collectors
 
@@ -181,14 +155,12 @@ distributed systems.
     :toctree: generated/
     :template: rl_template.rst
 
-    WeightUpdateReceiverBase
-    WeightUpdateSenderBase
-    VanillaWeightSender
-    VanillaWeightReceiver
-    MultiProcessedRemoteWeightUpdate
-    RayWeightUpdateSender
-    DistributedWeightUpdateSender
-    RPCWeightUpdateSender
+    WeightUpdaterBase
+    VanillaWeightUpdater
+    MultiProcessedWeightUpdater
+    RayWeightUpdater
+    DistributedWeightUpdater
+    RPCWeightUpdater
 
 Collectors and replay buffers interoperability
 ----------------------------------------------

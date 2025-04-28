@@ -17,130 +17,42 @@ from torchrl._utils import logger as torchrl_logger
 Policy = TypeVar("Policy", bound=TensorDictModuleBase)
 
 
-class WeightUpdateReceiverBase(metaclass=abc.ABCMeta):
-    """A base class for receiving policy weights from a server.
-
-    This class provides an interface for downloading the weights of a policy
-    on a given node. It implements the "pull" operation in a weight update scheme.
-
-    Unlike the :class:`sender <~torchrl.collectors.WeightUpdateSenderBase>` class, this class is optional
-    and should only be used when the collector needs to pull weights from a server.
-
-    To extend this class, implement the following abstract methods:
-
-    - `_get_server_weights`: Define how to retrieve the weights from the server.
-        Returns a state-dict or some handle to the server's weights to be consumed by the
-        weight sender (see :class:`~torchrl.collectors.WeightUpdateSenderBase`).
-    - `_maybe_map_weights`: Optionally transform the server weights to match the local weights.
-        By default, no transform is applied.
-
-    Attributes:
-        collector: The collector (or any container) of the weight receiver. The collector is registered via
-            :meth:`~torchrl.collectors.WeightUpdateReceiverBase.register_collector`.
-
-    Methods:
-        update_weights: Returns a state-dict or a handle to the server's weights to be consumed by the
-            :class:`weight sender <torchrl.collectors.WeightUpdateSenderBase>`.
-        register_collector: Registers the collector (or any container) in the receiver through a weakref.
-            This will be called automatically by the collector upon registration of the updater.
-
-    .. seealso:: :class:`~torchrl.collectors.WeightUpdateSenderBase` and
-        :meth:`~torchrl.collectors.DataCollectorBase.update_policy_weights_`.
-
-    """
-
-    _collector_wr: Any = None
-
-    def register_collector(self, collector: DataCollectorBase):  # noqa
-        """Register a collector in the updater.
-
-        Once registered, the updater will not accept another collector.
-
-        Args:
-            collector (DataCollectorBase): The collector to register.
-
-        """
-        if self._collector_wr is not None:
-            raise RuntimeError("Cannot register collector twice.")
-        self._collector_wr = weakref.ref(collector)
-
-    @property
-    def collector(self) -> torchrl.collectors.DataCollectorBase:  # noqa
-        """The collector or container of the receiver.
-
-        Returns `None` if the container is out-of-scope or not set.
-        """
-        return self._collector_wr() if self._collector_wr is not None else None
-
-    def _get_server_weights(self) -> Any:
-        """An optional method to gather weights from the server."""
-        raise NotImplementedError
-
-    def _maybe_map_weights(self, server_weights: Any, *args, **kwargs) -> Any:
-        """A method to transform the server weights to match the local weights."""
-        return server_weights
-
-    def __call__(
-        self,
-        *,
-        weights: Any = None,
-    ):
-        """A proxy to :meth:`~.pull_weights`."""
-        return self.pull_weights(weights=weights)
-
-    def pull_weights(self, *, weights: Any = None) -> Any:
-        """Pull weights from the server.
-
-        Keyword Args:
-            weights (Any, optional): The weights (handle). If not provided, weights are
-                retrieved from the server via :meth:`~._get_server_weights`.
-
-        Returns:
-            The weights or a handle to them.
-
-        """
-        if weights is None:
-            # get server weights (source)
-            server_weights = self._get_server_weights()
-        else:
-            server_weights = weights
-
-        # Optionally map the weights
-        mapped_weights = self._maybe_map_weights(server_weights)
-
-        return mapped_weights
-
-
-class WeightUpdateSenderBase(metaclass=abc.ABCMeta):
+class WeightUpdaterBase(metaclass=abc.ABCMeta):
     """A base class for updating remote policy weights on inference workers.
 
-    The weight sender is the central piece of the weight update scheme:
+    The weight updater is the central piece of the weight update scheme:
 
     - In leaf collector nodes, it is responsible for sending the weights to the policy, which can be as simple as
       updating a state-dict, or more complex if an inference server is being used.
-    - In server collector nodes, it is responsible for sending the weights ("push") to the leaf collectors.
+    - In server collector nodes, it is responsible for sending the weights to the leaf collectors.
 
-    In a collector, the sender is always called after the receiver.
+    In a collector, the updater is called within :meth:`~torchrl.collector.DataCollectorBase.update_policy_weights_`.`
+
+    The main method of this class is the :meth:`~.push_weights` method, which updates the policy weights in the worker /
+    policy.
 
     To extend this class, implement the following abstract methods:
 
-    - `_get_server_weights`: Define how to retrieve the weights from the server if they are not passed to
-        the updater directly.
+    - `_get_server_weights` (optional): Define how to retrieve the weights from the server if they are not passed to
+        the updater directly. This method is only called if the weights (hanlde) is not passed directly.
     - `_sync_weights_with_worker`: Define how to synchronize weights with a specific worker.
+        This method must be implemented by child classes.
     - `_maybe_map_weights`: Optionally transform the server weights before distribution.
+        By default, this method returns the weights unchanged.
     - `all_worker_ids`: Provide a list of all worker identifiers.
+        Returns `None` by default (no worker id).
 
     Attributes:
         collector: The collector (or any container) of the weight receiver. The collector is registered via
             :meth:`~torchrl.collectors.WeightUpdateReceiverBase.register_collector`.
 
     Methods:
-        update_weights: Updates the weights on specified or all remote workers.
+        push_weights: Updates the weights on specified or all remote workers.
+            The `__call__` method is a proxy to `push_weights`.
         register_collector: Registers the collector (or any container) in the receiver through a weakref.
             This will be called automatically by the collector upon registration of the updater.
 
-    .. seealso:: :class:`~torchrl.collectors.WeightUpdateReceiverBase` and
-        :meth:`~torchrl.collectors.DataCollectorBase.update_policy_weights_`.
+    .. seealso:: :meth:`~torchrl.collectors.DataCollectorBase.update_policy_weights_`.
 
     """
 
@@ -167,6 +79,13 @@ class WeightUpdateSenderBase(metaclass=abc.ABCMeta):
         """
         return self._collector_wr() if self._collector_wr is not None else None
 
+    def _get_server_weights(self) -> Any:
+        """An optional method to gather weights from the server.
+
+        This method is called only if the weights (handle) are not passed directly to the update method.
+        """
+        raise NotImplementedError
+
     @abstractmethod
     def _sync_weights_with_worker(
         self, *, worker_id: int | torch.device | None = None, server_weights: Any
@@ -176,13 +95,6 @@ class WeightUpdateSenderBase(metaclass=abc.ABCMeta):
         The worker id can be `None` if there are no workers associated with the sender.
         """
         ...
-
-    def _get_server_weights(self) -> Any:
-        """An optional method to gather weights from the server.
-
-        This method is called only if the weights (handle) are not passed directly to the update method.
-        """
-        raise NotImplementedError
 
     def _maybe_map_weights(self, server_weights: Any) -> Any:
         """Optionally transforms the server weights to match the local weights."""
@@ -244,16 +156,9 @@ class WeightUpdateSenderBase(metaclass=abc.ABCMeta):
             )
 
 
-class VanillaWeightReceiver(WeightUpdateReceiverBase):
-    """A simple implementation of :class:`~torchrl.collectors.WeightUpdateReceiverBase` for updating local policy weights."""
-
-    def _get_server_weights(self) -> Any:
-        return None
-
-
 # Specialized classes
-class VanillaWeightSender(WeightUpdateSenderBase):
-    """A simple implementation of :class:`~torchrl.collectors.WeightUpdateSenderBase` for updating local policy weights.
+class VanillaWeightUpdater(WeightUpdaterBase):
+    """A simple implementation of :class:`~torchrl.collectors.WeightUpdaterBase` for updating local policy weights.
 
     The `VanillaWeightSender` class provides a basic mechanism for updating the weights
     of a local policy by directly fetching them from a specified source. It is typically used
@@ -301,10 +206,10 @@ class VanillaWeightSender(WeightUpdateSenderBase):
         self.policy_weights.update_(server_weights)
 
 
-class MultiProcessedWeightUpdate(WeightUpdateSenderBase):
+class MultiProcessedWeightUpdate(WeightUpdaterBase):
     """A remote weight updater for synchronizing policy weights across multiple processes or devices.
 
-    The `MultiProcessedRemoteWeightUpdate` class provides a mechanism for updating the weights
+    The `MultiProcessedWeightUpdater` class provides a mechanism for updating the weights
     of a policy across multiple inference workers in a multiprocessed environment. It is designed
     to handle the distribution of weights from a central server to various devices or processes
     that are running the policy.
@@ -320,9 +225,9 @@ class MultiProcessedWeightUpdate(WeightUpdateSenderBase):
     .. note::
         This class assumes that the server weights can be directly applied to the workers without
         any additional processing. If your use case requires more complex weight mapping or synchronization
-        logic, consider extending `WeightUpdateSenderBase` with a custom implementation.
+        logic, consider extending `WeightUpdaterBase` with a custom implementation.
 
-    .. seealso:: :class:`~torchrl.collectors.WeightUpdateSenderBase` and
+    .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase` and
         :class:`~torchrl.collectors.DataCollectorBase`.
 
     """
@@ -359,10 +264,10 @@ class MultiProcessedWeightUpdate(WeightUpdateSenderBase):
         return server_weights
 
 
-class RayWeightUpdater(WeightUpdateSenderBase):
+class RayWeightUpdater(WeightUpdaterBase):
     """A remote weight updater for synchronizing policy weights across remote workers using Ray.
 
-    The `RayWeightUpdateSender` class provides a mechanism for updating the weights of a policy
+    The `RayWeightUpdater` class provides a mechanism for updating the weights of a policy
     across remote inference workers managed by Ray. It leverages Ray's distributed computing
     capabilities to efficiently distribute policy weights to remote collectors.
     This class is typically used in distributed data collectors where each remote worker requires
@@ -385,9 +290,9 @@ class RayWeightUpdater(WeightUpdateSenderBase):
     .. note::
         This class assumes that the server weights can be directly applied to the remote workers without
         any additional processing. If your use case requires more complex weight mapping or synchronization
-        logic, consider extending `WeightUpdateSenderBase` with a custom implementation.
+        logic, consider extending `WeightUpdaterBase` with a custom implementation.
 
-    .. seealso:: :class:`~torchrl.collectors.WeightUpdateSenderBase` and
+    .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase` and
         :class:`~torchrl.collectors.distributed.RayCollector`.
 
     """
