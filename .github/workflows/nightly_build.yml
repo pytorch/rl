@@ -271,6 +271,7 @@ jobs:
         run: |
           python3 -mpip install numpy pytest --no-cache-dir
       - name: Install tensordict
+        shell: bash
         run: |
           if ! choco -v &> /dev/null; then
             powershell -NoProfile -InputFormat None -ExecutionPolicy Bypass -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))"
