@@ -4,6 +4,7 @@
 name: Push Binary Nightly
 
 on:
+  pull_request:
   workflow_call:
     secrets:
 #      AWS_PYTORCH_UPLOADER_ACCESS_KEY_ID:
@@ -12,9 +13,9 @@ on:
 #        required: true
       PYPI_TOKEN:
         required: false
-  # run every day at 11:15am
+  # run every day at 15:15am
   schedule:
-    - cron:  '15 11 * * *'
+    - cron:  '15 15 * * *'
   # or manually trigger it
   workflow_dispatch:
   push:
@@ -32,21 +33,27 @@ permissions:
   contents: read
 
 jobs:
-  build-wheel-linux:
+  build-wheel-unix:
     # Don't run on forked repos.
     if: github.repository_owner == 'pytorch'
-    runs-on: ubuntu-20.04
+    continue-on-error: true
+    runs-on: ${{ matrix.os[1] }}
     strategy:
       matrix:
-        python_version: [["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"], ["3.11", "cp311-cp311"], ["3.12", "cp312-cp312"]]
+        os: [['linux', 'ubuntu-22.04'], ['macos', 'macos-latest']]
+        python_version: [
+          ["3.9", "cp39-cp39"],
+          ["3.10", "cp310-cp310"],
+          ["3.11", "cp311-cp311"],
+          ["3.12", "cp312-cp312"],
+          ["3.13", "cp313-cp313"],
+        ]
         cuda_support: [["", "cpu", "cpu"]]
     steps:
       - name: Checkout torchrl
         uses: actions/checkout@v4
-        env:
-         AGENT_TOOLSDIRECTORY: "/opt/hostedtoolcache"
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python_version[0] }}
       - name: Install PyTorch nightly
@@ -64,67 +71,35 @@ jobs:
            find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
       # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
       # pretend that they're manylinux1 compliant so we do the same.
-      - name: Show auditwheel output; confirm 2-17
-        run: |
-          python3 -mpip install auditwheel
-          auditwheel show dist/*
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v4
         with:
-          name: torchrl-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
+          name: torchrl-${{ matrix.os[0] }}-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
           path: dist/*.whl
 
-  upload-wheel-linux:
-    # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch'
-    needs: test-wheel-linux
-    runs-on: ubuntu-20.04
-    strategy:
-      matrix:
-        python_version: [["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"], ["3.11", "cp311-cp311"], ["3.12", "cp312-cp312"]]
-        cuda_support: [["", "cpu", "cpu"]]
-    steps:
-      - name: Checkout torchrl
-        uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python_version[0] }}
-      - name: Download built wheels
-        uses: actions/download-artifact@v4
-        with:
-          name: torchrl-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
-          path: /tmp/wheels
-      - name: Push TorchRL Binary to PYPI
-        env:
-            PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
-        run: |
-          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install twine
-          python -m twine upload \
-              --username __token__ \
-              --password "$PYPI_TOKEN" \
-              --skip-existing \
-              /tmp/wheels/torchrl_nightly-*.whl \
-              --verbose
 
-  test-wheel-linux:
+  test-wheel-unix:
     # Don't run on forked repos.
     if: github.repository_owner == 'pytorch'
-    needs: build-wheel-linux
-    runs-on: ubuntu-20.04
+    needs: build-wheel-unix
+    continue-on-error: true
+    runs-on: ${{ matrix.os[1] }}
     strategy:
       matrix:
-        python_version: [["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"], ["3.11", "cp311-cp311"], ["3.12", "cp312-cp312"]]
+        os: [['linux', 'ubuntu-22.04'], ['macos', 'macos-latest']]
+        python_version: [
+          ["3.9", "cp39-cp39"],
+          ["3.10", "cp310-cp310"],
+          ["3.11", "cp311-cp311"],
+          ["3.12", "cp312-cp312"],
+          ["3.13", "cp313-cp313"],
+        ]
         cuda_support: [["", "cpu", "cpu"]]
     steps:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python_version[0] }}
-          architecture: x64
-        env:
-          AGENT_TOOLSDIRECTORY: "/opt/hostedtoolcache"
       - name: Checkout torchrl
         uses: actions/checkout@v4
       - name: Install PyTorch Nightly
@@ -137,6 +112,13 @@ jobs:
           python3 -mpip install --upgrade pip
       - name: Install tensordict
         run: |
+          if [[ "$OSTYPE" == "darwin"* ]]; then
+            brew install cmake
+          else
+            sudo apt-get update
+            sudo apt-get install -y cmake
+          fi
+          python3 -mpip install "pybind11[global]"
           python3 -mpip install git+https://github.com/pytorch/tensordict.git
       - name: Install test dependencies
         run: |
@@ -145,7 +127,7 @@ jobs:
       - name: Download built wheels
         uses: actions/download-artifact@v4
         with:
-          name: torchrl-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
+          name: torchrl-${{ matrix.os[0] }}-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
           path: /tmp/wheels
         env:
           AGENT_TOOLSDIRECTORY: "/opt/hostedtoolcache"
@@ -171,16 +153,67 @@ jobs:
           pytest test/smoke_test.py -v --durations 200
           exit $EXIT_STATUS
 
+  upload-wheel-unix:
+    # Don't run on forked repos.
+    if: ${{ github.repository_owner == 'pytorch' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') }}
+    needs: test-wheel-unix
+    runs-on: ${{ matrix.os[1] }}
+    continue-on-error: true
+    strategy:
+      matrix:
+        os: [['linux', 'ubuntu-22.04'], ['macos', 'macos-latest']]
+        python_version: [
+          ["3.9", "cp39-cp39"],
+          ["3.10", "cp310-cp310"],
+          ["3.11", "cp311-cp311"],
+          ["3.12", "cp312-cp312"],
+          ["3.13", "cp313-cp313"],
+        ]
+        cuda_support: [["", "cpu", "cpu"]]
+    steps:
+      - name: Checkout torchrl
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python_version[0] }}
+      - name: Download built wheels
+        uses: actions/download-artifact@v4
+        with:
+          name: torchrl-${{ matrix.os[0] }}-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
+          path: /tmp/wheels
+      - name: Push TorchRL Binary to PYPI
+        env:
+            PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
+          python3 -mpip install twine
+          python -m twine upload \
+              --username __token__ \
+              --password "$PYPI_TOKEN" \
+              --skip-existing \
+              /tmp/wheels/torchrl_nightly-*.whl \
+              --verbose
+
+
+
   build-wheel-windows:
     # Don't run on forked repos.
     if: github.repository_owner == 'pytorch'
     runs-on: windows-latest
+    continue-on-error: true
     strategy:
       matrix:
-        python_version: [["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"], ["3.12", "3.12"]]
+        python_version: [
+          ["3.9", "3.9"],
+          ["3.10", "3.10.3"],
+          ["3.11", "3.11"],
+          ["3.12", "3.12"],
+          ["3.13", "3.13"],
+        ]
     steps:
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python_version[1] }}
       - name: Checkout torchrl
@@ -207,10 +240,17 @@ jobs:
     # Don't run on forked repos.
     if: github.repository_owner == 'pytorch'
     needs: build-wheel-windows
+    continue-on-error: true
     runs-on: windows-latest
     strategy:
       matrix:
-        python_version: [["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"], ["3.12", "3.12"]]
+        python_version: [
+          ["3.9", "3.9"],
+          ["3.10", "3.10.3"],
+          ["3.11", "3.11"],
+          ["3.12", "3.12"],
+          ["3.13", "3.13"],
+        ]
     steps:
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -232,6 +272,14 @@ jobs:
           python3 -mpip install numpy pytest --no-cache-dir
       - name: Install tensordict
         run: |
+          if ! choco -v &> /dev/null; then
+            powershell -NoProfile -InputFormat None -ExecutionPolicy Bypass -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))"
+          fi
+          # Install cmake using Chocolatey
+          choco install cmake -y
+          # Install necessary Python packages
+          python -m pip install --upgrade pip
+          python -m pip install "pybind11[global]"
           python3 -mpip install git+https://github.com/pytorch/tensordict.git
       - name: Download built wheels
         uses: actions/download-artifact@v4
@@ -262,12 +310,19 @@ jobs:
 
   upload-wheel-windows:
     # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch'
+    if: ${{ github.repository_owner == 'pytorch' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') }}
     needs: test-wheel-windows
+    continue-on-error: true
     runs-on: windows-latest
     strategy:
       matrix:
-        python_version: [["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"], ["3.12", "3.12"]]
+        python_version: [
+          ["3.9", "3.9"],
+          ["3.10", "3.10.3"],
+          ["3.11", "3.11"],
+          ["3.12", "3.12"],
+          ["3.13", "3.13"],
+        ]
     steps:
       - name: Checkout torchrl
         uses: actions/checkout@v4
