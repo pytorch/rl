@@ -321,22 +321,6 @@ node or across multiple nodes.
     submitit_delayed_launcher
     RayCollector
 
-LLM Collectors
----------------------------
-TorchRL also provides a data collectors for large language models. These collectors
-are meant to include a subset of the functionality of other data collectors, targeted
-at supporting researchers in fine-tuning large language models.  These classes 
-currently derive from the :class:`~torchrl.collectors.SyncDataCollector` class.
-These classes are experimental and subject to change.
-
-.. currentmodule:: torchrl.collectors.llm_collectors
-
-.. autosummary::
-    :toctree: generated/
-    :template: rl_template.rst
-
-    LLMCollector
-
 Helper functions
 ----------------
 

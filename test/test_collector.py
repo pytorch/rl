@@ -2311,7 +2311,9 @@ class TestNestedEnvsCollector:
         torch.manual_seed(seed)
         env_fn = lambda: TransformedEnv(NestedCountingEnv(), InitTracker())
         env = NestedCountingEnv()
-        policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
+        policy = CountingEnvCountPolicy(
+            env.full_action_spec[env.action_key], env.action_key
+        )
 
         ccollector = MultiaSyncDataCollector(
             create_env_fn=[env_fn],
@@ -2377,7 +2379,9 @@ class TestNestedEnvsCollector:
             nest_obs_action=nested_obs_action,
         )
         torch.manual_seed(seed)
-        policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
+        policy = CountingEnvCountPolicy(
+            env.full_action_spec[env.action_key], env.action_key
+        )
         ccollector = SyncDataCollector(
             create_env_fn=env,
             policy=policy,
@@ -2404,7 +2408,9 @@ class TestNestedEnvsCollector:
         env = NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
         env_fn = lambda: NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
         torch.manual_seed(0)
-        policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
+        policy = CountingEnvCountPolicy(
+            env.full_action_spec[env.action_key], env.action_key
+        )
         policy(env.reset())
         ccollector = SyncDataCollector(
             create_env_fn=env_fn,

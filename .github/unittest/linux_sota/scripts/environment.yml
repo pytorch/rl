@@ -17,6 +17,7 @@ dependencies:
     - pytest-instafail
     - pytest-rerunfailures
     - expecttest
+    - pybind11[global]
     - pyyaml
     - scipy
     - hydra-core
@@ -28,5 +29,3 @@ dependencies:
     - coverage
     - vmas
     - transformers
-    - gym[atari]
-    - gym[accept-rom-license]

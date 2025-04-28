@@ -21,6 +21,7 @@ from torchrl.envs import (
     ParallelEnv,
     Resize,
     RewardSum,
+    set_gym_backend,
     SignTransform,
     StepCounter,
     ToTensorImage,
@@ -45,15 +46,20 @@ from torchrl.record import VideoRecorder
 
 
 def make_base_env(
-    env_name="BreakoutNoFrameskip-v4", frame_skip=4, device="cpu", is_test=False
+    env_name="BreakoutNoFrameskip-v4",
+    gym_backend="gymnasium",
+    frame_skip=4,
+    device="cpu",
+    is_test=False,
 ):
-    env = GymEnv(
-        env_name,
-        frame_skip=frame_skip,
-        from_pixels=True,
-        pixels_only=False,
-        device=device,
-    )
+    with set_gym_backend(gym_backend):
+        env = GymEnv(
+            env_name,
+            frame_skip=frame_skip,
+            from_pixels=True,
+            pixels_only=False,
+            device=device,
+        )
     env = TransformedEnv(env)
     env.append_transform(NoopResetEnv(noops=30, random=True))
     if not is_test:
@@ -61,11 +67,14 @@ def make_base_env(
     return env
 
 
-def make_parallel_env(env_name, num_envs, device, is_test=False):
+def make_parallel_env(env_name, num_envs, device, gym_backend, is_test=False):
     env = ParallelEnv(
         num_envs,
-        EnvCreator(lambda: make_base_env(env_name)),
+        EnvCreator(
+            lambda: make_base_env(env_name, gym_backend=gym_backend, is_test=is_test),
+        ),
         serial_for_single=True,
+        gym_backend=gym_backend,
         device=device,
     )
     env = TransformedEnv(env)
@@ -175,9 +184,11 @@ def make_ppo_modules_pixels(proof_environment, device):
     return common_module, policy_module, value_module
 
 
-def make_ppo_models(env_name, device):
+def make_ppo_models(env_name, device, gym_backend):
 
-    proof_environment = make_parallel_env(env_name, 1, device="cpu")
+    proof_environment = make_parallel_env(
+        env_name, num_envs=1, device="cpu", gym_backend=gym_backend
+    )
     common_module, policy_module, value_module = make_ppo_modules_pixels(
         proof_environment, device=device
     )

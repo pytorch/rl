@@ -62,11 +62,18 @@ def main(cfg: DictConfig):  # noqa: F821
                 compile_mode = "reduce-overhead"
 
     # Create models (check utils_atari.py)
-    actor, critic = make_ppo_models(cfg.env.env_name, device=device)
+    actor, critic = make_ppo_models(
+        cfg.env.env_name, device=device, gym_backend=cfg.env.backend
+    )
 
     # Create collector
     collector = SyncDataCollector(
-        create_env_fn=make_parallel_env(cfg.env.env_name, cfg.env.num_envs, device),
+        create_env_fn=make_parallel_env(
+            cfg.env.env_name,
+            num_envs=cfg.env.num_envs,
+            device=device,
+            gym_backend=cfg.env.backend,
+        ),
         policy=actor,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
@@ -137,7 +144,9 @@ def main(cfg: DictConfig):  # noqa: F821
         logger_video = False
 
     # Create test environment
-    test_env = make_parallel_env(cfg.env.env_name, 1, device, is_test=True)
+    test_env = make_parallel_env(
+        cfg.env.env_name, 1, device, is_test=True, gym_backend=cfg.env.backend
+    )
     if logger_video:
         test_env = test_env.append_transform(
             VideoRecorder(logger, tag="rendering/test", in_keys=["pixels_int"])

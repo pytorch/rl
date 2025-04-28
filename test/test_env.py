@@ -87,6 +87,7 @@ pytestmark = [
     pytest.mark.filterwarnings(
         "ignore:Got multiple backends for torchrl.data.replay_buffers.storages"
     ),
+    pytest.mark.filterwarnings("ignore:unclosed file"),
 ]
 
 gym_version = None
@@ -1241,6 +1242,7 @@ class TestParallel:
             td_serial = env_serial.rollout(max_steps=50)
         finally:
             env_serial.close(raise_if_closed=False)
+            gc.collect()
 
         try:
             env_parallel = maybe_fork_ParallelEnv(
@@ -1256,6 +1258,7 @@ class TestParallel:
             assert_allclose_td(td_serial, td_parallel)
         finally:
             env_parallel.close(raise_if_closed=False)
+            gc.collect()
 
     @pytest.mark.skipif(not _has_dmc, reason="no dm_control")
     def test_multitask(self, maybe_fork_ParallelEnv):
@@ -2809,18 +2812,23 @@ class TestNestedSpecs:
         else:
             raise NotImplementedError
         reset = env.reset()
-        with pytest.warns(
-            DeprecationWarning, match="non-trivial"
-        ) if envclass == "NestedCountingEnv" else contextlib.nullcontext():
+        if envclass == "NestedCountingEnv":
+            assert isinstance(env.reward_spec, Composite)
+        else:
             assert not isinstance(env.reward_spec, Composite)
         for done_key in env.done_keys:
             assert (
                 env.full_done_spec[done_key]
                 == env.output_spec[("full_done_spec", *_unravel_key_to_tuple(done_key))]
             )
-        with pytest.warns(
-            DeprecationWarning, match="non-trivial"
-        ) if envclass == "NestedCountingEnv" else contextlib.nullcontext():
+        if envclass == "NestedCountingEnv":
+            assert (
+                env.full_reward_spec[env.reward_key]
+                == env.output_spec[
+                    ("full_reward_spec", *_unravel_key_to_tuple(env.reward_key))
+                ]
+            )
+        else:
             assert (
                 env.reward_spec
                 == env.output_spec[

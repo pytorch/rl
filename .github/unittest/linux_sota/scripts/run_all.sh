@@ -8,7 +8,7 @@ set -v
 
 
 apt-get update && apt-get upgrade -y
-apt-get install -y vim git wget
+apt-get install -y vim git wget cmake
 
 apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev libosmesa6-dev
 apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2
@@ -68,7 +68,6 @@ echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
 export MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210
-export DISPLAY=unix:0.0
 #export MJLIB_PATH=$root_dir/.mujoco/mujoco-2.1.1/lib/libmujoco.so.2.1.1
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin
 export SDL_VIDEODRIVER=dummy
@@ -80,7 +79,7 @@ export COMPOSITE_LP_AGGREGATE=0
 conda env config vars set \
   MAX_IDLE_COUNT=1000 \
   MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
-  DISPLAY=unix:0.0 \
+  DISPLAY=:99 \
   LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin \
   SDL_VIDEODRIVER=dummy \
   MUJOCO_GL=egl \
@@ -112,7 +111,6 @@ python -c """import gym;import d4rl"""
 
 # install ale-py: manylinux names are broken for CentOS so we need to manually download and
 # rename them
-pip install "gymnasium[atari]>=1.1.0"
 
 # ============================================================================================ #
 # ================================ PyTorch & TorchRL ========================================= #
@@ -128,6 +126,9 @@ version="$(python -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
 
 # submodules
 git submodule sync && git submodule update --init --recursive
+
+pip3 install ale-py -U
+pip3 install "gym[atari,accept-rom-license]" "gymnasium>=1.1.0" -U
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
