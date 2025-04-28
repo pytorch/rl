@@ -45,12 +45,12 @@ import torch
 from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModule
 from torch import nn
-from torchrl.collectors import MultiSyncDataCollector, WeightUpdateSenderBase
+from torchrl.collectors import MultiSyncDataCollector, WeightUpdaterBase
 
 from torchrl.envs.libs.gym import GymEnv
 
 
-class MPSWeightUpdaterBase(WeightUpdateSenderBase):
+class MPSWeightUpdaterBase(WeightUpdaterBase):
     def __init__(self, policy_weights, num_workers):
         # Weights are on mps device, which cannot be shared
         self.policy_weights = policy_weights.data
@@ -101,7 +101,7 @@ if __name__ == "__main__":
         reset_at_each_iter=False,
         device=device,
         storing_device="cpu",
-        weight_update_sender=MPSWeightUpdaterBase(policy_weights, 2),
+        weight_updater=MPSWeightUpdaterBase(policy_weights, 2),
         # use_buffers=False,
         # cat_results="stack",
     )
