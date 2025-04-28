@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../versions.html"><span style="font-size:110%">main (0.8.0+21ef725) &#x25BC</span></a>
+      <a href="../versions.html"><span style="font-size:110%">main (0.8.0+f0d129c) &#x25BC</span></a>
     </div>
     
 
@@ -453,12 +453,22 @@
 <h2 id="_">_</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater._get_server_weights">_get_server_weights() (torchrl.collectors.RayWeightUpdater method)</a>
+</li>
+      <li><a href="reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater._maybe_map_weights">_maybe_map_weights() (torchrl.collectors.RayWeightUpdater method)</a>
+</li>
       <li><a href="reference/generated/torchrl.envs.ProcessorAsyncEnvPool.html#torchrl.envs.ProcessorAsyncEnvPool._setup">_setup() (torchrl.envs.ProcessorAsyncEnvPool method)</a>
 
       <ul>
         <li><a href="reference/generated/torchrl.envs.ThreadingAsyncEnvPool.html#torchrl.envs.ThreadingAsyncEnvPool._setup">(torchrl.envs.ThreadingAsyncEnvPool method)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater._skip_update">_skip_update() (torchrl.collectors.RayWeightUpdater method)</a>
+</li>
+      <li><a href="reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater._sync_weights_with_worker">_sync_weights_with_worker() (torchrl.collectors.RayWeightUpdater method)</a>
+</li>
   </ul></td>
 </tr></table>
 
@@ -711,8 +721,18 @@
         <li><a href="reference/generated/torchrl.envs.TicTacToeEnv.html#torchrl.envs.TicTacToeEnv.all_actions">(torchrl.envs.TicTacToeEnv method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.collectors.RayWeightUpdater.html#id0">all_worker_ids() (torchrl.collectors.RayWeightUpdater method)</a>, <a href="reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater.all_worker_ids">[1]</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.collectors.VanillaWeightUpdater.html#torchrl.collectors.VanillaWeightUpdater.all_worker_ids">(torchrl.collectors.VanillaWeightUpdater method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.all_worker_ids">(torchrl.collectors.WeightUpdaterBase method)</a>
+</li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.objectives.CrossQLoss.html#torchrl.objectives.CrossQLoss.alpha_loss">alpha_loss() (torchrl.objectives.CrossQLoss method)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool.any_done">any_done() (torchrl.envs.AsyncEnvPool method)</a>
 
       <ul>
@@ -737,8 +757,6 @@
         <li><a href="reference/generated/torchrl.envs.TicTacToeEnv.html#torchrl.envs.TicTacToeEnv.any_done">(torchrl.envs.TicTacToeEnv method)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.envs.transforms.Compose.html#torchrl.envs.transforms.Compose.append">append() (torchrl.envs.transforms.Compose method)</a>
 </li>
       <li><a href="reference/generated/torchrl.data.PrioritizedReplayBuffer.html#torchrl.data.PrioritizedReplayBuffer.append_transform">append_transform() (torchrl.data.PrioritizedReplayBuffer method)</a>
@@ -1455,6 +1473,14 @@
       </ul></li>
       <li><a href="reference/generated/torchrl.envs.GymLikeEnv.html#torchrl.envs.GymLikeEnv.close">close() (torchrl.envs.GymLikeEnv method)</a>
 </li>
+      <li><a href="reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater.collector">collector (torchrl.collectors.RayWeightUpdater property)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.collectors.VanillaWeightUpdater.html#torchrl.collectors.VanillaWeightUpdater.collector">(torchrl.collectors.VanillaWeightUpdater property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.collector">(torchrl.collectors.WeightUpdaterBase property)</a>
+</li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.data.BinaryToDecimal.html#torchrl.data.BinaryToDecimal.compile">compile() (torchrl.data.BinaryToDecimal method)</a>
 
       <ul>
@@ -5513,6 +5539,14 @@
 </li>
       <li><a href="reference/generated/torchrl.data.PromptTensorDictTokenizer.html#torchrl.data.PromptTensorDictTokenizer">PromptTensorDictTokenizer (class in torchrl.data)</a>
 </li>
+      <li><a href="reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater.push_weights">push_weights() (torchrl.collectors.RayWeightUpdater method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.collectors.VanillaWeightUpdater.html#torchrl.collectors.VanillaWeightUpdater.push_weights">(torchrl.collectors.VanillaWeightUpdater method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#id0">(torchrl.collectors.WeightUpdaterBase method)</a>, <a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.push_weights">[1]</a>
+</li>
+      </ul></li>
   </ul></td>
 </tr></table>
 
@@ -5677,6 +5711,8 @@
 </li>
       <li><a href="reference/generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer">RayReplayBuffer (class in torchrl.data)</a>
 </li>
+      <li><a href="reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater">RayWeightUpdater (class in torchrl.collectors)</a>
+</li>
       <li><a href="reference/generated/torchrl.envs.GymLikeEnv.html#torchrl.envs.GymLikeEnv.read_action">read_action() (torchrl.envs.GymLikeEnv method)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.GymLikeEnv.html#torchrl.envs.GymLikeEnv.read_done">read_done() (torchrl.envs.GymLikeEnv method)</a>
@@ -5797,10 +5833,12 @@
         <li><a href="reference/generated/torchrl.envs.transforms.rb_transforms.MultiStepTransform.html#torchrl.envs.transforms.rb_transforms.MultiStepTransform.register_buffer">(torchrl.envs.transforms.rb_transforms.MultiStepTransform method)</a>
 </li>
       </ul></li>
-      <li><a href="reference/generated/torchrl.collectors.WeightUpdateReceiverBase.html#torchrl.collectors.WeightUpdateReceiverBase.register_collector">register_collector() (torchrl.collectors.WeightUpdateReceiverBase method)</a>
+      <li><a href="reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater.register_collector">register_collector() (torchrl.collectors.RayWeightUpdater method)</a>
 
       <ul>
-        <li><a href="reference/generated/torchrl.collectors.WeightUpdateSenderBase.html#id0">(torchrl.collectors.WeightUpdateSenderBase method)</a>, <a href="reference/generated/torchrl.collectors.WeightUpdateSenderBase.html#torchrl.collectors.WeightUpdateSenderBase.register_collector">[1]</a>
+        <li><a href="reference/generated/torchrl.collectors.VanillaWeightUpdater.html#torchrl.collectors.VanillaWeightUpdater.register_collector">(torchrl.collectors.VanillaWeightUpdater method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#id1">(torchrl.collectors.WeightUpdaterBase method)</a>, <a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.register_collector">[1]</a>
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.data.BinaryToDecimal.html#torchrl.data.BinaryToDecimal.register_forward_hook">register_forward_hook() (torchrl.data.BinaryToDecimal method)</a>
@@ -8579,12 +8617,6 @@
         <li><a href="reference/generated/torchrl.data.replay_buffers.PrioritizedSliceSampler.html#torchrl.data.replay_buffers.PrioritizedSliceSampler.update_priority">(torchrl.data.replay_buffers.PrioritizedSliceSampler method)</a>
 </li>
       </ul></li>
-      <li><a href="reference/generated/torchrl.collectors.WeightUpdateReceiverBase.html#torchrl.collectors.WeightUpdateReceiverBase.update_weights">update_weights() (torchrl.collectors.WeightUpdateReceiverBase method)</a>
-
-      <ul>
-        <li><a href="reference/generated/torchrl.collectors.WeightUpdateSenderBase.html#torchrl.collectors.WeightUpdateSenderBase.update_weights">(torchrl.collectors.WeightUpdateSenderBase method)</a>
-</li>
-      </ul></li>
       <li><a href="reference/generated/torchrl.trainers.UpdateWeights.html#torchrl.trainers.UpdateWeights">UpdateWeights (class in torchrl.trainers)</a>
 </li>
   </ul></td>
@@ -8625,6 +8657,8 @@
         <li><a href="reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite.values">(torchrl.data.StackedComposite method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.collectors.VanillaWeightUpdater.html#torchrl.collectors.VanillaWeightUpdater">VanillaWeightUpdater (class in torchrl.collectors)</a>
+</li>
       <li><a href="reference/generated/torchrl.envs.transforms.VC1Transform.html#torchrl.envs.transforms.VC1Transform">VC1Transform (class in torchrl.envs.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.modules.VDNMixer.html#torchrl.modules.VDNMixer">VDNMixer (class in torchrl.modules)</a>
@@ -8727,9 +8761,7 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.record.loggers.wandb.WandbLogger.html#torchrl.record.loggers.wandb.WandbLogger">WandbLogger() (in module torchrl.record.loggers.wandb)</a>
 </li>
-      <li><a href="reference/generated/torchrl.collectors.WeightUpdateReceiverBase.html#torchrl.collectors.WeightUpdateReceiverBase">WeightUpdateReceiverBase (class in torchrl.collectors)</a>
-</li>
-      <li><a href="reference/generated/torchrl.collectors.WeightUpdateSenderBase.html#torchrl.collectors.WeightUpdateSenderBase">WeightUpdateSenderBase (class in torchrl.collectors)</a>
+      <li><a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase">WeightUpdaterBase (class in torchrl.collectors)</a>
 </li>
       <li><a href="reference/generated/torchrl.modules.tensordict_module.WorldModelWrapper.html#torchrl.modules.tensordict_module.WorldModelWrapper">WorldModelWrapper (class in torchrl.modules.tensordict_module)</a>
 </li>

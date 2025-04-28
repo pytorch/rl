@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.collectors
-
-
-WeightUpdateReceiverBase
-========================
-
-.. autoclass:: WeightUpdateReceiverBase
-    :members:
-    :inherited-members:

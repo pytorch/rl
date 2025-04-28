@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.8.0+21ef725) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.8.0+f0d129c) &#x25BC</span></a>
     </div>
     
 
@@ -2653,8 +2653,14 @@
 
             <span class="k">for</span> <span class="n">channel</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent_channels</span><span class="p">:</span>
                 <span class="n">channel</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="n">start_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+            <span class="k">while</span> <span class="p">(</span>
+                <span class="nb">any</span><span class="p">(</span><span class="n">proc</span><span class="o">.</span><span class="n">is_alive</span><span class="p">()</span> <span class="k">for</span> <span class="n">proc</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_workers</span><span class="p">)</span>
+                <span class="ow">and</span> <span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">start_time</span><span class="p">)</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_timeout</span>
+            <span class="p">):</span>
+                <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.01</span><span class="p">)</span>
             <span class="k">for</span> <span class="n">proc</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_workers</span><span class="p">:</span>
-                <span class="n">proc</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_timeout</span><span class="p">)</span>
+                <span class="n">proc</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
         <span class="k">finally</span><span class="p">:</span>
             <span class="k">for</span> <span class="n">proc</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_workers</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">proc</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
@@ -3152,16 +3158,13 @@
             <span class="k">if</span> <span class="ow">not</span> <span class="n">initialized</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;call &#39;init&#39; before closing&quot;</span><span class="p">)</span>
             <span class="n">env</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
-            <span class="k">del</span> <span class="p">(</span>
-                <span class="n">env</span><span class="p">,</span>
-                <span class="n">data</span><span class="p">,</span>
-            <span class="p">)</span>
             <span class="n">mp_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
             <span class="n">child_pipe</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
             <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
                 <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">pid</span><span class="si">}</span><span class="s2"> closed&quot;</span><span class="p">)</span>
+            <span class="k">del</span> <span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">child_pipe</span><span class="p">,</span> <span class="n">mp_event</span><span class="p">)</span>
             <span class="n">gc</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span>
-            <span class="k">break</span>
+            <span class="k">return</span>
 
         <span class="k">elif</span> <span class="n">cmd</span> <span class="o">==</span> <span class="s2">&quot;load_state_dict&quot;</span><span class="p">:</span>
             <span class="n">env</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>

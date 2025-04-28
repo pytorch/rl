@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+21ef725) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+f0d129c) &#x25BC</span></a>
     </div>
     
 
@@ -563,7 +563,7 @@ or <code class="docutils literal notranslate"><span class="pre">torchrl.envs.uti
 <li><p><strong>reset_when_done</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code> (default), an environment
 that return a <code class="docutils literal notranslate"><span class="pre">True</span></code> value in its <code class="docutils literal notranslate"><span class="pre">&quot;done&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;truncated&quot;</span></code>
 entry will be reset at the corresponding indices.</p></li>
-<li><p><strong>update_at_each_batch</strong> (<em>boolm optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, <code class="xref py py-meth docutils literal notranslate"><span class="pre">update_policy_weight_()</span></code>
+<li><p><strong>update_at_each_batch</strong> (<em>boolm optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, <a class="reference internal" href="#torchrl.collectors.aSyncDataCollector.update_policy_weights_" title="torchrl.collectors.aSyncDataCollector.update_policy_weights_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update_policy_weights_()</span></code></a>
 will be called before (sync) or after (async) each data collection.
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>preemptive_threshold</strong> (<code class="xref py py-obj docutils literal notranslate"><span class="pre">float</span></code>, optional) – a value between 0.0 and 1.0 that specifies the ratio of workers
@@ -668,23 +668,18 @@ can be transferred to the children workers from a server.</p>
 for the update. If not provided, the method will attempt to fetch the weights using the configured
 weight updater.</p></li>
 <li><p><strong>worker_ids</strong> (<em>int</em><em> | </em><em>List</em><em>[</em><em>int</em><em>] </em><em>| </em><a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em> | </em><em>List</em><em>[</em><a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em>] </em><em>| </em><em>None</em><em>, </em><em>optional</em>) – Identifiers for the
-workers that need to be updated. This is relevant when using a remote weights updater, which must
-be specified during the data collector’s initialization. If <cite>worker_ids</cite> is provided without a
-configured remote weights updater, a TypeError will be raised.</p></li>
+workers that need to be updated. This is relevant when the collector has more than one worker associated
+with it.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>TypeError</strong> – If <cite>worker_ids</cite> is provided but no <cite>weight_update_sender</cite> is configured.</p>
+<dd class="field-even"><p><strong>TypeError</strong> – If <cite>worker_ids</cite> is provided but no <cite>weight_updater</cite> is configured.</p>
 </dd>
 </dl>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<ul class="simple">
-<li><p>The method first attempts to update weights locally using <cite>weight_update_receiver</cite>, if available.</p></li>
-<li><p>If a <cite>weight_update_sender</cite> is configured, it will be used to update the specified remote workers.</p></li>
-<li><p>Users can extend the <cite>WeightUpdateReceiverBase</cite> and <cite>WeightUpdateSenderBase</cite> classes to customize
-the weight update logic for specific use cases. This method should not be overwritten.</p></li>
-</ul>
+<p>Users should extend the <cite>WeightUpdaterBase</cite> classes to customize
+the weight update logic for specific use cases. This method should not be overwritten.</p>
 </div>
 <div class="admonition seealso">
 <p class="admonition-title">See also</p>
