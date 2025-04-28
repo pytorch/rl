@@ -118,61 +118,36 @@ try to limit the cases where a deepcopy will be executed. The following chart sh
    Policy copy decision tree in Collectors.
 
 Weight Synchronization in Distributed Environments
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+--------------------------------------------------
+
 In distributed and multiprocessed environments, ensuring that all instances of a policy are synchronized with the
 latest trained weights is crucial for consistent performance. The API introduces a flexible and extensible
 mechanism for updating policy weights across different devices and processes, accommodating various deployment scenarios.
 
-Local and Remote Weight Updaters
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Sending and receiving model weights with WeightUpdaters
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The weight synchronization process is facilitated by two main components: :class:`~torchrl.collectors.WeightUpdateReceiverBase`
-and :class:`~torchrl.collectors.WeightUpdateSenderBase`. These base classes provide a structured interface for
+The weight synchronization process is facilitated by one dedicated extension point:
+:class:`~torchrl.collectors.WeightUpdaterBase`. These base class provides a structured interface for
 implementing custom weight update logic, allowing users to tailor the synchronization process to their specific needs.
 
-- :class:`~torchrl.collectors.WeightUpdateReceiverBase`: This component is responsible for updating the policy weights on
-  the local inference worker. It is particularly useful when the training and inference occur on the same machine but on
-  different devices. Users can extend this class to define how weights are fetched from a server and applied locally.
-  It is also the extension point for collectors where the workers need to ask for weight updates (in contrast with
-  situations where the server decides when to update the worker policies).
-- :class:`~torchrl.collectors.WeightUpdateSenderBase`: This component handles the distribution of policy weights to
-  remote inference workers. It is essential in distributed systems where multiple workers need to be kept in sync with
-  the central policy. Users can extend this class to implement custom logic for synchronizing weights across a network of
-  devices or processes.
+:class:`~torchrl.collectors.WeightUpdaterBase` handles the distribution of policy weights to
+the policy or to remote inference workers, as well as formatting / gathering the weights from a server if necessary.
+Every collector -- server or worker -- should have a `WeightUpdaterBase` instance to handle the
+weight synchronization with the policy.
+Even the simplest collectors use a :class:`~torchrl.collectors.VanillaWeightUpdater` instance to update the policy
+state-dict (assuming it is a :class:`~torch.nn.Module` instance).
 
-Extending the Updater Classes
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Extending the Updater Class
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 To accommodate diverse use cases, the API allows users to extend the updater classes with custom implementations.
+The goal is to be able to customize the weight sync strategy while leaving the collector and policy implementation
+untouched.
 This flexibility is particularly beneficial in scenarios involving complex network architectures or specialized hardware
-setups. By implementing the abstract methods in these base classes, users can define how weights are retrieved,
+setups.
+By implementing the abstract methods in these base classes, users can define how weights are retrieved,
 transformed, and applied, ensuring seamless integration with their existing infrastructure.
-
-Default Implementations
-~~~~~~~~~~~~~~~~~~~~~~~
-
-For common scenarios, the API provides default implementations of these updaters, such as
-:class:`~torchrl.collectors.VanillaLocalWeightUpdater`, :class:`~torchrl.collectors.MultiProcessedRemoteWeightUpdate`,
-:class:`~torchrl.collectors.RayWeightUpdateSender`, :class:`~torchrl.collectors.RPCWeightUpdateSender`, and
-:class:`~torchrl.collectors.DistributedWeightUpdateSender`.
-These implementations cover a range of typical deployment configurations, from single-device setups to large-scale
-distributed systems.
-
-Practical Considerations
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-When designing a system that leverages this API, consider the following:
-
-- Network Latency: In distributed environments, network latency can impact the speed of weight updates. Ensure that your
-  implementation accounts for potential delays and optimizes data transfer where possible.
-- Consistency: Ensure that all workers receive the updated weights in a timely manner to maintain consistency across
-  the system. This is particularly important in reinforcement learning scenarios where stale weights can lead to
-  suboptimal policy performance.
-- Scalability: As your system grows, the weight synchronization mechanism should scale efficiently. Consider the
-  overhead of broadcasting weights to a large number of workers and optimize the process to minimize bottlenecks.
-
-By leveraging the API, users can achieve robust and efficient weight synchronization across a variety of deployment
-scenarios, ensuring that their policies remain up-to-date and performant.
 
 .. currentmodule:: torchrl.collectors
 
@@ -180,13 +155,12 @@ scenarios, ensuring that their policies remain up-to-date and performant.
     :toctree: generated/
     :template: rl_template.rst
 
-    WeightUpdateReceiverBase
-    WeightUpdateSenderBase
-    VanillaLocalWeightUpdater
-    MultiProcessedRemoteWeightUpdate
-    RayWeightUpdateSender
-    DistributedWeightUpdateSender
-    RPCWeightUpdateSender
+    WeightUpdaterBase
+    VanillaWeightUpdater
+    MultiProcessedWeightUpdater
+    RayWeightUpdater
+    DistributedWeightUpdater
+    RPCWeightUpdater
 
 Collectors and replay buffers interoperability
 ----------------------------------------------

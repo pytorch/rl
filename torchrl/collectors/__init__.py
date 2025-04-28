@@ -16,14 +16,12 @@ from .weight_update import (
     MultiProcessedWeightUpdate,
     RayWeightUpdater,
     VanillaWeightUpdater,
-    WeightUpdateReceiverBase,
-    WeightUpdateSenderBase,
+    WeightUpdaterBase,
 )
 
 __all__ = [
     "RandomPolicy",
-    "WeightUpdateReceiverBase",
-    "WeightUpdateSenderBase",
+    "WeightUpdaterBase",
     "VanillaWeightUpdater",
     "RayWeightUpdater",
     "MultiProcessedWeightUpdate",

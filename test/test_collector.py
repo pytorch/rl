@@ -39,11 +39,7 @@ from torchrl._utils import (
     prod,
     seed_generator,
 )
-from torchrl.collectors import (
-    aSyncDataCollector,
-    SyncDataCollector,
-    WeightUpdateSenderBase,
-)
+from torchrl.collectors import aSyncDataCollector, SyncDataCollector, WeightUpdaterBase
 from torchrl.collectors.collectors import (
     _Interruptor,
     MultiaSyncDataCollector,
@@ -3489,7 +3485,7 @@ def __deepcopy_error__(*args, **kwargs):
 
 
 class TestPolicyFactory:
-    class MPSWeightUpdaterBase(WeightUpdateSenderBase):
+    class MPSWeightUpdaterBase(WeightUpdaterBase):
         def __init__(self, policy_weights, num_workers):
             # Weights are on mps device, which cannot be shared
             self.policy_weights = policy_weights.data
@@ -3533,7 +3529,7 @@ class TestPolicyFactory:
             reset_at_each_iter=False,
             device=device,
             storing_device="cpu",
-            weight_update_sender=self.MPSWeightUpdaterBase(policy_weights, 2),
+            weight_updater=self.MPSWeightUpdaterBase(policy_weights, 2),
         )
 
         collector.update_policy_weights_()
