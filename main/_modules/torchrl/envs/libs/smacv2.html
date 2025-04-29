@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.8.0+f0d129c) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.8.0+4e310dd) &#x25BC</span></a>
     </div>
     
 
@@ -649,7 +649,7 @@
             <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span>
             <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_action_spec</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">full_action_spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_action_spec</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">observation_spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_observation_spec</span><span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_init_env</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -777,7 +777,7 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="c1"># perform actions</span>
         <span class="n">action</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;agents&quot;</span><span class="p">,</span> <span class="s2">&quot;action&quot;</span><span class="p">))</span>
-        <span class="n">action_np</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">action</span><span class="p">)</span>
+        <span class="n">action_np</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">full_action_spec</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">action_key</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">action</span><span class="p">)</span>
 
         <span class="c1"># Actions are validated by the environment.</span>
         <span class="k">try</span><span class="p">:</span>
