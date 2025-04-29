@@ -9,7 +9,11 @@ set -e
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
-apt-get update && apt-get install -y git wget gcc g++ cmake
+apt-get update && apt-get install -y git wget gcc g++
+
+apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev libsdl2-dev libsdl2-2.0-0
+apt-get install -y libegl-dev libegl
+apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2 xvfb
 
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
@@ -68,6 +72,7 @@ cd ..
 printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
+
 
 export MUJOCO_GL=egl
 conda env config vars set \

@@ -74,7 +74,6 @@ def make_parallel_env(env_name, num_envs, device, gym_backend, is_test=False):
             lambda: make_base_env(env_name, gym_backend=gym_backend, is_test=is_test),
         ),
         serial_for_single=True,
-        gym_backend=gym_backend,
         device=device,
     )
     env = TransformedEnv(env)
