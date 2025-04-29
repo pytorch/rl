@@ -4,8 +4,7 @@ unset PYTORCH_VERSION
 # For unittest, nightly PyTorch is used as the following section,
 # so no need to set PYTORCH_VERSION.
 # In fact, keeping PYTORCH_VERSION forces us to hardcode PyTorch version in config.
-apt-get update && apt-get install -y git wget gcc g++ cmake
-
+apt-get update && apt-get install -y git wget gcc g++
 set -e
 set -v
 
@@ -48,6 +47,8 @@ pip install -U charset-normalizer
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
+  conda install "anaconda::cmake>=3.22" -y
+  pip3 install "pybind11[global]"
   pip3 install git+https://github.com/pytorch/tensordict.git
 else
   pip3 install tensordict
