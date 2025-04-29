@@ -95,6 +95,8 @@ fi
 if [[ "$RELEASE" == 0 ]]; then
   conda install anaconda::cmake -y
 
+  python -m pip install "pybind11[global]"
+
   git clone https://github.com/pytorch/tensordict
   cd tensordict
   pip install -e .
