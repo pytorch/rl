@@ -8,6 +8,7 @@ import argparse
 import functools
 import importlib.util
 import os
+import sys
 
 import pytest
 
@@ -23,7 +24,7 @@ from torchrl.data.map import (
     TensorDictMap,
 )
 from torchrl.envs import GymEnv
-import sys
+
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import PENDULUM_VERSIONED
 else:
