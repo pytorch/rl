@@ -110,7 +110,7 @@ conda env config vars set \
 # make env variables apparent
 conda deactivate && conda activate "${env_dir}"
 
-pip install pip --upgrade
+#pip install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
 #conda install -c conda-forge fltk -y

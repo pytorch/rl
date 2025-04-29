@@ -39,7 +39,7 @@ jobs:
         set -v
         yum makecache
         # Install Mesa and OpenGL Libraries:
-        yum install -y glfw mesa-libGL mesa-libGL-devel egl-utils freeglut mesa-libGLU mesa-libEGL
+        yum install -y glfw mesa-libGL mesa-libGL-devel egl-utils freeglut mesa-libGLU mesa-libEGL python39-pip
         # Install DRI Drivers:
         yum install -y mesa-dri-drivers
         # Install Xvfb for Headless Environments:
