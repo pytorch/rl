@@ -3510,6 +3510,7 @@ class TestPolicyFactory:
             return list(range(self.num_workers))
 
     @pytest.mark.skipif(not _has_cuda, reason="requires cuda another device than CPU.")
+    @pytest.mark.skipif(not _has_gym, reason="requires gym")
     def test_weight_update(self):
         device = "cuda:0"
         env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")

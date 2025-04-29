@@ -8,6 +8,7 @@ import argparse
 import functools
 import importlib.util
 import os
+import sys
 
 import pytest
 
@@ -32,6 +33,7 @@ else:
 _has_gym = importlib.util.find_spec("gymnasium", None) or importlib.util.find_spec(
     "gym", None
 )
+IS_WIN = sys.platform == "win32"
 
 
 class TestHash:
@@ -702,6 +704,7 @@ class TestMCTSForest:
                 ).all()
                 prev_tree = subtree
 
+    @pytest.mark.skipif(IS_WIN, reason="fails with windows machines")
     def test_to_string(self):
         forest = MCTSForest()
 

@@ -9,14 +9,9 @@ ARCH=${ARCH:-}  # This sets ARCH to an empty string if it's not defined
 if pip list | grep -q torch; then
     echo "Torch is installed."
 
-    ${CONDA_RUN} pip install "pybind11[global]"
+    # ${CONDA_RUN} conda install 'anaconda::cmake>=3.22' -y
 
-    if conda list cmake | grep -q 'cmake'; then
-        echo "CMake is already installed."
-    else
-        echo "CMake is not installed. Installing now..."
-        ${CONDA_RUN} conda install anaconda::cmake -y --no-update-deps
-    fi
+    ${CONDA_RUN} pip install "pybind11[global]"
 
     ${CONDA_RUN} pip install git+https://github.com/pytorch/tensordict.git -U --no-deps
 elif [[ -n "${SMOKE_TEST_SCRIPT:-}" ]]; then
@@ -24,14 +19,10 @@ elif [[ -n "${SMOKE_TEST_SCRIPT:-}" ]]; then
     #    TODO: revert when nightlies of tensordict are fixed
     #    if [[ "$ARCH" == "aarch64" ]]; then
 
-    ${CONDA_RUN} pip install "pybind11[global]"
 
-    if conda list cmake | grep -q 'cmake'; then
-        echo "CMake is already installed."
-    else
-        echo "CMake is not installed. Installing now..."
-        ${CONDA_RUN} conda install anaconda::cmake -y --no-update-deps
-    fi
+#     ${CONDA_RUN} conda install 'anaconda::cmake>=3.22' -y
+
+     ${CONDA_RUN} pip install "pybind11[global]"
 
     ${CONDA_RUN} pip install git+https://github.com/pytorch/tensordict.git -U --no-deps
 else

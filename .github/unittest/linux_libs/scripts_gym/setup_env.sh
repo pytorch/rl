@@ -12,8 +12,7 @@ this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 apt-get update && apt-get install -y git wget gcc g++
 
 apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev libsdl2-dev libsdl2-2.0-0
-apt-get install -y libegl-dev libegl
-apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2 xvfb
+apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2 xvfb libegl-dev libx11-dev freeglut3-dev
 
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
@@ -92,7 +91,7 @@ conda env config vars set \
 # make env variables apparent
 conda deactivate && conda activate "${env_dir}"
 
-pip install pip --upgrade
+# pip install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
 #conda install -c conda-forge fltk -y
