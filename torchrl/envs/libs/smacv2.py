@@ -356,7 +356,7 @@ class SMACv2Wrapper(_EnvWrapper):
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         # perform actions
         action = tensordict.get(("agents", "action"))
-        action_np = self.action_spec.to_numpy(action)
+        action_np = self.full_action_spec[self.action_key].to_numpy(action)
 
         # Actions are validated by the environment.
         try:
