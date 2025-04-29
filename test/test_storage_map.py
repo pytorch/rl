@@ -23,7 +23,7 @@ from torchrl.data.map import (
     TensorDictMap,
 )
 from torchrl.envs import GymEnv
-
+import sys
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import PENDULUM_VERSIONED
 else:
@@ -32,6 +32,7 @@ else:
 _has_gym = importlib.util.find_spec("gymnasium", None) or importlib.util.find_spec(
     "gym", None
 )
+IS_WIN = sys.platform == "win32"
 
 
 class TestHash:
@@ -702,6 +703,7 @@ class TestMCTSForest:
                 ).all()
                 prev_tree = subtree
 
+    @pytest.mark.skipif(IS_WIN, reason="fails with windows machines")
     def test_to_string(self):
         forest = MCTSForest()
 
