@@ -93,9 +93,12 @@ fi
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
+  conda install anaconda::cmake -y
+
   git clone https://github.com/pytorch/tensordict
   cd tensordict
-  python setup.py develop
+  pip install -e .
+
   cd ..
 else
   pip3 install tensordict
