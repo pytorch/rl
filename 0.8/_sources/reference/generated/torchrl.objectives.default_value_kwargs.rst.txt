@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives
+
+
+default_value_kwargs
+====================
+
+.. autoclass:: default_value_kwargs
+    :members:
