@@ -895,7 +895,7 @@ git clone https://github.com/pytorch/rl
 ```
 and don't forget to check out the branch or tag you want to use for the build:
 ```bash
-git checkout v0.4.0
+git checkout v0.8.0
 ```
 
 Go to the directory where you have cloned the torchrl repo and install it (after
