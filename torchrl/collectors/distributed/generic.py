@@ -945,7 +945,7 @@ class DistributedDataCollector(DataCollectorBase):
     def load_state_dict(self, state_dict: OrderedDict) -> None:
         raise NotImplementedError
 
-    def shutdown(self):
+    def shutdown(self, timeout: float | None = None) -> None:
         self._store.set("TRAINER_status", b"shutdown")
         for i in range(self.num_workers):
             rank = i + 1

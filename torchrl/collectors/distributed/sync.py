@@ -635,5 +635,5 @@ class DistributedSyncDataCollector(DataCollectorBase):
     def load_state_dict(self, state_dict: OrderedDict) -> None:
         raise NotImplementedError
 
-    def shutdown(self):
+    def shutdown(self, timeout: float | None = None) -> None:
         pass

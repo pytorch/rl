@@ -802,7 +802,7 @@ class RayCollector(DataCollectorBase):
         for collector, state_dict in zip(self.remote_collectors, state_dicts):
             collector.load_state_dict.remote(state_dict)
 
-    def shutdown(self):
+    def shutdown(self, timeout: float | None = None) -> None:
         """Finishes processes started by ray.init()."""
         self.stop_remote_collectors()
         ray.shutdown()
