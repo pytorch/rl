@@ -2336,6 +2336,10 @@ also that the state dict is synchronised across processes if needed."""
         """
         if self.replay_buffer is None:
             raise RuntimeError("Replay buffer must be defined for execution.")
+        if self.init_random_frames is not None and self.init_random_frames > 0:
+            raise RuntimeError(
+                "Cannot currently start() a collector that requires random frames. Please submit a feature request on github."
+            )
         for pipe in self.pipes:
             pipe.send((None, "run_free"))
 
