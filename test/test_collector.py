@@ -5,12 +5,14 @@
 from __future__ import annotations
 
 import argparse
+
 import contextlib
 import functools
 import gc
 import os
 import subprocess
 import sys
+import time
 from unittest.mock import patch
 
 import numpy as np
@@ -3546,6 +3548,104 @@ class TestPolicyFactory:
                     break
         finally:
             collector.shutdown()
+
+
+class TestAsyncCollection:
+    @pytest.mark.parametrize("total_frames", [-1, 1_000_000_000])
+    def test_start_single(self, total_frames):
+        rb = ReplayBuffer(storage=LazyMemmapStorage(max_size=1000))
+        env = CountingEnv()
+        policy = RandomPolicy(action_spec=env.action_spec)
+        collector = SyncDataCollector(
+            env,
+            policy,
+            replay_buffer=rb,
+            total_frames=total_frames,
+            frames_per_batch=16,
+        )
+        try:
+            collector.start()
+            for _ in range(10):
+                time.sleep(0.1)
+                if len(rb) >= 16:
+                    break
+            else:
+                raise RuntimeError("RB is empty")
+            assert len(rb) >= 16
+        finally:
+            collector.async_shutdown(timeout=10)
+            del collector
+
+    @pytest.mark.parametrize("total_frames", [-1, 1_000_000_000])
+    @pytest.mark.parametrize("cls", [MultiaSyncDataCollector, MultiSyncDataCollector])
+    def test_start_multi(self, total_frames, cls):
+        rb = ReplayBuffer(storage=LazyMemmapStorage(max_size=1000))
+        policy = RandomPolicy(action_spec=CountingEnv().action_spec)
+        collector = cls(
+            [CountingEnv, CountingEnv],
+            policy,
+            replay_buffer=rb,
+            total_frames=total_frames,
+            frames_per_batch=16,
+        )
+        try:
+            collector.start()
+            for _ in range(10):
+                time.sleep(0.1)  # Use asyncio.sleep instead of time.sleep
+                if len(rb) >= 16:
+                    break
+            else:
+                raise RuntimeError("RB is empty")
+        finally:
+            collector.async_shutdown()
+            del collector
+
+    @pytest.mark.parametrize("total_frames", [-1, 1_000_000_000])
+    @pytest.mark.parametrize(
+        "cls", [SyncDataCollector, MultiaSyncDataCollector, MultiSyncDataCollector]
+    )
+    def test_start_update_policy(self, total_frames, cls):
+        rb = ReplayBuffer(storage=LazyMemmapStorage(max_size=1000))
+        env = CountingEnv()
+        m = nn.Linear(env.observation_spec["observation"].shape[-1], 1)
+        m.weight.data.fill_(0)
+        m.bias.data.fill_(0)
+        policy = TensorDictSequential(
+            TensorDictModule(
+                lambda x: x.float(), in_keys=["observation"], out_keys=["observation"]
+            ),
+            TensorDictModule(m, in_keys=["observation"], out_keys=["action"]),
+        )
+        td = TensorDict.from_module(policy).data.clone()
+        if cls != SyncDataCollector:
+            env = [CountingEnv] * 2
+        collector = cls(
+            env,
+            policy,
+            replay_buffer=rb,
+            total_frames=total_frames,
+            frames_per_batch=16,
+        )
+        try:
+            collector.start()
+            for _ in range(10):
+                time.sleep(0.1)
+                if len(rb) >= 16:
+                    break
+            else:
+                raise RuntimeError("RB is empty")
+            assert (rb[-16:]["action"] == 0).all()
+            td["module", "1", "module", "bias"] += 1
+            collector.update_policy_weights_(td)
+            for _ in range(10):
+                time.sleep(0.1)
+                if (rb[-16:]["action"] == 1).all():
+                    break
+            else:
+                raise RuntimeError
+        finally:
+            collector.async_shutdown(timeout=10)
+            del collector
 
 
 if __name__ == "__main__":
