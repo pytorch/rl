@@ -288,7 +288,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
 
         .. seealso:: :meth:`~.start`
         """
-        return self.shutdown()
+        return self.shutdown(timeout=timeout)
 
     def update_policy_weights_(
         self,
@@ -344,7 +344,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             return None
 
     @abc.abstractmethod
-    def shutdown(self):
+    def shutdown(self, timeout: float | None = None) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -1311,7 +1311,7 @@ class SyncDataCollector(DataCollectorBase):
             if self._stop:
                 return
 
-    def async_shutdown(self, timeout=None):
+    def async_shutdown(self, timeout: float | None = None) -> None:
         """Finishes processes started by ray.init() during async execution."""
         self._stop = True
         if hasattr(self, "_thread") and self._thread.is_alive():
@@ -1576,7 +1576,7 @@ class SyncDataCollector(DataCollectorBase):
         )
         self._shuttle["collector"] = collector_metadata
 
-    def shutdown(self) -> None:
+    def shutdown(self, timeout: float | None = None) -> None:
         """Shuts down all workers and/or closes the local environment."""
         if not self.closed:
             self.closed = True
@@ -2414,7 +2414,7 @@ also that the state dict is synchronised across processes if needed."""
                     proc.terminate()
 
     def async_shutdown(self, timeout: float = None):
-        return self.shutdown()
+        return self.shutdown(timeout=timeout)
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
@@ -2589,7 +2589,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
         ...         if i == 2:
         ...             print(data)
         ...             break
-        >>> collector>shutdown()
+        >>> collector.shutdown()
         >>> del collector
         TensorDict(
             fields={
@@ -2627,12 +2627,12 @@ class MultiSyncDataCollector(_MultiDataCollector):
         return super().next()
 
     # for RPC
-    def shutdown(self):
+    def shutdown(self, timeout: float | None = None) -> None:
         if hasattr(self, "out_buffer"):
             del self.out_buffer
         if hasattr(self, "buffers"):
             del self.buffers
-        return super().shutdown()
+        return super().shutdown(timeout=timeout)
 
     # for RPC
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
@@ -2998,10 +2998,10 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         return super().next()
 
     # for RPC
-    def shutdown(self):
+    def shutdown(self, timeout: float | None = None) -> None:
         if hasattr(self, "out_tensordicts"):
             del self.out_tensordicts
-        return super().shutdown()
+        return super().shutdown(timeout=timeout)
 
     # for RPC
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
@@ -3339,8 +3339,8 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         return super().next()
 
     # for RPC
-    def shutdown(self):
-        return super().shutdown()
+    def shutdown(self, timeout: float | None = None) -> None:
+        return super().shutdown(timeout=timeout)
 
     # for RPC
     def set_seed(self, seed: int, static_seed: bool = False) -> int:

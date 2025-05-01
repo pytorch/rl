@@ -772,7 +772,7 @@ class RPCDataCollector(DataCollectorBase):
     def load_state_dict(self, state_dict: OrderedDict) -> None:
         raise NotImplementedError
 
-    def shutdown(self):
+    def shutdown(self, timeout: float | None = None) -> None:
         if not hasattr(self, "_shutdown"):
             warnings.warn("shutdown has no effect has `_init` has not been called yet.")
             return
