@@ -6,13 +6,13 @@ from __future__ import annotations
 
 import _pickle
 import abc
-import asyncio
 import collections
 import contextlib
 import functools
 import os
 import queue
 import sys
+import threading
 import time
 import typing
 import warnings
@@ -260,6 +260,36 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         ).to_module(policy)
         return policy, get_original_weights
 
+    def start(self):
+        """Starts the collector for asynchronous data collection.
+
+        This method initiates the background collection of data, allowing for decoupling of data collection and training.
+
+        The collected data is typically stored in a replay buffer passed during the collector's initialization.
+
+        .. note:: After calling this method, it's essential to shut down the collector using :meth:`~.async_shutdown`
+            when you're done with it to free up resources.
+
+        .. warning:: Asynchronous data collection can significantly impact training performance due to its decoupled nature.
+            Ensure you understand the implications for your specific algorithm before using this mode.
+
+        Raises:
+            NotImplementedError: If not implemented by a subclass.
+        """
+        raise NotImplementedError(
+            f"Collector start() is not implemented for {type(self).__name__}."
+        )
+
+    def async_shutdown(self, timeout: float | None = None) -> None:
+        """Shuts down the collector when started asynchronously with the `start` method.
+
+        Arg:
+            timeout (float, optional): The maximum time to wait for the collector to shutdown.
+
+        .. seealso:: :meth:`~.start`
+        """
+        return self.shutdown(timeout=timeout)
+
     def update_policy_weights_(
         self,
         policy_weights: TensorDictBase | None = None,
@@ -314,7 +344,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             return None
 
     @abc.abstractmethod
-    def shutdown(self):
+    def shutdown(self, timeout: float | None = None) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -1200,26 +1230,92 @@ class SyncDataCollector(DataCollectorBase):
                     yield tensordict_out.clone()
 
     def start(self):
-        """Starts the RayCollector."""
+        """Starts the collector in a separate thread for asynchronous data collection.
+
+        The collected data is stored in the provided replay buffer. This method is useful when you want to decouple data
+        collection from training, allowing your training loop to run independently of the data collection process.
+
+        Raises:
+            RuntimeError: If no replay buffer is defined during the collector's initialization.
+
+        Example:
+            >>> import time
+            >>> from functools import partial
+            >>>
+            >>> import tqdm
+            >>>
+            >>> from torchrl.collectors import SyncDataCollector, RandomPolicy
+            >>> from torchrl.data import LazyTensorStorage, ReplayBuffer
+            >>> from torchrl.envs import GymEnv, set_gym_backend
+            >>> import ale_py
+            >>>
+            >>> # Set the gym backend to gymnasium
+            >>> set_gym_backend("gymnasium").set()
+            >>>
+            >>> if __name__ == "__main__":
+            ...     # Create a random policy for the Pong environment
+            ...     env = GymEnv("ALE/Pong-v5")
+            ...     policy = RandomPolicy(env.action_spec)
+            ...
+            ...     # Initialize a shared replay buffer
+            ...     rb = ReplayBuffer(storage=LazyTensorStorage(1000), shared=True)
+            ...
+            ...     # Create a synchronous data collector
+            ...     collector = SyncDataCollector(
+            ...         env,
+            ...         policy=policy,
+            ...         replay_buffer=rb,
+            ...         frames_per_batch=256,
+            ...         total_frames=-1,
+            ...     )
+            ...
+            ...     # Progress bar to track the number of collected frames
+            ...     pbar = tqdm.tqdm(total=100_000)
+            ...
+            ...     # Start the collector asynchronously
+            ...     collector.start()
+            ...
+            ...     # Track the write count of the replay buffer
+            ...     prec_wc = 0
+            ...     while True:
+            ...         wc = rb.write_count
+            ...         c = wc - prec_wc
+            ...         prec_wc = wc
+            ...
+            ...         # Update the progress bar
+            ...         pbar.update(c)
+            ...         pbar.set_description(f"Write Count: {rb.write_count}")
+            ...
+            ...         # Check the write count every 0.5 seconds
+            ...         time.sleep(0.5)
+            ...
+            ...         # Stop when the desired number of frames is reached
+            ...         if rb.write_count . 100_000:
+            ...             break
+            ...
+            ...     # Shut down the collector
+            ...     collector.async_shutdown()
+        """
         if self.replay_buffer is None:
-            raise RuntimeError("Replay buffer must be defined for asyncio execution.")
-        if self._task is None or self._task.done():
-            loop = asyncio.get_event_loop()
-            self._task = loop.create_task(self._run_iterator_silently())
+            raise RuntimeError("Replay buffer must be defined for execution.")
+        if not hasattr(self, "_thread") or not self._thread.is_alive():
+            self._stop = False
+            self._thread = threading.Thread(target=self._run_iterator)
+            self._thread.daemon = (
+                True  # So that the thread dies when the main program exits
+            )
+            self._thread.start()
 
-    async def _run_iterator_silently(self):
-        async for _ in self._asyncio_iterator():
-            # Process each item silently
-            continue
+    def _run_iterator(self):
+        for _ in self:
+            if self._stop:
+                return
 
-    async def _asyncio_iterator(self):
-        for data in self:
-            yield data
-
-    async def async_shutdown(self):
+    def async_shutdown(self, timeout: float | None = None) -> None:
         """Finishes processes started by ray.init() during async execution."""
-        if self._task is not None:
-            await self._task
+        self._stop = True
+        if hasattr(self, "_thread") and self._thread.is_alive():
+            self._thread.join(timeout=timeout)
         self.shutdown()
 
     def _postproc(self, tensordict_out):
@@ -1480,7 +1576,7 @@ class SyncDataCollector(DataCollectorBase):
         )
         self._shuttle["collector"] = collector_metadata
 
-    def shutdown(self) -> None:
+    def shutdown(self, timeout: float | None = None) -> None:
         """Shuts down all workers and/or closes the local environment."""
         if not self.closed:
             self.closed = True
@@ -2170,6 +2266,83 @@ also that the state dict is synchronised across processes if needed."""
         self.queue_out = queue_out
         self.closed = False
 
+    def start(self):
+        """Starts the collector(s) for asynchronous data collection.
+
+        The collected data is stored in the provided replay buffer. This method initiates the background collection of
+        data across multiple processes, allowing for decoupling of data collection and training.
+
+        Raises:
+            RuntimeError: If no replay buffer is defined during the collector's initialization.
+
+        Example:
+            >>> import time
+            >>> from functools import partial
+            >>>
+            >>> import tqdm
+            >>>
+            >>> from torchrl.collectors import MultiaSyncDataCollector, RandomPolicy
+            >>> from torchrl.data import LazyTensorStorage, ReplayBuffer
+            >>> from torchrl.envs import GymEnv, set_gym_backend
+            >>> import ale_py
+            >>>
+            >>> # Set the gym backend to gymnasium
+            >>> set_gym_backend("gymnasium").set()
+            >>>
+            >>> if __name__ == "__main__":
+            ...     # Create a random policy for the Pong environment
+            ...     env_fn = partial(GymEnv, "ALE/Pong-v5")
+            ...     policy = RandomPolicy(env_fn().action_spec)
+            ...
+            ...     # Initialize a shared replay buffer
+            ...     rb = ReplayBuffer(storage=LazyTensorStorage(10000), shared=True)
+            ...
+            ...     # Create a multi-async data collector with 16 environments
+            ...     num_envs = 16
+            ...     collector = MultiaSyncDataCollector(
+            ...         [env_fn] * num_envs,
+            ...         policy=policy,
+            ...         replay_buffer=rb,
+            ...         frames_per_batch=num_envs * 16,
+            ...         total_frames=-1,
+            ...     )
+            ...
+            ...     # Progress bar to track the number of collected frames
+            ...     pbar = tqdm.tqdm(total=100_000)
+            ...
+            ...     # Start the collector asynchronously
+            ...     collector.start()
+            ...
+            ...     # Track the write count of the replay buffer
+            ...     prec_wc = 0
+            ...     while True:
+            ...         wc = rb.write_count
+            ...         c = wc - prec_wc
+            ...         prec_wc = wc
+            ...
+            ...         # Update the progress bar
+            ...         pbar.update(c)
+            ...         pbar.set_description(f"Write Count: {rb.write_count}")
+            ...
+            ...         # Check the write count every 0.5 seconds
+            ...         time.sleep(0.5)
+            ...
+            ...         # Stop when the desired number of frames is reached
+            ...         if rb.write_count . 100_000:
+            ...             break
+            ...
+            ...     # Shut down the collector
+            ...     collector.async_shutdown()
+        """
+        if self.replay_buffer is None:
+            raise RuntimeError("Replay buffer must be defined for execution.")
+        if self.init_random_frames is not None and self.init_random_frames > 0:
+            raise RuntimeError(
+                "Cannot currently start() a collector that requires random frames. Please submit a feature request on github."
+            )
+        for pipe in self.pipes:
+            pipe.send((None, "run_free"))
+
     def __del__(self):
         try:
             self.shutdown()
@@ -2180,30 +2353,46 @@ also that the state dict is synchronised across processes if needed."""
             # __del__ will not affect the program.
             pass
 
-    def shutdown(self) -> None:
+    def shutdown(self, timeout: float | None = None) -> None:
         """Shuts down all processes. This operation is irreversible."""
-        self._shutdown_main()
+        self._shutdown_main(timeout)
 
-    def _shutdown_main(self) -> None:
+    def _shutdown_main(self, timeout: float | None = None) -> None:
+        if timeout is None:
+            timeout = 10
         try:
             if self.closed:
                 return
             _check_for_faulty_process(self.procs)
-            self.closed = True
+            all_closed = [False] * self.num_workers
+            rep = 0
             for idx in range(self.num_workers):
+                if all_closed[idx]:
+                    continue
                 if not self.procs[idx].is_alive():
                     continue
-                try:
-                    self.pipes[idx].send((None, "close"))
+                self.pipes[idx].send((None, "close"))
 
-                    if self.pipes[idx].poll(10.0):
-                        msg = self.pipes[idx].recv()
-                        if msg != "closed":
-                            raise RuntimeError(f"got {msg} but expected 'close'")
-                    else:
+            while not all(all_closed) and rep < 1000:
+                rep += 1
+                for idx in range(self.num_workers):
+                    if all_closed[idx]:
                         continue
-                except BrokenPipeError:
-                    continue
+                    if not self.procs[idx].is_alive():
+                        all_closed[idx] = True
+                        continue
+                    try:
+                        if self.pipes[idx].poll(timeout / 1000 / self.num_workers):
+                            msg = self.pipes[idx].recv()
+                            if msg != "closed":
+                                raise RuntimeError(f"got {msg} but expected 'close'")
+                            all_closed[idx] = True
+                        else:
+                            continue
+                    except BrokenPipeError:
+                        all_closed[idx] = True
+                        continue
+            self.closed = True
 
             self.queue_out.close()
             for pipe in self.pipes:
@@ -2223,6 +2412,9 @@ also that the state dict is synchronised across processes if needed."""
             for proc in self.procs:
                 if proc.is_alive():
                     proc.terminate()
+
+    def async_shutdown(self, timeout: float = None):
+        return self.shutdown(timeout=timeout)
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
@@ -2397,7 +2589,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
         ...         if i == 2:
         ...             print(data)
         ...             break
-        >>> collector>shutdown()
+        >>> collector.shutdown()
         >>> del collector
         TensorDict(
             fields={
@@ -2435,12 +2627,12 @@ class MultiSyncDataCollector(_MultiDataCollector):
         return super().next()
 
     # for RPC
-    def shutdown(self):
+    def shutdown(self, timeout: float | None = None) -> None:
         if hasattr(self, "out_buffer"):
             del self.out_buffer
         if hasattr(self, "buffers"):
             del self.buffers
-        return super().shutdown()
+        return super().shutdown(timeout=timeout)
 
     # for RPC
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
@@ -2806,10 +2998,10 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         return super().next()
 
     # for RPC
-    def shutdown(self):
+    def shutdown(self, timeout: float | None = None) -> None:
         if hasattr(self, "out_tensordicts"):
             del self.out_tensordicts
-        return super().shutdown()
+        return super().shutdown(timeout=timeout)
 
     # for RPC
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
@@ -2924,10 +3116,10 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         # self._shutdown_main()
         self.running = False
 
-    def _shutdown_main(self) -> None:
+    def _shutdown_main(self, *args, **kwargs) -> None:
         if hasattr(self, "out_tensordicts"):
             del self.out_tensordicts
-        return super()._shutdown_main()
+        return super()._shutdown_main(*args, **kwargs)
 
     def reset(self, reset_idx: Sequence[bool] | None = None) -> None:
         super().reset(reset_idx)
@@ -3147,8 +3339,8 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         return super().next()
 
     # for RPC
-    def shutdown(self):
-        return super().shutdown()
+    def shutdown(self, timeout: float | None = None) -> None:
+        return super().shutdown(timeout=timeout)
 
     # for RPC
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
@@ -3236,14 +3428,15 @@ def _main_async_collector(
 
     has_timed_out = False
     counter = 0
+    run_free = False
     while True:
         _timeout = _TIMEOUT if not has_timed_out else 1e-3
-        if pipe_child.poll(_timeout):
+        if not run_free and pipe_child.poll(_timeout):
             counter = 0
             data_in, msg = pipe_child.recv()
             if verbose:
                 torchrl_logger.info(f"worker {idx} received {msg}")
-        else:
+        elif not run_free:
             if verbose:
                 torchrl_logger.info(f"poll failed, j={j}, worker={idx}")
             # default is "continue" (after first iteration)
@@ -3276,12 +3469,27 @@ def _main_async_collector(
                         f"collected, consider calling `collector.shutdown()` before ending the program."
                     )
                 continue
+        else:
+            # placeholder, will be checked after
+            msg = "continue"
+        if msg == "run_free":
+            run_free = True
+        if run_free:
+            # Capture shutdown / update / seed signal, but continue should not be expected
+            if pipe_child.poll(1e-3):
+                data_in, msg = pipe_child.recv()
+                if msg == "continue":
+                    # Switch back to run_free = False
+                    run_free = False
+            else:
+                data_in = None
+                # TODO: this does not work with random frames
+                msg = "continue"
         if msg in ("continue", "continue_random"):
             if msg == "continue_random":
                 inner_collector.init_random_frames = float("inf")
             else:
                 inner_collector.init_random_frames = -1
-
             next_data = next(dc_iter)
             if pipe_child.poll(_MIN_TIMEOUT):
                 # in this case, main send a message to the worker while it was busy collecting trajectories.
@@ -3293,6 +3501,9 @@ def _main_async_collector(
                 if not extend_buffer:
                     next_data.names = None
                     replay_buffer.extend(next_data)
+
+                if run_free:
+                    continue
 
                 try:
                     queue_out.put((idx, j), timeout=_TIMEOUT)
