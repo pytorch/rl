@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+83cb41d) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+6ef7f64) &#x25BC</span></a>
     </div>
     
 
@@ -705,6 +705,20 @@ Consider using a constructor if the updater needs to be serialized.</p></li>
 </dd>
 </dl>
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.MultiaSyncDataCollector.async_shutdown">
+<span class="sig-name descname"><span class="pre">async_shutdown</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.collectors.MultiaSyncDataCollector.async_shutdown" title="Permalink to this definition">¶</a></dt>
+<dd><p>Shuts down the collector when started asynchronously with the <cite>start</cite> method.</p>
+<dl class="simple">
+<dt>Arg:</dt><dd><p>timeout (float, optional): The maximum time to wait for the collector to shutdown.</p>
+</dd>
+</dl>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="#torchrl.collectors.MultiaSyncDataCollector.start" title="torchrl.collectors.MultiaSyncDataCollector.start"><code class="xref py py-meth docutils literal notranslate"><span class="pre">start()</span></code></a></p>
+</div>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrl.collectors.MultiaSyncDataCollector.load_state_dict">
 <span class="sig-name descname"><span class="pre">load_state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">OrderedDict</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/collectors/collectors.html#MultiaSyncDataCollector.load_state_dict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.MultiaSyncDataCollector.load_state_dict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Loads the state_dict on the workers.</p>
@@ -763,8 +777,81 @@ environment.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.collectors.MultiaSyncDataCollector.shutdown">
-<span class="sig-name descname"><span class="pre">shutdown</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/collectors.html#MultiaSyncDataCollector.shutdown"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.MultiaSyncDataCollector.shutdown" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">shutdown</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/collectors/collectors.html#MultiaSyncDataCollector.shutdown"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.MultiaSyncDataCollector.shutdown" title="Permalink to this definition">¶</a></dt>
 <dd><p>Shuts down all processes. This operation is irreversible.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.MultiaSyncDataCollector.start">
+<span class="sig-name descname"><span class="pre">start</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.collectors.MultiaSyncDataCollector.start" title="Permalink to this definition">¶</a></dt>
+<dd><p>Starts the collector(s) for asynchronous data collection.</p>
+<p>The collected data is stored in the provided replay buffer. This method initiates the background collection of
+data across multiple processes, allowing for decoupling of data collection and training.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>RuntimeError</strong> – If no replay buffer is defined during the collector’s initialization.</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">partial</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">tqdm</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiaSyncDataCollector</span><span class="p">,</span> <span class="n">RandomPolicy</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">LazyTensorStorage</span><span class="p">,</span> <span class="n">ReplayBuffer</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">GymEnv</span><span class="p">,</span> <span class="n">set_gym_backend</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">ale_py</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Set the gym backend to gymnasium</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">set_gym_backend</span><span class="p">(</span><span class="s2">&quot;gymnasium&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="c1"># Create a random policy for the Pong environment</span>
+<span class="gp">... </span>    <span class="n">env_fn</span> <span class="o">=</span> <span class="n">partial</span><span class="p">(</span><span class="n">GymEnv</span><span class="p">,</span> <span class="s2">&quot;ALE/Pong-v5&quot;</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">policy</span> <span class="o">=</span> <span class="n">RandomPolicy</span><span class="p">(</span><span class="n">env_fn</span><span class="p">()</span><span class="o">.</span><span class="n">action_spec</span><span class="p">)</span>
+<span class="gp">...</span>
+<span class="gp">... </span>    <span class="c1"># Initialize a shared replay buffer</span>
+<span class="gp">... </span>    <span class="n">rb</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="p">(</span><span class="n">storage</span><span class="o">=</span><span class="n">LazyTensorStorage</span><span class="p">(</span><span class="mi">10000</span><span class="p">),</span> <span class="n">shared</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="gp">...</span>
+<span class="gp">... </span>    <span class="c1"># Create a multi-async data collector with 16 environments</span>
+<span class="gp">... </span>    <span class="n">num_envs</span> <span class="o">=</span> <span class="mi">16</span>
+<span class="gp">... </span>    <span class="n">collector</span> <span class="o">=</span> <span class="n">MultiaSyncDataCollector</span><span class="p">(</span>
+<span class="gp">... </span>        <span class="p">[</span><span class="n">env_fn</span><span class="p">]</span> <span class="o">*</span> <span class="n">num_envs</span><span class="p">,</span>
+<span class="gp">... </span>        <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
+<span class="gp">... </span>        <span class="n">replay_buffer</span><span class="o">=</span><span class="n">rb</span><span class="p">,</span>
+<span class="gp">... </span>        <span class="n">frames_per_batch</span><span class="o">=</span><span class="n">num_envs</span> <span class="o">*</span> <span class="mi">16</span><span class="p">,</span>
+<span class="gp">... </span>        <span class="n">total_frames</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="p">)</span>
+<span class="gp">...</span>
+<span class="gp">... </span>    <span class="c1"># Progress bar to track the number of collected frames</span>
+<span class="gp">... </span>    <span class="n">pbar</span> <span class="o">=</span> <span class="n">tqdm</span><span class="o">.</span><span class="n">tqdm</span><span class="p">(</span><span class="n">total</span><span class="o">=</span><span class="mi">100_000</span><span class="p">)</span>
+<span class="gp">...</span>
+<span class="gp">... </span>    <span class="c1"># Start the collector asynchronously</span>
+<span class="gp">... </span>    <span class="n">collector</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+<span class="gp">...</span>
+<span class="gp">... </span>    <span class="c1"># Track the write count of the replay buffer</span>
+<span class="gp">... </span>    <span class="n">prec_wc</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="gp">... </span>    <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+<span class="gp">... </span>        <span class="n">wc</span> <span class="o">=</span> <span class="n">rb</span><span class="o">.</span><span class="n">write_count</span>
+<span class="gp">... </span>        <span class="n">c</span> <span class="o">=</span> <span class="n">wc</span> <span class="o">-</span> <span class="n">prec_wc</span>
+<span class="gp">... </span>        <span class="n">prec_wc</span> <span class="o">=</span> <span class="n">wc</span>
+<span class="gp">...</span>
+<span class="gp">... </span>        <span class="c1"># Update the progress bar</span>
+<span class="gp">... </span>        <span class="n">pbar</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">c</span><span class="p">)</span>
+<span class="gp">... </span>        <span class="n">pbar</span><span class="o">.</span><span class="n">set_description</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Write Count: </span><span class="si">{</span><span class="n">rb</span><span class="o">.</span><span class="n">write_count</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="gp">...</span>
+<span class="gp">... </span>        <span class="c1"># Check the write count every 0.5 seconds</span>
+<span class="gp">... </span>        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.5</span><span class="p">)</span>
+<span class="gp">...</span>
+<span class="gp">... </span>        <span class="c1"># Stop when the desired number of frames is reached</span>
+<span class="gp">... </span>        <span class="k">if</span> <span class="n">rb</span><span class="o">.</span><span class="n">write_count</span> <span class="o">.</span> <span class="mi">100_000</span><span class="p">:</span>
+<span class="gp">... </span>            <span class="k">break</span>
+<span class="gp">...</span>
+<span class="gp">... </span>    <span class="c1"># Shut down the collector</span>
+<span class="gp">... </span>    <span class="n">collector</span><span class="o">.</span><span class="n">async_shutdown</span><span class="p">()</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <dl class="py method">

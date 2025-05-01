@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.8.0+83cb41d) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.8.0+6ef7f64) &#x25BC</span></a>
     </div>
     
 
@@ -1223,7 +1223,7 @@
         <span class="k">for</span> <span class="n">collector</span><span class="p">,</span> <span class="n">state_dict</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">,</span> <span class="n">state_dicts</span><span class="p">):</span>
             <span class="n">collector</span><span class="o">.</span><span class="n">load_state_dict</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">state_dict</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="RayCollector.shutdown"><a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.shutdown">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="RayCollector.shutdown"><a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.shutdown">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Finishes processes started by ray.init().&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">stop_remote_collectors</span><span class="p">()</span>
         <span class="n">ray</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span></div>

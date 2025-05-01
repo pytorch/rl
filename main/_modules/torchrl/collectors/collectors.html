@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.8.0+83cb41d) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.8.0+6ef7f64) &#x25BC</span></a>
     </div>
     
 
@@ -427,13 +427,13 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">_pickle</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">abc</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">collections</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">contextlib</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">queue</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">typing</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
@@ -681,6 +681,36 @@
         <span class="p">)</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">policy</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">policy</span><span class="p">,</span> <span class="n">get_original_weights</span>
 
+<div class="viewcode-block" id="DataCollectorBase.start"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase.start">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Starts the collector for asynchronous data collection.</span>
+
+<span class="sd">        This method initiates the background collection of data, allowing for decoupling of data collection and training.</span>
+
+<span class="sd">        The collected data is typically stored in a replay buffer passed during the collector&#39;s initialization.</span>
+
+<span class="sd">        .. note:: After calling this method, it&#39;s essential to shut down the collector using :meth:`~.async_shutdown`</span>
+<span class="sd">            when you&#39;re done with it to free up resources.</span>
+
+<span class="sd">        .. warning:: Asynchronous data collection can significantly impact training performance due to its decoupled nature.</span>
+<span class="sd">            Ensure you understand the implications for your specific algorithm before using this mode.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            NotImplementedError: If not implemented by a subclass.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Collector start() is not implemented for </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="DataCollectorBase.async_shutdown"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase.async_shutdown">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">async_shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Shuts down the collector when started asynchronously with the `start` method.</span>
+
+<span class="sd">        Arg:</span>
+<span class="sd">            timeout (float, optional): The maximum time to wait for the collector to shutdown.</span>
+
+<span class="sd">        .. seealso:: :meth:`~.start`</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span></div>
+
 <div class="viewcode-block" id="DataCollectorBase.update_policy_weights_"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase.update_policy_weights_">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">update_policy_weights_</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">policy_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -735,7 +765,7 @@
             <span class="k">return</span> <span class="kc">None</span>
 
     <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span>
 
     <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
@@ -1621,26 +1651,92 @@
                     <span class="k">yield</span> <span class="n">tensordict_out</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span></div>
 
 <div class="viewcode-block" id="SyncDataCollector.start"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector.start">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Starts the RayCollector.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Starts the collector in a separate thread for asynchronous data collection.</span>
+
+<span class="sd">        The collected data is stored in the provided replay buffer. This method is useful when you want to decouple data</span>
+<span class="sd">        collection from training, allowing your training loop to run independently of the data collection process.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            RuntimeError: If no replay buffer is defined during the collector&#39;s initialization.</span>
+
+<span class="sd">        Example:</span>
+<span class="sd">            &gt;&gt;&gt; import time</span>
+<span class="sd">            &gt;&gt;&gt; from functools import partial</span>
+<span class="sd">            &gt;&gt;&gt;</span>
+<span class="sd">            &gt;&gt;&gt; import tqdm</span>
+<span class="sd">            &gt;&gt;&gt;</span>
+<span class="sd">            &gt;&gt;&gt; from torchrl.collectors import SyncDataCollector, RandomPolicy</span>
+<span class="sd">            &gt;&gt;&gt; from torchrl.data import LazyTensorStorage, ReplayBuffer</span>
+<span class="sd">            &gt;&gt;&gt; from torchrl.envs import GymEnv, set_gym_backend</span>
+<span class="sd">            &gt;&gt;&gt; import ale_py</span>
+<span class="sd">            &gt;&gt;&gt;</span>
+<span class="sd">            &gt;&gt;&gt; # Set the gym backend to gymnasium</span>
+<span class="sd">            &gt;&gt;&gt; set_gym_backend(&quot;gymnasium&quot;).set()</span>
+<span class="sd">            &gt;&gt;&gt;</span>
+<span class="sd">            &gt;&gt;&gt; if __name__ == &quot;__main__&quot;:</span>
+<span class="sd">            ...     # Create a random policy for the Pong environment</span>
+<span class="sd">            ...     env = GymEnv(&quot;ALE/Pong-v5&quot;)</span>
+<span class="sd">            ...     policy = RandomPolicy(env.action_spec)</span>
+<span class="sd">            ...</span>
+<span class="sd">            ...     # Initialize a shared replay buffer</span>
+<span class="sd">            ...     rb = ReplayBuffer(storage=LazyTensorStorage(1000), shared=True)</span>
+<span class="sd">            ...</span>
+<span class="sd">            ...     # Create a synchronous data collector</span>
+<span class="sd">            ...     collector = SyncDataCollector(</span>
+<span class="sd">            ...         env,</span>
+<span class="sd">            ...         policy=policy,</span>
+<span class="sd">            ...         replay_buffer=rb,</span>
+<span class="sd">            ...         frames_per_batch=256,</span>
+<span class="sd">            ...         total_frames=-1,</span>
+<span class="sd">            ...     )</span>
+<span class="sd">            ...</span>
+<span class="sd">            ...     # Progress bar to track the number of collected frames</span>
+<span class="sd">            ...     pbar = tqdm.tqdm(total=100_000)</span>
+<span class="sd">            ...</span>
+<span class="sd">            ...     # Start the collector asynchronously</span>
+<span class="sd">            ...     collector.start()</span>
+<span class="sd">            ...</span>
+<span class="sd">            ...     # Track the write count of the replay buffer</span>
+<span class="sd">            ...     prec_wc = 0</span>
+<span class="sd">            ...     while True:</span>
+<span class="sd">            ...         wc = rb.write_count</span>
+<span class="sd">            ...         c = wc - prec_wc</span>
+<span class="sd">            ...         prec_wc = wc</span>
+<span class="sd">            ...</span>
+<span class="sd">            ...         # Update the progress bar</span>
+<span class="sd">            ...         pbar.update(c)</span>
+<span class="sd">            ...         pbar.set_description(f&quot;Write Count: {rb.write_count}&quot;)</span>
+<span class="sd">            ...</span>
+<span class="sd">            ...         # Check the write count every 0.5 seconds</span>
+<span class="sd">            ...         time.sleep(0.5)</span>
+<span class="sd">            ...</span>
+<span class="sd">            ...         # Stop when the desired number of frames is reached</span>
+<span class="sd">            ...         if rb.write_count . 100_000:</span>
+<span class="sd">            ...             break</span>
+<span class="sd">            ...</span>
+<span class="sd">            ...     # Shut down the collector</span>
+<span class="sd">            ...     collector.async_shutdown()</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Replay buffer must be defined for asyncio execution.&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_task</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_task</span><span class="o">.</span><span class="n">done</span><span class="p">():</span>
-            <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_event_loop</span><span class="p">()</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_task</span> <span class="o">=</span> <span class="n">loop</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_run_iterator_silently</span><span class="p">())</span></div>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Replay buffer must be defined for execution.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_thread&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_stop</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_run_iterator</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="o">.</span><span class="n">daemon</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="kc">True</span>  <span class="c1"># So that the thread dies when the main program exits</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span></div>
 
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_run_iterator_silently</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">async</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_asyncio_iterator</span><span class="p">():</span>
-            <span class="c1"># Process each item silently</span>
-            <span class="k">continue</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_run_iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stop</span><span class="p">:</span>
+                <span class="k">return</span>
 
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_asyncio_iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">for</span> <span class="n">data</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">:</span>
-            <span class="k">yield</span> <span class="n">data</span>
-
-<div class="viewcode-block" id="SyncDataCollector.async_shutdown"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector.async_shutdown">[docs]</a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">async_shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="SyncDataCollector.async_shutdown"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector.async_shutdown">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">async_shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Finishes processes started by ray.init() during async execution.&quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_task</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_task</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stop</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_thread&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_postproc</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict_out</span><span class="p">):</span>
@@ -1901,7 +1997,7 @@
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span><span class="p">[</span><span class="s2">&quot;collector&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">collector_metadata</span></div>
 
-<div class="viewcode-block" id="SyncDataCollector.shutdown"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector.shutdown">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<div class="viewcode-block" id="SyncDataCollector.shutdown"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector.shutdown">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Shuts down all workers and/or closes the local environment.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">closed</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">closed</span> <span class="o">=</span> <span class="kc">True</span>
@@ -2591,6 +2687,83 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">queue_out</span> <span class="o">=</span> <span class="n">queue_out</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">closed</span> <span class="o">=</span> <span class="kc">False</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Starts the collector(s) for asynchronous data collection.</span>
+
+<span class="sd">        The collected data is stored in the provided replay buffer. This method initiates the background collection of</span>
+<span class="sd">        data across multiple processes, allowing for decoupling of data collection and training.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            RuntimeError: If no replay buffer is defined during the collector&#39;s initialization.</span>
+
+<span class="sd">        Example:</span>
+<span class="sd">            &gt;&gt;&gt; import time</span>
+<span class="sd">            &gt;&gt;&gt; from functools import partial</span>
+<span class="sd">            &gt;&gt;&gt;</span>
+<span class="sd">            &gt;&gt;&gt; import tqdm</span>
+<span class="sd">            &gt;&gt;&gt;</span>
+<span class="sd">            &gt;&gt;&gt; from torchrl.collectors import MultiaSyncDataCollector, RandomPolicy</span>
+<span class="sd">            &gt;&gt;&gt; from torchrl.data import LazyTensorStorage, ReplayBuffer</span>
+<span class="sd">            &gt;&gt;&gt; from torchrl.envs import GymEnv, set_gym_backend</span>
+<span class="sd">            &gt;&gt;&gt; import ale_py</span>
+<span class="sd">            &gt;&gt;&gt;</span>
+<span class="sd">            &gt;&gt;&gt; # Set the gym backend to gymnasium</span>
+<span class="sd">            &gt;&gt;&gt; set_gym_backend(&quot;gymnasium&quot;).set()</span>
+<span class="sd">            &gt;&gt;&gt;</span>
+<span class="sd">            &gt;&gt;&gt; if __name__ == &quot;__main__&quot;:</span>
+<span class="sd">            ...     # Create a random policy for the Pong environment</span>
+<span class="sd">            ...     env_fn = partial(GymEnv, &quot;ALE/Pong-v5&quot;)</span>
+<span class="sd">            ...     policy = RandomPolicy(env_fn().action_spec)</span>
+<span class="sd">            ...</span>
+<span class="sd">            ...     # Initialize a shared replay buffer</span>
+<span class="sd">            ...     rb = ReplayBuffer(storage=LazyTensorStorage(10000), shared=True)</span>
+<span class="sd">            ...</span>
+<span class="sd">            ...     # Create a multi-async data collector with 16 environments</span>
+<span class="sd">            ...     num_envs = 16</span>
+<span class="sd">            ...     collector = MultiaSyncDataCollector(</span>
+<span class="sd">            ...         [env_fn] * num_envs,</span>
+<span class="sd">            ...         policy=policy,</span>
+<span class="sd">            ...         replay_buffer=rb,</span>
+<span class="sd">            ...         frames_per_batch=num_envs * 16,</span>
+<span class="sd">            ...         total_frames=-1,</span>
+<span class="sd">            ...     )</span>
+<span class="sd">            ...</span>
+<span class="sd">            ...     # Progress bar to track the number of collected frames</span>
+<span class="sd">            ...     pbar = tqdm.tqdm(total=100_000)</span>
+<span class="sd">            ...</span>
+<span class="sd">            ...     # Start the collector asynchronously</span>
+<span class="sd">            ...     collector.start()</span>
+<span class="sd">            ...</span>
+<span class="sd">            ...     # Track the write count of the replay buffer</span>
+<span class="sd">            ...     prec_wc = 0</span>
+<span class="sd">            ...     while True:</span>
+<span class="sd">            ...         wc = rb.write_count</span>
+<span class="sd">            ...         c = wc - prec_wc</span>
+<span class="sd">            ...         prec_wc = wc</span>
+<span class="sd">            ...</span>
+<span class="sd">            ...         # Update the progress bar</span>
+<span class="sd">            ...         pbar.update(c)</span>
+<span class="sd">            ...         pbar.set_description(f&quot;Write Count: {rb.write_count}&quot;)</span>
+<span class="sd">            ...</span>
+<span class="sd">            ...         # Check the write count every 0.5 seconds</span>
+<span class="sd">            ...         time.sleep(0.5)</span>
+<span class="sd">            ...</span>
+<span class="sd">            ...         # Stop when the desired number of frames is reached</span>
+<span class="sd">            ...         if rb.write_count . 100_000:</span>
+<span class="sd">            ...             break</span>
+<span class="sd">            ...</span>
+<span class="sd">            ...     # Shut down the collector</span>
+<span class="sd">            ...     collector.async_shutdown()</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Replay buffer must be defined for execution.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Cannot currently start() a collector that requires random frames. Please submit a feature request on github.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">for</span> <span class="n">pipe</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">:</span>
+            <span class="n">pipe</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;run_free&quot;</span><span class="p">))</span>
+
     <span class="k">def</span><span class="w"> </span><span class="fm">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
@@ -2601,30 +2774,46 @@
             <span class="c1"># __del__ will not affect the program.</span>
             <span class="k">pass</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Shuts down all processes. This operation is irreversible.&quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_shutdown_main</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_shutdown_main</span><span class="p">(</span><span class="n">timeout</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_shutdown_main</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_shutdown_main</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">timeout</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">timeout</span> <span class="o">=</span> <span class="mi">10</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">closed</span><span class="p">:</span>
                 <span class="k">return</span>
             <span class="n">_check_for_faulty_process</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">procs</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">closed</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="n">all_closed</span> <span class="o">=</span> <span class="p">[</span><span class="kc">False</span><span class="p">]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span>
+            <span class="n">rep</span> <span class="o">=</span> <span class="mi">0</span>
             <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">all_closed</span><span class="p">[</span><span class="n">idx</span><span class="p">]:</span>
+                    <span class="k">continue</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">procs</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
                     <span class="k">continue</span>
-                <span class="k">try</span><span class="p">:</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;close&quot;</span><span class="p">))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;close&quot;</span><span class="p">))</span>
 
-                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="mf">10.0</span><span class="p">):</span>
-                        <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
-                        <span class="k">if</span> <span class="n">msg</span> <span class="o">!=</span> <span class="s2">&quot;closed&quot;</span><span class="p">:</span>
-                            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2"> but expected &#39;close&#39;&quot;</span><span class="p">)</span>
-                    <span class="k">else</span><span class="p">:</span>
+            <span class="k">while</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="n">all_closed</span><span class="p">)</span> <span class="ow">and</span> <span class="n">rep</span> <span class="o">&lt;</span> <span class="mi">1000</span><span class="p">:</span>
+                <span class="n">rep</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">all_closed</span><span class="p">[</span><span class="n">idx</span><span class="p">]:</span>
                         <span class="k">continue</span>
-                <span class="k">except</span> <span class="ne">BrokenPipeError</span><span class="p">:</span>
-                    <span class="k">continue</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">procs</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+                        <span class="n">all_closed</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+                        <span class="k">continue</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="n">timeout</span> <span class="o">/</span> <span class="mi">1000</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">):</span>
+                            <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+                            <span class="k">if</span> <span class="n">msg</span> <span class="o">!=</span> <span class="s2">&quot;closed&quot;</span><span class="p">:</span>
+                                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2"> but expected &#39;close&#39;&quot;</span><span class="p">)</span>
+                            <span class="n">all_closed</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="k">continue</span>
+                    <span class="k">except</span> <span class="ne">BrokenPipeError</span><span class="p">:</span>
+                        <span class="n">all_closed</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+                        <span class="k">continue</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">closed</span> <span class="o">=</span> <span class="kc">True</span>
 
             <span class="bp">self</span><span class="o">.</span><span class="n">queue_out</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
             <span class="k">for</span> <span class="n">pipe</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">:</span>
@@ -2644,6 +2833,9 @@
             <span class="k">for</span> <span class="n">proc</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">procs</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">proc</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
                     <span class="n">proc</span><span class="o">.</span><span class="n">terminate</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">async_shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">static_seed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Sets the seeds of the environments stored in the DataCollector.</span>
@@ -2818,7 +3010,7 @@
 <span class="sd">        ...         if i == 2:</span>
 <span class="sd">        ...             print(data)</span>
 <span class="sd">        ...             break</span>
-<span class="sd">        &gt;&gt;&gt; collector&gt;shutdown()</span>
+<span class="sd">        &gt;&gt;&gt; collector.shutdown()</span>
 <span class="sd">        &gt;&gt;&gt; del collector</span>
 <span class="sd">        TensorDict(</span>
 <span class="sd">            fields={</span>
@@ -2856,12 +3048,12 @@
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">next</span><span class="p">()</span>
 
     <span class="c1"># for RPC</span>
-<div class="viewcode-block" id="MultiSyncDataCollector.shutdown"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector.shutdown">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="MultiSyncDataCollector.shutdown"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector.shutdown">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;out_buffer&quot;</span><span class="p">):</span>
             <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_buffer</span>
         <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;buffers&quot;</span><span class="p">):</span>
             <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">buffers</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span></div>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span></div>
 
     <span class="c1"># for RPC</span>
 <div class="viewcode-block" id="MultiSyncDataCollector.set_seed"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector.set_seed">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">static_seed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
@@ -3227,10 +3419,10 @@
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">next</span><span class="p">()</span>
 
     <span class="c1"># for RPC</span>
-<div class="viewcode-block" id="MultiaSyncDataCollector.shutdown"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector.shutdown">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="MultiaSyncDataCollector.shutdown"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector.shutdown">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;out_tensordicts&quot;</span><span class="p">):</span>
             <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_tensordicts</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span></div>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span></div>
 
     <span class="c1"># for RPC</span>
 <div class="viewcode-block" id="MultiaSyncDataCollector.set_seed"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector.set_seed">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">static_seed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
@@ -3345,10 +3537,10 @@
         <span class="c1"># self._shutdown_main()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">running</span> <span class="o">=</span> <span class="kc">False</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_shutdown_main</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_shutdown_main</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;out_tensordicts&quot;</span><span class="p">):</span>
             <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_tensordicts</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_shutdown_main</span><span class="p">()</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_shutdown_main</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
 <div class="viewcode-block" id="MultiaSyncDataCollector.reset"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector.reset">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reset_idx</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">reset_idx</span><span class="p">)</span>
@@ -3568,8 +3760,8 @@
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">next</span><span class="p">()</span>
 
     <span class="c1"># for RPC</span>
-<div class="viewcode-block" id="aSyncDataCollector.shutdown"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.aSyncDataCollector.html#torchrl.collectors.aSyncDataCollector.shutdown">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span></div>
+<div class="viewcode-block" id="aSyncDataCollector.shutdown"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.aSyncDataCollector.html#torchrl.collectors.aSyncDataCollector.shutdown">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span></div>
 
     <span class="c1"># for RPC</span>
 <div class="viewcode-block" id="aSyncDataCollector.set_seed"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.aSyncDataCollector.html#torchrl.collectors.aSyncDataCollector.set_seed">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">static_seed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
@@ -3657,14 +3849,15 @@
 
     <span class="n">has_timed_out</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">counter</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">run_free</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
         <span class="n">_timeout</span> <span class="o">=</span> <span class="n">_TIMEOUT</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">has_timed_out</span> <span class="k">else</span> <span class="mf">1e-3</span>
-        <span class="k">if</span> <span class="n">pipe_child</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="n">_timeout</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">run_free</span> <span class="ow">and</span> <span class="n">pipe_child</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="n">_timeout</span><span class="p">):</span>
             <span class="n">counter</span> <span class="o">=</span> <span class="mi">0</span>
             <span class="n">data_in</span><span class="p">,</span> <span class="n">msg</span> <span class="o">=</span> <span class="n">pipe_child</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
             <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
                 <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;worker </span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2"> received </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="n">run_free</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
                 <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;poll failed, j=</span><span class="si">{</span><span class="n">j</span><span class="si">}</span><span class="s2">, worker=</span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
             <span class="c1"># default is &quot;continue&quot; (after first iteration)</span>
@@ -3697,12 +3890,27 @@
                         <span class="sa">f</span><span class="s2">&quot;collected, consider calling `collector.shutdown()` before ending the program.&quot;</span>
                     <span class="p">)</span>
                 <span class="k">continue</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># placeholder, will be checked after</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;continue&quot;</span>
+        <span class="k">if</span> <span class="n">msg</span> <span class="o">==</span> <span class="s2">&quot;run_free&quot;</span><span class="p">:</span>
+            <span class="n">run_free</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">if</span> <span class="n">run_free</span><span class="p">:</span>
+            <span class="c1"># Capture shutdown / update / seed signal, but continue should not be expected</span>
+            <span class="k">if</span> <span class="n">pipe_child</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="mf">1e-3</span><span class="p">):</span>
+                <span class="n">data_in</span><span class="p">,</span> <span class="n">msg</span> <span class="o">=</span> <span class="n">pipe_child</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">msg</span> <span class="o">==</span> <span class="s2">&quot;continue&quot;</span><span class="p">:</span>
+                    <span class="c1"># Switch back to run_free = False</span>
+                    <span class="n">run_free</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">data_in</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="c1"># TODO: this does not work with random frames</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;continue&quot;</span>
         <span class="k">if</span> <span class="n">msg</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;continue&quot;</span><span class="p">,</span> <span class="s2">&quot;continue_random&quot;</span><span class="p">):</span>
             <span class="k">if</span> <span class="n">msg</span> <span class="o">==</span> <span class="s2">&quot;continue_random&quot;</span><span class="p">:</span>
                 <span class="n">inner_collector</span><span class="o">.</span><span class="n">init_random_frames</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">inner_collector</span><span class="o">.</span><span class="n">init_random_frames</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
-
             <span class="n">next_data</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">dc_iter</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">pipe_child</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="n">_MIN_TIMEOUT</span><span class="p">):</span>
                 <span class="c1"># in this case, main send a message to the worker while it was busy collecting trajectories.</span>
@@ -3714,6 +3922,9 @@
                 <span class="k">if</span> <span class="ow">not</span> <span class="n">extend_buffer</span><span class="p">:</span>
                     <span class="n">next_data</span><span class="o">.</span><span class="n">names</span> <span class="o">=</span> <span class="kc">None</span>
                     <span class="n">replay_buffer</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">next_data</span><span class="p">)</span>
+
+                <span class="k">if</span> <span class="n">run_free</span><span class="p">:</span>
+                    <span class="k">continue</span>
 
                 <span class="k">try</span><span class="p">:</span>
                     <span class="n">queue_out</span><span class="o">.</span><span class="n">put</span><span class="p">((</span><span class="n">idx</span><span class="p">,</span> <span class="n">j</span><span class="p">),</span> <span class="n">timeout</span><span class="o">=</span><span class="n">_TIMEOUT</span><span class="p">)</span>
