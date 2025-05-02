@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.8.0+3dbd84c) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.8.0+795e362) &#x25BC</span></a>
     </div>
     
 
@@ -499,7 +499,7 @@ the foundational policy-optimization algorithm. For more information, see the
 <a class="reference external" href="https://arxiv.org/abs/1707.06347">Proximal Policy Optimization Algorithms</a> paper.</p>
 <p>This type of algorithms is usually trained <em>on-policy</em>. This means that, at every learning iteration, we have a
 <strong>sampling</strong> and a <strong>training</strong> phase. In the <strong>sampling</strong> phase of iteration <span class="math notranslate nohighlight">\(t\)</span>, rollouts are collected
-form agents’ interactions in the environment using the current policies <span class="math notranslate nohighlight">\(\mathbf{\pi}_t\)</span>.
+from agents’ interactions in the environment using the current policies <span class="math notranslate nohighlight">\(\mathbf{\pi}_t\)</span>.
 In the <strong>training</strong> phase, all the collected rollouts are immediately fed to the training process to perform
 backpropagation. This leads to updated policies which are then used again for sampling.
 The execution of this process in a loop constitutes <em>on-policy learning</em>.</p>

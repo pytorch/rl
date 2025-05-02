@@ -75,7 +75,7 @@ the foundational policy-optimization algorithm. For more information, see the
 
 This type of algorithms is usually trained *on-policy*. This means that, at every learning iteration, we have a
 **sampling** and a **training** phase. In the **sampling** phase of iteration :math:`t`, rollouts are collected
-form agents' interactions in the environment using the current policies :math:`\mathbf{\pi}_t`.
+from agents' interactions in the environment using the current policies :math:`\mathbf{\pi}_t`.
 In the **training** phase, all the collected rollouts are immediately fed to the training process to perform
 backpropagation. This leads to updated policies which are then used again for sampling.
 The execution of this process in a loop constitutes *on-policy learning*.
