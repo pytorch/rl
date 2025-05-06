@@ -404,7 +404,8 @@ policy_net = torch.nn.Sequential(
         n_agent_inputs=env.observation_spec["agents", "observation"].shape[
             -1
         ],  # n_obs_per_agent
-        n_agent_outputs=2 * env.action_spec.shape[-1],  # 2 * n_actions_per_agents
+        n_agent_outputs=2
+        * env.full_action_spec[env.action_key].shape[-1],  # 2 * n_actions_per_agents
         n_agents=env.n_agents,
         centralised=False,  # the policies are decentralised (ie each agent will act from its observation)
         share_params=share_parameters_policy,
