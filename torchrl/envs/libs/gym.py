@@ -53,6 +53,7 @@ if not _has_gym:
 
 _has_mo = importlib.util.find_spec("mo_gymnasium") is not None
 _has_sb3 = importlib.util.find_spec("stable_baselines3") is not None
+_has_isaaclab = importlib.util.find_spec("isaaclab") is not None
 _has_minigrid = importlib.util.find_spec("minigrid") is not None
 
 
@@ -803,6 +804,11 @@ class _GymAsyncMeta(_EnvPostInit):
                 VecGymEnvTransform,
             )
 
+            if _has_isaaclab:
+                from isaaclab.envs import ManagerBasedRLEnv
+                if isinstance(instance._env.unwrapped, ManagerBasedRLEnv):
+                    return TransformedEnv(instance, VecGymEnvTransform())
+
             if _has_sb3:
                 from stable_baselines3.common.vec_env.base_vec_env import VecEnv
 
@@ -1069,12 +1075,15 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
 
     @property
     def _is_batched(self):
+        tuple_of_classes = ()
         if _has_sb3:
             from stable_baselines3.common.vec_env.base_vec_env import VecEnv
 
-            tuple_of_classes = (VecEnv,)
-        else:
-            tuple_of_classes = ()
+            tuple_of_classes = tuple_of_classes + (VecEnv,)
+        if _has_isaaclab:
+            from isaaclab.envs import ManagerBasedRLEnv
+
+            tuple_of_classes = tuple_of_classes + (ManagerBasedRLEnv,)
         return isinstance(
             self._env, tuple_of_classes + (gym_backend("vector").VectorEnv,)
         )
