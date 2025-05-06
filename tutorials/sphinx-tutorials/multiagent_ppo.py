@@ -57,7 +57,7 @@ Key learnings:
 #
 # This type of algorithms is usually trained *on-policy*. This means that, at every learning iteration, we have a
 # **sampling** and a **training** phase. In the **sampling** phase of iteration :math:`t`, rollouts are collected
-# form agents' interactions in the environment using the current policies :math:`\mathbf{\pi}_t`.
+# from agents' interactions in the environment using the current policies :math:`\mathbf{\pi}_t`.
 # In the **training** phase, all the collected rollouts are immediately fed to the training process to perform
 # backpropagation. This leads to updated policies which are then used again for sampling.
 # The execution of this process in a loop constitutes *on-policy learning*.
@@ -404,7 +404,8 @@ policy_net = torch.nn.Sequential(
         n_agent_inputs=env.observation_spec["agents", "observation"].shape[
             -1
         ],  # n_obs_per_agent
-        n_agent_outputs=2 * env.action_spec.shape[-1],  # 2 * n_actions_per_agents
+        n_agent_outputs=2
+        * env.full_action_spec[env.action_key].shape[-1],  # 2 * n_actions_per_agents
         n_agents=env.n_agents,
         centralised=False,  # the policies are decentralised (ie each agent will act from its observation)
         share_params=share_parameters_policy,
