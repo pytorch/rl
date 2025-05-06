@@ -4549,6 +4549,17 @@ class TestMeltingpot:
 class TestIsaacLab:
     @pytest.fixture(scope="class")
     def env(self):
+        import argparse
+
+        # This code block ensures that the Isaac app is started in headless mode
+        from isaaclab.app import AppLauncher
+
+        parser = argparse.ArgumentParser(description="Train an RL agent with TorchRL.")
+        AppLauncher.add_app_launcher_args(parser)
+        args_cli, hydra_args = parser.parse_known_args(["--headless"])
+        AppLauncher(args_cli)
+
+        # Imports and env
         import gymnasium as gym
         import isaaclab_tasks  # noqa: F401
         from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg

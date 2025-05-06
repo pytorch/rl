@@ -2,14 +2,52 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import torch
 from torchrl.envs.libs.gym import GymWrapper
 
 
 class IsaacLabWrapper(GymWrapper):
+    """A wrapper for IsaacLab environments.
+
+    Args:
+        env (isaaclab.envs.ManagerBasedRLEnv or equivalent): the environment instance to wrap.
+        categorical_action_encoding (bool, optional): if ``True``, categorical
+            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.Categorical`),
+            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHot`).
+            Defaults to ``False``.
+        allow_done_after_reset (bool, optional): if ``True``, it is tolerated
+            for envs to be ``done`` just after :meth:`reset` is called.
+            Defaults to ``False``.
+
+    For other arguments, see the :class:`torchrl.envs.GymWrapper` documentation.
+
+    Example:
+        >>> # This code block ensures that the Isaac app is started in headless mode
+        >>> from isaaclab.app import AppLauncher
+        >>> import argparse
+
+        >>> parser = argparse.ArgumentParser(description="Train an RL agent with TorchRL.")
+        >>> AppLauncher.add_app_launcher_args(parser)
+        >>> args_cli, hydra_args = parser.parse_known_args(["--headless"])
+        >>> app_launcher = AppLauncher(args_cli)
+
+        >>> # Imports and env
+        >>> import gymnasium as gym
+        >>> import isaaclab_tasks  # noqa: F401
+        >>> from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
+        >>> from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
+
+        >>> env = gym.make("Isaac-Ant-v0", cfg=AntEnvCfg())
+        >>> env = IsaacLabWrapper(env)
+
+    """
+
     def __init__(
         self,
-        env: "ManagerBasedRLEnv",
+        env: ManagerBasedRLEnv,
+        *,
         categorical_action_encoding=False,
         allow_done_after_reset=True,
         convert_actions_to_numpy=False,
@@ -51,9 +89,9 @@ if __name__ == "__main__":
     from isaaclab.app import AppLauncher
     from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
 
-    parser = argparse.ArgumentParser(description="Train an RL agent with skrl.")
+    parser = argparse.ArgumentParser(description="Train an RL agent with TorchRL.")
     AppLauncher.add_app_launcher_args(parser)
-    args_cli, hydra_args = parser.parse_known_args()
+    args_cli, hydra_args = parser.parse_known_args(["--headless"])
 
     app_launcher = AppLauncher(args_cli)
     import gymnasium as gym
