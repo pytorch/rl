@@ -4566,10 +4566,14 @@ class TestIsaacLab:
         from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
         from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
 
+        torchrl_logger.info("Making IsaacLab env...")
         env = gym.make("Isaac-Ant-v0", cfg=AntEnvCfg())
+        torchrl_logger.info("Wrapping IsaacLab env...")
         env = IsaacLabWrapper(env)
         yield env
+        torchrl_logger.info("Closing IsaacLab env...")
         env.close()
+        torchrl_logger.info("Closed")
 
     def test_isaaclab(self, env):
         assert env.batch_size == (4096,)
