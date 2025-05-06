@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.8.0+795e362) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.8.0+46ccbae) &#x25BC</span></a>
     </div>
     
 
@@ -797,7 +797,8 @@ multiple agents, with much customization available.</p>
         <span class="n">n_agent_inputs</span><span class="o">=</span><span class="n">env</span><span class="o">.</span><span class="n">observation_spec</span><span class="p">[</span><span class="s2">&quot;agents&quot;</span><span class="p">,</span> <span class="s2">&quot;observation&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span>
             <span class="o">-</span><span class="mi">1</span>
         <span class="p">],</span>  <span class="c1"># n_obs_per_agent</span>
-        <span class="n">n_agent_outputs</span><span class="o">=</span><span class="mi">2</span> <span class="o">*</span> <span class="n">env</span><span class="o">.</span><span class="n">action_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>  <span class="c1"># 2 * n_actions_per_agents</span>
+        <span class="n">n_agent_outputs</span><span class="o">=</span><span class="mi">2</span>
+        <span class="o">*</span> <span class="n">env</span><span class="o">.</span><span class="n">full_action_spec</span><span class="p">[</span><span class="n">env</span><span class="o">.</span><span class="n">action_key</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>  <span class="c1"># 2 * n_actions_per_agents</span>
         <span class="n">n_agents</span><span class="o">=</span><span class="n">env</span><span class="o">.</span><span class="n">n_agents</span><span class="p">,</span>
         <span class="n">centralised</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>  <span class="c1"># the policies are decentralised (ie each agent will act from its observation)</span>
         <span class="n">share_params</span><span class="o">=</span><span class="n">share_parameters_policy</span><span class="p">,</span>

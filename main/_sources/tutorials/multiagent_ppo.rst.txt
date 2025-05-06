@@ -471,7 +471,7 @@ For this we use the ``MultiAgentMLP``, a TorchRL module made exactly for
 multiple agents, with much customization available.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 399-419
+.. GENERATED FROM PYTHON SOURCE LINES 399-420
 
 .. code-block:: Python
 
@@ -483,7 +483,8 @@ multiple agents, with much customization available.
             n_agent_inputs=env.observation_spec["agents", "observation"].shape[
                 -1
             ],  # n_obs_per_agent
-            n_agent_outputs=2 * env.action_spec.shape[-1],  # 2 * n_actions_per_agents
+            n_agent_outputs=2
+            * env.full_action_spec[env.action_key].shape[-1],  # 2 * n_actions_per_agents
             n_agents=env.n_agents,
             centralised=False,  # the policies are decentralised (ie each agent will act from its observation)
             share_params=share_parameters_policy,
@@ -496,7 +497,7 @@ multiple agents, with much customization available.
     )
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 420-429
+.. GENERATED FROM PYTHON SOURCE LINES 421-430
 
 **Second**: wrap the neural network in a :class:`TensorDictModule`
 
@@ -508,7 +509,7 @@ Note that we use ``("agents", ...)`` keys as these keys are denoting data with t
 additional ``n_agents`` dimension.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 429-435
+.. GENERATED FROM PYTHON SOURCE LINES 430-436
 
 .. code-block:: Python
 
@@ -519,7 +520,7 @@ additional ``n_agents`` dimension.
     )
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 436-448
+.. GENERATED FROM PYTHON SOURCE LINES 437-449
 
 **Third**: wrap the :class:`TensorDictModule` in a :class:`ProbabilisticActor`
 
@@ -534,7 +535,7 @@ the :class:`TensorDictModule` above) has to end with the
 :class:`TanhNormal` distribution constructor keyword arguments (loc and scale).
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 448-462
+.. GENERATED FROM PYTHON SOURCE LINES 449-463
 
 .. code-block:: Python
 
@@ -553,7 +554,7 @@ the :class:`TensorDictModule` above) has to end with the
     )  # we'll need the log-prob for the PPO loss
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 463-496
+.. GENERATED FROM PYTHON SOURCE LINES 464-497
 
 Critic network
 --------------
@@ -589,7 +590,7 @@ If the critic is centralised and shared,
 all the values along the ``n_agents`` dimension will be identical.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 496-518
+.. GENERATED FROM PYTHON SOURCE LINES 497-519
 
 .. code-block:: Python
 
@@ -616,7 +617,7 @@ all the values along the ``n_agents`` dimension will be identical.
     )
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 519-527
+.. GENERATED FROM PYTHON SOURCE LINES 520-528
 
 Let us try our policy and critic modules. As pointed earlier, the usage of
 :class:`TensorDictModule` makes it possible to directly read the output
@@ -627,7 +628,7 @@ and where to write it:
 components as in single-agent learning. Isn't this fantastic?**
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 527-530
+.. GENERATED FROM PYTHON SOURCE LINES 528-531
 
 .. code-block:: Python
 
@@ -635,7 +636,7 @@ components as in single-agent learning. Isn't this fantastic?**
     print("Running value:", critic(env.reset()))
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 531-543
+.. GENERATED FROM PYTHON SOURCE LINES 532-544
 
 Data collector
 --------------
@@ -650,7 +651,7 @@ We will use the simplest possible data collector, which has the same output as a
 with the only difference that it will auto reset done states until the desired frames are collected.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 543-552
+.. GENERATED FROM PYTHON SOURCE LINES 544-553
 
 .. code-block:: Python
 
@@ -664,7 +665,7 @@ with the only difference that it will auto reset done states until the desired f
     )
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 553-565
+.. GENERATED FROM PYTHON SOURCE LINES 554-566
 
 Replay buffer
 -------------
@@ -679,7 +680,7 @@ use the collected data online, but using these classes
 makes it easy for us to build the inner training loop in a reproducible way.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 565-574
+.. GENERATED FROM PYTHON SOURCE LINES 566-575
 
 .. code-block:: Python
 
@@ -693,7 +694,7 @@ makes it easy for us to build the inner training loop in a reproducible way.
     )
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 575-596
+.. GENERATED FROM PYTHON SOURCE LINES 576-597
 
 Loss function
 -------------
@@ -717,7 +718,7 @@ Both of these will be used by :class:`ClipPPOLoss` to
 return the policy and value losses.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 596-621
+.. GENERATED FROM PYTHON SOURCE LINES 597-622
 
 .. code-block:: Python
 
@@ -747,7 +748,7 @@ return the policy and value losses.
     optim = torch.optim.Adam(loss_module.parameters(), lr)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 622-639
+.. GENERATED FROM PYTHON SOURCE LINES 623-640
 
 Training loop
 -------------
@@ -767,7 +768,7 @@ The steps include:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 639-699
+.. GENERATED FROM PYTHON SOURCE LINES 640-700
 
 .. code-block:: Python
 
@@ -832,7 +833,7 @@ The steps include:
         pbar.update()
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 700-707
+.. GENERATED FROM PYTHON SOURCE LINES 701-708
 
 Results
 -------
@@ -842,7 +843,7 @@ Let's plot the mean reward obtained per episode
 To make training last longer, increase the ``n_iters`` hyperparameter.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 707-713
+.. GENERATED FROM PYTHON SOURCE LINES 708-714
 
 .. code-block:: Python
 
@@ -853,7 +854,7 @@ To make training last longer, increase the ``n_iters`` hyperparameter.
     plt.show()
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 714-768
+.. GENERATED FROM PYTHON SOURCE LINES 715-769
 
 Render
 ------
@@ -910,7 +911,7 @@ If you are running this in Google Colab, you can render the trained policy by ru
    Image(open(f"{scenario_name}.gif", "rb").read())
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 771-803
+.. GENERATED FROM PYTHON SOURCE LINES 772-804
 
 Conclusion and next steps
 -------------------------
