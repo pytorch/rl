@@ -1417,6 +1417,7 @@ the following function will return ``1`` when queried:
     HabitatEnv
     IsaacGymEnv
     IsaacGymWrapper
+    IsaacLabWrapper
     JumanjiEnv
     JumanjiWrapper
     MeltingpotEnv

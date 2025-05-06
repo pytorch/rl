@@ -32,32 +32,6 @@ import numpy as np
 import pytest
 import torch
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import (
-        _make_multithreaded_env,
-        CARTPOLE_VERSIONED,
-        get_available_devices,
-        get_default_devices,
-        HALFCHEETAH_VERSIONED,
-        PENDULUM_VERSIONED,
-        PONG_VERSIONED,
-        rand_reset,
-        retry,
-        rollout_consistency_assertion,
-    )
-else:
-    from _utils_internal import (
-        _make_multithreaded_env,
-        CARTPOLE_VERSIONED,
-        get_available_devices,
-        get_default_devices,
-        HALFCHEETAH_VERSIONED,
-        PENDULUM_VERSIONED,
-        PONG_VERSIONED,
-        rand_reset,
-        retry,
-        rollout_consistency_assertion,
-    )
 from packaging import version
 from tensordict import (
     assert_allclose_td,
@@ -155,6 +129,33 @@ from torchrl.modules import (
     ValueOperator,
 )
 
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import (
+        _make_multithreaded_env,
+        CARTPOLE_VERSIONED,
+        get_available_devices,
+        get_default_devices,
+        HALFCHEETAH_VERSIONED,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        rand_reset,
+        retry,
+        rollout_consistency_assertion,
+    )
+else:
+    from _utils_internal import (
+        _make_multithreaded_env,
+        CARTPOLE_VERSIONED,
+        get_available_devices,
+        get_default_devices,
+        HALFCHEETAH_VERSIONED,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        rand_reset,
+        retry,
+        rollout_consistency_assertion,
+    )
+
 _has_d4rl = importlib.util.find_spec("d4rl") is not None
 
 _has_mo = importlib.util.find_spec("mo_gymnasium") is not None
@@ -166,6 +167,9 @@ _has_gym_robotics = importlib.util.find_spec("gymnasium_robotics") is not None
 _has_minari = importlib.util.find_spec("minari") is not None
 
 _has_gymnasium = importlib.util.find_spec("gymnasium") is not None
+
+_has_isaaclab = importlib.util.find_spec("isaaclab") is not None
+
 _has_gym_regular = importlib.util.find_spec("gym") is not None
 if _has_gymnasium:
     set_gym_backend("gymnasium").set()
@@ -4539,6 +4543,37 @@ class TestMeltingpot:
         image_from_env = env.get_rgb_image()
         assert torch.equal(rollout_last_image, image_from_env)
         assert not torch.equal(rollout_penultimate_image, image_from_env)
+
+
+@pytest.mark.skipif(not _has_isaaclab, reason="Isaaclab not found")
+class TestIsaacLab:
+    def test_isaaclab(self):
+        import gymnasium as gym
+        import isaaclab_tasks  # noqa: F401
+        from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
+        from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
+
+        env = gym.make("Isaac-Ant-v0", cfg=AntEnvCfg())
+        env = IsaacLabWrapper(env)
+        assert env.batch_size == (4096,)
+        env.check_env_specs(break_when_any_done="both")
+
+    def test_isaac_collector(self):
+        import gymnasium as gym
+        import isaaclab_tasks  # noqa: F401
+        from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
+        from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
+
+        env = gym.make("Isaac-Ant-v0", cfg=AntEnvCfg())
+        env = IsaacLabWrapper(env)
+        col = SyncDataCollector(
+            env, env.rand_action, frames_per_batch=1000, total_frames=100_000_000
+        )
+        for _ in col:
+            break
+
+    def test_isaaclab_reset(self):
+        ...
 
 
 if __name__ == "__main__":
