@@ -1085,7 +1085,7 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
 
             tuple_of_classes = tuple_of_classes + (ManagerBasedRLEnv,)
         return isinstance(
-            self._env, tuple_of_classes + (gym_backend("vector").VectorEnv,)
+            self._env.unwrapped, tuple_of_classes + (gym_backend("vector").VectorEnv,)
         )
 
     @implement_for("gym")
