@@ -8881,7 +8881,7 @@ class VecGymEnvTransform(Transform):
         super().__init__()
         self._memo = {}
         if not isinstance(missing_obs_value, torch.Tensor):
-            missing_obs_value = torch.tensor(self.missing_obs_value)
+            missing_obs_value = torch.tensor(missing_obs_value)
         self.missing_obs_value = missing_obs_value
 
     def set_container(self, container: Transform | EnvBase) -> None:
