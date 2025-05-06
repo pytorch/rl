@@ -4556,6 +4556,7 @@ class TestIsaacLab:
         env = gym.make("Isaac-Ant-v0", cfg=AntEnvCfg())
         env = IsaacLabWrapper(env)
         assert env.batch_size == (4096,)
+        assert env._is_batched
         env.check_env_specs(break_when_any_done="both")
 
     def test_isaac_collector(self):
