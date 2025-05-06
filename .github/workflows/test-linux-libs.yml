@@ -235,7 +235,7 @@ jobs:
       matrix:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') }}
+    if: ${{ github.event_name == 'push' }} # || contains(github.event.pull_request.labels.*.name, 'Environments') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl

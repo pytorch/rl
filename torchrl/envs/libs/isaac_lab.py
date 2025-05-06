@@ -16,9 +16,6 @@ class IsaacLabWrapper(GymWrapper):
         device=torch.device("cuda:0"),
         **kwargs,
     ):
-        """
-        Here we are setting some parameters that are what we need for IsaacLab.
-        """
         super().__init__(
             env,
             device=device,
