@@ -4547,7 +4547,8 @@ class TestMeltingpot:
 
 @pytest.mark.skipif(not _has_isaaclab, reason="Isaaclab not found")
 class TestIsaacLab:
-    def test_isaaclab(self):
+    @pytest.fixture(scope="class")
+    def env(self):
         import gymnasium as gym
         import isaaclab_tasks  # noqa: F401
         from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
@@ -4555,18 +4556,14 @@ class TestIsaacLab:
 
         env = gym.make("Isaac-Ant-v0", cfg=AntEnvCfg())
         env = IsaacLabWrapper(env)
+        yield env
+
+    def test_isaaclab(self, env):
         assert env.batch_size == (4096,)
         assert env._is_batched
         env.check_env_specs(break_when_any_done="both")
 
-    def test_isaac_collector(self):
-        import gymnasium as gym
-        import isaaclab_tasks  # noqa: F401
-        from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
-        from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
-
-        env = gym.make("Isaac-Ant-v0", cfg=AntEnvCfg())
-        env = IsaacLabWrapper(env)
+    def test_isaac_collector(self, env):
         col = SyncDataCollector(
             env, env.rand_action, frames_per_batch=1000, total_frames=100_000_000
         )
@@ -4574,7 +4571,10 @@ class TestIsaacLab:
             break
 
     def test_isaaclab_reset(self):
-        ...
+        # Make a rollout that will stop as soon as a trajectory reaches a done state
+        r = env.rollout(1_000_000)
+        # Check that done obs are None
+        assert (r["next", "policy"][r["next", "done"].squeeze(-1)] == np.nan).all()
 
 
 if __name__ == "__main__":
