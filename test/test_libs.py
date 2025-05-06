@@ -4547,7 +4547,7 @@ class TestMeltingpot:
 
 @pytest.mark.skipif(not _has_isaaclab, reason="Isaaclab not found")
 class TestIsaacLab:
-    @pytest.fixture
+    @pytest.fixture(scope="class")
     def env(self):
         torch.manual_seed(0)
         import argparse
