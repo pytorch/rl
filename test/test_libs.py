@@ -4549,6 +4549,7 @@ class TestMeltingpot:
 class TestIsaacLab:
     @pytest.fixture(scope="class")
     def env(self):
+        torch.manual_seed(0)
         import argparse
 
         # This code block ensures that the Isaac app is started in headless mode
@@ -4568,6 +4569,7 @@ class TestIsaacLab:
         env = gym.make("Isaac-Ant-v0", cfg=AntEnvCfg())
         env = IsaacLabWrapper(env)
         yield env
+        env.close()
 
     def test_isaaclab(self, env):
         assert env.batch_size == (4096,)
