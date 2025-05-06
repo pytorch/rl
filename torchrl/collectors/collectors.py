@@ -280,15 +280,19 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             f"Collector start() is not implemented for {type(self).__name__}."
         )
 
-    def async_shutdown(self, timeout: float | None = None) -> None:
+    def async_shutdown(
+        self, timeout: float | None = None, close_env: bool = True
+    ) -> None:
         """Shuts down the collector when started asynchronously with the `start` method.
 
         Arg:
             timeout (float, optional): The maximum time to wait for the collector to shutdown.
+            close_env (bool, optional): If True, the collector will close the contained environment.
+                Defaults to `True`.
 
         .. seealso:: :meth:`~.start`
         """
-        return self.shutdown(timeout=timeout)
+        return self.shutdown(timeout=timeout, close_env=close_env)
 
     def update_policy_weights_(
         self,
@@ -344,7 +348,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             return None
 
     @abc.abstractmethod
-    def shutdown(self, timeout: float | None = None) -> None:
+    def shutdown(self, timeout: float | None = None, close_env: bool = True) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -1311,12 +1315,14 @@ class SyncDataCollector(DataCollectorBase):
             if self._stop:
                 return
 
-    def async_shutdown(self, timeout: float | None = None) -> None:
+    def async_shutdown(
+        self, timeout: float | None = None, close_env: bool = True
+    ) -> None:
         """Finishes processes started by ray.init() during async execution."""
         self._stop = True
         if hasattr(self, "_thread") and self._thread.is_alive():
             self._thread.join(timeout=timeout)
-        self.shutdown()
+        self.shutdown(close_env=close_env)
 
     def _postproc(self, tensordict_out):
         if self.split_trajs:
@@ -1576,14 +1582,20 @@ class SyncDataCollector(DataCollectorBase):
         )
         self._shuttle["collector"] = collector_metadata
 
-    def shutdown(self, timeout: float | None = None) -> None:
-        """Shuts down all workers and/or closes the local environment."""
+    def shutdown(self, timeout: float | None = None, close_env: bool = True) -> None:
+        """Shuts down all workers and/or closes the local environment.
+
+        Args:
+            timeout (float, optional): The timeout for closing pipes between workers.
+                No effect for this class.
+            close_env (bool, optional): Whether to close the environment. Defaults to `True`.
+        """
         if not self.closed:
             self.closed = True
             del self._shuttle
             if self._use_buffers:
                 del self._final_rollout
-            if not self.env.is_closed:
+            if close_env and not self.env.is_closed:
                 self.env.close()
             del self.env
         return
@@ -2353,8 +2365,17 @@ also that the state dict is synchronised across processes if needed."""
             # __del__ will not affect the program.
             pass
 
-    def shutdown(self, timeout: float | None = None) -> None:
-        """Shuts down all processes. This operation is irreversible."""
+    def shutdown(self, timeout: float | None = None, close_env: bool = True) -> None:
+        """Shuts down all processes. This operation is irreversible.
+
+        Args:
+            timeout (float, optional): The timeout for closing pipes between workers.
+            close_env (bool, optional): Whether to close the environment. Defaults to `True`.
+        """
+        if not close_env:
+            raise RuntimeError(
+                f"Cannot shutdown {type(self).__name__} collector without environment being closed."
+            )
         self._shutdown_main(timeout)
 
     def _shutdown_main(self, timeout: float | None = None) -> None:
@@ -2627,7 +2648,11 @@ class MultiSyncDataCollector(_MultiDataCollector):
         return super().next()
 
     # for RPC
-    def shutdown(self, timeout: float | None = None) -> None:
+    def shutdown(self, timeout: float | None = None, close_env: bool = True) -> None:
+        if not close_env:
+            raise RuntimeError(
+                f"Cannot shutdown {type(self).__name__} collector without environment being closed."
+            )
         if hasattr(self, "out_buffer"):
             del self.out_buffer
         if hasattr(self, "buffers"):
@@ -2998,9 +3023,13 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         return super().next()
 
     # for RPC
-    def shutdown(self, timeout: float | None = None) -> None:
+    def shutdown(self, timeout: float | None = None, close_env: bool = True) -> None:
         if hasattr(self, "out_tensordicts"):
             del self.out_tensordicts
+        if not close_env:
+            raise RuntimeError(
+                f"Cannot shutdown {type(self).__name__} collector without environment being closed."
+            )
         return super().shutdown(timeout=timeout)
 
     # for RPC
@@ -3339,8 +3368,8 @@ class aSyncDataCollector(MultiaSyncDataCollector):
         return super().next()
 
     # for RPC
-    def shutdown(self, timeout: float | None = None) -> None:
-        return super().shutdown(timeout=timeout)
+    def shutdown(self, timeout: float | None = None, close_env: bool = True) -> None:
+        return super().shutdown(timeout=timeout, close_env=close_env)
 
     # for RPC
     def set_seed(self, seed: int, static_seed: bool = False) -> int:

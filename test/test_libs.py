@@ -4588,9 +4588,13 @@ class TestIsaacLab:
         col = SyncDataCollector(
             env, env.rand_action, frames_per_batch=1000, total_frames=100_000_000
         )
-        for data in col:
-            assert data.shape == (4096, 1)
-            break
+        try:
+            for data in col:
+                assert data.shape == (4096, 1)
+                break
+        finally:
+            # We must do that, otherwise `__del__` calls `shutdown` and the next test will fail
+            col.shutdown(close_env=False)
 
     def test_isaaclab_reset(self, env):
         # Make a rollout that will stop as soon as a trajectory reaches a done state
