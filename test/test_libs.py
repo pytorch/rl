@@ -4580,18 +4580,22 @@ class TestIsaacLab:
     def test_isaaclab(self, env):
         assert env.batch_size == (4096,)
         assert env._is_batched
+        torchrl_logger.info("Checking env specs...")
         env.check_env_specs(break_when_any_done="both")
+        torchrl_logger.info("Check succeeded!")
 
     def test_isaac_collector(self, env):
         col = SyncDataCollector(
             env, env.rand_action, frames_per_batch=1000, total_frames=100_000_000
         )
-        for _ in col:
+        for data in col:
+            assert data.shape == (4096,)
             break
 
     def test_isaaclab_reset(self, env):
         # Make a rollout that will stop as soon as a trajectory reaches a done state
         r = env.rollout(1_000_000)
+
         # Check that done obs are None
         assert (r["next", "policy"][r["next", "done"].squeeze(-1)] == np.nan).all()
 
