@@ -48,14 +48,16 @@ class IsaacLabWrapper(GymWrapper):
 
     def __init__(
         self,
-        env: ManagerBasedRLEnv,
+        env: isaaclab.envs.ManagerBasedRLEnv,  # noqa: F821
         *,
-        categorical_action_encoding=False,
-        allow_done_after_reset=True,
-        convert_actions_to_numpy=False,
-        device=torch.device("cuda:0"),
+        categorical_action_encoding: bool = False,
+        allow_done_after_reset: bool = True,
+        convert_actions_to_numpy: bool = False,
+        device: torch.device | None = None,
         **kwargs,
     ):
+        if device is None:
+            device = torch.device("cuda:0")
         super().__init__(
             env,
             device=device,
@@ -83,39 +85,3 @@ class IsaacLabWrapper(GymWrapper):
             done.clone(),
             info,
         )
-
-
-if __name__ == "__main__":
-    import argparse
-
-    from isaaclab.app import AppLauncher
-    from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
-
-    parser = argparse.ArgumentParser(description="Train an RL agent with TorchRL.")
-    AppLauncher.add_app_launcher_args(parser)
-    args_cli, hydra_args = parser.parse_known_args(["--headless"])
-
-    app_launcher = AppLauncher(args_cli)
-    import gymnasium as gym
-    import isaaclab_tasks  # noqa: F401
-    from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
-
-    if __name__ == "__main__":
-        # import isaaclab_tasks
-
-        env = gym.make("Isaac-Ant-v0", cfg=AntEnvCfg())
-        env = IsaacLabWrapper(env)
-
-        import tqdm
-
-        # env.check_env_specs(break_when_any_done="both")
-        # env.check_env_specs(break_when_any_done="both")
-        from torchrl.collectors import SyncDataCollector
-        from torchrl.record.loggers.wandb import WandbLogger
-
-        logger = WandbLogger(exp_name="test_isaac")
-        col = SyncDataCollector(
-            env, env.rand_action, frames_per_batch=1000, total_frames=100_000_000
-        )
-        for d in tqdm.tqdm(col):
-            logger.log_scalar("frames", col._frames)
