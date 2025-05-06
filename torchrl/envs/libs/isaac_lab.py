@@ -23,6 +23,8 @@ class IsaacLabWrapper(GymWrapper):
 
     For other arguments, see the :class:`torchrl.envs.GymWrapper` documentation.
 
+    Refer to `the Isaac Lab doc for installation instructions <https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/pip_installation.html>`_.
+
     Example:
         >>> # This code block ensures that the Isaac app is started in headless mode
         >>> from isaaclab.app import AppLauncher

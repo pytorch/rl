@@ -4581,7 +4581,7 @@ class TestIsaacLab:
         for _ in col:
             break
 
-    def test_isaaclab_reset(self):
+    def test_isaaclab_reset(self, env):
         # Make a rollout that will stop as soon as a trajectory reaches a done state
         r = env.rollout(1_000_000)
         # Check that done obs are None
