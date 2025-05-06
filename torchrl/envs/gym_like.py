@@ -515,7 +515,11 @@ class GymLikeEnv(_EnvWrapper):
     def _reset(
         self, tensordict: TensorDictBase | None = None, **kwargs
     ) -> TensorDictBase:
-        if tensordict is not None and "_reset" in tensordict and not tensordict["_reset"].all():
+        if (
+            tensordict is not None
+            and "_reset" in tensordict
+            and not tensordict["_reset"].all()
+        ):
             raise RuntimeError("Partial resets are not handled at this level.")
         obs, info = self._reset_output_transform(self._env.reset(**kwargs))
 

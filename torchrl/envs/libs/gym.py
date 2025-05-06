@@ -794,6 +794,7 @@ def _is_from_pixels(env):
 
 class _GymAsyncMeta(_EnvPostInit):
     def __call__(cls, *args, **kwargs):
+        missing_obs_value = kwargs.pop("missing_obs_value", None)
         instance: GymWrapper = super().__call__(*args, **kwargs)
 
         # before gym 0.22, there was no final_observation
@@ -806,8 +807,12 @@ class _GymAsyncMeta(_EnvPostInit):
 
             if _has_isaaclab:
                 from isaaclab.envs import ManagerBasedRLEnv
+
+                kwargs = {}
+                if missing_obs_value is not None:
+                    kwargs["missing_obs_value"] = missing_obs_value
                 if isinstance(instance._env.unwrapped, ManagerBasedRLEnv):
-                    return TransformedEnv(instance, VecGymEnvTransform())
+                    return TransformedEnv(instance, VecGymEnvTransform(**kwargs))
 
             if _has_sb3:
                 from stable_baselines3.common.vec_env.base_vec_env import VecEnv
@@ -851,7 +856,10 @@ class _GymAsyncMeta(_EnvPostInit):
                         instance.observation_spec, backend=backend
                     )
                 )
-            return TransformedEnv(instance, VecGymEnvTransform())
+            kwargs = {}
+            if missing_obs_value is not None:
+                kwargs["missing_obs_value"] = missing_obs_value
+            return TransformedEnv(instance, VecGymEnvTransform(**kwargs))
         return instance
 
 
@@ -898,6 +906,10 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
             env step function. Set this to ``False`` if the environment is evaluated
             on GPU, such as IsaacLab.
             Defaults to ``True``.
+        missing_obs_value (Any, optional): default value to use as placeholder for missing observations, when
+            the environment is auto-resetting and missing observations cannot be found in the info dictionary
+            (e.g., with IsaacLab). This argument is passed to :class:`~torchrl.envs.VecGymEnvTransform` by
+            the metaclass.
 
     Attributes:
         available_envs (List[str]): a list of environments to build.
@@ -1571,7 +1583,10 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
     def _replace_reset(self, reset, kwargs):  # noqa
         import gymnasium as gym
 
-        if self._env.autoreset_mode == gym.vector.AutoresetMode.DISABLED:
+        if (
+            getattr(self._env, "autoreset_mode", None)
+            == gym.vector.AutoresetMode.DISABLED
+        ):
             options = {"reset_mask": reset.view(self.batch_size).numpy()}
             kwargs.setdefault("options", {}).update(options)
         return kwargs

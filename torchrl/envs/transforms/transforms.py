@@ -8868,16 +8868,21 @@ class VecGymEnvTransform(Transform):
     Args:
         final_name (str, optional): the name of the final observation in the dict.
             Defaults to `"final"`.
+        missing_obs_value (Any, optional): default value to use as placeholder for missing
+            last observations. Defaults to `np.nan`.
 
     .. note:: In general, this class should not be handled directly. It is
         created whenever a vectorized environment is placed within a :class:`GymWrapper`.
 
     """
 
-    def __init__(self, final_name="final"):
+    def __init__(self, final_name: str = "final", missing_obs_value: Any = np.nan):
         self.final_name = final_name
         super().__init__()
         self._memo = {}
+        if not isinstance(missing_obs_value, torch.Tensor):
+            missing_obs_value = torch.tensor(self.missing_obs_value)
+        self.missing_obs_value = missing_obs_value
 
     def set_container(self, container: Transform | EnvBase) -> None:
         out = super().set_container(container)
@@ -8908,7 +8913,7 @@ class VecGymEnvTransform(Transform):
             else:
                 saved_next = next_tensordict.select(*self.obs_keys).clone()
                 for obs_key in self.obs_keys:
-                    next_tensordict[obs_key][done] = torch.tensor(np.nan)
+                    next_tensordict[obs_key][done] = self.missing_obs_value
 
             self._memo["saved_next"] = saved_next
         else:
