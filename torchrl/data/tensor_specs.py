@@ -1609,7 +1609,7 @@ class Stacked(_LazyStackedMixin[TensorSpec], TensorSpec):
     def _project(self, val: TensorDictBase) -> TensorDictBase:
         raise NOT_IMPLEMENTED_ERROR
 
-    def encode(
+    def _encode_eager(
         self, val: np.ndarray | torch.Tensor, *, ignore_device=False
     ) -> torch.Tensor:
         if self.dim != 0 and not isinstance(val, tuple):
@@ -2912,7 +2912,7 @@ class NonTensor(TensorSpec):
     ) -> np.ndarray | dict:
         return val
 
-    def encode(
+    def _encode_eager(
         self,
         val: np.ndarray | torch.Tensor | TensorDictBase,
         *,
@@ -6357,7 +6357,7 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
             [spec.empty() for spec in self._specs], dim=self.stack_dim
         )
 
-    def encode(
+    def _encode_eager(
         self, vals: dict[str, Any], ignore_device: bool = False
     ) -> dict[str, torch.Tensor]:
         raise NOT_IMPLEMENTED_ERROR
