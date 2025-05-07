@@ -46,16 +46,18 @@ from torch import autograd, nn
 from torchrl._utils import _standardize
 from torchrl.data import Bounded, Categorical, Composite, MultiOneHot, OneHot, Unbounded
 from torchrl.data.postprocs.postprocs import MultiStep
-from torchrl.envs import EnvBase
+from torchrl.envs import EnvBase, GymEnv, InitTracker, SerialEnv
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import TensorDictPrimer, TransformedEnv
 from torchrl.envs.utils import exploration_type, ExplorationType, set_exploration_type
 from torchrl.modules import (
     DistributionalQValueActor,
+    LSTMModule,
     OneHotCategorical,
     QValueActor,
     recurrent_mode,
     SafeSequential,
+    set_recurrent_mode,
     WorldModelWrapper,
 )
 from torchrl.modules.distributions.continuous import TanhDelta, TanhNormal
@@ -13755,6 +13757,62 @@ def test_updater(mode, value_network_update_interval, device, dtype):
 
 
 class TestValues:
+    def test_gae_lstm(self):
+        # Checks that shifted=True and False provide the same result in GAE when an LSTM is used
+        env = SerialEnv(
+            2,
+            [
+                functools.partial(TransformedEnv, GymEnv("Pendulum-v1"), InitTracker())
+                for _ in range(2)
+            ],
+        )
+        env.set_seed(0)
+        torch.manual_seed(0)
+        lstm_module = LSTMModule(
+            input_size=env.observation_spec["observation"].shape[-1],
+            hidden_size=64,
+            in_keys=["observation", "rs_h", "rs_c"],
+            out_keys=["intermediate", ("next", "rs_h"), ("next", "rs_c")],
+            python_based=True,
+        )
+        for p in lstm_module.parameters():
+            p.data *= 1 + torch.randn_like(p.data) / 10
+        mlp_value = MLP(num_cells=[64], out_features=1)
+        value_net = Seq(
+            lstm_module,
+            Mod(mlp_value, in_keys=["intermediate"], out_keys=["state_value"]),
+        )
+        mlp_policy = MLP(num_cells=[64], out_features=1)
+        policy_net = Seq(
+            lstm_module, Mod(mlp_policy, in_keys=["intermediate"], out_keys=["action"])
+        )
+        # value_net.select_out_keys("state_value")
+        env = env.append_transform(lstm_module.make_tensordict_primer())
+        vals = env.rollout(1000, policy_net, break_when_any_done=False)
+        # vals["next", "is_init"] = vals["is_init"]
+
+        # Shifted
+        gae_shifted = GAE(
+            gamma=0.9,
+            lmbda=0.99,
+            value_network=value_net,
+            shifted=True,
+        )
+        with set_recurrent_mode(True):
+            r0 = gae_shifted(vals.copy())
+        a0 = r0["advantage"]
+        gae = GAE(
+            gamma=0.9,
+            lmbda=0.99,
+            value_network=value_net,
+            shifted=False,
+            deactivate_vmap=True,
+        )
+        with set_recurrent_mode(True):
+            r1 = gae(vals.copy())
+        a1 = r1["advantage"]
+        torch.testing.assert_close(a0, a1)
+
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("gamma", [0.1, 0.5, 0.99])
     @pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])

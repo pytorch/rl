@@ -8,7 +8,7 @@ import functools
 import re
 import warnings
 from enum import Enum
-from typing import Iterable
+from typing import Any, Callable, Iterable
 
 import torch
 from tensordict import NestedKey, TensorDict, TensorDictBase, unravel_key
@@ -16,6 +16,7 @@ from tensordict.nn import TensorDictModule
 from torch import nn, Tensor
 from torch.nn import functional as F
 from torch.nn.modules import dropout
+from torch.utils._pytree import tree_map
 
 try:
     from torch import vmap
@@ -527,7 +528,7 @@ def _cache_values(func):
     return new_func
 
 
-def _vmap_func(module, *args, func=None, **kwargs):
+def _vmap_func(module, *args, func=None, pseudo_vmap: bool = False, **kwargs):
     try:
 
         def decorated_module(*module_args_params):
@@ -539,7 +540,9 @@ def _vmap_func(module, *args, func=None, **kwargs):
                 else:
                     return getattr(module, func)(*module_args)
 
-        return vmap(decorated_module, *args, **kwargs)  # noqa: TOR101
+        if not pseudo_vmap:
+            return vmap(decorated_module, *args, **kwargs)  # noqa: TOR101
+        return _pseudo_vmap(decorated_module, *args, **kwargs)
 
     except RuntimeError as err:
         if re.match(
@@ -548,6 +551,58 @@ def _vmap_func(module, *args, func=None, **kwargs):
             raise RuntimeError(
                 "Please use <loss_module>.set_vmap_randomness('different') to handle random operations during vmap."
             ) from err
+
+
+def _pseudo_vmap(
+    func: Callable,
+    in_dims: Any = 0,
+    out_dims: Any = 0,
+    randomness: str = "error",
+    *,
+    chunk_size=None,
+):
+    # Test:
+    # import torch
+    # from tensordict import TensorDict
+    # a = torch.randn(3, 4)
+    # b = TensorDict(a=torch.randn(3, 4), batch_size=3)
+    # ds = (0, 0)
+    # v0, v1, v2 = zip(*tuple(tree_map(lambda d, x: x.unbind(d), (0, 0), (a, b))))
+    if isinstance(in_dims, int):
+        in_dims = (in_dims,)
+    if isinstance(out_dims, int):
+        out_dims = (out_dims,)
+    from tensordict.nn.functional_modules import _exclude_td_from_pytree
+
+    def _unbind(d, x):
+        if d is not None and hasattr(x, "unbind"):
+            return x.unbind(d)
+        # Generator to reprod the value
+        return (x for _ in range(1000))
+
+    def _stack(d, x):
+        if d is not None:
+            return torch.stack(list(x), d)
+        return x
+
+    @functools.wraps(func)
+    def new_func(*args, **kwargs):
+        with _exclude_td_from_pytree():
+            # Unbind inputs
+            vs = zip(*tuple(tree_map(_unbind, in_dims, args)))
+            rs = []
+            for v in vs:
+                r = func(*v, **kwargs)
+                if not isinstance(r, tuple):
+                    r = (r,)
+                rs.append(r)
+            rs = tuple(zip(*rs))
+            vs = tuple(tree_map(_stack, out_dims, rs))
+            if len(vs) == 1:
+                return vs[0]
+            return vs
+
+    return new_func
 
 
 def _reduce(tensor: torch.Tensor, reduction: str) -> float | torch.Tensor:
