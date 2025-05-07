@@ -29,7 +29,12 @@ from torch import Tensor
 
 from torchrl._utils import RL_WARNINGS
 from torchrl.envs.utils import step_mdp
-from torchrl.objectives.utils import _maybe_get_or_select, _vmap_func, hold_out_net
+from torchrl.objectives.utils import (
+    _maybe_get_or_select,
+    _pseudo_vmap,
+    _vmap_func,
+    hold_out_net,
+)
 from torchrl.objectives.value.functional import (
     generalized_advantage_estimate,
     td0_return_estimate,
@@ -149,6 +154,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
     tensor_keys: _AcceptedKeys
     value_network: TensorDictModule | Callable
     _vmap_randomness = None
+    deactivate_vmap: bool = False
 
     @property
     def advantage_key(self):
@@ -435,26 +441,11 @@ class ValueEstimatorBase(TensorDictModuleBase):
             value_net = self.value_network
         in_keys = value_net.in_keys
         if single_call:
+            # Reshape to -1 because we cannot guarantee that all dims have the same number of done states
             for i, name in enumerate(data.names):
                 if name == "time":
                     ndim = i + 1
                     break
-            else:
-                ndim = None
-            if ndim is not None:
-                # get data at t and last of t+1
-                idx0 = (slice(None),) * (ndim - 1) + (slice(-1, None),)
-                idx = (slice(None),) * (ndim - 1) + (slice(None, -1),)
-                idx_ = (slice(None),) * (ndim - 1) + (slice(1, None),)
-                data_in = torch.cat(
-                    [
-                        data.select(*in_keys, value_key, strict=False),
-                        data.get("next").select(*in_keys, value_key, strict=False)[
-                            idx0
-                        ],
-                    ],
-                    ndim - 1,
-                )
             else:
                 if RL_WARNINGS:
                     warnings.warn(
@@ -462,35 +453,58 @@ class ValueEstimatorBase(TensorDictModuleBase):
                         "This warning can be turned off by setting the environment variable RL_WARNINGS to False."
                     )
                 ndim = data.ndim
-                idx = (slice(None),) * (ndim - 1) + (slice(None, data.shape[ndim - 1]),)
-                idx_ = (slice(None),) * (ndim - 1) + (
-                    slice(data.shape[ndim - 1], None),
+            data_copy = data.copy()
+            done = data_copy["next", "done"].clone()
+            done[(slice(None),) * (ndim - 1) + (-1,)].fill_(True)
+            data_copy["next", "done"] = done
+            with data_copy.view(-1) as data_copy_view:
+                # Interleave next data when done
+                data_copy_select = data_copy_view.select(
+                    *in_keys, value_key, strict=False
                 )
-                data_in = torch.cat(
-                    [
-                        data.select(*in_keys, value_key, strict=False),
-                        data.get("next").select(*in_keys, value_key, strict=False),
-                    ],
-                    ndim - 1,
+                data_in = data_copy_select.new_zeros(
+                    (
+                        data_copy_view.shape[0]
+                        + data_copy_view["next", "done"].sum().item(),
+                    )
                 )
-
-            # next_params should be None or be identical to params
-            if next_params is not None and next_params is not params:
-                raise ValueError(
-                    "the value at t and t+1 cannot be retrieved in a single call without recurring to vmap when both params and next params are passed."
+                # we can get the indices of non-done data by adding the shifted done cumsum to an arange
+                #    traj = [0, 0, 0, 1, 1, 2, 2]
+                #  arange = [0, 1, 2, 3, 4, 5, 6]
+                #    done = [0, 0, 1, 0, 1, 0, 1]
+                # done_cs = [0, 0, 0, 1, 1, 2, 2]
+                # indices = [0, 1, 2, 4, 5, 7, 8]
+                done_view = data_copy_view["next", "done"].squeeze(-1)
+                done_cs = done_view.cumsum(0)
+                done_cs = torch.cat([done_cs.new_zeros((1,)), done_cs[:-1]], dim=0)
+                indices = torch.arange(done_cs.shape[0], device=done_cs.device)
+                indices = indices + done_cs
+                data_in[indices] = data_copy_select
+                # To get the indices of the extra data, we can mask indices with done_view and add 1
+                indices_interleaved = indices[done_view] + 1
+                # assert not set(indices_interleaved.tolist()).intersection(indices.tolist())
+                data_in[indices_interleaved] = (
+                    data_copy_view[done_view]
+                    .get("next")
+                    .select(*in_keys, value_key, strict=False)
                 )
-            if params is not None:
-                with params.to_module(value_net):
+                if next_params is not None and next_params is not params:
+                    raise ValueError(
+                        "the value at t and t+1 cannot be retrieved in a single call without recurring to vmap when both params and next params are passed."
+                    )
+                if params is not None:
+                    with params.to_module(value_net):
+                        value_est = value_net(data_in).get(value_key)
+                else:
                     value_est = value_net(data_in).get(value_key)
-            else:
-                value_est = value_net(data_in).get(value_key)
-            value, value_ = value_est[idx], value_est[idx_]
+                value, value_ = value_est[indices], value_est[indices + 1]
+            value = value.view_as(done)
+            value_ = value_.view_as(done)
         else:
+            data_root = data.select(*in_keys, value_key, strict=False)
+            data_next = data.get("next").select(*in_keys, value_key, strict=False)
             data_in = torch.stack(
-                [
-                    data.select(*in_keys, value_key, strict=False),
-                    data.get("next").select(*in_keys, value_key, strict=False),
-                ],
+                [data_root, data_next],
                 0,
             )
             if (params is not None) ^ (next_params is not None):
@@ -499,11 +513,19 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 )
             elif params is not None:
                 params_stack = torch.stack([params, next_params], 0).contiguous()
-                data_out = _vmap_func(value_net, (0, 0), randomness=vmap_randomness)(
-                    data_in, params_stack
-                )
-            else:
+                data_out = _vmap_func(
+                    value_net,
+                    (0, 0),
+                    randomness=vmap_randomness,
+                    pseudo_vmap=self.deactivate_vmap,
+                )(data_in, params_stack)
+            elif not self.deactivate_vmap:
                 data_out = vmap(value_net, (0,), randomness=vmap_randomness)(data_in)
+            else:
+                data_out = _pseudo_vmap(value_net, (0,), randomness=vmap_randomness)(
+                    data_in
+                )
+
             value_est = data_out.get(value_key)
             value, value_ = value_est[0], value_est[1]
         data.set(value_key, value)
@@ -1242,6 +1264,8 @@ class GAE(ValueEstimatorBase):
         auto_reset_env (bool, optional): if ``True``, the last ``"next"`` state
             of the episode isn't valid, so the GAE calculation will use the ``value``
             instead of ``next_value`` to bootstrap truncated episodes.
+        deactivate_vmap (bool, optional): if ``True``, no vmap call will be used, and
+            vectorized maps will be replaced with simple for loops. Defaults to ``False``.
 
     GAE will return an :obj:`"advantage"` entry containing the advantage value. It will also
     return a :obj:`"value_target"` entry with the return value that is to be used
@@ -1274,6 +1298,7 @@ class GAE(ValueEstimatorBase):
         device: torch.device | None = None,
         time_dim: int | None = None,
         auto_reset_env: bool = False,
+        deactivate_vmap: bool = False,
     ):
         super().__init__(
             shifted=shifted,
@@ -1301,6 +1326,7 @@ class GAE(ValueEstimatorBase):
         self.vectorized = vectorized
         self.time_dim = time_dim
         self.auto_reset_env = auto_reset_env
+        self.deactivate_vmap = deactivate_vmap
 
     @property
     def vectorized(self):
