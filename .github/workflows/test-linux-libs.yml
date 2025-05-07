@@ -236,28 +236,16 @@ jobs:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments/Isaac') }}
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: vmoens/test-infra/.github/workflows/isaac_linux_job_v2.yml@patch-1
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
-      # docker-image: "nvcr.io/nvidia/isaac-lab:2.1.0"
+      docker-image: "nvcr.io/nvidia/isaac-lab:2.1.0"
       timeout: 120
-      docker-image: "docker:dind"
       script: |
-        docker run --name isaac-lab --entrypoint sh --gpus all -e "ACCEPT_EULA=Y" --rm --network=host \
-         -e "PRIVACY_CONSENT=Y" \
-         -v ~/docker/isaac-sim/cache/kit:/isaac-sim/kit/cache:rw \
-         -v ~/docker/isaac-sim/cache/ov:/root/.cache/ov:rw \
-         -v ~/docker/isaac-sim/cache/pip:/root/.cache/pip:rw \
-         -v ~/docker/isaac-sim/cache/glcache:/root/.cache/nvidia/GLCache:rw \
-         -v ~/docker/isaac-sim/cache/computecache:/root/.nv/ComputeCache:rw \
-         -v ~/docker/isaac-sim/logs:/root/.nvidia-omniverse/logs:rw \
-         -v ~/docker/isaac-sim/data:/root/.local/share/ov/data:rw \
-         -v ~/docker/isaac-sim/documents:/root/Documents:rw \
-         nvcr.io/nvidia/isaac-lab:2.1.0 ./.github/unittest/linux_libs/scripts_isaaclab/isaac.sh
-        # ./.github/unittest/linux_libs/scripts_isaaclab/isaac.sh
+        ./.github/unittest/linux_libs/scripts_isaaclab/isaac.sh
 
   unittests-jumanji:
     strategy:
