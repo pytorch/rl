@@ -47,6 +47,7 @@ from torchrl._utils import _standardize
 from torchrl.data import Bounded, Categorical, Composite, MultiOneHot, OneHot, Unbounded
 from torchrl.data.postprocs.postprocs import MultiStep
 from torchrl.envs import EnvBase, GymEnv, InitTracker, SerialEnv
+from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import TensorDictPrimer, TransformedEnv
 from torchrl.envs.utils import exploration_type, ExplorationType, set_exploration_type
@@ -148,6 +149,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         dtype_fixture,
         get_available_devices,
         get_default_devices,
+        PENDULUM_VERSIONED,
     )
     from pytorch.rl.test.mocking_classes import ContinuousActionConvMockEnv
 else:
@@ -156,6 +158,7 @@ else:
         dtype_fixture,
         get_available_devices,
         get_default_devices,
+        PENDULUM_VERSIONED,
     )
     from mocking_classes import ContinuousActionConvMockEnv
 
@@ -13757,12 +13760,15 @@ def test_updater(mode, value_network_update_interval, device, dtype):
 
 
 class TestValues:
+    @pytest.mark.skipif(not _has_gym, reason="requires gym")
     def test_gae_lstm(self):
         # Checks that shifted=True and False provide the same result in GAE when an LSTM is used
         env = SerialEnv(
             2,
             [
-                functools.partial(TransformedEnv, GymEnv("Pendulum-v1"), InitTracker())
+                functools.partial(
+                    TransformedEnv, GymEnv(PENDULUM_VERSIONED()), InitTracker()
+                )
                 for _ in range(2)
             ],
         )
