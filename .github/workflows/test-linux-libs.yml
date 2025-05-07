@@ -242,7 +242,8 @@ jobs:
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      # docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "nvcr.io/nvidia/isaac-lab:2.1.0"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
