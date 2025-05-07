@@ -242,28 +242,29 @@ jobs:
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
-      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
-      # docker-image: "nvcr.io/nvidia/isaac-lab:2.1.0"
+      # docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
+      docker-image: "nvcr.io/nvidia/isaac-lab:2.1.0"
       timeout: 120
       script: |
-        apt update
-        apt install -y ca-certificates curl gnupg lsb-release
-        mkdir -p /etc/apt/keyrings
-        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-        apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+        # apt update
+        # apt install -y ca-certificates curl gnupg lsb-release
+        # mkdir -p /etc/apt/keyrings
+        # curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        # echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+        # apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 
-        docker run --name isaac-lab --entrypoint bash -it --gpus all -e "ACCEPT_EULA=Y" --rm --network=host \
-         -e "PRIVACY_CONSENT=Y" \
-         -v ~/docker/isaac-sim/cache/kit:/isaac-sim/kit/cache:rw \
-         -v ~/docker/isaac-sim/cache/ov:/root/.cache/ov:rw \
-         -v ~/docker/isaac-sim/cache/pip:/root/.cache/pip:rw \
-         -v ~/docker/isaac-sim/cache/glcache:/root/.cache/nvidia/GLCache:rw \
-         -v ~/docker/isaac-sim/cache/computecache:/root/.nv/ComputeCache:rw \
-         -v ~/docker/isaac-sim/logs:/root/.nvidia-omniverse/logs:rw \
-         -v ~/docker/isaac-sim/data:/root/.local/share/ov/data:rw \
-         -v ~/docker/isaac-sim/documents:/root/Documents:rw \
-         nvcr.io/nvidia/isaac-lab:2.1.0 ./.github/unittest/linux_libs/scripts_isaaclab/isaac.sh
+        # docker run --name isaac-lab --entrypoint bash -it --gpus all -e "ACCEPT_EULA=Y" --rm --network=host \
+        #  -e "PRIVACY_CONSENT=Y" \
+        #  -v ~/docker/isaac-sim/cache/kit:/isaac-sim/kit/cache:rw \
+        #  -v ~/docker/isaac-sim/cache/ov:/root/.cache/ov:rw \
+        #  -v ~/docker/isaac-sim/cache/pip:/root/.cache/pip:rw \
+        #  -v ~/docker/isaac-sim/cache/glcache:/root/.cache/nvidia/GLCache:rw \
+        #  -v ~/docker/isaac-sim/cache/computecache:/root/.nv/ComputeCache:rw \
+        #  -v ~/docker/isaac-sim/logs:/root/.nvidia-omniverse/logs:rw \
+        #  -v ~/docker/isaac-sim/data:/root/.local/share/ov/data:rw \
+        #  -v ~/docker/isaac-sim/documents:/root/Documents:rw \
+        #  nvcr.io/nvidia/isaac-lab:2.1.0 ./.github/unittest/linux_libs/scripts_isaaclab/isaac.sh
+        ./.github/unittest/linux_libs/scripts_isaaclab/isaac.sh
 
   unittests-jumanji:
     strategy:
