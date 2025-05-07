@@ -571,7 +571,7 @@ class TensorSpec(metaclass=abc.ABCMeta):
     shape: torch.Size
     space: None | Box
     device: torch.device | None = None
-    dtype: torch.dtype = torch.float
+    dtype: torch.dtype = torch.get_default_dtype()
     domain: str = ""
     _encode_memo_dict: dict[Any, Callable[[Any], Any]] = field(
         default_factory=dict,
@@ -1682,7 +1682,7 @@ class OneHot(TensorSpec):
     shape: torch.Size
     space: CategoricalBox
     device: torch.device | None = None
-    dtype: torch.dtype = torch.float
+    dtype: torch.dtype = torch.get_default_dtype()
     domain: str = ""
     _encode_memo_dict: dict[Any, Callable[[Any], Any]] = field(
         default_factory=dict,
@@ -2067,7 +2067,7 @@ class OneHot(TensorSpec):
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
         if self.mask is None:
-            out = torch.multinomial(val.to(torch.float), 1).squeeze(-1)
+            out = torch.multinomial(val.to(torch.get_default_dtype()), 1).squeeze(-1)
             out = torch.nn.functional.one_hot(out, self.space.n).to(self.dtype)
             return out
         shape = self.mask.shape
@@ -3735,7 +3735,7 @@ class Categorical(TensorSpec):
     shape: torch.Size
     space: CategoricalBox
     device: torch.device | None = None
-    dtype: torch.dtype = torch.float
+    dtype: torch.dtype = torch.get_default_dtype()
     domain: str = ""
 
     # SPEC_HANDLED_FUNCTIONS = {}
