@@ -12,7 +12,7 @@ class IsaacLabWrapper(GymWrapper):
     """A wrapper for IsaacLab environments.
 
     Args:
-        env (isaaclab.envs.ManagerBasedRLEnv or equivalent): the environment instance to wrap.
+        env (scripts_isaaclab.envs.ManagerBasedRLEnv or equivalent): the environment instance to wrap.
         categorical_action_encoding (bool, optional): if ``True``, categorical
             specs will be converted to the TorchRL equivalent (:class:`torchrl.data.Categorical`),
             otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHot`).
@@ -27,7 +27,7 @@ class IsaacLabWrapper(GymWrapper):
 
     Example:
         >>> # This code block ensures that the Isaac app is started in headless mode
-        >>> from isaaclab.app import AppLauncher
+        >>> from scripts_isaaclab.app import AppLauncher
         >>> import argparse
 
         >>> parser = argparse.ArgumentParser(description="Train an RL agent with TorchRL.")

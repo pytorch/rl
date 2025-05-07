@@ -53,7 +53,7 @@ if not _has_gym:
 
 _has_mo = importlib.util.find_spec("mo_gymnasium") is not None
 _has_sb3 = importlib.util.find_spec("stable_baselines3") is not None
-_has_isaaclab = importlib.util.find_spec("isaaclab") is not None
+_has_isaaclab = importlib.util.find_spec("scripts_isaaclab") is not None
 _has_minigrid = importlib.util.find_spec("minigrid") is not None
 
 
