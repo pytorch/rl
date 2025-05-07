@@ -242,8 +242,7 @@ jobs:
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
-      # docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
-      docker-image: "nvcr.io/nvidia/isaac-lab:2.1.0"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       timeout: 120
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
@@ -292,7 +291,7 @@ jobs:
         git clone git@github.com:isaac-sim/IsaacLab.git
         conda install "conda-forge::cmake>3.22" -y
         cd IsaacLab
-        ./isaaclab.sh --install
+        ./isaaclab.sh --install skrl
         cd ../
         
         # install tensordict
