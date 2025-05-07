@@ -246,7 +246,7 @@ jobs:
       timeout: 120
       docker-image: "docker:dind"
       script: |
-        docker run --name isaac-lab --entrypoint bash --gpus all -e "ACCEPT_EULA=Y" --rm --network=host \
+        docker run --name isaac-lab --entrypoint sh --gpus all -e "ACCEPT_EULA=Y" --rm --network=host \
          -e "PRIVACY_CONSENT=Y" \
          -v ~/docker/isaac-sim/cache/kit:/isaac-sim/kit/cache:rw \
          -v ~/docker/isaac-sim/cache/ov:/root/.cache/ov:rw \
