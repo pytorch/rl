@@ -2918,7 +2918,7 @@ class NonTensor(TensorSpec):
         *,
         ignore_device: bool = False,
     ) -> torch.Tensor | TensorDictBase:
-        return val
+        return NonTensorData(val, device=self.device, batch_size=self.shape)
 
 
 class _UnboundedMeta(abc.ABCMeta):
