@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.8.0+46ccbae) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.8.0+3bad905) &#x25BC</span></a>
     </div>
     
 
@@ -433,13 +433,13 @@ The goal is to be able to swap environments in an experiment with little or no e
 even if these environments are simulated using different libraries.
 TorchRL offers some out-of-the-box environment wrappers under <code class="xref py py-obj docutils literal notranslate"><span class="pre">torchrl.envs.libs</span></code>,
 which we hope can be easily imitated for other libraries.
-The parent class <a class="reference internal" href="generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnvBase</span></code></a> is a <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a> subclass that implements
+The parent class <a class="reference internal" href="generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnvBase</span></code></a> is a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a> subclass that implements
 some typical environment methods using <code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code> as a data organiser. This allows this
 class to be generic and to handle an arbitrary number of input and outputs, as well as
 nested or batched data structures.</p>
 <p>Each env will have the following attributes:</p>
 <ul class="simple">
-<li><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">env.batch_size</span></code>: a <a class="reference external" href="https://pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.7)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">torch.Size</span></code></a> representing the number of envs
+<li><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">env.batch_size</span></code>: a <a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.7)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">torch.Size</span></code></a> representing the number of envs
 batched together.</p></li>
 <li><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">env.device</span></code>: the device where the input and output tensordict are expected to live.
 The environment device does not mean that the actual step operations will be computed on device

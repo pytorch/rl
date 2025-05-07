@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+46ccbae) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+3bad905) &#x25BC</span></a>
     </div>
     
 
@@ -551,12 +551,12 @@ names to the keys.</p>
 <dd><p>Copy parameters and buffers from <a class="reference internal" href="#torchrl.envs.transforms.TrajCounter.state_dict" title="torchrl.envs.transforms.TrajCounter.state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">state_dict</span></code></a> into this module and its descendants.</p>
 <p>If <code class="xref py py-attr docutils literal notranslate"><span class="pre">strict</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code>, then
 the keys of <a class="reference internal" href="#torchrl.envs.transforms.TrajCounter.state_dict" title="torchrl.envs.transforms.TrajCounter.state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">state_dict</span></code></a> must exactly match the keys returned
-by this module’s <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict" title="(in PyTorch v2.7)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">state_dict()</span></code></a> function.</p>
+by this module’s <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict" title="(in PyTorch v2.7)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">state_dict()</span></code></a> function.</p>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>If <code class="xref py py-attr docutils literal notranslate"><span class="pre">assign</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code> the optimizer must be created after
 the call to <a class="reference internal" href="#torchrl.envs.transforms.TrajCounter.load_state_dict" title="torchrl.envs.transforms.TrajCounter.load_state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">load_state_dict</span></code></a> unless
-<a class="reference external" href="https://pytorch.org/docs/stable/future_mod.html#torch.__future__.get_swap_module_params_on_conversion" title="(in PyTorch v2.7)"><code class="xref py py-func docutils literal notranslate"><span class="pre">get_swap_module_params_on_conversion()</span></code></a> is <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/future_mod.html#torch.__future__.get_swap_module_params_on_conversion" title="(in PyTorch v2.7)"><code class="xref py py-func docutils literal notranslate"><span class="pre">get_swap_module_params_on_conversion()</span></code></a> is <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
 </div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -565,7 +565,7 @@ the call to <a class="reference internal" href="#torchrl.envs.transforms.TrajCou
 persistent buffers.</p></li>
 <li><p><strong>strict</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to strictly enforce that the keys
 in <a class="reference internal" href="#torchrl.envs.transforms.TrajCounter.state_dict" title="torchrl.envs.transforms.TrajCounter.state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">state_dict</span></code></a> match the keys returned by this module’s
-<a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict" title="(in PyTorch v2.7)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">state_dict()</span></code></a> function. Default: <code class="docutils literal notranslate"><span class="pre">True</span></code></p></li>
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict" title="(in PyTorch v2.7)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">state_dict()</span></code></a> function. Default: <code class="docutils literal notranslate"><span class="pre">True</span></code></p></li>
 <li><p><strong>assign</strong> (<em>bool</em><em>, </em><em>optional</em>) – When set to <code class="docutils literal notranslate"><span class="pre">False</span></code>, the properties of the tensors
 in the current module are preserved whereas setting it to <code class="docutils literal notranslate"><span class="pre">True</span></code> preserves
 properties of the Tensors in the state dict. The only
@@ -633,7 +633,7 @@ Otherwise, an <code class="docutils literal notranslate"><span class="pre">Order
 Default: <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 <li><p><strong>prefix</strong> (<em>str</em><em>, </em><em>optional</em>) – a prefix added to parameter and buffer
 names to compose the keys in state_dict. Default: <code class="docutils literal notranslate"><span class="pre">''</span></code>.</p></li>
-<li><p><strong>keep_vars</strong> (<em>bool</em><em>, </em><em>optional</em>) – by default the <a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a> s
+<li><p><strong>keep_vars</strong> (<em>bool</em><em>, </em><em>optional</em>) – by default the <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a> s
 returned in the state dict are detached from autograd. If it’s
 set to <code class="docutils literal notranslate"><span class="pre">True</span></code>, detaching will not be performed.
 Default: <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>

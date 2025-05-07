@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+46ccbae) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+3bad905) &#x25BC</span></a>
     </div>
     
 
@@ -441,7 +441,7 @@ Tensors of heterogeneous shapes can also be stored within the storage and stacke
 Because the storage is represented as a list, the number of tensors to store in memory will grow linearly with
 the size of the buffer.</p>
 <p>If possible, nested tensors can also be created via <code class="xref py py-meth docutils literal notranslate"><span class="pre">densify()</span></code>
-(see <a class="reference external" href="https://pytorch.org/docs/stable/nested.html#module-torch.nested" title="(in PyTorch v2.7)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nested</span></code></a>).</p>
+(see <a class="reference external" href="https://docs.pytorch.org/docs/stable/nested.html#module-torch.nested" title="(in PyTorch v2.7)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nested</span></code></a>).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>max_size</strong> (<em>int</em><em>, </em><em>optional</em>) – the maximum number of elements stored in the storage.
@@ -449,7 +449,7 @@ If not provided, an unlimited storage is created.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>compilable</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the storage will be made compatible with <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.7)"><code class="xref py py-func docutils literal notranslate"><span class="pre">compile()</span></code></a> at
+<li><p><strong>compilable</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the storage will be made compatible with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.7)"><code class="xref py py-func docutils literal notranslate"><span class="pre">compile()</span></code></a> at
 the cost of being executable in multiprocessed settings.</p></li>
 <li><p><strong>stack_dim</strong> (<em>int</em><em>, </em><em>optional</em>) – the stack dimension in terms of TensorDict batch sizes. Defaults to <cite>0</cite>.</p></li>
 </ul>

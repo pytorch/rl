@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+46ccbae) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+3bad905) &#x25BC</span></a>
     </div>
     
 
@@ -471,9 +471,9 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 same action is to be repeated. The observation returned will be the
 last observation of the sequence, whereas the reward will be the sum
 of rewards across steps.</p></li>
-<li><p><strong>device</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em>, </em><em>optional</em>) – if provided, the device on which the data
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em>, </em><em>optional</em>) – if provided, the device on which the data
 is to be cast. Defaults to <code class="docutils literal notranslate"><span class="pre">torch.device(&quot;cpu&quot;)</span></code>.</p></li>
-<li><p><strong>batch_size</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.7)"><em>torch.Size</em></a><em>, </em><em>optional</em>) – Only <code class="docutils literal notranslate"><span class="pre">torch.Size([])</span></code> will work with
+<li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.7)"><em>torch.Size</em></a><em>, </em><em>optional</em>) – Only <code class="docutils literal notranslate"><span class="pre">torch.Size([])</span></code> will work with
 <code class="docutils literal notranslate"><span class="pre">RoboHiveEnv</span></code> since vectorized environments are not supported within the
 class. To execute more than one environment at a time, see <a class="reference internal" href="torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a>.</p></li>
 <li><p><strong>allow_done_after_reset</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, it is tolerated

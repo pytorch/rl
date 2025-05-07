@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.8.0+46ccbae) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.8.0+3bad905) &#x25BC</span></a>
     </div>
     
 
@@ -435,7 +435,7 @@ a simple signature.</p>
 <li><p>they are stateful objects: they contain a copy of the trainable parameters
 such that <code class="docutils literal notranslate"><span class="pre">loss_module.parameters()</span></code> gives whatever is needed to train the
 algorithm.</p></li>
-<li><p>They follow the <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> convention: the <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.forward" title="(in PyTorch v2.7)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.forward()</span></code></a>
+<li><p>They follow the <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> convention: the <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.forward" title="(in PyTorch v2.7)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.forward()</span></code></a>
 method will receive a tensordict as input that contains all the necessary
 information to return a loss value.</p></li>
 <li><p>They output a <code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code> instance with the loss values
@@ -464,7 +464,7 @@ used to reset the parameters in the loss to the new value.</p>
 </div>
 <section id="torch-vmap-and-randomness">
 <h2>torch.vmap and randomness<a class="headerlink" href="#torch-vmap-and-randomness" title="Permalink to this heading">¶</a></h2>
-<p>TorchRL loss modules have plenty of calls to <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.7)"><code class="xref py py-func docutils literal notranslate"><span class="pre">vmap()</span></code></a> to amortize the cost of calling multiple similar models
+<p>TorchRL loss modules have plenty of calls to <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.7)"><code class="xref py py-func docutils literal notranslate"><span class="pre">vmap()</span></code></a> to amortize the cost of calling multiple similar models
 in a loop, and instead vectorize these operations. <cite>vmap</cite> needs to be told explicitly what to do when random numbers
 need to be generated within the call. To do this, a randomness mode need to be set and must be one of <cite>“error”</cite> (default,
 errors when dealing with pseudo-random functions), <cite>“same”</cite> (replicates the results across the batch) or <cite>“different”</cite>

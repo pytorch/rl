@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.8.0+46ccbae) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.8.0+3bad905) &#x25BC</span></a>
     </div>
     
 
@@ -480,12 +480,12 @@ a Convolutional Neural Network (CNN) as backbones.</p>
 <p>Similar to how environments interact with instances of
 <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code>, the modules used to represent policies and
 value functions also do the same. The core idea is simple: encapsulate a
-standard <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a> (or any other function) within a class
+standard <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a> (or any other function) within a class
 that knows which entries need to be read and passed to the module, and then
 records the results with the assigned entries. To illustrate this, we will
 use the simplest policy possible: a deterministic map from the observation
 space to the action space. For maximum generality, we will use a
-<a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.LazyLinear.html#torch.nn.LazyLinear" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyLinear</span></code></a> module with the Pendulum environment we
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LazyLinear.html#torch.nn.LazyLinear" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyLinear</span></code></a> module with the Pendulum environment we
 instantiated in the previous tutorial.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 
@@ -493,7 +493,7 @@ instantiated in the previous tutorial.</p>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">GymEnv</span>
 
 <span class="n">env</span> <span class="o">=</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">)</span>
-<span class="n">module</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.LazyLinear.html#torch.nn.LazyLinear" title="torch.nn.LazyLinear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span></a><span class="p">(</span><span class="n">out_features</span><span class="o">=</span><span class="n">env</span><span class="o">.</span><span class="n">action_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+<span class="n">module</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LazyLinear.html#torch.nn.LazyLinear" title="torch.nn.LazyLinear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span></a><span class="p">(</span><span class="n">out_features</span><span class="o">=</span><span class="n">env</span><span class="o">.</span><span class="n">action_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
 <span class="n">policy</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span>
     <span class="n">module</span><span class="p">,</span>
     <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">],</span>
@@ -540,7 +540,7 @@ the <a class="reference internal" href="../reference/generated/torchrl.modules.M
 <span class="n">module</span> <span class="o">=</span> <span class="n">MLP</span><span class="p">(</span>
     <span class="n">out_features</span><span class="o">=</span><span class="n">env</span><span class="o">.</span><span class="n">action_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
     <span class="n">num_cells</span><span class="o">=</span><span class="p">[</span><span class="mi">32</span><span class="p">,</span> <span class="mi">64</span><span class="p">],</span>
-    <span class="n">activation_class</span><span class="o">=</span><a href="https://pytorch.org/docs/stable/generated/torch.nn.Tanh.html#torch.nn.Tanh" title="torch.nn.Tanh" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Tanh</span></a><span class="p">,</span>
+    <span class="n">activation_class</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Tanh.html#torch.nn.Tanh" title="torch.nn.Tanh" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Tanh</span></a><span class="p">,</span>
 <span class="p">)</span>
 <span class="n">policy</span> <span class="o">=</span> <span class="n">Actor</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
 <span class="n">rollout</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">rollout</span><span class="p">(</span><span class="n">max_steps</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">)</span>
@@ -576,7 +576,7 @@ populate our tensordict with samples and log-probabilities.</p></li>
 
 <span class="n">backbone</span> <span class="o">=</span> <span class="n">MLP</span><span class="p">(</span><span class="n">in_features</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">out_features</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 <span class="n">extractor</span> <span class="o">=</span> <span class="n">NormalParamExtractor</span><span class="p">()</span>
-<span class="n">module</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.nn.Sequential.html#torch.nn.Sequential" title="torch.nn.Sequential" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span></a><span class="p">(</span><span class="n">backbone</span><span class="p">,</span> <span class="n">extractor</span><span class="p">)</span>
+<span class="n">module</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Sequential.html#torch.nn.Sequential" title="torch.nn.Sequential" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span></a><span class="p">(</span><span class="n">backbone</span><span class="p">,</span> <span class="n">extractor</span><span class="p">)</span>
 <span class="n">td_module</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">,</span> <span class="s2">&quot;scale&quot;</span><span class="p">])</span>
 <span class="n">policy</span> <span class="o">=</span> <span class="n">ProbabilisticActor</span><span class="p">(</span>
     <span class="n">td_module</span><span class="p">,</span>
@@ -646,7 +646,7 @@ to <a class="reference internal" href="../reference/generated/torchrl.modules.EG
 <p>To build our explorative policy, we only had to concatenate the
 deterministic policy module with the exploration module within a
 <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code> module (which is the analogous
-to <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Sequential.html#torch.nn.Sequential" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code></a> in the tensordict realm).</p>
+to <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Sequential.html#torch.nn.Sequential" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code></a> in the tensordict realm).</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">exploration_policy</span> <span class="o">=</span> <span class="n">TensorDictSequential</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="n">exploration_module</span><span class="p">)</span>
 
 <span class="k">with</span> <span class="n">set_exploration_type</span><span class="p">(</span><span class="n">ExplorationType</span><span class="o">.</span><span class="n">DETERMINISTIC</span><span class="p">):</span>

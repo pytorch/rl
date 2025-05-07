@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.8.0+46ccbae) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.8.0+3bad905) &#x25BC</span></a>
     </div>
     
 
@@ -502,7 +502,7 @@ Reward and action do not have this restriction:</p>
 sample is in the defined space. We can also use some heuristic to project
 a sample in the space if it is out of space, and generate random (possibly
 uniformly distributed) numbers in that space:</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">action</span> <span class="o">=</span> <a href="https://pytorch.org/docs/stable/generated/torch.ones.html#torch.ones" title="torch.ones" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">ones</span></a><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="mi">3</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">action</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.ones.html#torch.ones" title="torch.ones" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">ones</span></a><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="mi">3</span>
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;action is in bounds?</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">,</span> <span class="nb">bool</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">action_spec</span><span class="o">.</span><span class="n">is_in</span><span class="p">(</span><span class="n">action</span><span class="p">)))</span>
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;projected action: </span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">env</span><span class="o">.</span><span class="n">action_spec</span><span class="o">.</span><span class="n">project</span><span class="p">(</span><span class="n">action</span><span class="p">))</span>
 </pre></div>
@@ -535,7 +535,7 @@ or any other input to the environment (including inputs at reset time).</p>
 <p>The basic operations on an environment are (1) <code class="docutils literal notranslate"><span class="pre">set_seed</span></code>, (2) <code class="docutils literal notranslate"><span class="pre">reset</span></code>
 and (3) <code class="docutils literal notranslate"><span class="pre">step</span></code>.</p>
 <p>Let’s see how these methods work with TorchRL:</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://pytorch.org/docs/stable/generated/torch.manual_seed.html#torch.manual_seed" title="torch.manual_seed" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span></a><span class="p">(</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># make sure that all torch code is also reproductible</span>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.pytorch.org/docs/stable/generated/torch.manual_seed.html#torch.manual_seed" title="torch.manual_seed" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span></a><span class="p">(</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># make sure that all torch code is also reproductible</span>
 <span class="n">env</span><span class="o">.</span><span class="n">set_seed</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
 <span class="n">reset_data</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;reset data&quot;</span><span class="p">,</span> <span class="n">reset_data</span><span class="p">)</span>
@@ -570,7 +570,7 @@ after the key with the same name but without the prefix.</p>
 it returns a new tensordict updated such that <em>t &lt; -t’</em>:</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">step_mdp</span>
 
-<span class="n">tensordict_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;some other key&quot;</span><span class="p">,</span> <a href="https://pytorch.org/docs/stable/generated/torch.randn.html#torch.randn" title="torch.randn" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn</span></a><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+<span class="n">tensordict_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;some other key&quot;</span><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.randn.html#torch.randn" title="torch.randn" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn</span></a><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
 <span class="n">tensordict_tprime</span> <span class="o">=</span> <span class="n">step_mdp</span><span class="p">(</span><span class="n">tensordict_out</span><span class="p">)</span>
 
 <span class="nb">print</span><span class="p">(</span><span class="n">tensordict_tprime</span><span class="p">)</span>
@@ -813,7 +813,7 @@ above and (2) sharing data amongst workers in multiprocessing settings.</p>
     <span class="n">CatTensors</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;orientations&quot;</span><span class="p">,</span> <span class="s2">&quot;velocity&quot;</span><span class="p">],</span> <span class="n">out_key</span><span class="o">=</span><span class="s2">&quot;observation&quot;</span><span class="p">)</span>
 <span class="p">)</span>
 
-<span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">has_cuda</span> <span class="ow">and</span> <a href="https://pytorch.org/docs/stable/generated/torch.cuda.device_count.html#torch.cuda.device_count" title="torch.cuda.device_count" class="sphx-glr-backref-module-torch-cuda sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device_count</span></a><span class="p">():</span>
+<span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">has_cuda</span> <span class="ow">and</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.cuda.device_count.html#torch.cuda.device_count" title="torch.cuda.device_count" class="sphx-glr-backref-module-torch-cuda sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device_count</span></a><span class="p">():</span>
     <span class="n">env</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">)</span>
     <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
 </pre></div>
