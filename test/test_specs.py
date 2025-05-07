@@ -3940,10 +3940,17 @@ class TestNonTensor:
         assert comp["nontensor"].device == torch.device("cpu")
 
     def test_encode(self):
+        nt = NonTensor(shape=(1,))
+        r = nt.encode("a string")
+        assert isinstance(r, NonTensorData)
+        assert r.shape == nt.shape
+
         comp = Composite(device="cpu")
-        comp["nontensor"] = NonTensor(shape=())
+        comp["nontensor"] = nt
         r = comp.encode({"nontensor": "a string"})
-        assert isinstance(r["nontensor"], str)
+        assert isinstance(r, TensorDict)
+        assert isinstance(r.get("nontensor"), NonTensorData)
+        assert r.get("nontensor").shape == (1,)
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="not cuda device")
