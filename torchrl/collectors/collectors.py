@@ -230,23 +230,6 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 )
             return policy, None
 
-        def map_weight(
-            weight,
-            policy_device=policy_device,
-        ):
-
-            is_param = isinstance(weight, Parameter)
-            is_buffer = isinstance(weight, Buffer)
-            weight = weight.data
-            if weight.device != policy_device:
-                weight = weight.to(policy_device)
-            elif weight.device.type in ("cpu",):
-                weight = weight.share_memory_()
-            if is_param:
-                weight = Parameter(weight, requires_grad=False)
-            elif is_buffer:
-                weight = Buffer(weight)
-            return weight
 
         # Create a stateless policy, then populate this copy with params on device
         def get_original_weights(policy):
@@ -257,7 +240,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             policy = deepcopy(policy)
 
         param_and_buf.apply(
-            map_weight,
+            partial(_map_weight, policy_device=policy_device),
             filter_empty=False,
         ).to_module(policy)
         return policy, get_original_weights
@@ -3662,3 +3645,21 @@ class _TrajectoryPool:
             out = torch.arange(v, v + n).to(device)
             self._traj_id.copy_(1 + out[-1].item())
         return out
+
+def _map_weight(
+    weight,
+    policy_device,
+):
+
+    is_param = isinstance(weight, Parameter)
+    is_buffer = isinstance(weight, Buffer)
+    weight = weight.data
+    if weight.device != policy_device:
+        weight = weight.to(policy_device)
+    elif weight.device.type in ("cpu",):
+        weight = weight.share_memory_()
+    if is_param:
+        weight = Parameter(weight, requires_grad=False)
+    elif is_buffer:
+        weight = Buffer(weight)
+    return weight

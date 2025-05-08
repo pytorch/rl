@@ -13,6 +13,7 @@ from tensordict.nn import InteractionType, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn, optim
 from torchrl.collectors import WeightUpdaterBase, aSyncDataCollector, SyncDataCollector
+from torchrl.collectors.collectors import _map_weight
 from torchrl.data import (
     LazyMemmapStorage,
     LazyTensorStorage,
@@ -181,7 +182,11 @@ def make_collector_async(
 
     with params.data.to("meta").to_module(actor_model_explore):
         policy = deepcopy(actor_model_explore)
-        params.clone().to(device).to_module(policy)
+
+    params.apply(
+        functools.partial(_map_weight, policy_device=device),
+        filter_empty=False,
+    ).to_module(policy)
 
     collector = aSyncDataCollector(
         train_env_make,
