@@ -9,10 +9,11 @@ from copy import deepcopy
 from typing import Any
 
 import torch
+from tensordict import TensorDict
 from tensordict.nn import InteractionType, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn, optim
-from torchrl.collectors import WeightUpdaterBase, aSyncDataCollector, SyncDataCollector
+from torchrl.collectors import aSyncDataCollector, SyncDataCollector, WeightUpdaterBase
 from torchrl.collectors.collectors import _map_weight
 from torchrl.data import (
     LazyMemmapStorage,
@@ -37,7 +38,6 @@ from torchrl.modules.distributions import TanhNormal
 from torchrl.objectives import SoftUpdate
 from torchrl.objectives.sac import SACLoss
 from torchrl.record import VideoRecorder
-from tensordict import TensorDict
 
 # ====================================================================
 # Environment utils
@@ -154,6 +154,7 @@ def make_collector(cfg, train_env, actor_model_explore, compile_mode):
 def flatten(td):
     return td.reshape(-1)
 
+
 class AsyncUpdater(WeightUpdaterBase):
     def __init__(self, policy_server, policy_worker):
         self.policy_server = policy_server
@@ -163,10 +164,12 @@ class AsyncUpdater(WeightUpdaterBase):
 
     def _get_server_weights(self) -> Any:
         return self.policy_server_weights
+
     def _sync_weights_with_worker(
         self, *, worker_id: int | torch.device | None = None, server_weights: Any
     ) -> Any:
         self.policy_worker_weights.update_(server_weights)
+
 
 def make_collector_async(
     cfg, train_env_make, actor_model_explore, compile_mode, replay_buffer
@@ -202,7 +205,9 @@ def make_collector_async(
         extend_buffer=True,
         postproc=flatten,
         no_cuda_sync=True,
-        weight_updater=AsyncUpdater(policy_server=actor_model_explore, policy_worker=policy),
+        weight_updater=AsyncUpdater(
+            policy_server=actor_model_explore, policy_worker=policy
+        ),
     )
     collector.set_seed(cfg.env.seed)
     collector.start()

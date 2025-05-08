@@ -22,7 +22,6 @@ import numpy as np
 import torch
 import torch.cuda
 import tqdm
-from tensordict import TensorDict
 from tensordict.nn import CudaGraphModule
 from torchrl._utils import compile_with_warmup, timeit
 from torchrl.envs.utils import ExplorationType, set_exploration_type
@@ -194,9 +193,7 @@ def main(cfg: DictConfig):  # noqa: F821
             with timeit("update"):
                 torch.compiler.cudagraph_mark_step_begin()
                 loss_td = update(sampled_tensordict).clone()
-            losses.append(loss_td.select(
-                "loss_actor", "loss_qvalue", "loss_alpha"
-            ))
+            losses.append(loss_td.select("loss_actor", "loss_qvalue", "loss_alpha"))
 
             # Update priority
             if prb:
