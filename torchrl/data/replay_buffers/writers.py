@@ -217,6 +217,7 @@ class RoundRobinWriter(Writer):
 
     def _empty(self):
         self._cursor = 0
+        self._write_count = 0
 
     @property
     def _cursor(self):

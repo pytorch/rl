@@ -2235,6 +2235,9 @@ class _MultiDataCollector(DataCollectorBase):
                     else False,
                     "no_cuda_sync": self.no_cuda_sync,
                     "collector_class": self.collector_class,
+                    "postproc": self.postprocs
+                    if self.replay_buffer is not None
+                    else None,
                 }
                 proc = _ProcessNoWarn(
                     target=_main_async_collector,
@@ -2991,7 +2994,9 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             self.postprocs = {}
             for _device in self.storing_device:
                 if _device not in self.postprocs:
-                    self.postprocs[_device] = deepcopy(postproc).to(_device)
+                    if hasattr(postproc, "to"):
+                        postproc = deepcopy(postproc).to(_device)
+                    self.postprocs[_device] = postproc
 
     # for RPC
     def next(self):
@@ -3314,7 +3319,9 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             policy=policy,
             policy_factory=policy_factory,
             total_frames=total_frames,
-            create_env_kwargs=[create_env_kwargs],
+            create_env_kwargs=[create_env_kwargs]
+            if create_env_kwargs
+            else create_env_kwargs,
             max_frames_per_traj=max_frames_per_traj,
             frames_per_batch=frames_per_batch,
             reset_at_each_iter=reset_at_each_iter,
@@ -3332,6 +3339,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             num_threads=num_threads,
             num_sub_threads=num_sub_threads,
             set_truncated=set_truncated,
+            **kwargs,
         )
 
     # for RPC
@@ -3384,6 +3392,7 @@ def _main_async_collector(
     no_cuda_sync: bool = False,
     policy_factory: Callable | None = None,
     collector_class: type | Callable[[], DataCollectorBase] | None = None,
+    postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
 ) -> None:
     if collector_class is None:
         collector_class = SyncDataCollector
@@ -3400,7 +3409,7 @@ def _main_async_collector(
         max_frames_per_traj=max_frames_per_traj,
         frames_per_batch=frames_per_batch,
         reset_at_each_iter=reset_at_each_iter,
-        postproc=None,
+        postproc=postproc,
         split_trajs=False,
         storing_device=storing_device,
         policy_device=policy_device,
@@ -3411,7 +3420,7 @@ def _main_async_collector(
         interruptor=interruptor,
         set_truncated=set_truncated,
         use_buffers=use_buffers,
-        replay_buffer=replay_buffer if extend_buffer else None,
+        replay_buffer=replay_buffer if not extend_buffer else None,
         extend_buffer=False,
         traj_pool=traj_pool,
         trust_policy=trust_policy,
@@ -3498,7 +3507,7 @@ def _main_async_collector(
                 continue
 
             if replay_buffer is not None:
-                if not extend_buffer:
+                if extend_buffer:
                     next_data.names = None
                     replay_buffer.extend(next_data)
 
