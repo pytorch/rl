@@ -179,7 +179,7 @@ def make_collector_async(
             device = torch.device("cpu")
     params = TensorDict.from_module(actor_model_explore)
 
-    with params.to("meta").to_module(actor_model_explore):
+    with params.data.to("meta").to_module(actor_model_explore):
         policy = deepcopy(actor_model_explore)
         params.clone().to(device).to_module(policy)
 
