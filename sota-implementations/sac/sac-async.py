@@ -151,7 +151,7 @@ def main(cfg: DictConfig):  # noqa: F821
             "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
             category=UserWarning,
         )
-        update = CudaGraphModule(update, in_keys=[], out_keys=[], warmup=10)
+        update = CudaGraphModule(update, in_keys=[], out_keys=[], warmup=50)
 
     # Main loop
     collected_frames = 0
