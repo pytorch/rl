@@ -151,13 +151,12 @@ def main(cfg: DictConfig):  # noqa: F821
             "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
             category=UserWarning,
         )
-        update = CudaGraphModule(update, in_keys=[], out_keys=[], warmup=50)
+        update = CudaGraphModule(update, in_keys=[], out_keys=[], warmup=10)
 
     # Main loop
     collected_frames = 0
 
     init_random_frames = cfg.collector.init_random_frames
-    assert init_random_frames == 0
 
     prb = cfg.replay_buffer.prb
     update_freq = cfg.collector.update_freq
@@ -169,7 +168,7 @@ def main(cfg: DictConfig):  # noqa: F821
     total_iter = 1_000_000
     pbar = tqdm.tqdm(total=total_iter * num_updates)
 
-    while not replay_buffer.write_count:
+    while replay_buffer.write_count <= init_random_frames:
         time.sleep(0.01)
 
     losses = []
