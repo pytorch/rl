@@ -146,6 +146,7 @@ def main(cfg: DictConfig):  # noqa: F821
     if cfg.compile.compile:
         update = compile_with_warmup(update, mode=compile_mode, warmup=2)
 
+    cudagraphs = cfg.compile.cudagraphs
     if cfg.compile.cudagraphs:
         warnings.warn(
             "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
@@ -191,7 +192,13 @@ def main(cfg: DictConfig):  # noqa: F821
 
             with timeit("update"):
                 torch.compiler.cudagraph_mark_step_begin()
-                loss_td = update(sampled_tensordict).clone()
+                # After a certain number of warmup steps, CudaGraphModule will register the graph
+                #  We want to pause the collector while this is happening
+                if cudagraphs and update.counter == (update._warmup - 1):
+                    with collector.pause():
+                        loss_td = update(sampled_tensordict).clone()
+                else:
+                    loss_td = update(sampled_tensordict).clone()
             losses.append(loss_td.select("loss_actor", "loss_qvalue", "loss_alpha"))
 
             # Update priority

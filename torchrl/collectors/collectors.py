@@ -265,6 +265,11 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             f"Collector start() is not implemented for {type(self).__name__}."
         )
 
+    @contextlib.contextmanager
+    def pause(self):
+        """Context manager that pauses the collector if it is running free."""
+        raise NotImplementedError(f"Collector pause() is not implemented for {type(self).__name__}.")
+
     def async_shutdown(self, timeout: float | None = None) -> None:
         """Shuts down the collector when started asynchronously with the `start` method.
 
@@ -2264,6 +2269,8 @@ also that the state dict is synchronised across processes if needed."""
         self.queue_out = queue_out
         self.closed = False
 
+    _running_free = False
+
     def start(self):
         """Starts the collector(s) for asynchronous data collection.
 
@@ -2338,8 +2345,26 @@ also that the state dict is synchronised across processes if needed."""
             raise RuntimeError(
                 "Cannot currently start() a collector that requires random frames. Please submit a feature request on github."
             )
+        self._running_free = True
         for pipe in self.pipes:
             pipe.send((None, "run_free"))
+
+    @contextlib.contextmanager
+    def pause(self):
+        """Context manager that pauses the collector if it is running free."""
+        if self._running_free:
+            for pipe in self.pipes:
+                pipe.send((None, "pause"))
+            # Make sure all workers are paused
+            for _ in self.pipes:
+                idx, msg = self.queue_out.get()
+                if msg != "paused":
+                    raise ValueError(f"Expected paused, but got {msg=}.")
+                torchrl_logger.info(f"Worker {idx} is paused.")
+            self._running_free = False
+            yield None
+            for pipe in self.pipes:
+                pipe.send((None, "restart"))
 
     def __del__(self):
         try:
@@ -3480,11 +3505,18 @@ def _main_async_collector(
             run_free = True
         if run_free:
             # Capture shutdown / update / seed signal, but continue should not be expected
-            if pipe_child.poll(1e-3):
+            if pipe_child.poll(1e-4):
                 data_in, msg = pipe_child.recv()
                 if msg == "continue":
                     # Switch back to run_free = False
                     run_free = False
+                if msg == "pause":
+                    queue_out.put((idx, "paused"), timeout=_TIMEOUT)
+                    while not pipe_child.poll(1e-2):
+                        continue
+                    data_in, msg = pipe_child.recv()
+                    if msg != "restart":
+                        raise RuntimeError(f"Expected msg='restart', got {msg=}")
             else:
                 data_in = None
                 # TODO: this does not work with random frames
