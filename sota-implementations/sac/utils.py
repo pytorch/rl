@@ -167,7 +167,7 @@ def make_collector_async(
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
         device=device,
-        compile_policy={"mode": compile_mode} if compile_mode else False,
+        compile_policy=False, # {"mode": compile_mode} if compile_mode else False,
         # cudagraph_policy={"warmup": 10} if cfg.compile.cudagraphs else False,
         replay_buffer=replay_buffer,
         extend_buffer=True,
