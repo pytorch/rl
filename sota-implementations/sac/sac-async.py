@@ -164,7 +164,7 @@ def main(cfg: DictConfig):  # noqa: F821
     eval_rollout_steps = cfg.env.max_episode_steps
     # TODO: customize this
     total_iter = 1_000_000
-    pbar = tqdm.tqdm(total_iter * num_updates)
+    pbar = tqdm.tqdm(total=total_iter * num_updates)
 
     while not replay_buffer.write_count:
         time.sleep(0.01)
