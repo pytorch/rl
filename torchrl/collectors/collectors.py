@@ -208,7 +208,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             return policy, None
 
         if isinstance(policy, nn.Module):
-            param_and_buf = TensorDict.from_module(policy, as_module=True)
+            param_and_buf = TensorDict.from_module(policy, as_module=True).data
         else:
             # Because we want to reach the warning
             param_and_buf = TensorDict()
@@ -249,7 +249,9 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             return weight
 
         # Create a stateless policy, then populate this copy with params on device
-        get_original_weights = functools.partial(TensorDict.from_module, policy)
+        def get_original_weights(policy):
+            td = TensorDict.from_module(policy)
+            return td.data
         # We need to use ".data" otherwise buffers may disappear from the `get_original_weights` function
         with param_and_buf.data.to("meta").to_module(policy):
             policy = deepcopy(policy)
@@ -777,7 +779,7 @@ class SyncDataCollector(DataCollectorBase):
             observation_spec=self.env.observation_spec,
         )
         if isinstance(self.policy, nn.Module):
-            self.policy_weights = TensorDict.from_module(self.policy, as_module=True)
+            self.policy_weights = TensorDict.from_module(self.policy, as_module=True).data
         else:
             self.policy_weights = TensorDict()
 
@@ -1979,7 +1981,7 @@ class _MultiDataCollector(DataCollectorBase):
                 if type(policy_copy) is not type(policy):
                     policy = policy_copy
                 weights = (
-                    TensorDict.from_module(policy_copy)
+                    TensorDict.from_module(policy_copy).data
                     if isinstance(policy_copy, nn.Module)
                     else TensorDict()
                 )

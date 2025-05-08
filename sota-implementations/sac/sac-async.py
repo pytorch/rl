@@ -137,21 +137,22 @@ def main(cfg: DictConfig):  # noqa: F821
 
         (actor_loss + q_loss + alpha_loss).sum().backward()
         optimizer.step()
-        optimizer.zero_grad(set_to_none=True)
 
         # Update qnet_target params
         target_net_updater.step()
+
+        optimizer.zero_grad(set_to_none=True)
         return loss_td.detach()
 
     if cfg.compile.compile:
-        update = compile_with_warmup(update, mode=compile_mode, warmup=1)
+        update = compile_with_warmup(update, mode=compile_mode, warmup=2)
 
     if cfg.compile.cudagraphs:
         warnings.warn(
             "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
             category=UserWarning,
         )
-        update = CudaGraphModule(update, in_keys=[], out_keys=[], warmup=5)
+        update = CudaGraphModule(update, in_keys=[], out_keys=[], warmup=10)
 
     # Main loop
     collected_frames = 0
@@ -159,14 +160,12 @@ def main(cfg: DictConfig):  # noqa: F821
     init_random_frames = cfg.collector.init_random_frames
     assert init_random_frames == 0
 
-    num_updates = int(cfg.collector.frames_per_batch * cfg.optim.utd_ratio)
     prb = cfg.replay_buffer.prb
-    eval_iter = cfg.logger.eval_iter
-    frames_per_batch = cfg.collector.frames_per_batch
     update_freq = cfg.collector.update_freq
 
     eval_rollout_steps = cfg.env.max_episode_steps
     # TODO: customize this
+    num_updates = 1000
     total_iter = 1_000_000
     pbar = tqdm.tqdm(total=total_iter * num_updates)
 
