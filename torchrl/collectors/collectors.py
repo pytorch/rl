@@ -268,7 +268,9 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     @contextlib.contextmanager
     def pause(self):
         """Context manager that pauses the collector if it is running free."""
-        raise NotImplementedError(f"Collector pause() is not implemented for {type(self).__name__}.")
+        raise NotImplementedError(
+            f"Collector pause() is not implemented for {type(self).__name__}."
+        )
 
     def async_shutdown(self, timeout: float | None = None) -> None:
         """Shuts down the collector when started asynchronously with the `start` method.
