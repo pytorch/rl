@@ -38,9 +38,10 @@ from utils import (
     make_sac_optimizer,
     make_train_environment,
 )
+import tensordict
 
 torch.set_float32_matmul_precision("high")
-
+tensordict.nn.functional_modules._exclude_td_from_pytree().set()
 
 @hydra.main(version_base="1.1", config_path="", config_name="config-async")
 def main(cfg: DictConfig):  # noqa: F821
