@@ -91,6 +91,7 @@ def main(cfg: DictConfig):  # noqa: F821
                 compile_mode = "default"
             else:
                 compile_mode = "reduce-overhead"
+        compile_mode_collector = "reduce-overhead"
 
     # Create replay buffer
     replay_buffer = make_replay_buffer(
@@ -113,7 +114,7 @@ def main(cfg: DictConfig):  # noqa: F821
         cfg,
         partial(make_train_environment, cfg),
         exploration_policy,
-        compile_mode=compile_mode,
+        compile_mode=compile_mode_collector,
         replay_buffer=replay_buffer,
     )
 
