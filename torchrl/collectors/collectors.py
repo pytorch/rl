@@ -8,6 +8,7 @@ import _pickle
 import abc
 import collections
 import contextlib
+import functools
 import os
 import queue
 import sys
@@ -239,7 +240,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             policy = deepcopy(policy)
 
         param_and_buf.apply(
-            partial(_map_weight, policy_device=policy_device),
+            functools.partial(_map_weight, policy_device=policy_device),
             filter_empty=False,
         ).to_module(policy)
         return policy, get_original_weights
@@ -772,7 +773,9 @@ class SyncDataCollector(DataCollectorBase):
                 self.policy, **self.compiled_policy_kwargs
             )
         if self.cudagraphed_policy:
-            self.policy = CudaGraphModule(self.policy, **self.cudagraphed_policy_kwargs)
+            self.policy = CudaGraphModule(
+                self.policy, in_keys=[], out_keys=[], **self.cudagraphed_policy_kwargs
+            )
 
         if self.env_device:
             self.env: EnvBase = self.env.to(self.env_device)
