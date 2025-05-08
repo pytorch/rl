@@ -5,12 +5,13 @@
 from __future__ import annotations
 
 import functools
+from typing import Any
 
 import torch
 from tensordict.nn import InteractionType, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn, optim
-from torchrl.collectors import aSyncDataCollector, SyncDataCollector
+from torchrl.collectors import WeightUpdaterBase, aSyncDataCollector, SyncDataCollector
 from torchrl.data import (
     LazyMemmapStorage,
     LazyTensorStorage,
@@ -34,7 +35,7 @@ from torchrl.modules.distributions import TanhNormal
 from torchrl.objectives import SoftUpdate
 from torchrl.objectives.sac import SACLoss
 from torchrl.record import VideoRecorder
-
+from tensordict import TensorDict
 
 # ====================================================================
 # Environment utils
@@ -149,6 +150,19 @@ def make_collector(cfg, train_env, actor_model_explore, compile_mode):
 def flatten(td):
     return td.reshape(-1)
 
+class AsyncUpdater(WeightUpdaterBase):
+    def __init__(self, policy_server, policy_worker):
+        self.policy_server = policy_server
+        self.policy_worker = policy_worker
+        self.policy_server_weights = TensorDict.from_module(policy_server).data
+        self.policy_worker_weights = TensorDict.from_module(policy_worker).data
+
+    def _get_server_weights(self) -> Any:
+        return self.policy_server_weights
+    def _sync_weights_with_worker(
+        self, *, worker_id: int | torch.device | None = None, server_weights: Any
+    ) -> Any:
+        self.policy_worker_weights.update_(server_weights)
 
 def make_collector_async(
     cfg, train_env_make, actor_model_explore, compile_mode, replay_buffer
@@ -160,9 +174,10 @@ def make_collector_async(
             device = torch.device("cuda:0")
         else:
             device = torch.device("cpu")
+    policy = actor_model_explore.to(device)
     collector = aSyncDataCollector(
         train_env_make,
-        actor_model_explore,
+        policy,
         init_random_frames=cfg.collector.init_random_frames,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
@@ -173,6 +188,7 @@ def make_collector_async(
         extend_buffer=True,
         postproc=flatten,
         no_cuda_sync=True,
+        weight_updater=AsyncUpdater(policy_server=actor_model_explore, policy_worker=policy),
     )
     collector.set_seed(cfg.env.seed)
     collector.start()
