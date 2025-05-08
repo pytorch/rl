@@ -157,10 +157,13 @@ def main(cfg: DictConfig):  # noqa: F821
 
     init_random_frames = cfg.collector.init_random_frames
     assert init_random_frames == 0
+
     num_updates = int(cfg.collector.frames_per_batch * cfg.optim.utd_ratio)
     prb = cfg.replay_buffer.prb
     eval_iter = cfg.logger.eval_iter
     frames_per_batch = cfg.collector.frames_per_batch
+    update_freq = cfg.collector.update_freq
+
     eval_rollout_steps = cfg.env.max_episode_steps
     # TODO: customize this
     total_iter = 1_000_000
@@ -173,7 +176,7 @@ def main(cfg: DictConfig):  # noqa: F821
     for i in range(total_iter * num_updates):
         timeit.printevery(num_prints=1000, total_count=total_iter, erase=True)
 
-        if i % num_updates == num_updates - 1:
+        if i % update_freq == update_freq - 1:
             # Update weights of the inference policy
             collector.update_policy_weights_()
 
@@ -199,19 +202,19 @@ def main(cfg: DictConfig):  # noqa: F821
                 replay_buffer.update_priority(sampled_tensordict)
 
         # Logging
-        metrics_to_log = {}
-        if collected_frames >= init_random_frames:
-            losses_m = losses.mean()
-            metrics_to_log["train/q_loss"] = losses_m.get("loss_qvalue")
-            metrics_to_log["train/actor_loss"] = losses_m.get("loss_actor")
-            metrics_to_log["train/alpha_loss"] = losses_m.get("loss_alpha")
-            metrics_to_log["train/alpha"] = loss_td["alpha"]
-            metrics_to_log["train/entropy"] = loss_td["entropy"]
-            metrics_to_log["train/collected_frames"] = int(replay_buffer.write_count)
-        # Log rewards in the buffer
+        if i % num_updates == num_updates - 1:
+            metrics_to_log = {}
+            if collected_frames >= init_random_frames:
+                losses_m = losses.mean()
+                metrics_to_log["train/q_loss"] = losses_m.get("loss_qvalue")
+                metrics_to_log["train/actor_loss"] = losses_m.get("loss_actor")
+                metrics_to_log["train/alpha_loss"] = losses_m.get("loss_alpha")
+                metrics_to_log["train/alpha"] = loss_td["alpha"]
+                metrics_to_log["train/entropy"] = loss_td["entropy"]
+                metrics_to_log["train/collected_frames"] = int(replay_buffer.write_count)
+            # Log rewards in the buffer
 
-        # Evaluation
-        if abs(collected_frames % eval_iter) < frames_per_batch:
+            # Evaluation
             with set_exploration_type(
                 ExplorationType.DETERMINISTIC
             ), torch.no_grad(), timeit("eval"):
@@ -224,10 +227,10 @@ def main(cfg: DictConfig):  # noqa: F821
                 eval_env.apply(dump_video)
                 eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
                 metrics_to_log["eval/reward"] = eval_reward
-        if logger is not None:
-            metrics_to_log.update(timeit.todict(prefix="time"))
-            metrics_to_log["time/speed"] = pbar.format_dict["rate"]
-            log_metrics(logger, metrics_to_log, collected_frames)
+            if logger is not None:
+                metrics_to_log.update(timeit.todict(prefix="time"))
+                metrics_to_log["time/speed"] = pbar.format_dict["rate"]
+                log_metrics(logger, metrics_to_log, collected_frames)
 
     collector.shutdown()
     if not eval_env.is_closed:
