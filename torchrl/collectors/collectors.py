@@ -774,7 +774,11 @@ class SyncDataCollector(DataCollectorBase):
             )
         if self.cudagraphed_policy:
             self.policy = CudaGraphModule(
-                self.policy, in_keys=[], out_keys=[], **self.cudagraphed_policy_kwargs
+                self.policy,
+                in_keys=[],
+                out_keys=[],
+                device=self.policy_device,
+                **self.cudagraphed_policy_kwargs,
             )
 
         if self.env_device:
