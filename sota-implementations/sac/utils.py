@@ -172,6 +172,7 @@ def make_collector_async(
         replay_buffer=replay_buffer,
         extend_buffer=True,
         postproc=flatten,
+        no_cuda_sync=True,
     )
     collector.set_seed(cfg.env.seed)
     collector.start()
