@@ -8,7 +8,6 @@ import _pickle
 import abc
 import collections
 import contextlib
-import functools
 import os
 import queue
 import sys
@@ -230,11 +229,11 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 )
             return policy, None
 
-
         # Create a stateless policy, then populate this copy with params on device
         def get_original_weights(policy):
             td = TensorDict.from_module(policy)
             return td.data
+
         # We need to use ".data" otherwise buffers may disappear from the `get_original_weights` function
         with param_and_buf.data.to("meta").to_module(policy):
             policy = deepcopy(policy)
@@ -762,7 +761,9 @@ class SyncDataCollector(DataCollectorBase):
             observation_spec=self.env.observation_spec,
         )
         if isinstance(self.policy, nn.Module):
-            self.policy_weights = TensorDict.from_module(self.policy, as_module=True).data
+            self.policy_weights = TensorDict.from_module(
+                self.policy, as_module=True
+            ).data
         else:
             self.policy_weights = TensorDict()
 
@@ -3647,6 +3648,7 @@ class _TrajectoryPool:
             out = torch.arange(v, v + n).to(device)
             self._traj_id.copy_(1 + out[-1].item())
         return out
+
 
 def _map_weight(
     weight,

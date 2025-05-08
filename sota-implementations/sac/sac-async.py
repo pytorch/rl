@@ -91,7 +91,7 @@ def main(cfg: DictConfig):  # noqa: F821
                 compile_mode = "default"
             else:
                 compile_mode = "reduce-overhead"
-        compile_mode_collector = "reduce-overhead"
+        compile_mode_collector = compile_mode  # "reduce-overhead"
 
     # Create replay buffer
     replay_buffer = make_replay_buffer(
@@ -164,6 +164,7 @@ def main(cfg: DictConfig):  # noqa: F821
     update_freq = cfg.collector.update_freq
 
     eval_rollout_steps = cfg.env.max_episode_steps
+    log_freq = cfg.logger.log_freq
     # TODO: customize this
     num_updates = 1000
     total_iter = 1_000_000
@@ -172,7 +173,7 @@ def main(cfg: DictConfig):  # noqa: F821
     while not replay_buffer.write_count:
         time.sleep(0.01)
 
-    losses = TensorDict(batch_size=[num_updates])
+    losses = []
     for i in range(total_iter * num_updates):
         timeit.printevery(num_prints=1000, total_count=total_iter, erase=True)
 
@@ -193,25 +194,28 @@ def main(cfg: DictConfig):  # noqa: F821
             with timeit("update"):
                 torch.compiler.cudagraph_mark_step_begin()
                 loss_td = update(sampled_tensordict).clone()
-            losses[i % num_updates] = loss_td.select(
+            losses.append(loss_td.select(
                 "loss_actor", "loss_qvalue", "loss_alpha"
-            )
+            ))
 
             # Update priority
             if prb:
                 replay_buffer.update_priority(sampled_tensordict)
 
         # Logging
-        if i % num_updates == num_updates - 1:
+        if (i % log_freq) == (log_freq - 1):
             metrics_to_log = {}
             if collected_frames >= init_random_frames:
-                losses_m = losses.mean()
+                losses_m = torch.stack(losses).mean()
+                losses = []
                 metrics_to_log["train/q_loss"] = losses_m.get("loss_qvalue")
                 metrics_to_log["train/actor_loss"] = losses_m.get("loss_actor")
                 metrics_to_log["train/alpha_loss"] = losses_m.get("loss_alpha")
                 metrics_to_log["train/alpha"] = loss_td["alpha"]
                 metrics_to_log["train/entropy"] = loss_td["entropy"]
-                metrics_to_log["train/collected_frames"] = int(replay_buffer.write_count)
+                metrics_to_log["train/collected_frames"] = int(
+                    replay_buffer.write_count
+                )
             # Log rewards in the buffer
 
             # Evaluation

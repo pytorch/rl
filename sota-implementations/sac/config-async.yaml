@@ -50,7 +50,7 @@ logger:
   group_name: null
   exp_name: ${env.name}_SAC
   mode: online
-  eval_iter: 25000
+  log_freq: 25000  # logging freq in updates
   video: False
 
 compile:
