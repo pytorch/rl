@@ -194,7 +194,7 @@ def make_collector_async(
     collector = aSyncDataCollector(
         train_env_make,
         policy,
-        init_random_frames=cfg.collector.init_random_frames,
+        init_random_frames=0,  # Currently not supported, but accounted for in script: cfg.collector.init_random_frames,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
         device=device,
