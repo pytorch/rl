@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import functools
+from copy import deepcopy
 from typing import Any
 
 import torch
@@ -130,7 +131,9 @@ def make_collector(cfg, train_env, actor_model_explore, compile_mode):
     device = cfg.collector.device
     if device in ("", None):
         if torch.cuda.is_available():
-            device = torch.device("cuda:0")
+            if torch.cuda.device_count() < 2:
+                raise RuntimeError("Requires >= 2 GPUs")
+            device = torch.device("cuda:1")
         else:
             device = torch.device("cpu")
     collector = SyncDataCollector(
@@ -174,7 +177,12 @@ def make_collector_async(
             device = torch.device("cuda:0")
         else:
             device = torch.device("cpu")
-    policy = actor_model_explore.to(device)
+    params = TensorDict.from_module(actor_model_explore)
+
+    with params.to("meta").to_module(actor_model_explore):
+        policy = deepcopy(actor_model_explore)
+        params.clone().to(device).to_module(policy)
+
     collector = aSyncDataCollector(
         train_env_make,
         policy,
