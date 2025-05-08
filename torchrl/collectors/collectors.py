@@ -1143,11 +1143,13 @@ class SyncDataCollector(DataCollectorBase):
             and self.storing_device
             and self.storing_device.type == "cuda"
         ):
+            raise RuntimeError()
             stream = torch.cuda.Stream(self.storing_device, priority=-1)
             event = stream.record_event()
             streams = [stream]
             events = [event]
         elif not self.no_cuda_sync and self.storing_device is None:
+            raise RuntimeError()
             streams = []
             events = []
             # this way of checking cuda is robust to lazy stacks with mismatching shapes
