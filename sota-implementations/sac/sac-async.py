@@ -39,7 +39,7 @@ from utils import (
     make_sac_optimizer,
     make_train_environment,
 )
-
+from torchrl._utils import logger as torchrl_logger
 torch.set_float32_matmul_precision("high")
 tensordict.nn.functional_modules._exclude_td_from_pytree().set()
 
@@ -187,17 +187,18 @@ def main(cfg: DictConfig):  # noqa: F821
 
         if (i % update_freq) == 0:
             # Update weights of the inference policy
+            torchrl_logger.info("Updating weights")
             collector.update_policy_weights_()
 
         pbar.update(1)
 
         # Optimization steps
         with timeit("train"):
-            with timeit("rb - sample"):
+            with timeit("train - rb - sample"):
                 # Sample from replay buffer
                 sampled_tensordict = replay_buffer.sample()
 
-            with timeit("update"):
+            with timeit("train - update"):
                 torch.compiler.cudagraph_mark_step_begin()
                 loss_td = update(sampled_tensordict).clone()
             losses.append(loss_td.select("loss_actor", "loss_qvalue", "loss_alpha"))
