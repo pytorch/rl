@@ -53,7 +53,7 @@ def env_maker(cfg, device="cpu", from_pixels=False):
             )
     elif lib == "dm_control":
         env = DMControlEnv(
-            cfg.env.name, cfg.env.task, from_pixels=from_pixels, pixels_only=False
+            cfg.env.name, cfg.env.task, from_pixels=from_pixels, pixels_only=False, device=device,
         )
         return TransformedEnv(
             env, CatTensors(in_keys=env.observation_spec.keys(), out_key="observation")
@@ -75,13 +75,14 @@ def apply_env_transforms(env, max_episode_steps=1000):
     return transformed_env
 
 
-def make_environment(cfg, logger=None):
+def make_environment(cfg, logger=None, device="cpu", worker_device="cpu"):
     """Make environments for training and evaluation."""
-    partial = functools.partial(env_maker, cfg=cfg)
+    partial = functools.partial(env_maker, cfg=cfg, device=worker_device)
     parallel_env = ParallelEnv(
         cfg.collector.env_per_collector,
         EnvCreator(partial),
         serial_for_single=True,
+        device=device,
     )
     parallel_env.set_seed(cfg.env.seed)
 
