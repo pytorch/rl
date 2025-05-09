@@ -183,7 +183,7 @@ def main(cfg: DictConfig):  # noqa: F821
 
     losses = []
     for i in range(total_iter * num_updates):
-        timeit.printevery(num_prints=log_freq, total_count=total_iter, erase=True)
+        timeit.printevery(num_prints=total_iter * num_updates // log_freq, total_count=total_iter * num_updates, erase=True)
 
         if (i % update_freq) == 0:
             # Update weights of the inference policy
