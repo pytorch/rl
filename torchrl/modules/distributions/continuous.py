@@ -373,9 +373,11 @@ class TanhNormal(FasterTransformedDistribution):
             high = torch.as_tensor(high, device=loc.device)
         if not isinstance(low, torch.Tensor):
             low = torch.as_tensor(low, device=loc.device)
-        self.non_trivial_max = (high != 1.0).any()
-
-        self.non_trivial_min = (low != -1.0).any()
+        if not is_compiling() and not torch.cuda.is_current_stream_capturing():
+            self.non_trivial_max = (high != 1.0).any()
+            self.non_trivial_min = (low != -1.0).any()
+        else:
+            self.non_trivial_max = self.non_trivial_min = True
 
         self.tanh_loc = tanh_loc
         self._event_dims = event_dims
