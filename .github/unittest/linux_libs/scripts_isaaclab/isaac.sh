@@ -46,13 +46,13 @@ conda create -n env_isaaclab python=3.10 -y
 conda activate env_isaaclab
 pip install --upgrade pip
 pip install 'isaacsim[all,extscache]==4.5.0' --extra-index-url https://pypi.nvidia.com
-#git clone git@github.com:isaac-sim/IsaacLab.git
+git clone https://github.com/isaac-sim/IsaacLab.git
 conda install conda-forge::"cmake>3.22" -y
 
 # This should be part of the docker image?
-#cd IsaacLab
-#./isaaclab.sh --install skrl
-#cd ../
+cd IsaacLab
+./isaaclab.sh --install skrl
+cd ../
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
