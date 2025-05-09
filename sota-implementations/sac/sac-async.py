@@ -210,6 +210,7 @@ def main(cfg: DictConfig):  # noqa: F821
 
         # Logging
         if (i % log_freq) == (log_freq - 1):
+            torchrl_logger.info("Logging")
             collected_frames = replay_buffer.write_count
             metrics_to_log = {}
             if collected_frames >= init_random_frames:
@@ -223,7 +224,6 @@ def main(cfg: DictConfig):  # noqa: F821
                 metrics_to_log["train/collected_frames"] = int(
                     collected_frames
                 )
-            # Log rewards in the buffer
 
             # Evaluation
             with set_exploration_type(
@@ -238,6 +238,7 @@ def main(cfg: DictConfig):  # noqa: F821
                 eval_env.apply(dump_video)
                 eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
                 metrics_to_log["eval/reward"] = eval_reward
+            torchrl_logger.info(f"Logs: {metrics_to_log}")
             if logger is not None:
                 metrics_to_log.update(timeit.todict(prefix="time"))
                 metrics_to_log["time/speed"] = pbar.format_dict["rate"]
