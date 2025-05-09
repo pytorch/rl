@@ -369,8 +369,10 @@ class TanhNormal(FasterTransformedDistribution):
                 if not all(high > low):
                     raise RuntimeError(err_msg)
 
-        high = torch.as_tensor(high, device=loc.device)
-        low = torch.as_tensor(low, device=loc.device)
+        if not isinstance(high, torch.Tensor):
+            high = torch.as_tensor(high, device=loc.device)
+        if not isinstance(low, torch.Tensor):
+            low = torch.as_tensor(low, device=loc.device)
         self.non_trivial_max = (high != 1.0).any()
 
         self.non_trivial_min = (low != -1.0).any()
