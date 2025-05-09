@@ -165,19 +165,10 @@ def make_collector_async(
             device = torch.device("cuda:0")
         else:
             device = torch.device("cpu")
-    params = TensorDict.from_module(actor_model_explore)
-
-    with params.data.to("meta").to_module(actor_model_explore):
-        policy = deepcopy(actor_model_explore)
-
-    params.apply(
-        functools.partial(_map_weight, policy_device=device),
-        filter_empty=False,
-    ).to_module(policy)
 
     collector = aSyncDataCollector(
         train_env_make,
-        policy,
+        actor_model_explore,
         init_random_frames=0,  # Currently not supported, but accounted for in script: cfg.collector.init_random_frames,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,

@@ -16,7 +16,7 @@ import time
 
 import warnings
 from functools import partial
-
+from tensordict import TensorDict
 import hydra
 import numpy as np
 import tensordict
@@ -177,6 +177,7 @@ def main(cfg: DictConfig):  # noqa: F821
     num_updates = 1000
     total_iter = 1_000_000
     pbar = tqdm.tqdm(total=total_iter * num_updates)
+    params = TensorDict.from_module(model[0]).data
 
     while replay_buffer.write_count <= init_random_frames:
         time.sleep(0.01)
@@ -188,7 +189,7 @@ def main(cfg: DictConfig):  # noqa: F821
         if (i % update_freq) == 0:
             # Update weights of the inference policy
             torchrl_logger.info("Updating weights")
-            collector.update_policy_weights_()
+            collector.update_policy_weights_(params)
 
         pbar.update(1)
 
