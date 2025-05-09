@@ -240,9 +240,9 @@ jobs:
     with:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
+      docker-image: "nvcr.io/nvidia/isaac-lab:2.1.0"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
-      docker-image: "nvcr.io/nvidia/isaac-lab:2.1.0"
       timeout: 120
       script: |
         ./.github/unittest/linux_libs/scripts_isaaclab/isaac.sh
