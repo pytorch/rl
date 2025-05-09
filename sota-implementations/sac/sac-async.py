@@ -77,9 +77,13 @@ def main(cfg: DictConfig):  # noqa: F821
     _, eval_env = make_environment(cfg, logger=logger)
 
     # Create agent
-    model, exploration_policy = make_sac_agent(
+    model, _ = make_sac_agent(
         cfg, make_train_environment(cfg), eval_env, device
     )
+    _, exploration_policy = make_sac_agent(
+        cfg, make_train_environment(cfg), eval_env, "cuda:1"
+    )
+    exploration_policy.load_state_dict(model[0].state_dict())
 
     # Create SAC loss
     loss_module, target_net_updater = make_loss_module(cfg, model)
