@@ -155,22 +155,6 @@ def flatten(td):
     return td.reshape(-1)
 
 
-class AsyncUpdater(WeightUpdaterBase):
-    def __init__(self, policy_server, policy_worker):
-        self.policy_server = policy_server
-        self.policy_worker = policy_worker
-        self.policy_server_weights = TensorDict.from_module(policy_server).data
-        self.policy_worker_weights = TensorDict.from_module(policy_worker).data
-
-    def _get_server_weights(self) -> Any:
-        return self.policy_server_weights
-
-    def _sync_weights_with_worker(
-        self, *, worker_id: int | torch.device | None = None, server_weights: Any
-    ) -> Any:
-        self.policy_worker_weights.update_(server_weights)
-
-
 def make_collector_async(
     cfg, train_env_make, actor_model_explore, compile_mode, replay_buffer
 ):
@@ -205,9 +189,6 @@ def make_collector_async(
         extend_buffer=True,
         postproc=flatten,
         no_cuda_sync=True,
-        weight_updater=AsyncUpdater(
-            policy_server=actor_model_explore, policy_worker=policy
-        ),
     )
     collector.set_seed(cfg.env.seed)
     collector.start()
