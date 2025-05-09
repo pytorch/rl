@@ -12,6 +12,7 @@ import hydra
 @hydra.main(version_base="1.1", config_path="", config_name="config")
 def main(cfg):  # noqa: F821
     rs = []
+    exploration_policy = None
     for worker_device in (None, "cpu", "cuda:0", "cuda:1"):
         rs.append([])
         for device in (None, "cpu", "cuda:0", "cuda:1"):
@@ -21,7 +22,14 @@ def main(cfg):  # noqa: F821
             numpy.random.seed(0)
             train_env, eval_env = make_environment(cfg, device=device, worker_device=worker_device)
             train_env.set_seed(0)
-            model, exploration_policy = make_sac_agent(cfg, train_env, eval_env, device)
+            if exploration_policy is None:
+                model, exploration_policy = make_sac_agent(cfg, train_env, eval_env, device)
+            if device is not None:
+                exploration_policy.to(device)
+            elif worker_device is not None:
+                exploration_policy.to(worker_device)
+            else:
+                exploration_policy.to("cpu")
             with set_exploration_type("RANDOM"):
                 r = train_env.rollout(1000, exploration_policy, break_when_any_done=False, auto_cast_to_device=True)
             rs[-1].append(r.cpu())
@@ -31,8 +39,8 @@ def main(cfg):  # noqa: F821
     rs = torch.stack(rs, dim=0)
     for i in range(4):
         for j in range(4):
-            if i != j:
-                assert_close(rs[0, 0], rs[i, j])
+            print(f"testing {i=}, {j=}")
+            assert_close(rs[0, 0], rs[i, j])
 
 if __name__ == "__main__":
     main()

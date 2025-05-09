@@ -856,7 +856,7 @@ class BatchedEnvBase(EnvBase):
     def close(self, *, raise_if_closed: bool = True) -> None:
         if self.is_closed:
             if raise_if_closed:
-                raise RuntimeError("trying to close a closed environment")
+                raise RuntimeError("trying to close a closed environment. Set `raise_if_closed=False` to bypass this error.")
             else:
                 return
         if self._verbose:
