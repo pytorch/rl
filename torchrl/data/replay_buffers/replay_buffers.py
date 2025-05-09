@@ -258,6 +258,8 @@ class ReplayBuffer:
         if self._prefetch_cap:
             self._prefetch_executor = ThreadPoolExecutor(max_workers=self._prefetch_cap)
 
+        if shared and prefetch:
+            raise ValueError("Cannot share prefetched replay buffers.")
         self.shared = shared
         self.share(self.shared)
 

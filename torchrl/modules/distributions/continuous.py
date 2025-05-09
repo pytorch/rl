@@ -34,9 +34,9 @@ except ImportError:
     from torch._dynamo import assume_constant_result
 
 try:
-    from torch.compiler import is_dynamo_compiling
+    from torch.compiler import is_compiling
 except ImportError:
-    from torch._dynamo import is_compiling as is_dynamo_compiling
+    from torch._dynamo import is_compiling
 
 TORCH_VERSION = version.parse(torch.__version__).base_version
 TORCH_VERSION_PRE_2_6 = version.parse(TORCH_VERSION) < version.parse("2.6.0")
@@ -117,7 +117,7 @@ class SafeTanhTransform(D.TanhTransform):
             inv = self._inv()
         if inv is None:
             inv = _InverseTransform(self)
-            if not is_dynamo_compiling():
+            if not is_compiling():
                 self._inv = weakref.ref(inv)
         return inv
 
@@ -281,7 +281,7 @@ class _PatchedComposeTransform(D.ComposeTransform):
             inv = self._inv()
         if inv is None:
             inv = _PatchedComposeTransform([p.inv for p in reversed(self.parts)])
-            if not is_dynamo_compiling():
+            if not is_compiling():
                 self._inv = weakref.ref(inv)
                 inv._inv = weakref.ref(self)
         return inv
@@ -295,7 +295,7 @@ class _PatchedAffineTransform(D.AffineTransform):
             inv = self._inv()
         if inv is None:
             inv = _InverseTransform(self)
-            if not is_dynamo_compiling():
+            if not is_compiling():
                 self._inv = weakref.ref(inv)
         return inv
 
@@ -358,7 +358,7 @@ class TanhNormal(FasterTransformedDistribution):
             event_dims = min(1, loc.ndim)
 
         err_msg = "TanhNormal high values must be strictly greater than low values"
-        if not is_dynamo_compiling():
+        if not is_compiling() and not torch.cuda.is_current_stream_capturing():
             if isinstance(high, torch.Tensor) or isinstance(low, torch.Tensor):
                 if not (high > low).all():
                     raise RuntimeError(err_msg)
@@ -369,11 +369,19 @@ class TanhNormal(FasterTransformedDistribution):
                 if not all(high > low):
                     raise RuntimeError(err_msg)
 
-        high = torch.as_tensor(high, device=loc.device)
-        low = torch.as_tensor(low, device=loc.device)
-        self.non_trivial_max = (high != 1.0).any()
-
-        self.non_trivial_min = (low != -1.0).any()
+        if not isinstance(high, torch.Tensor):
+            high = torch.as_tensor(high, device=loc.device)
+        elif high.device != loc.device:
+            high = high.to(loc.device)
+        if not isinstance(low, torch.Tensor):
+            low = torch.as_tensor(low, device=loc.device)
+        elif low.device != loc.device:
+            low = low.to(loc.device)
+        if not is_compiling() and not torch.cuda.is_current_stream_capturing():
+            self.non_trivial_max = (high != 1.0).any()
+            self.non_trivial_min = (low != -1.0).any()
+        else:
+            self.non_trivial_max = self.non_trivial_min = True
 
         self.tanh_loc = tanh_loc
         self._event_dims = event_dims
@@ -385,21 +393,18 @@ class TanhNormal(FasterTransformedDistribution):
             else upscale.to(self.device)
         )
 
-        if isinstance(high, torch.Tensor):
-            high = high.to(loc.device)
-        if isinstance(low, torch.Tensor):
-            low = low.to(loc.device)
+        low = low.to(loc.device)
         self.low = low
         self.high = high
 
         if safe_tanh:
-            if is_dynamo_compiling() and TORCH_VERSION_PRE_2_6:
+            if is_compiling() and TORCH_VERSION_PRE_2_6:
                 _err_compile_safetanh()
             t = SafeTanhTransform()
         else:
             t = D.TanhTransform()
         # t = D.TanhTransform()
-        if is_dynamo_compiling() or (self.non_trivial_max or self.non_trivial_min):
+        if is_compiling() or (self.non_trivial_max or self.non_trivial_min):
             t = _PatchedComposeTransform(
                 [
                     t,
@@ -426,7 +431,7 @@ class TanhNormal(FasterTransformedDistribution):
         if self.tanh_loc:
             loc = (loc / self.upscale).tanh() * self.upscale
             # loc must be rescaled if tanh_loc
-            if is_dynamo_compiling() or (self.non_trivial_max or self.non_trivial_min):
+            if is_compiling() or (self.non_trivial_max or self.non_trivial_min):
                 loc = loc + (self.high - self.low) / 2 + self.low
         self.loc = loc
         self.scale = scale
@@ -647,13 +652,13 @@ class TanhDelta(FasterTransformedDistribution):
     ):
         minmax_msg = "high value has been found to be equal or less than low value"
         if isinstance(high, torch.Tensor) or isinstance(low, torch.Tensor):
-            if is_dynamo_compiling():
+            if is_compiling():
                 assert (high > low).all()
             else:
                 if not (high > low).all():
                     raise ValueError(minmax_msg)
         elif isinstance(high, Number) and isinstance(low, Number):
-            if is_dynamo_compiling():
+            if is_compiling():
                 assert high > low
             elif high <= low:
                 raise ValueError(minmax_msg)
@@ -662,16 +667,16 @@ class TanhDelta(FasterTransformedDistribution):
                 raise ValueError(minmax_msg)
 
         if safe:
-            if is_dynamo_compiling():
+            if is_compiling():
                 _err_compile_safetanh()
             t = SafeTanhTransform()
         else:
             t = torch.distributions.TanhTransform()
-        non_trivial_min = is_dynamo_compiling or (
+        non_trivial_min = is_compiling or (
             (isinstance(low, torch.Tensor) and (low != -1.0).any())
             or (not isinstance(low, torch.Tensor) and low != -1.0)
         )
-        non_trivial_max = is_dynamo_compiling or (
+        non_trivial_max = is_compiling or (
             (isinstance(high, torch.Tensor) and (high != 1.0).any())
             or (not isinstance(high, torch.Tensor) and high != 1.0)
         )
