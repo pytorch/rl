@@ -107,7 +107,7 @@ def make_environment(cfg, logger=None):
     return train_env, eval_env
 
 
-def make_train_environment(cfg):
+def make_train_environment(cfg, device):
     """Make environments for training and evaluation."""
     partial = functools.partial(env_maker, cfg=cfg)
     parallel_env = ParallelEnv(

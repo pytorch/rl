@@ -3500,13 +3500,17 @@ def _main_async_collector(
                 continue
         else:
             # placeholder, will be checked after
+            if msg != "continue":
+                torchrl_logger.info(f"worker {idx} will reset {msg} to 'continue'")
             msg = "continue"
         if msg == "run_free":
             run_free = True
+            msg = "continue"
         if run_free:
             # Capture shutdown / update / seed signal, but continue should not be expected
             if pipe_child.poll(1e-4):
                 data_in, msg = pipe_child.recv()
+                torchrl_logger.info(f"worker {idx} received {msg} while running free")
                 if msg == "continue":
                     # Switch back to run_free = False
                     run_free = False
@@ -3614,6 +3618,7 @@ def _main_async_collector(
                 continue
 
         elif msg == "update":
+            torchrl_logger.info(f"worker {idx} updating the params...")
             inner_collector.update_policy_weights_(policy_weights=data_in)
             pipe_child.send((j, "updated"))
             has_timed_out = False

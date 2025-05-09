@@ -180,15 +180,13 @@ def main(cfg: DictConfig):  # noqa: F821
 
     losses = []
     for i in range(total_iter * num_updates):
-        timeit.printevery(num_prints=1000, total_count=total_iter, erase=True)
+        timeit.printevery(num_prints=log_freq, total_count=total_iter, erase=True)
 
-        if i % update_freq == update_freq - 1:
+        if (i % update_freq) == 0:
             # Update weights of the inference policy
             collector.update_policy_weights_()
 
         pbar.update(1)
-
-        collected_frames = replay_buffer.write_count
 
         # Optimization steps
         with timeit("train"):
@@ -198,13 +196,7 @@ def main(cfg: DictConfig):  # noqa: F821
 
             with timeit("update"):
                 torch.compiler.cudagraph_mark_step_begin()
-                # After a certain number of warmup steps, CudaGraphModule will register the graph
-                #  We want to pause the collector while this is happening
-                if cudagraphs and update.counter == (update._warmup - 1):
-                    with collector.pause():
-                        loss_td = update(sampled_tensordict).clone()
-                else:
-                    loss_td = update(sampled_tensordict).clone()
+                loss_td = update(sampled_tensordict).clone()
             losses.append(loss_td.select("loss_actor", "loss_qvalue", "loss_alpha"))
 
             # Update priority
@@ -213,6 +205,7 @@ def main(cfg: DictConfig):  # noqa: F821
 
         # Logging
         if (i % log_freq) == (log_freq - 1):
+            collected_frames = replay_buffer.write_count
             metrics_to_log = {}
             if collected_frames >= init_random_frames:
                 losses_m = torch.stack(losses).mean()
@@ -223,7 +216,7 @@ def main(cfg: DictConfig):  # noqa: F821
                 metrics_to_log["train/alpha"] = loss_td["alpha"]
                 metrics_to_log["train/entropy"] = loss_td["entropy"]
                 metrics_to_log["train/collected_frames"] = int(
-                    replay_buffer.write_count
+                    collected_frames
                 )
             # Log rewards in the buffer
 
