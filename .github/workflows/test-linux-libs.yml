@@ -238,12 +238,12 @@ jobs:
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments/Isaac') }}
     uses: vmoens/test-infra/.github/workflows/isaac_linux_job_v2.yml@patch-1
     with:
+      test-infra-repository: vmoens/test-infra
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
       docker-image: "nvcr.io/nvidia/isaac-lab:2.1.0"
       gpu-arch-type: cuda
       gpu-arch-version: "12.8"
-      test-infra-repository: vmoens/test-infra
       timeout: 120
       script: |
         ./.github/unittest/linux_libs/scripts_isaaclab/isaac.sh
