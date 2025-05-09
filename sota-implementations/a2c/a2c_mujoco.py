@@ -167,7 +167,7 @@ def main(cfg: DictConfig):  # noqa: F821
         max_frames_per_traj=-1,
         trust_policy=True,
         compile_policy={"mode": compile_mode} if compile_mode is not None else False,
-        cudagraph_policy=cfg.compile.cudagraphs,
+        cudagraph_policy={"warmup": 10} if cfg.compile.cudagraphs else False,
     )
 
     test_env.eval()

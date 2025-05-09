@@ -22,7 +22,7 @@ from multiprocessing import connection, queues
 from multiprocessing.managers import SyncManager
 from queue import Empty
 from textwrap import indent
-from typing import Any, Callable, Iterator, Sequence, TypeVar
+from typing import Any, Callable, Iterator, Mapping, Sequence, TypeVar
 
 import numpy as np
 import torch
@@ -31,7 +31,7 @@ import torch.nn as nn
 from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 from tensordict.base import NO_DEFAULT
 from tensordict.nn import CudaGraphModule, TensorDictModule
-from tensordict.utils import Buffer
+from tensordict.utils import _zip_strict, Buffer
 from torch import multiprocessing as mp
 from torch.nn import Parameter
 from torch.utils.data import IterableDataset
@@ -208,7 +208,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             return policy, None
 
         if isinstance(policy, nn.Module):
-            param_and_buf = TensorDict.from_module(policy, as_module=True)
+            param_and_buf = TensorDict.from_module(policy, as_module=True).data
         else:
             # Because we want to reach the warning
             param_and_buf = TensorDict()
@@ -230,32 +230,17 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 )
             return policy, None
 
-        def map_weight(
-            weight,
-            policy_device=policy_device,
-        ):
-
-            is_param = isinstance(weight, Parameter)
-            is_buffer = isinstance(weight, Buffer)
-            weight = weight.data
-            if weight.device != policy_device:
-                weight = weight.to(policy_device)
-            elif weight.device.type in ("cpu",):
-                weight = weight.share_memory_()
-            if is_param:
-                weight = Parameter(weight, requires_grad=False)
-            elif is_buffer:
-                weight = Buffer(weight)
-            return weight
-
         # Create a stateless policy, then populate this copy with params on device
-        get_original_weights = functools.partial(TensorDict.from_module, policy)
+        def get_original_weights(policy):
+            td = TensorDict.from_module(policy)
+            return td.data
+
         # We need to use ".data" otherwise buffers may disappear from the `get_original_weights` function
         with param_and_buf.data.to("meta").to_module(policy):
             policy = deepcopy(policy)
 
         param_and_buf.apply(
-            map_weight,
+            functools.partial(_map_weight, policy_device=policy_device),
             filter_empty=False,
         ).to_module(policy)
         return policy, get_original_weights
@@ -278,6 +263,13 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         """
         raise NotImplementedError(
             f"Collector start() is not implemented for {type(self).__name__}."
+        )
+
+    @contextlib.contextmanager
+    def pause(self):
+        """Context manager that pauses the collector if it is running free."""
+        raise NotImplementedError(
+            f"Collector pause() is not implemented for {type(self).__name__}."
         )
 
     def async_shutdown(self, timeout: float | None = None) -> None:
@@ -777,7 +769,9 @@ class SyncDataCollector(DataCollectorBase):
             observation_spec=self.env.observation_spec,
         )
         if isinstance(self.policy, nn.Module):
-            self.policy_weights = TensorDict.from_module(self.policy, as_module=True)
+            self.policy_weights = TensorDict.from_module(
+                self.policy, as_module=True
+            ).data
         else:
             self.policy_weights = TensorDict()
 
@@ -786,7 +780,13 @@ class SyncDataCollector(DataCollectorBase):
                 self.policy, **self.compiled_policy_kwargs
             )
         if self.cudagraphed_policy:
-            self.policy = CudaGraphModule(self.policy, **self.cudagraphed_policy_kwargs)
+            self.policy = CudaGraphModule(
+                self.policy,
+                in_keys=[],
+                out_keys=[],
+                device=self.policy_device,
+                **self.cudagraphed_policy_kwargs,
+            )
 
         if self.env_device:
             self.env: EnvBase = self.env.to(self.env_device)
@@ -1901,11 +1901,17 @@ class _MultiDataCollector(DataCollectorBase):
         self.num_threads = num_threads
         self.create_env_fn = create_env_fn
         self._read_compile_kwargs(compile_policy, cudagraph_policy)
-        self.create_env_kwargs = (
-            create_env_kwargs
-            if create_env_kwargs is not None
-            else [{} for _ in range(self.num_workers)]
-        )
+        if isinstance(create_env_kwargs, Mapping):
+            create_env_kwargs = [create_env_kwargs] * self.num_workers
+        elif create_env_kwargs is None:
+            create_env_kwargs = [{}] * self.num_workers
+        elif isinstance(create_env_kwargs, (tuple, list)):
+            create_env_kwargs = list(create_env_kwargs)
+            if len(create_env_kwargs) != self.num_workers:
+                raise ValueError(
+                    f"len(create_env_kwargs) must be equal to num_workers, got {len(create_env_kwargs)=} and {self.num_workers=}"
+                )
+        self.create_env_kwargs = create_env_kwargs
         # Preparing devices:
         # We want the user to be able to choose, for each worker, on which
         # device will the policy live and which device will be used to store
@@ -1967,7 +1973,7 @@ class _MultiDataCollector(DataCollectorBase):
         if any(policy_factory) and policy is not None:
             raise TypeError("policy_factory and policy are mutually exclusive")
         elif not any(policy_factory):
-            for policy_device, env_maker, env_maker_kwargs in zip(
+            for policy_device, env_maker, env_maker_kwargs in _zip_strict(
                 self.policy_device, self.create_env_fn, self.create_env_kwargs
             ):
                 (policy_copy, get_weights_fn,) = self._get_policy_and_device(
@@ -1979,7 +1985,7 @@ class _MultiDataCollector(DataCollectorBase):
                 if type(policy_copy) is not type(policy):
                     policy = policy_copy
                 weights = (
-                    TensorDict.from_module(policy_copy)
+                    TensorDict.from_module(policy_copy).data
                     if isinstance(policy_copy, nn.Module)
                     else TensorDict()
                 )
@@ -2235,6 +2241,9 @@ class _MultiDataCollector(DataCollectorBase):
                     else False,
                     "no_cuda_sync": self.no_cuda_sync,
                     "collector_class": self.collector_class,
+                    "postproc": self.postprocs
+                    if self.replay_buffer is not None
+                    else None,
                 }
                 proc = _ProcessNoWarn(
                     target=_main_async_collector,
@@ -2265,6 +2274,8 @@ also that the state dict is synchronised across processes if needed."""
                 raise RuntimeError(msg)
         self.queue_out = queue_out
         self.closed = False
+
+    _running_free = False
 
     def start(self):
         """Starts the collector(s) for asynchronous data collection.
@@ -2340,8 +2351,29 @@ also that the state dict is synchronised across processes if needed."""
             raise RuntimeError(
                 "Cannot currently start() a collector that requires random frames. Please submit a feature request on github."
             )
+        self._running_free = True
         for pipe in self.pipes:
             pipe.send((None, "run_free"))
+
+    @contextlib.contextmanager
+    def pause(self):
+        """Context manager that pauses the collector if it is running free."""
+        if self._running_free:
+            for pipe in self.pipes:
+                pipe.send((None, "pause"))
+            # Make sure all workers are paused
+            for _ in self.pipes:
+                idx, msg = self.queue_out.get()
+                if msg != "paused":
+                    raise ValueError(f"Expected paused, but got {msg=}.")
+                torchrl_logger.info(f"Worker {idx} is paused.")
+            self._running_free = False
+            yield None
+            for pipe in self.pipes:
+                pipe.send((None, "restart"))
+            self._running_free = True
+        else:
+            raise RuntimeError("Collector cannot be paused.")
 
     def __del__(self):
         try:
@@ -2991,7 +3023,9 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             self.postprocs = {}
             for _device in self.storing_device:
                 if _device not in self.postprocs:
-                    self.postprocs[_device] = deepcopy(postproc).to(_device)
+                    if hasattr(postproc, "to"):
+                        postproc = deepcopy(postproc).to(_device)
+                    self.postprocs[_device] = postproc
 
     # for RPC
     def next(self):
@@ -3314,7 +3348,9 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             policy=policy,
             policy_factory=policy_factory,
             total_frames=total_frames,
-            create_env_kwargs=[create_env_kwargs],
+            create_env_kwargs=[create_env_kwargs]
+            if create_env_kwargs
+            else create_env_kwargs,
             max_frames_per_traj=max_frames_per_traj,
             frames_per_batch=frames_per_batch,
             reset_at_each_iter=reset_at_each_iter,
@@ -3332,6 +3368,7 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             num_threads=num_threads,
             num_sub_threads=num_sub_threads,
             set_truncated=set_truncated,
+            **kwargs,
         )
 
     # for RPC
@@ -3384,6 +3421,7 @@ def _main_async_collector(
     no_cuda_sync: bool = False,
     policy_factory: Callable | None = None,
     collector_class: type | Callable[[], DataCollectorBase] | None = None,
+    postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
 ) -> None:
     if collector_class is None:
         collector_class = SyncDataCollector
@@ -3400,7 +3438,7 @@ def _main_async_collector(
         max_frames_per_traj=max_frames_per_traj,
         frames_per_batch=frames_per_batch,
         reset_at_each_iter=reset_at_each_iter,
-        postproc=None,
+        postproc=postproc,
         split_trajs=False,
         storing_device=storing_device,
         policy_device=policy_device,
@@ -3411,7 +3449,7 @@ def _main_async_collector(
         interruptor=interruptor,
         set_truncated=set_truncated,
         use_buffers=use_buffers,
-        replay_buffer=replay_buffer if extend_buffer else None,
+        replay_buffer=replay_buffer if not extend_buffer else None,
         extend_buffer=False,
         traj_pool=traj_pool,
         trust_policy=trust_policy,
@@ -3471,16 +3509,28 @@ def _main_async_collector(
                 continue
         else:
             # placeholder, will be checked after
+            if msg != "continue":
+                torchrl_logger.info(f"worker {idx} will reset {msg} to 'continue'")
             msg = "continue"
         if msg == "run_free":
             run_free = True
+            msg = "continue"
         if run_free:
             # Capture shutdown / update / seed signal, but continue should not be expected
-            if pipe_child.poll(1e-3):
+            if pipe_child.poll(1e-4):
                 data_in, msg = pipe_child.recv()
+                torchrl_logger.info(f"worker {idx} received {msg} while running free")
                 if msg == "continue":
                     # Switch back to run_free = False
                     run_free = False
+                if msg == "pause":
+                    queue_out.put((idx, "paused"), timeout=_TIMEOUT)
+                    while not pipe_child.poll(1e-2):
+                        continue
+                    data_in, msg = pipe_child.recv()
+                    if msg != "restart":
+                        raise RuntimeError(f"Expected msg='restart', got {msg=}")
+                    msg = "continue"
             else:
                 data_in = None
                 # TODO: this does not work with random frames
@@ -3498,7 +3548,7 @@ def _main_async_collector(
                 continue
 
             if replay_buffer is not None:
-                if not extend_buffer:
+                if extend_buffer:
                     next_data.names = None
                     replay_buffer.extend(next_data)
 
@@ -3578,6 +3628,7 @@ def _main_async_collector(
                 continue
 
         elif msg == "update":
+            torchrl_logger.info(f"worker {idx} updating the params...")
             inner_collector.update_policy_weights_(policy_weights=data_in)
             pipe_child.send((j, "updated"))
             has_timed_out = False
@@ -3651,3 +3702,22 @@ class _TrajectoryPool:
             out = torch.arange(v, v + n).to(device)
             self._traj_id.copy_(1 + out[-1].item())
         return out
+
+
+def _map_weight(
+    weight,
+    policy_device,
+):
+
+    is_param = isinstance(weight, Parameter)
+    is_buffer = isinstance(weight, Buffer)
+    weight = weight.data
+    if weight.device != policy_device:
+        weight = weight.to(policy_device)
+    elif weight.device.type in ("cpu",):
+        weight = weight.share_memory_()
+    if is_param:
+        weight = Parameter(weight, requires_grad=False)
+    elif is_buffer:
+        weight = Buffer(weight)
+    return weight

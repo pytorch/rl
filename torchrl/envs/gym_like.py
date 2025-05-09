@@ -231,7 +231,11 @@ class GymLikeEnv(_EnvWrapper):
         Returns: an action in a format compatible with the contained environment.
 
         """
-        return self.action_spec.to_numpy(action, safe=False)
+        action_spec = self.full_action_spec
+        action_keys = self.action_keys
+        if len(action_keys) == 1:
+            action_spec = action_spec[action_keys[0]]
+        return action_spec.to_numpy(action, safe=False)
 
     def read_done(
         self,
