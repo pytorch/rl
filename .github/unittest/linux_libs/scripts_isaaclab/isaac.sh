@@ -3,13 +3,13 @@
 set -e
 set -v
 
-if [[ "${{ github.ref }}" =~ release/* ]]; then
-  export RELEASE=1
-  export TORCH_VERSION=stable
-else
-  export RELEASE=0
-  export TORCH_VERSION=nightly
-fi
+#if [[ "${{ github.ref }}" =~ release/* ]]; then
+#  export RELEASE=1
+#  export TORCH_VERSION=stable
+#else
+export RELEASE=0
+export TORCH_VERSION=nightly
+#fi
 
 set -euo pipefail
 export PYTHON_VERSION="3.10"
@@ -47,10 +47,12 @@ conda activate env_isaaclab
 pip install --upgrade pip
 pip install 'isaacsim[all,extscache]==4.5.0' --extra-index-url https://pypi.nvidia.com
 git clone git@github.com:isaac-sim/IsaacLab.git
-conda install "conda-forge::cmake>3.22" -y
-cd IsaacLab
-./isaaclab.sh --install skrl
-cd ../
+conda install conda-forge::"cmake>3.22" -y
+
+# This should be part of the docker image?
+#cd IsaacLab
+#./isaaclab.sh --install skrl
+#cd ../
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
