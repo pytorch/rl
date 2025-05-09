@@ -15,6 +15,7 @@ def main(cfg):  # noqa: F821
     for worker_device in (None, "cpu", "cuda:0", "cuda:1"):
         rs.append([])
         for device in (None, "cpu", "cuda:0", "cuda:1"):
+            print(f'collecting {device=} and {worker_device=}')
             torch.cuda.manual_seed(0)
             torch.manual_seed(0)
             numpy.random.seed(0)
@@ -23,7 +24,7 @@ def main(cfg):  # noqa: F821
             model, exploration_policy = make_sac_agent(cfg, train_env, eval_env, device)
             with set_exploration_type("RANDOM"):
                 r = train_env.rollout(1000, exploration_policy, break_when_any_done=False)
-            rs[-1].append(r)
+            rs[-1].append(r.cpu())
         rs[-1] = torch.stack(rs[-1], dim=0)
     rs = torch.stack(rs, dim=0)
     for i in range(4):
