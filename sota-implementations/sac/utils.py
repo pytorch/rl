@@ -199,7 +199,7 @@ def make_collector_async(
         total_frames=cfg.collector.total_frames,
         device=device,
         env_device=torch.device("cpu"),
-        compile_policy={"mode": compile_mode, "warmup": 5} if compile_mode else False,
+        compile_policy=False, # {"mode": compile_mode, "warmup": 5} if compile_mode else False,
         cudagraph_policy={"warmup": 20} if cfg.compile.cudagraphs else False,
         replay_buffer=replay_buffer,
         extend_buffer=True,
