@@ -14,7 +14,7 @@ import os
 import re
 import warnings
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 import torch
 
@@ -687,7 +687,7 @@ def check_env_specs(
     check_dtype=True,
     seed: int | None = None,
     tensordict: TensorDictBase | None = None,
-    break_when_any_done: bool | str = None,
+    break_when_any_done: bool | Literal["both"] = None,
 ):
     """Tests an environment specs against the results of short rollout.
 
