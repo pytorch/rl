@@ -3646,9 +3646,12 @@ class TestAsyncCollection:
         m.bias.data.fill_(0)
         policy = TensorDictSequential(
             TensorDictModule(
-                lambda x: x.float(), in_keys=["observation"], out_keys=["observation"]
+                lambda x: x.float(), in_keys=["observation"], out_keys=["action"]
             ),
-            TensorDictModule(m, in_keys=["observation"], out_keys=["action"]),
+            TensorDictModule(m, in_keys=["action"], out_keys=["action"]),
+            TensorDictModule(
+                lambda x: x.to(torch.int8), in_keys=["action"], out_keys=["action"]
+            ),
         )
         td = TensorDict.from_module(policy).data.clone()
         if cls != SyncDataCollector:
