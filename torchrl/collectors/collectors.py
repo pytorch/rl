@@ -22,7 +22,7 @@ from multiprocessing import connection, queues
 from multiprocessing.managers import SyncManager
 from queue import Empty
 from textwrap import indent
-from typing import Any, Callable, Iterator, Sequence, TypeVar
+from typing import Any, Callable, Iterator, Mapping, Sequence, TypeVar
 
 import numpy as np
 import torch
@@ -31,7 +31,7 @@ import torch.nn as nn
 from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 from tensordict.base import NO_DEFAULT
 from tensordict.nn import CudaGraphModule, TensorDictModule
-from tensordict.utils import Buffer
+from tensordict.utils import _zip_strict, Buffer
 from torch import multiprocessing as mp
 from torch.nn import Parameter
 from torch.utils.data import IterableDataset
@@ -1901,11 +1901,17 @@ class _MultiDataCollector(DataCollectorBase):
         self.num_threads = num_threads
         self.create_env_fn = create_env_fn
         self._read_compile_kwargs(compile_policy, cudagraph_policy)
-        self.create_env_kwargs = (
-            create_env_kwargs
-            if create_env_kwargs is not None
-            else [{} for _ in range(self.num_workers)]
-        )
+        if isinstance(create_env_kwargs, Mapping):
+            create_env_kwargs = [create_env_kwargs] * self.num_workers
+        elif create_env_kwargs is None:
+            create_env_kwargs = [{}] * self.num_workers
+        elif isinstance(create_env_kwargs, (tuple, list)):
+            create_env_kwargs = list(create_env_kwargs)
+            if len(create_env_kwargs) != self.num_workers:
+                raise ValueError(
+                    f"len(create_env_kwargs) must be equal to num_workers, got {len(create_env_kwargs)=} and {self.num_workers=}"
+                )
+        self.create_env_kwargs = create_env_kwargs
         # Preparing devices:
         # We want the user to be able to choose, for each worker, on which
         # device will the policy live and which device will be used to store
@@ -1967,7 +1973,7 @@ class _MultiDataCollector(DataCollectorBase):
         if any(policy_factory) and policy is not None:
             raise TypeError("policy_factory and policy are mutually exclusive")
         elif not any(policy_factory):
-            for policy_device, env_maker, env_maker_kwargs in zip(
+            for policy_device, env_maker, env_maker_kwargs in _zip_strict(
                 self.policy_device, self.create_env_fn, self.create_env_kwargs
             ):
                 (policy_copy, get_weights_fn,) = self._get_policy_and_device(
@@ -2365,6 +2371,9 @@ also that the state dict is synchronised across processes if needed."""
             yield None
             for pipe in self.pipes:
                 pipe.send((None, "restart"))
+            self._running_free = True
+        else:
+            raise RuntimeError("Collector cannot be paused.")
 
     def __del__(self):
         try:
@@ -3521,6 +3530,7 @@ def _main_async_collector(
                     data_in, msg = pipe_child.recv()
                     if msg != "restart":
                         raise RuntimeError(f"Expected msg='restart', got {msg=}")
+                    msg = "continue"
             else:
                 data_in = None
                 # TODO: this does not work with random frames

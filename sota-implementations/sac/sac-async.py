@@ -2,7 +2,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""SAC Example.
+"""Async SAC Example.
+
+WARNING: This isn't a SOTA implementation but a rudimentary implementation of SAC where inference
+and training are entirely decoupled. It can achieve a 20x speedup if compile and cudagraph are used.
+Two GPUs are required for this script to run.
+The API is currently being perfected, and contributions are welcome (as usual!) - see the TODOs in this script.
 
 This is a simple self-contained example of a SAC training script.
 
@@ -61,7 +66,7 @@ def main(cfg: DictConfig):  # noqa: F821
     if cfg.logger.backend:
         logger = get_logger(
             logger_type=cfg.logger.backend,
-            logger_name="sac_logging",
+            logger_name="async_sac_logging",
             experiment_name=exp_name,
             wandb_kwargs={
                 "mode": cfg.logger.mode,
@@ -77,6 +82,10 @@ def main(cfg: DictConfig):  # noqa: F821
     # Create environments
     _, eval_env = make_environment(cfg, logger=logger)
 
+    # TODO: This should be simplified. We need to create the policy on cuda:1 directly because of the bounds
+    #  of the TanhDistribution which cannot be sent to cuda:1 within the distribution construction (ie, the
+    #  distribution kwargs need to have access to the low / high values on the right device for compile and
+    #  cudagraph to work).
     # Create agent
     dummy_train_env = make_train_environment(cfg)
     model, _ = make_sac_agent(cfg, dummy_train_env, eval_env, device)
@@ -98,6 +107,8 @@ def main(cfg: DictConfig):  # noqa: F821
                 compile_mode = "reduce-overhead"
         compile_mode_collector = compile_mode  # "reduce-overhead"
 
+    # TODO: enabling prefetch for mp RBs would speed up sampling which is currently responsible for
+    #  half of the compute time on the trainer side.
     # Create replay buffer
     replay_buffer = make_replay_buffer(
         batch_size=cfg.optim.batch_size,
@@ -114,7 +125,7 @@ def main(cfg: DictConfig):  # noqa: F821
     replay_buffer.extend(make_train_environment(cfg).rollout(1).view(-1))
     replay_buffer.empty()
 
-    # Create off-policy collector
+    # Create off-policy collector and start it
     collector = make_collector_async(
         cfg,
         partial(make_train_environment, cfg),
@@ -161,8 +172,6 @@ def main(cfg: DictConfig):  # noqa: F821
         update = CudaGraphModule(update, in_keys=[], out_keys=[], warmup=10)
 
     # Main loop
-    collected_frames = 0
-
     init_random_frames = cfg.collector.init_random_frames
 
     prb = cfg.replay_buffer.prb
@@ -170,12 +179,14 @@ def main(cfg: DictConfig):  # noqa: F821
 
     eval_rollout_steps = cfg.env.max_episode_steps
     log_freq = cfg.logger.log_freq
+
     # TODO: customize this
     num_updates = 1000
-    total_iter = 1_000_000
+    total_iter = 1000
     pbar = tqdm.tqdm(total=total_iter * num_updates)
     params = TensorDict.from_module(model[0]).data
 
+    # Wait till we have enough data to start training
     while replay_buffer.write_count <= init_random_frames:
         time.sleep(0.01)
 
