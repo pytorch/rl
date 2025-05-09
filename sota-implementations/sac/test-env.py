@@ -25,8 +25,8 @@ def main(cfg):  # noqa: F821
             with set_exploration_type("RANDOM"):
                 r = train_env.rollout(1000, exploration_policy, break_when_any_done=False, auto_cast_to_device=True)
             rs[-1].append(r.cpu())
-            train_env.close()
-            eval_env.close()
+            train_env.close(raise_if_closed=False)
+            eval_env.close(raise_if_closed=False)
         rs[-1] = torch.stack(rs[-1], dim=0)
     rs = torch.stack(rs, dim=0)
     for i in range(4):
