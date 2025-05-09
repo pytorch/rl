@@ -77,12 +77,15 @@ def main(cfg: DictConfig):  # noqa: F821
     _, eval_env = make_environment(cfg, logger=logger)
 
     # Create agent
+    dummy_train_env = make_train_environment(cfg)
     model, _ = make_sac_agent(
-        cfg, make_train_environment(cfg), eval_env, device
+        cfg, dummy_train_env, eval_env, device
     )
     _, exploration_policy = make_sac_agent(
-        cfg, make_train_environment(cfg), eval_env, "cuda:1"
+        cfg, dummy_train_env, eval_env, "cuda:1"
     )
+    dummy_train_env.close(raise_if_closed=False)
+    del dummy_train_env
     exploration_policy.load_state_dict(model[0].state_dict())
 
     # Create SAC loss
