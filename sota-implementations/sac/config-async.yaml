@@ -13,7 +13,7 @@ collector:
   frames_per_batch: 8000
   init_env_steps: 1000
   device: cuda:1
-  env_per_collector: 8
+  env_per_collector: 16
   reset_at_each_iter: False
   update_freq: 10_000
 

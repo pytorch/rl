@@ -5,16 +5,12 @@
 from __future__ import annotations
 
 import functools
-from copy import deepcopy
-from typing import Any
 
 import torch
-from tensordict import TensorDict
 from tensordict.nn import InteractionType, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn, optim
-from torchrl.collectors import aSyncDataCollector, SyncDataCollector, WeightUpdaterBase
-from torchrl.collectors.collectors import _map_weight
+from torchrl.collectors import aSyncDataCollector, SyncDataCollector
 from torchrl.data import (
     LazyMemmapStorage,
     LazyTensorStorage,

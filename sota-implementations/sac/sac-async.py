@@ -16,15 +16,16 @@ import time
 
 import warnings
 from functools import partial
-from tensordict import TensorDict
+
 import hydra
 import numpy as np
 import tensordict
 import torch
 import torch.cuda
 import tqdm
+from tensordict import TensorDict
 from tensordict.nn import CudaGraphModule
-from torchrl._utils import compile_with_warmup, timeit
+from torchrl._utils import compile_with_warmup, logger as torchrl_logger, timeit
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives import group_optimizers
 from torchrl.record.loggers import generate_exp_name, get_logger
@@ -39,7 +40,7 @@ from utils import (
     make_sac_optimizer,
     make_train_environment,
 )
-from torchrl._utils import logger as torchrl_logger
+
 torch.set_float32_matmul_precision("high")
 tensordict.nn.functional_modules._exclude_td_from_pytree().set()
 
@@ -78,12 +79,8 @@ def main(cfg: DictConfig):  # noqa: F821
 
     # Create agent
     dummy_train_env = make_train_environment(cfg)
-    model, _ = make_sac_agent(
-        cfg, dummy_train_env, eval_env, device
-    )
-    _, exploration_policy = make_sac_agent(
-        cfg, dummy_train_env, eval_env, "cuda:1"
-    )
+    model, _ = make_sac_agent(cfg, dummy_train_env, eval_env, device)
+    _, exploration_policy = make_sac_agent(cfg, dummy_train_env, eval_env, "cuda:1")
     dummy_train_env.close(raise_if_closed=False)
     del dummy_train_env
     exploration_policy.load_state_dict(model[0].state_dict())
@@ -155,7 +152,7 @@ def main(cfg: DictConfig):  # noqa: F821
     if cfg.compile.compile:
         update = compile_with_warmup(update, mode=compile_mode, warmup=2)
 
-    cudagraphs = cfg.compile.cudagraphs
+    cfg.compile.cudagraphs
     if cfg.compile.cudagraphs:
         warnings.warn(
             "CudaGraphModule is experimental and may lead to silently wrong results. Use with caution.",
@@ -184,7 +181,11 @@ def main(cfg: DictConfig):  # noqa: F821
 
     losses = []
     for i in range(total_iter * num_updates):
-        timeit.printevery(num_prints=total_iter * num_updates // log_freq, total_count=total_iter * num_updates, erase=True)
+        timeit.printevery(
+            num_prints=total_iter * num_updates // log_freq,
+            total_count=total_iter * num_updates,
+            erase=True,
+        )
 
         if (i % update_freq) == 0:
             # Update weights of the inference policy
@@ -221,9 +222,7 @@ def main(cfg: DictConfig):  # noqa: F821
                 metrics_to_log["train/alpha_loss"] = losses_m.get("loss_alpha")
                 metrics_to_log["train/alpha"] = loss_td["alpha"]
                 metrics_to_log["train/entropy"] = loss_td["entropy"]
-                metrics_to_log["train/collected_frames"] = int(
-                    collected_frames
-                )
+                metrics_to_log["train/collected_frames"] = int(collected_frames)
 
             # Evaluation
             with set_exploration_type(
