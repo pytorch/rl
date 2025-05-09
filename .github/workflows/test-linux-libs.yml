@@ -236,7 +236,7 @@ jobs:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments/Isaac') }}
-    uses: vmoens/test-infra/.github/workflows/isaac_linux_job_v2.yml@patch-1
+    uses: vmoens/test-infra/.github/workflows/isaac_linux_job_v2.yml@main
     with:
       test-infra-repository: vmoens/test-infra
       repository: pytorch/rl
