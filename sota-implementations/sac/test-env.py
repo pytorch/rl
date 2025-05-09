@@ -10,7 +10,7 @@ from tensordict import assert_close
 import hydra
 
 @hydra.main(version_base="1.1", config_path="", config_name="config")
-def main(cfg: DictConfig):  # noqa: F821
+def main(cfg):  # noqa: F821
     rs = []
     for worker_device in (None, "cpu", "cuda:0", "cuda:1"):
         rs.append([])
