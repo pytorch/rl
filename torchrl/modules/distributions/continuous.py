@@ -15,6 +15,7 @@ from torch import distributions as D, nn
 from torch.distributions import constraints
 from torch.distributions.transforms import _InverseTransform
 
+from torchrl._utils import safe_is_current_stream_capturing
 from torchrl.modules.distributions.truncated_normal import (
     TruncatedNormal as _TruncatedNormal,
 )
@@ -358,7 +359,7 @@ class TanhNormal(FasterTransformedDistribution):
             event_dims = min(1, loc.ndim)
 
         err_msg = "TanhNormal high values must be strictly greater than low values"
-        if not is_compiling() and not torch.cuda.is_current_stream_capturing():
+        if not is_compiling() and not safe_is_current_stream_capturing():
             if isinstance(high, torch.Tensor) or isinstance(low, torch.Tensor):
                 if not (high > low).all():
                     raise RuntimeError(err_msg)
@@ -377,7 +378,7 @@ class TanhNormal(FasterTransformedDistribution):
             low = torch.as_tensor(low, device=loc.device)
         elif low.device != loc.device:
             low = low.to(loc.device)
-        if not is_compiling() and not torch.cuda.is_current_stream_capturing():
+        if not is_compiling() and not safe_is_current_stream_capturing():
             self.non_trivial_max = (high != 1.0).any()
             self.non_trivial_min = (low != -1.0).any()
         else:
