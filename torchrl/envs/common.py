@@ -174,7 +174,10 @@ class EnvMetaData:
         specs = env.specs.to("cpu")
 
         batch_size = env.batch_size
-        env_str = str(env)
+        try:
+            env_str = str(env)
+        except Exception:
+            env_str = f"{env.__class__.__name__}()"
         device = env.device
         specs = specs.to("cpu")
         batch_locked = env.batch_locked
@@ -521,15 +524,15 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         output_spec.unlock_(recurse=True)
         input_spec.unlock_(recurse=True)
         if "full_observation_spec" not in output_spec:
-            output_spec["full_observation_spec"] = Composite()
+            output_spec["full_observation_spec"] = Composite(batch_size=batch_size)
         if "full_done_spec" not in output_spec:
-            output_spec["full_done_spec"] = Composite()
+            output_spec["full_done_spec"] = Composite(batch_size=batch_size)
         if "full_reward_spec" not in output_spec:
-            output_spec["full_reward_spec"] = Composite()
+            output_spec["full_reward_spec"] = Composite(batch_size=batch_size)
         if "full_state_spec" not in input_spec:
-            input_spec["full_state_spec"] = Composite()
+            input_spec["full_state_spec"] = Composite(batch_size=batch_size)
         if "full_action_spec" not in input_spec:
-            input_spec["full_action_spec"] = Composite()
+            input_spec["full_action_spec"] = Composite(batch_size=batch_size)
 
         if "is_closed" not in self.__dir__():
             self.is_closed = True
@@ -773,7 +776,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 "To set an environment spec, please use `env.observation_spec = obs_spec` (without the leading"
                 " underscore)."
             )
-        return super().__setattr__(key, value)
+        super().__setattr__(key, value)
 
     @property
     def batch_locked(self) -> bool:
@@ -850,7 +853,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def append_transform(
         self,
         transform: Transform | Callable[[TensorDictBase], TensorDictBase],  # noqa: F821
-    ) -> EnvBase:
+    ) -> torchrl.envs.TransformedEnv:  # noqa
         """Returns a transformed environment where the callable/transform passed is applied.
 
         Args:
@@ -1116,18 +1119,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             raise KeyError("Failed to find the action_spec.")
 
         if len(self.action_keys) > 1:
-            out = action_spec
+            return action_spec
         else:
             if len(self.action_keys) == 1 and self.action_keys[0] != "action":
-                warnings.warn(
-                    "You are querying a non-trivial, single action_spec, i.e., there is only "
-                    "one action known by the environment but it is not named `'action'`. "
-                    "Currently, env.action_spec returns the leaf but for consistency with the "
-                    "setter, this will return the full spec instead (from v0.8 and on).",
-                    category=DeprecationWarning,
-                )
+                return action_spec
             try:
-                out = action_spec[self.action_key]
+                return action_spec[self.action_key]
             except KeyError:
                 # the key may have changed
                 raise KeyError(
@@ -1137,8 +1134,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     "Make sure you rely on this  type of command "
                     "to set the action and other specs."
                 )
-
-        return out
 
     @action_spec.setter
     @_maybe_unlock
@@ -1332,13 +1327,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             return reward_spec
         else:
             if len(self.reward_keys) == 1 and self.reward_keys[0] != "reward":
-                warnings.warn(
-                    "You are querying a non-trivial, single reward_spec, i.e., there is only "
-                    "one reward known by the environment but it is not named `'reward'`. "
-                    "Currently, env.reward_spec returns the leaf but for consistency with the "
-                    "setter, this will return the full spec instead (from v0.8 and on).",
-                    category=DeprecationWarning,
-                )
+                return reward_spec
             return reward_spec[self.reward_keys[0]]
 
     @reward_spec.setter
@@ -2147,17 +2136,19 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             else next_tensordict_out.shape
         )
         for reward_key in self.reward_keys:
-            reward = next_tensordict_out.get(reward_key)
             expected_reward_shape = torch.Size(
                 [
                     *leading_batch_size,
                     *self.output_spec["full_reward_spec"][reward_key].shape,
                 ]
             )
-            actual_reward_shape = reward.shape
-            if actual_reward_shape != expected_reward_shape:
-                reward = reward.view(expected_reward_shape)
-                next_tensordict_out.set(reward_key, reward)
+            # If the reward has a variable shape, we don't want to perform this check
+            if all(s > 0 for s in expected_reward_shape):
+                reward = next_tensordict_out.get(reward_key)
+                actual_reward_shape = reward.shape
+                if actual_reward_shape != expected_reward_shape:
+                    reward = reward.view(expected_reward_shape)
+                    next_tensordict_out.set(reward_key, reward)
 
         self._complete_done(self.full_done_spec, next_tensordict_out)
 
@@ -2211,7 +2202,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         nondeterministic: bool = False,
         max_episode_steps: int | None = None,
         order_enforce: bool = True,
-        autoreset: bool = False,
+        autoreset: bool | None = None,
         disable_env_checker: bool = False,
         apply_api_compatibility: bool = False,
         **kwargs,
@@ -2273,12 +2264,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 enforcer wrapper should be applied to ensure users run functions
                 in the correct order.
                 Defaults to ``True``.
-            autoreset (bool, optional): [Gym >= 0.14] Whether the autoreset wrapper
+            autoreset (bool, optional): [Gym >= 0.14 and <1.0.0] Whether the autoreset wrapper
                 should be added such that reset does not need to be called.
                 Defaults to ``False``.
             disable_env_checker: [Gym >= 0.14] Whether the environment
                 checker should be disabled for the environment. Defaults to ``False``.
-            apply_api_compatibility: [Gym >= 0.26] If to apply the `StepAPICompatibility` wrapper.
+            apply_api_compatibility: [Gym >= 0.26 and <1.0.0] If to apply the `StepAPICompatibility` wrapper.
                 Defaults to ``False``.
             **kwargs: arbitrary keyword arguments which are passed to the environment constructor.
 
@@ -2400,7 +2391,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         nondeterministic: bool = False,
         max_episode_steps: int | None = None,
         order_enforce: bool = True,
-        autoreset: bool = False,
+        autoreset: bool | None = None,
         disable_env_checker: bool = False,
         apply_api_compatibility: bool = False,
         **kwargs,
@@ -2425,7 +2416,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             nondeterministic=nondeterministic,
             max_episode_steps=max_episode_steps,
             order_enforce=order_enforce,
-            autoreset=autoreset,
+            autoreset=bool(autoreset),
             disable_env_checker=disable_env_checker,
             apply_api_compatibility=apply_api_compatibility,
         )
@@ -2442,7 +2433,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         nondeterministic: bool = False,
         max_episode_steps: int | None = None,
         order_enforce: bool = True,
-        autoreset: bool = False,
+        autoreset: bool | None = None,
         disable_env_checker: bool = False,
         apply_api_compatibility: bool = False,
         **kwargs,
@@ -2474,7 +2465,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             nondeterministic=nondeterministic,
             max_episode_steps=max_episode_steps,
             order_enforce=order_enforce,
-            autoreset=autoreset,
+            autoreset=bool(autoreset),
             disable_env_checker=disable_env_checker,
         )
 
@@ -2490,7 +2481,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         nondeterministic: bool = False,
         max_episode_steps: int | None = None,
         order_enforce: bool = True,
-        autoreset: bool = False,
+        autoreset: bool | None = None,
         disable_env_checker: bool = False,
         apply_api_compatibility: bool = False,
         **kwargs,
@@ -2528,7 +2519,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             nondeterministic=nondeterministic,
             max_episode_steps=max_episode_steps,
             order_enforce=order_enforce,
-            autoreset=autoreset,
+            autoreset=bool(autoreset),
         )
 
     @implement_for("gym", "0.21", "0.24", class_method=True)
@@ -2543,7 +2534,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         nondeterministic: bool = False,
         max_episode_steps: int | None = None,
         order_enforce: bool = True,
-        autoreset: bool = False,
+        autoreset: bool | None = None,
         disable_env_checker: bool = False,
         apply_api_compatibility: bool = False,
         **kwargs,
@@ -2562,7 +2553,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     "disable_env_checker", gym.__version__
                 )
             )
-        if autoreset is not False:
+        if autoreset is not None:
             raise TypeError(
                 cls._GYM_UNRECOGNIZED_KWARG.format("autoreset", gym.__version__)
             )
@@ -2599,7 +2590,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         nondeterministic: bool = False,
         max_episode_steps: int | None = None,
         order_enforce: bool = True,
-        autoreset: bool = False,
+        autoreset: bool | None = None,
         disable_env_checker: bool = False,
         apply_api_compatibility: bool = False,
         **kwargs,
@@ -2617,7 +2608,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     "disable_env_checker", gym.__version__
                 )
             )
-        if autoreset is not False:
+        if autoreset is not None:
             raise TypeError(
                 cls._GYM_UNRECOGNIZED_KWARG.format("autoreset", gym.__version__)
             )
@@ -2645,7 +2636,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             max_episode_steps=max_episode_steps,
         )
 
-    @implement_for("gymnasium", class_method=True)
+    @implement_for("gymnasium", None, "1.0.0", class_method=True)
     def _register_gym(  # noqa: F811
         cls,
         id,
@@ -2657,7 +2648,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         nondeterministic: bool = False,
         max_episode_steps: int | None = None,
         order_enforce: bool = True,
-        autoreset: bool = False,
+        autoreset: bool | None = None,
         disable_env_checker: bool = False,
         apply_api_compatibility: bool = False,
         **kwargs,
@@ -2683,9 +2674,60 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             nondeterministic=nondeterministic,
             max_episode_steps=max_episode_steps,
             order_enforce=order_enforce,
-            autoreset=autoreset,
+            autoreset=bool(autoreset),
             disable_env_checker=disable_env_checker,
             apply_api_compatibility=apply_api_compatibility,
+        )
+
+    @implement_for("gymnasium", "1.1.0", class_method=True)
+    def _register_gym(  # noqa: F811
+        cls,
+        id,
+        entry_point: Callable | None = None,
+        transform: Transform | None = None,  # noqa: F821
+        info_keys: list[NestedKey] | None = None,
+        to_numpy: bool = False,
+        reward_threshold: float | None = None,
+        nondeterministic: bool = False,
+        max_episode_steps: int | None = None,
+        order_enforce: bool = True,
+        autoreset: bool | None = None,
+        disable_env_checker: bool = False,
+        apply_api_compatibility: bool = False,
+        **kwargs,
+    ):
+        import gymnasium
+        from torchrl.envs.libs._gym_utils import _TorchRLGymnasiumWrapper
+
+        if autoreset is not None:
+            raise TypeError(
+                f"the autoreset argument is deprecated in gymnasium>=1.0. Got autoreset={autoreset}"
+            )
+        if entry_point is None:
+            entry_point = cls
+
+        entry_point = partial(
+            _TorchRLGymnasiumWrapper,
+            entry_point=entry_point,
+            info_keys=info_keys,
+            to_numpy=to_numpy,
+            transform=transform,
+            **kwargs,
+        )
+        if apply_api_compatibility is not False:
+            raise TypeError(
+                cls._GYM_UNRECOGNIZED_KWARG.format(
+                    "apply_api_compatibility", gymnasium.__version__
+                )
+            )
+        return gymnasium.register(
+            id=id,
+            entry_point=entry_point,
+            reward_threshold=reward_threshold,
+            nondeterministic=nondeterministic,
+            max_episode_steps=max_episode_steps,
+            order_enforce=order_enforce,
+            disable_env_checker=disable_env_checker,
         )
 
     def forward(self, *args, **kwargs):
@@ -2843,7 +2885,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return seed
 
     @abc.abstractmethod
-    def _set_seed(self, seed: int | None):
+    def _set_seed(self, seed: int | None) -> None:
         raise NotImplementedError
 
     def set_state(self):

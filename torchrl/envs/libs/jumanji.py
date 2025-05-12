@@ -517,7 +517,7 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
     def key(self, value):
         self._key = value
 
-    def _set_seed(self, seed):
+    def _set_seed(self, seed: int | None) -> None:
         import jax
 
         if seed is None:

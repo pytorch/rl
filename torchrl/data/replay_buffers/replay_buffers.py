@@ -258,6 +258,8 @@ class ReplayBuffer:
         if self._prefetch_cap:
             self._prefetch_executor = ThreadPoolExecutor(max_workers=self._prefetch_cap)
 
+        if shared and prefetch:
+            raise ValueError("Cannot share prefetched replay buffers.")
         self.shared = shared
         self.share(self.shared)
 
@@ -446,6 +448,10 @@ class ReplayBuffer:
     def __len__(self) -> int:
         with self._replay_lock:
             return len(self._storage)
+
+    def _getattr(self, attr):
+        # To access properties in remote settings, see RayReplayBuffer.write_count for instance
+        return getattr(self, attr)
 
     @property
     def write_count(self):

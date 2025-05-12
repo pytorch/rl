@@ -10,7 +10,7 @@ import torch
 from tensordict.nn import InteractionType, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn, optim
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import aSyncDataCollector, SyncDataCollector
 from torchrl.data import (
     LazyMemmapStorage,
     LazyTensorStorage,
@@ -34,7 +34,6 @@ from torchrl.modules.distributions import TanhNormal
 from torchrl.objectives import SoftUpdate
 from torchrl.objectives.sac import SACLoss
 from torchrl.record import VideoRecorder
-
 
 # ====================================================================
 # Environment utils
@@ -104,6 +103,21 @@ def make_environment(cfg, logger=None):
     return train_env, eval_env
 
 
+def make_train_environment(cfg):
+    """Make environments for training and evaluation."""
+    partial = functools.partial(env_maker, cfg=cfg)
+    parallel_env = ParallelEnv(
+        cfg.collector.env_per_collector,
+        EnvCreator(partial),
+        serial_for_single=True,
+    )
+    parallel_env.set_seed(cfg.env.seed)
+
+    train_env = apply_env_transforms(parallel_env, cfg.env.max_episode_steps)
+
+    return train_env
+
+
 # ====================================================================
 # Collector and replay buffer
 # ---------------------------
@@ -114,7 +128,9 @@ def make_collector(cfg, train_env, actor_model_explore, compile_mode):
     device = cfg.collector.device
     if device in ("", None):
         if torch.cuda.is_available():
-            device = torch.device("cuda:0")
+            if torch.cuda.device_count() < 2:
+                raise RuntimeError("Requires >= 2 GPUs")
+            device = torch.device("cuda:1")
         else:
             device = torch.device("cpu")
     collector = SyncDataCollector(
@@ -125,9 +141,44 @@ def make_collector(cfg, train_env, actor_model_explore, compile_mode):
         total_frames=cfg.collector.total_frames,
         device=device,
         compile_policy={"mode": compile_mode} if compile_mode else False,
-        cudagraph_policy=cfg.compile.cudagraphs,
+        cudagraph_policy={"warmup": 10} if cfg.compile.cudagraphs else False,
     )
     collector.set_seed(cfg.env.seed)
+    return collector
+
+
+def flatten(td):
+    return td.reshape(-1)
+
+
+def make_collector_async(
+    cfg, train_env_make, actor_model_explore, compile_mode, replay_buffer
+):
+    """Make async collector."""
+    device = cfg.collector.device
+    if device in ("", None):
+        if torch.cuda.is_available():
+            device = torch.device("cuda:0")
+        else:
+            device = torch.device("cpu")
+
+    collector = aSyncDataCollector(
+        train_env_make,
+        actor_model_explore,
+        init_random_frames=0,  # Currently not supported, but accounted for in script: cfg.collector.init_random_frames,
+        frames_per_batch=cfg.collector.frames_per_batch,
+        total_frames=cfg.collector.total_frames,
+        device=device,
+        env_device=torch.device("cpu"),
+        compile_policy={"mode": compile_mode, "warmup": 5} if compile_mode else False,
+        cudagraph_policy={"warmup": 20} if cfg.compile.cudagraphs else False,
+        replay_buffer=replay_buffer,
+        extend_buffer=True,
+        postproc=flatten,
+        no_cuda_sync=True,
+    )
+    collector.set_seed(cfg.env.seed)
+    collector.start()
     return collector
 
 
@@ -138,6 +189,7 @@ def make_replay_buffer(
     scratch_dir=None,
     device="cpu",
     prefetch=3,
+    shared: bool = False,
 ):
     storage_cls = (
         functools.partial(LazyTensorStorage, device=device)
@@ -154,6 +206,7 @@ def make_replay_buffer(
                 buffer_size,
             ),
             batch_size=batch_size,
+            shared=shared,
         )
     else:
         replay_buffer = TensorDictReplayBuffer(
@@ -163,6 +216,7 @@ def make_replay_buffer(
                 buffer_size,
             ),
             batch_size=batch_size,
+            shared=shared,
         )
     if scratch_dir:
         replay_buffer.append_transform(lambda td: td.to(device))

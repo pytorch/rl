@@ -5,6 +5,7 @@ unset PYTORCH_VERSION
 # so no need to set PYTORCH_VERSION.
 # In fact, keeping PYTORCH_VERSION forces us to hardcode PyTorch version in config.
 apt-get update && apt-get install -y \
+    cmake \
     git \
     wget \
     gcc \

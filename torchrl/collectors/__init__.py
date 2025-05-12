@@ -13,20 +13,18 @@ from .collectors import (
     SyncDataCollector,
 )
 from .weight_update import (
-    LocalWeightUpdaterBase,
-    MultiProcessedRemoteWeightUpdate,
-    RayRemoteWeightUpdater,
-    RemoteWeightUpdaterBase,
-    VanillaLocalWeightUpdater,
+    MultiProcessedWeightUpdate,
+    RayWeightUpdater,
+    VanillaWeightUpdater,
+    WeightUpdaterBase,
 )
 
 __all__ = [
     "RandomPolicy",
-    "LocalWeightUpdaterBase",
-    "RemoteWeightUpdaterBase",
-    "VanillaLocalWeightUpdater",
-    "RayRemoteWeightUpdater",
-    "MultiProcessedRemoteWeightUpdate",
+    "WeightUpdaterBase",
+    "VanillaWeightUpdater",
+    "RayWeightUpdater",
+    "MultiProcessedWeightUpdate",
     "aSyncDataCollector",
     "DataCollectorBase",
     "MultiaSyncDataCollector",

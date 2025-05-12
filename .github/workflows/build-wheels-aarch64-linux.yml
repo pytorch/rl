@@ -35,6 +35,7 @@ jobs:
           - repository: pytorch/rl
             smoke-test-script: test/smoke_test.py
             package-name: torchrl
+            pre-script: .github/scripts/pre-build-script.sh
     name: pytorch/rl
     uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@main
     with:

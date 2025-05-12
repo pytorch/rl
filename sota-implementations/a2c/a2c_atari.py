@@ -47,7 +47,9 @@ def main(cfg: DictConfig):  # noqa: F821
     test_interval = cfg.logger.test_interval // frame_skip
 
     # Create models (check utils_atari.py)
-    actor, critic, critic_head = make_ppo_models(cfg.env.env_name, device=device)
+    actor, critic, critic_head = make_ppo_models(
+        cfg.env.env_name, device=device, gym_backend=cfg.env.backend
+    )
     with from_module(actor).data.to("meta").to_module(actor):
         actor_eval = deepcopy(actor)
         actor_eval.eval()
@@ -107,7 +109,13 @@ def main(cfg: DictConfig):  # noqa: F821
         )
 
     # Create test environment
-    test_env = make_parallel_env(cfg.env.env_name, 1, device, is_test=True)
+    test_env = make_parallel_env(
+        cfg.env.env_name,
+        num_envs=1,
+        device=device,
+        gym_backend=cfg.env.backend,
+        is_test=True,
+    )
     test_env.set_seed(0)
     if cfg.logger.video:
         test_env = test_env.insert_transform(
@@ -162,7 +170,12 @@ def main(cfg: DictConfig):  # noqa: F821
 
     # Create collector
     collector = SyncDataCollector(
-        create_env_fn=make_parallel_env(cfg.env.env_name, cfg.env.num_envs, device),
+        create_env_fn=make_parallel_env(
+            cfg.env.env_name,
+            num_envs=cfg.env.num_envs,
+            device=device,
+            gym_backend=cfg.env.backend,
+        ),
         policy=actor,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
@@ -170,7 +183,7 @@ def main(cfg: DictConfig):  # noqa: F821
         storing_device=device,
         policy_device=device,
         compile_policy={"mode": compile_mode} if cfg.compile.compile else False,
-        cudagraph_policy=cfg.compile.cudagraphs,
+        cudagraph_policy={"warmup": 10} if cfg.compile.cudagraphs else False,
     )
 
     # Main loop
