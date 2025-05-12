@@ -50,7 +50,7 @@ git clone https://github.com/isaac-sim/IsaacLab.git
 conda install conda-forge::"cmake>3.22" -y
 
 cd IsaacLab
-conda run -p ${conda_dir} ./isaaclab.sh --install skrl
+conda run -p ${conda_dir} ./isaaclab.sh --install none
 cd ../
 
 # install tensordict
