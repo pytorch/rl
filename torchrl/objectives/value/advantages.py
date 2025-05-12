@@ -1239,6 +1239,9 @@ class GAE(ValueEstimatorBase):
             :meth:`~.value_estimate`.
             Negative dimensions are considered with respect to the input
             tensordict.
+        auto_reset_env (bool, optional): if ``True``, the last ``"next"`` state
+            of the episode isn't valid, so the GAE calculation will use the ``value``
+            instead of ``next_value`` to bootstrap truncated episodes.
 
     GAE will return an :obj:`"advantage"` entry containing the advantage value. It will also
     return a :obj:`"value_target"` entry with the return value that is to be used
@@ -1270,6 +1273,7 @@ class GAE(ValueEstimatorBase):
         shifted: bool = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
+        auto_reset_env: bool = False,
     ):
         super().__init__(
             shifted=shifted,
@@ -1296,6 +1300,7 @@ class GAE(ValueEstimatorBase):
         self.average_gae = average_gae
         self.vectorized = vectorized
         self.time_dim = time_dim
+        self.auto_reset_env = auto_reset_env
 
     @property
     def vectorized(self):
@@ -1430,6 +1435,12 @@ class GAE(ValueEstimatorBase):
         done = tensordict.get(("next", self.tensor_keys.done))
         terminated = tensordict.get(("next", self.tensor_keys.terminated), default=done)
         time_dim = self._get_time_dim(time_dim, tensordict)
+
+        if self.auto_reset_env:
+            truncated = tensordict.get(("next", "truncated"))
+            if truncated.any():
+                reward += gamma * value * truncated
+
         if self.vectorized:
             adv, value_target = vec_generalized_advantage_estimate(
                 gamma,
@@ -1438,7 +1449,7 @@ class GAE(ValueEstimatorBase):
                 next_value,
                 reward,
                 done=done,
-                terminated=terminated,
+                terminated=terminated if not self.auto_reset_env else done,
                 time_dim=time_dim,
             )
         else:
@@ -1449,7 +1460,7 @@ class GAE(ValueEstimatorBase):
                 next_value,
                 reward,
                 done=done,
-                terminated=terminated,
+                terminated=terminated if not self.auto_reset_env else done,
                 time_dim=time_dim,
             )
 

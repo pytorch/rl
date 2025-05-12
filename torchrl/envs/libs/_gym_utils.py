@@ -125,7 +125,7 @@ if _has_gymnasium:
     import gymnasium
 
     class _TorchRLGymnasiumWrapper(gymnasium.Env, _BaseGymWrapper):
-        @implement_for("gymnasium", "1.0.0")
+        @implement_for("gymnasium", "1.0.0", "1.1.0")
         def step(self, action):  # noqa: F811
             raise ImportError(GYMNASIUM_1_ERROR)
 
@@ -157,9 +157,43 @@ if _has_gymnasium:
                 out = tree_map(lambda x: x.detach().cpu().numpy(), out)
             return out
 
+        @implement_for("gymnasium", "1.1.0")
+        def step(self, action):  # noqa: F811
+            action_keys = self._action_keys
+            if len(action_keys) == 1:
+                self._tensordict.set(action_keys[0], action)
+            else:
+                raise RuntimeError(
+                    "Wrapping environments with more than one action key is not supported yet."
+                )
+            self.torchrl_env.step(self._tensordict)
+            _tensordict = step_mdp(self._tensordict)
+            observation = self._tensordict.get("next")
+            if self.info_keys:
+                info = observation.select(*self.info_keys).to_dict()
+            else:
+                info = {}
+            observation = observation.select(*self._observation_keys).to_dict()
+            reward = self._tensordict.get(("next", "reward"))
+            terminated = self._tensordict.get(("next", "terminated"))
+            truncated = self._tensordict.get(
+                ("next", "truncated"), torch.zeros_like(terminated)
+            )
+            self._tensordict = _tensordict.select(*self._input_keys)
+            out = (observation, reward, terminated, truncated, info)
+            if self.to_numpy:
+                out = tree_map(lambda x: x.detach().cpu().numpy(), out)
+            return out
+
         @implement_for("gymnasium", None, "1.0.0")
-        def reset(self):  # noqa: F811
-            self._tensordict = self.torchrl_env.reset()
+        def reset(
+            self, seed: int | None = None, options: dict | None = None
+        ):  # noqa: F811
+            if seed is not None:
+                self.torchrl_env.set_seed(seed)
+            if options is None:
+                options = {}
+            self._tensordict = self.torchrl_env.reset(**options)
             observation = self._tensordict
             if self.info_keys:
                 info = observation.select(*self.info_keys).to_dict()
@@ -171,9 +205,29 @@ if _has_gymnasium:
                 out = tree_map(lambda x: x.detach().cpu().numpy(), out)
             return out
 
-        @implement_for("gymnasium", "1.0.0")
+        @implement_for("gymnasium", "1.0.0", "1.1.0")
         def reset(self):  # noqa: F811
             raise ImportError(GYMNASIUM_1_ERROR)
+
+        @implement_for("gymnasium", "1.1.0")
+        def reset(  # noqa: F811
+            self, seed: int | None = None, options: dict | None = None
+        ):
+            if seed is not None:
+                self.torchrl_env.set_seed(seed)
+            if options is None:
+                options = {}
+            self._tensordict = self.torchrl_env.reset(**options)
+            observation = self._tensordict
+            if self.info_keys:
+                info = observation.select(*self.info_keys).to_dict()
+            else:
+                info = {}
+            observation = observation.select(*self._observation_keys).to_dict()
+            out = observation, info
+            if self.to_numpy:
+                out = tree_map(lambda x: x.detach().cpu().numpy(), out)
+            return out
 
 else:
 

@@ -26,7 +26,7 @@ export MUJOCO_GL=egl
 conda create -n rl-sota-bench python=3.10 -y 
 conda install anaconda::libglu -y
 pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu121
-pip3 install "gymnasium[accept-rom-license,atari,mujoco]" vmas tqdm wandb pygame "moviepy<2.0.0" imageio submitit hydra-core transformers
+pip3 install "gymnasium[atari,mujoco]" vmas tqdm wandb pygame "moviepy<2.0.0" imageio submitit hydra-core transformers
 
 cd /path/to/tensordict
 python setup.py develop

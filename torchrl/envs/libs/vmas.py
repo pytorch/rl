@@ -490,7 +490,7 @@ class VmasWrapper(_EnvWrapper):
     def _init_env(self) -> int | None:
         pass
 
-    def _set_seed(self, seed: int | None):
+    def _set_seed(self, seed: int | None) -> None:
         self._env.seed(seed)
 
     def _reset(

@@ -81,6 +81,38 @@ if RL_WARNINGS:
 
 BATCHED_PIPE_TIMEOUT = float(os.environ.get("BATCHED_PIPE_TIMEOUT", "10000.0"))
 
+_TORCH_DTYPES = (
+    torch.bfloat16,
+    torch.bool,
+    torch.complex128,
+    torch.complex32,
+    torch.complex64,
+    torch.float16,
+    torch.float32,
+    torch.float64,
+    torch.int16,
+    torch.int32,
+    torch.int64,
+    torch.int8,
+    torch.qint32,
+    torch.qint8,
+    torch.quint4x2,
+    torch.quint8,
+    torch.uint8,
+)
+if hasattr(torch, "uint16"):
+    _TORCH_DTYPES = _TORCH_DTYPES + (torch.uint16,)
+if hasattr(torch, "uint32"):
+    _TORCH_DTYPES = _TORCH_DTYPES + (torch.uint32,)
+if hasattr(torch, "uint64"):
+    _TORCH_DTYPES = _TORCH_DTYPES + (torch.uint64,)
+_STR_DTYPE_TO_DTYPE = {str(dtype): dtype for dtype in _TORCH_DTYPES}
+_STRDTYPE2DTYPE = _STR_DTYPE_TO_DTYPE
+_DTYPE_TO_STR_DTYPE = {
+    dtype: str_dtype for str_dtype, dtype in _STR_DTYPE_TO_DTYPE.items()
+}
+_DTYPE2STRDTYPE = _STR_DTYPE_TO_DTYPE
+
 
 class timeit:
     """A dirty but easy to use decorator for profiling code."""
@@ -423,10 +455,17 @@ class implement_for:
         else:
             # class not yet defined
             return
+        try:
+            delattr(cls, self.fn.__name__)
+        except AttributeError:
+            pass
+
+        name = self.fn.__name__
         if self.class_method:
-            setattr(cls, self.fn.__name__, classmethod(self.fn))
+            fn = classmethod(self.fn)
         else:
-            setattr(cls, self.fn.__name__, self.fn)
+            fn = self.fn
+        setattr(cls, name, fn)
 
     @classmethod
     def import_module(cls, module_name: Callable | str) -> str:
@@ -543,7 +582,7 @@ class implement_for:
         return (
             f"{self.__class__.__name__}("
             f"module_name={self.module_name}({self.from_version, self.to_version}), "
-            f"fn_name={self.fn.__name__}, cls={self._get_cls(self.fn)}, is_set={self.do_set})"
+            f"fn_name={self.fn.__name__}, cls={self._get_cls(self.fn)})"
         )
 
 

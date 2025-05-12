@@ -228,7 +228,7 @@ class SMACv2Wrapper(_EnvWrapper):
             dtype=torch.bool,
             device=self.device,
         )
-        self.action_spec = self._make_action_spec()
+        self.full_action_spec = self._make_action_spec()
         self.observation_spec = self._make_observation_spec()
 
     def _init_env(self) -> None:
@@ -311,7 +311,7 @@ class SMACv2Wrapper(_EnvWrapper):
         )
         return spec
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: Optional[int]) -> None:
         if seed is not None:
             raise NotImplementedError(
                 "Seed cannot be changed once environment was created."
@@ -356,7 +356,7 @@ class SMACv2Wrapper(_EnvWrapper):
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         # perform actions
         action = tensordict.get(("agents", "action"))
-        action_np = self.action_spec.to_numpy(action)
+        action_np = self.full_action_spec[self.action_key].to_numpy(action)
 
         # Actions are validated by the environment.
         try:
@@ -407,7 +407,7 @@ class SMACv2Wrapper(_EnvWrapper):
         mask = torch.tensor(
             self.get_avail_actions(), dtype=torch.bool, device=self.device
         )
-        self.action_spec.update_mask(mask)
+        self.full_action_spec[self.action_key].update_mask(mask)
         return mask
 
     def close(self, *, raise_if_closed: bool = True):

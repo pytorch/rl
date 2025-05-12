@@ -93,10 +93,11 @@ fi
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  git clone https://github.com/pytorch/tensordict
-  cd tensordict
-  python setup.py develop
-  cd ..
+  conda install anaconda::cmake -y
+
+  python -m pip install "pybind11[global]"
+
+  python -m pip install git+https://github.com/pytorch/tensordict
 else
   pip3 install tensordict
 fi

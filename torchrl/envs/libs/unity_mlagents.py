@@ -277,7 +277,7 @@ class UnityMLAgentsWrapper(_EnvWrapper):
         self.reward_spec = Composite(reward_spec)
         self.done_spec = Composite(done_spec)
 
-    def _set_seed(self, seed):
+    def _set_seed(self, seed: int | None) -> None:
         if seed is not None:
             raise NotImplementedError("This environment has no seed.")
 

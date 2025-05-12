@@ -3,9 +3,10 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from .async_envs import AsyncEnvPool, ProcessorAsyncEnvPool, ThreadingAsyncEnvPool
 from .batched_envs import ParallelEnv, SerialEnv
 from .common import EnvBase, EnvMetaData, make_tensordict
-from .custom import ChessEnv, LLMEnv, LLMHashingEnv, PendulumEnv, TicTacToeEnv
+from .custom import ChessEnv, LLMHashingEnv, PendulumEnv, TicTacToeEnv
 from .env_creator import env_creator, EnvCreator, get_env_metadata
 from .gym_like import default_info_dict_reader, GymLikeEnv
 from .libs import (
@@ -46,8 +47,6 @@ from .model_based import DreamerDecoder, DreamerEnv, ModelBasedEnvBase
 from .transforms import (
     ActionDiscretizer,
     ActionMask,
-    as_nested_tensor,
-    as_padded_tensor,
     AutoResetEnv,
     AutoResetTransform,
     BatchSizeTransform,
@@ -60,7 +59,6 @@ from .transforms import (
     Compose,
     ConditionalSkip,
     Crop,
-    DataLoadingPrimer,
     DeviceCastTransform,
     DiscreteActionProjection,
     DoubleToFloat,
@@ -111,6 +109,7 @@ from .transforms import (
     VC1Transform,
     VecGymEnvTransform,
     VecNorm,
+    VecNormV2,
     VIPRewardTransform,
     VIPTransform,
 )
@@ -131,8 +130,12 @@ from .utils import (
 __all__ = [
     "ActionDiscretizer",
     "ActionMask",
+    "VecNormV2",
     "AutoResetEnv",
     "AutoResetTransform",
+    "AsyncEnvPool",
+    "ProcessorAsyncEnvPool",
+    "ThreadingAsyncEnvPool",
     "BatchSizeTransform",
     "BinarizeReward",
     "BraxEnv",
@@ -149,7 +152,6 @@ __all__ = [
     "DMControlEnv",
     "DMControlWrapper",
     "DTypeCastTransform",
-    "DataLoadingPrimer",
     "DeviceCastTransform",
     "DiscreteActionProjection",
     "DoubleToFloat",
@@ -176,7 +178,6 @@ __all__ = [
     "JumanjiEnv",
     "JumanjiWrapper",
     "KLRewardTransform",
-    "LLMEnv",
     "LLMHashingEnv",
     "LineariseRewards",
     "MOGymEnv",
@@ -241,8 +242,6 @@ __all__ = [
     "VecNorm",
     "VmasEnv",
     "VmasWrapper",
-    "as_nested_tensor",
-    "as_padded_tensor",
     "check_env_specs",
     "check_marl_grouping",
     "default_info_dict_reader",

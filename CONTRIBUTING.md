@@ -17,6 +17,7 @@ or the git version of the library:
 ```
 pip install git+https://github.com/pytorch/tensordict
 ```
+This command requires `pybind11[global]` and cmake to be installed.
 
 Once cloned, make sure you install torchrl in develop mode by running
 ```

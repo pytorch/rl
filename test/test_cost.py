@@ -2,9 +2,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import argparse
 import contextlib
 import functools
+import importlib.util
 import itertools
 import operator
 import os
@@ -12,7 +15,6 @@ import sys
 import warnings
 from copy import deepcopy
 from dataclasses import asdict, dataclass
-from typing import Optional
 
 import numpy as np
 import pytest
@@ -165,6 +167,8 @@ except ImportError as err:
     _has_functorch = False
     FUNCTORCH_ERR = str(err)
 
+_has_transformers = bool(importlib.util.find_spec("transformers"))
+
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 IS_WINDOWS = sys.platform == "win32"
 
@@ -176,6 +180,9 @@ pytestmark = [
     ),
     pytest.mark.filterwarnings(
         "ignore:dep_util is Deprecated. Use functions from setuptools instead"
+    ),
+    pytest.mark.filterwarnings(
+        "ignore:The PyTorch API of nested tensors is in prototype"
     ),
 ]
 
@@ -270,7 +277,7 @@ class MARLEnv(EnvBase):
     def _reset(self, tensordic):
         ...
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None) -> None:
         ...
 
 
@@ -7991,6 +7998,7 @@ class TestDiscreteCQL(LossModuleTestBase):
                 assert loss[key].shape == torch.Size([])
 
 
+@pytest.mark.skipif(not _has_transformers, reason="requires transformers lib")
 class TestPPO(LossModuleTestBase):
     seed = 0
 
@@ -13682,7 +13690,8 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         assert target_val.device == source_val.device, key
         if target_val.dtype == torch.long:
             continue
-        d0 += (target_val - source_val).norm().item()
+        with torch.no_grad():
+            d0 += (target_val - source_val).norm().item()
 
     assert d0 > 0
     if mode == "hard":
@@ -13696,7 +13705,8 @@ def test_updater(mode, value_network_update_interval, device, dtype):
                 target_val = upd._targets[key]
                 if target_val.dtype == torch.long:
                     continue
-                d1 += (target_val - source_val).norm().item()
+                with torch.no_grad():
+                    d1 += (target_val - source_val).norm().item()
 
             assert d1 == d0, i
             assert upd.counter == i
@@ -13711,7 +13721,8 @@ def test_updater(mode, value_network_update_interval, device, dtype):
             target_val = upd._targets[key]
             if target_val.dtype == torch.long:
                 continue
-            d1 += (target_val - source_val).norm().item()
+            with torch.no_grad():
+                d1 += (target_val - source_val).norm().item()
         assert d1 < d0
 
     elif mode == "soft":
@@ -13724,7 +13735,8 @@ def test_updater(mode, value_network_update_interval, device, dtype):
             target_val = upd._targets[key]
             if target_val.dtype == torch.long:
                 continue
-            d1 += (target_val - source_val).norm().item()
+            with torch.no_grad():
+                d1 += (target_val - source_val).norm().item()
         assert d1 < d0
     with pytest.warns(UserWarning, match="already"):
         upd.init_()
@@ -13737,7 +13749,8 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         target_val = upd._targets[key]
         if target_val.dtype == torch.long:
             continue
-        d2 += (target_val - source_val).norm().item()
+        with torch.no_grad():
+            d2 += (target_val - source_val).norm().item()
     assert d2 < 1e-6
 
 

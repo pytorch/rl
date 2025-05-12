@@ -1,5 +1,5 @@
 @echo off
-set TORCHRL_BUILD_VERSION=0.7.0
+set TORCHRL_BUILD_VERSION=0.8.0
 echo TORCHRL_BUILD_VERSION is set to %TORCHRL_BUILD_VERSION%
 
 @echo on
@@ -35,6 +35,9 @@ if "%VSDEVCMD_ARGS%" == "" (
 if "%CU_VERSION%" == "xpu" call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
 
 set DISTUTILS_USE_SDK=1
+
+:: Upgrade setuptools before installing PyTorch
+pip install --upgrade setuptools==72.1.0 || exit /b 1
 
 set args=%1
 shift

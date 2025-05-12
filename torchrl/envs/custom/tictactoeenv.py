@@ -251,7 +251,7 @@ class TicTacToeEnv(EnvBase):
             return torch.where(done, state, state_select)
         return state
 
-    def _set_seed(self, seed: int | None):
+    def _set_seed(self, seed: int | None) -> None:
         ...
 
     @staticmethod

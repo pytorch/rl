@@ -2,7 +2,7 @@ channels:
   - pytorch
   - defaults
 dependencies:
-  - pip<25.0
+  - pip
   - protobuf
   - pip:
     - hypothesis

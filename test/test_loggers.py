@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import argparse
 import importlib.util
@@ -13,6 +14,7 @@ from time import sleep
 
 import pytest
 import torch
+from packaging import version
 from tensordict import MemoryMappedTensor
 
 from torchrl.envs import check_env_specs, GymEnv, ParallelEnv
@@ -24,6 +26,12 @@ from torchrl.record.recorder import PixelRenderTransform, VideoRecorder
 
 if _has_tv:
     import torchvision
+
+    TORCHVISION_VERSION = version.parse(
+        version.parse(torchvision.__version__).base_version
+    )
+else:
+    TORCHVISION_VERSION = version.parse("0.0.1")
 
 if _has_tb:
     from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
@@ -162,6 +170,9 @@ class TestCSVLogger:
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
     @pytest.mark.parametrize(
         "video_format", ["pt", "memmap"] + ["mp4"] if _has_tv else []
+    )
+    @pytest.mark.skipif(
+        TORCHVISION_VERSION < version.parse("0.20.0"), reason="av compatibility bug"
     )
     def test_log_video(self, steps, video_format, tmpdir):
         torch.manual_seed(0)

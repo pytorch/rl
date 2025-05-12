@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import argparse
 import functools
@@ -186,7 +187,7 @@ class TestTDModule:
 
         # test bounds
         if not safe and spec_type == "bounded":
-            assert ((td.get("out") > 0.1) | (td.get("out") < -0.1)).any()
+            assert ((td.get("out") > 0.1) | (td.get("out") < -0.1)).any(), td.get("out")
         elif safe and spec_type == "bounded":
             assert ((td.get("out") < 0.1) | (td.get("out") > -0.1)).all()
 
@@ -756,23 +757,6 @@ class TestLSTMModule:
             assert lstm_module.recurrent_mode
         assert lstm_module.recurrent_mode is bool(default_val)
 
-    @pytest.mark.filterwarnings("ignore::DeprecationWarning")
-    def test_set_temporal_mode(self):
-        lstm_module = LSTMModule(
-            input_size=3,
-            hidden_size=12,
-            batch_first=True,
-            in_keys=["observation", "hidden0", "hidden1"],
-            out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
-        )
-        assert lstm_module.set_recurrent_mode(False) is lstm_module
-        assert not lstm_module.set_recurrent_mode(False).recurrent_mode
-        assert lstm_module.set_recurrent_mode(True) is not lstm_module
-        assert lstm_module.set_recurrent_mode(True).recurrent_mode
-        assert set(lstm_module.set_recurrent_mode(True).parameters()) == set(
-            lstm_module.parameters()
-        )
-
     def test_python_cudnn(self):
         lstm_module = LSTMModule(
             input_size=3,
@@ -854,44 +838,6 @@ class TestLSTMModule:
         ).any()
 
     @pytest.mark.parametrize("shape", [[], [2], [2, 3], [2, 3, 4]])
-    @pytest.mark.parametrize("t", [1, 10])
-    @pytest.mark.parametrize("python_based", [True, False])
-    def test_single_step_vs_multi(self, shape, t, python_based):
-        td = TensorDict(
-            {
-                "observation": torch.arange(t, dtype=torch.float32)
-                .unsqueeze(-1)
-                .expand(*shape, t, 3),
-                "is_init": torch.zeros(*shape, t, 1, dtype=torch.bool),
-            },
-            [*shape, t],
-        )
-        lstm_module_ss = LSTMModule(
-            input_size=3,
-            hidden_size=12,
-            batch_first=True,
-            in_keys=["observation", "hidden0", "hidden1"],
-            out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
-            python_based=python_based,
-        )
-        lstm_module_ms = lstm_module_ss.set_recurrent_mode()
-        lstm_module_ms(td)
-        td_ss = TensorDict(
-            {
-                "observation": torch.zeros(*shape, 3),
-                "is_init": torch.zeros(*shape, 1, dtype=torch.bool),
-            },
-            shape,
-        )
-        for _t in range(t):
-            lstm_module_ss(td_ss)
-            td_ss = step_mdp(td_ss, keep_other=True)
-            td_ss["observation"][:] = _t + 1
-        torch.testing.assert_close(
-            td_ss["hidden0"], td["next", "hidden0"][..., -1, :, :]
-        )
-
-    @pytest.mark.parametrize("shape", [[], [2], [2, 3], [2, 3, 4]])
     @pytest.mark.parametrize("python_based", [False, True])
     def test_multi_consecutive(self, shape, python_based):
         t = 20
@@ -918,8 +864,8 @@ class TestLSTMModule:
             out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
             python_based=python_based,
         )
-        lstm_module_ms = lstm_module_ss.set_recurrent_mode()
-        lstm_module_ms(td)
+        with set_recurrent_mode(True):
+            lstm_module_ss(td)
         td_ss = TensorDict(
             {
                 "observation": torch.zeros(*shape, 3),
@@ -941,8 +887,18 @@ class TestLSTMModule:
     @pytest.mark.parametrize("parallel", [True, False])
     @pytest.mark.parametrize("heterogeneous", [True, False])
     @pytest.mark.parametrize("within", [False, True])
-    def test_lstm_parallel_env(self, python_based, parallel, heterogeneous, within):
-        from torchrl.envs import InitTracker, ParallelEnv, TransformedEnv
+    def test_lstm_parallel_env(
+        self, python_based, parallel, heterogeneous, within, maybe_fork_ParallelEnv
+    ):
+        self._test_lstm_parallel_env(
+            python_based, parallel, heterogeneous, within, maybe_fork_ParallelEnv
+        )
+
+    def _test_lstm_parallel_env(
+        self, python_based, parallel, heterogeneous, within, maybe_fork_ParallelEnv
+    ):
+
+        from torchrl.envs import InitTracker, TransformedEnv
 
         torch.manual_seed(0)
         num_envs = 3
@@ -958,7 +914,7 @@ class TestLSTMModule:
             python_based=python_based,
         )
         if parallel:
-            cls = ParallelEnv
+            cls = maybe_fork_ParallelEnv
         else:
             cls = SerialEnv
 
@@ -1022,12 +978,22 @@ class TestLSTMModule:
     @pytest.mark.parametrize("python_based", [True, False])
     @pytest.mark.parametrize("parallel", [True, False])
     @pytest.mark.parametrize("heterogeneous", [True, False])
-    def test_lstm_parallel_within(self, python_based, parallel, heterogeneous):
-        out_within = self.test_lstm_parallel_env(
-            python_based, parallel, heterogeneous, within=True
+    def test_lstm_parallel_within(
+        self, python_based, parallel, heterogeneous, maybe_fork_ParallelEnv
+    ):
+        out_within = self._test_lstm_parallel_env(
+            python_based,
+            parallel,
+            heterogeneous,
+            within=True,
+            maybe_fork_ParallelEnv=maybe_fork_ParallelEnv,
         )
-        out_not_within = self.test_lstm_parallel_env(
-            python_based, parallel, heterogeneous, within=False
+        out_not_within = self._test_lstm_parallel_env(
+            python_based,
+            parallel,
+            heterogeneous,
+            within=False,
+            maybe_fork_ParallelEnv=maybe_fork_ParallelEnv,
         )
         assert_close(out_within, out_not_within)
 
@@ -1070,20 +1036,19 @@ class TestLSTMModule:
             in_keys=["features"],
             out_keys=[out_key],
         )
-        training_model = TensorDictSequential(
-            embedding_module, lstm_module.set_recurrent_mode(), mlp
-        )
+        training_model = TensorDictSequential(embedding_module, lstm_module, mlp)
         is_init = torch.zeros(50, 11, 1, dtype=torch.bool).bernoulli_(0.1)
         data = TensorDict(
             {"observation": torch.randn(50, 11, input_size), "is_init": is_init},
             [50, 11],
         )
-        training_model(data)
+        with set_recurrent_mode(True):
+            training_model(data)
         params = TensorDict.from_module(training_model)
         params = params.expand(2)
 
         def call(data, params):
-            with params.to_module(training_model):
+            with set_recurrent_mode(True), params.to_module(training_model):
                 return training_model(data)
 
         assert vmap(call, (None, 0))(data, params).shape == torch.Size((2, 50, 11))
@@ -1188,23 +1153,7 @@ class TestGRUModule:
             assert gru_module.recurrent_mode
         assert gru_module.recurrent_mode is bool(default_val)
 
-    @pytest.mark.filterwarnings("ignore::DeprecationWarning")
-    def test_set_temporal_mode(self):
-        gru_module = GRUModule(
-            input_size=3,
-            hidden_size=12,
-            batch_first=True,
-            in_keys=["observation", "hidden"],
-            out_keys=["intermediate", ("next", "hidden")],
-        )
-        assert gru_module.set_recurrent_mode(False) is gru_module
-        assert not gru_module.set_recurrent_mode(False).recurrent_mode
-        assert gru_module.set_recurrent_mode(True) is not gru_module
-        assert gru_module.set_recurrent_mode(True).recurrent_mode
-        assert set(gru_module.set_recurrent_mode(True).parameters()) == set(
-            gru_module.parameters()
-        )
-
+    @set_recurrent_mode(True)
     def test_python_cudnn(self):
         gru_module = GRUModule(
             input_size=3,
@@ -1214,7 +1163,7 @@ class TestGRUModule:
             num_layers=2,
             in_keys=["observation", "hidden0"],
             out_keys=["intermediate", ("next", "hidden0")],
-        ).set_recurrent_mode(True)
+        )
         obs = torch.rand(10, 20, 3)
 
         hidden0 = torch.rand(10, 20, 2, 12)
@@ -1296,8 +1245,8 @@ class TestGRUModule:
             out_keys=["intermediate", ("next", "hidden")],
             python_based=python_based,
         )
-        gru_module_ms = gru_module_ss.set_recurrent_mode()
-        gru_module_ms(td)
+        with set_recurrent_mode(True):
+            gru_module_ss(td)
         td_ss = TensorDict(
             {
                 "observation": torch.zeros(*shape, 3),
@@ -1337,8 +1286,8 @@ class TestGRUModule:
             out_keys=["intermediate", ("next", "hidden")],
             python_based=python_based,
         )
-        gru_module_ms = gru_module_ss.set_recurrent_mode()
-        gru_module_ms(td)
+        with set_recurrent_mode(True):
+            gru_module_ss(td)
         td_ss = TensorDict(
             {
                 "observation": torch.zeros(*shape, 3),
@@ -1359,7 +1308,16 @@ class TestGRUModule:
     @pytest.mark.parametrize("parallel", [True, False])
     @pytest.mark.parametrize("heterogeneous", [True, False])
     @pytest.mark.parametrize("within", [False, True])
-    def test_gru_parallel_env(self, python_based, parallel, heterogeneous, within):
+    def test_gru_parallel_env(
+        self, python_based, parallel, heterogeneous, within, maybe_fork_ParallelEnv
+    ):
+        self._test_gru_parallel_env(
+            python_based, parallel, heterogeneous, within, maybe_fork_ParallelEnv
+        )
+
+    def _test_gru_parallel_env(
+        self, python_based, parallel, heterogeneous, within, maybe_fork_ParallelEnv
+    ):
         from torchrl.envs import InitTracker, ParallelEnv, TransformedEnv
 
         torch.manual_seed(0)
@@ -1397,7 +1355,7 @@ class TestGRUModule:
             )
 
         if parallel:
-            cls = ParallelEnv
+            cls = maybe_fork_ParallelEnv
         else:
             cls = SerialEnv
         if heterogeneous:
@@ -1443,12 +1401,22 @@ class TestGRUModule:
     @pytest.mark.parametrize("python_based", [True, False])
     @pytest.mark.parametrize("parallel", [True, False])
     @pytest.mark.parametrize("heterogeneous", [True, False])
-    def test_gru_parallel_within(self, python_based, parallel, heterogeneous):
-        out_within = self.test_gru_parallel_env(
-            python_based, parallel, heterogeneous, within=True
+    def test_gru_parallel_within(
+        self, python_based, parallel, heterogeneous, maybe_fork_ParallelEnv
+    ):
+        out_within = self._test_gru_parallel_env(
+            python_based,
+            parallel,
+            heterogeneous,
+            within=True,
+            maybe_fork_ParallelEnv=maybe_fork_ParallelEnv,
         )
-        out_not_within = self.test_gru_parallel_env(
-            python_based, parallel, heterogeneous, within=False
+        out_not_within = self._test_gru_parallel_env(
+            python_based,
+            parallel,
+            heterogeneous,
+            within=False,
+            maybe_fork_ParallelEnv=maybe_fork_ParallelEnv,
         )
         assert_close(out_within, out_not_within)
 
@@ -1491,20 +1459,19 @@ class TestGRUModule:
             in_keys=["features"],
             out_keys=[out_key],
         )
-        training_model = TensorDictSequential(
-            embedding_module, lstm_module.set_recurrent_mode(), mlp
-        )
+        training_model = TensorDictSequential(embedding_module, lstm_module, mlp)
         is_init = torch.zeros(50, 11, 1, dtype=torch.bool).bernoulli_(0.1)
         data = TensorDict(
             {"observation": torch.randn(50, 11, input_size), "is_init": is_init},
             [50, 11],
         )
-        training_model(data)
+        with set_recurrent_mode(True):
+            training_model(data)
         params = TensorDict.from_module(training_model)
         params = params.expand(2)
 
         def call(data, params):
-            with params.to_module(training_model):
+            with set_recurrent_mode(True), params.to_module(training_model):
                 return training_model(data)
 
         assert vmap(call, (None, 0))(data, params).shape == torch.Size((2, 50, 11))

@@ -298,7 +298,7 @@ class BraxWrapper(_EnvWrapper):
         self._vmap_jit_env_step = jax.vmap(jax.jit(self._env.step))
         self._state_example = self._make_state_example()
 
-    def _set_seed(self, seed: int):
+    def _set_seed(self, seed: int | None) -> None:
         jax = self.jax
         if seed is None:
             raise Exception("Brax requires an integer seed.")
