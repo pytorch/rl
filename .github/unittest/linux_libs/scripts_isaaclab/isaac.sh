@@ -49,6 +49,9 @@ pip install 'isaacsim[all,extscache]==4.5.0' --extra-index-url https://pypi.nvid
 git clone https://github.com/isaac-sim/IsaacLab.git
 conda install conda-forge::"cmake>3.22" -y
 
+# Pin pytorch to 2.5.1 for IsaacLab
+conda run -p ${conda_dir} python3 -m pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu124
+
 cd IsaacLab
 conda run -p ${conda_dir} ./isaaclab.sh --install none
 cd ../
