@@ -49,9 +49,8 @@ pip install 'isaacsim[all,extscache]==4.5.0' --extra-index-url https://pypi.nvid
 git clone https://github.com/isaac-sim/IsaacLab.git
 conda install conda-forge::"cmake>3.22" -y
 
-# This should be part of the docker image?
 cd IsaacLab
-./isaaclab.sh --install skrl
+conda run -p ${conda_dir} ./isaaclab.sh --install skrl
 cd ../
 
 # install tensordict
@@ -71,7 +70,7 @@ python setup.py develop
 python -c "import torchrl"
 
 # Install pytest
-pip install pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-error-for-skips pytest-asyncio
+python -m pip install pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-error-for-skips pytest-asyncio
 
 # Run tests
-pytest test/test_libs.py -k isaac
+python -m pytest test/test_libs.py -k isaac
