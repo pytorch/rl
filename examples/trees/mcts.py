@@ -5,12 +5,11 @@
 
 import time
 
+import torch
 import torchrl
 import torchrl.envs
 import torchrl.modules.mcts
 from tensordict import TensorDict
-
-start_time = time.time()
 
 pgn_or_fen = "fen"
 mask_actions = True
@@ -30,25 +29,25 @@ class TransformReward:
     def __init__(self):
         self.first_turn = None
 
-    def __call__(self, td):
-        if self.first_turn is None and "turn" in td:
-            self.first_turn = td["turn"]
-            print(f"first turn: {self.first_turn}")
+    def reset(self, *args):
+        self.first_turn = None
 
+    def __call__(self, td):
         if "reward" not in td:
             return td
+
         reward = td["reward"]
+
+        if self.first_turn is None:
+            self.first_turn = td["turn"]
+
         if reward == 0.5:
             reward = 0
-        # elif reward == 1 and td["turn"] == env.lib.WHITE:
-        elif reward == 1 and td["turn"] == self.first_turn:
+        elif reward == 1 and td["turn"]:
             reward = -reward
 
         td["reward"] = reward
         return td
-
-    def reset(self, td):
-        self.first_turn = None
 
 
 # ChessEnv sets the reward to 0.5 for a draw and 1 for a win for either player.
@@ -56,7 +55,8 @@ class TransformReward:
 #   white win = 1
 #   draw = 0
 #   black win = -1
-env = env.append_transform(TransformReward())
+transform_reward = TransformReward()
+env = env.append_transform(transform_reward)
 
 forest = torchrl.data.MCTSForest()
 forest.reward_keys = env.reward_keys
@@ -80,6 +80,7 @@ def tree_format_fn(tree):
 
 
 def get_best_move(fen, mcts_steps, rollout_steps):
+    transform_reward.reset()
     root = env.reset(TensorDict({"fen": fen}))
     tree = torchrl.modules.mcts.MCTS(forest, root, env, mcts_steps, rollout_steps)
     moves = []
@@ -89,10 +90,8 @@ def get_best_move(fen, mcts_steps, rollout_steps):
         reward_sum = subtree.wins
         visits = subtree.visits
         value_avg = (reward_sum / visits).item()
-
-        if not subtree.rollout[0]["turn"]:
+        if not root["turn"]:
             value_avg = -value_avg
-
         moves.append((value_avg, san))
 
     moves = sorted(moves, key=lambda x: -x[0])
@@ -107,19 +106,31 @@ def get_best_move(fen, mcts_steps, rollout_steps):
     return moves[0][1]
 
 
-# White has M1, best move Rd8#. Any other moves lose to M2 or M1.
-fen0 = "7k/6pp/7p/7K/8/8/6q1/3R4 w - - 0 1"
-assert get_best_move(fen0, 100, 10) == "Rd8#"
+for idx in range(3):
+    print("==========")
+    print(idx)
+    print("==========")
+    torch.manual_seed(idx)
 
-# Black has M1, best move Qg6#. Other moves give rough equality or worse.
-fen1 = "6qk/2R4p/7K/8/8/8/8/4R3 b - - 1 1"
-assert get_best_move(fen1, 100, 10) == "Qg6#"
+    start_time = time.time()
 
-# White has M2, best move Rxg8+. Any other move loses.
-fen2 = "2R3qk/5p1p/7K/8/8/8/5r2/2R5 w - - 0 1"
-assert get_best_move(fen2, 1000, 10) == "Rxg8+"
+    # White has M1, best move Rd8#. Any other moves lose to M2 or M1.
+    fen0 = "7k/6pp/7p/7K/8/8/6q1/3R4 w - - 0 1"
+    assert get_best_move(fen0, 40, 10) == "Rd8#"
 
-end_time = time.time()
-total_time = end_time - start_time
+    # Black has M1, best move Qg6#. Other moves give rough equality or worse.
+    fen1 = "6qk/2R4p/7K/8/8/8/8/4R3 b - - 1 1"
+    assert get_best_move(fen1, 40, 10) == "Qg6#"
 
-print(f"Took {total_time} s")
+    # White has M2, best move Rxg8+. Any other move loses.
+    fen2 = "2R3qk/5p1p/7K/8/8/8/5r2/2R5 w - - 0 1"
+    assert get_best_move(fen2, 600, 10) == "Rxg8+"
+
+    # Black has M2, best move Rxg1+. Any other move loses.
+    fen3 = "2r5/5R2/8/8/8/7k/5P1P/2r3QK b - - 0 1"
+    assert get_best_move(fen3, 600, 10) == "Rxg1+"
+
+    end_time = time.time()
+    total_time = end_time - start_time
+
+    print(f"Took {total_time} s")

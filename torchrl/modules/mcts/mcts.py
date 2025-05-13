@@ -19,9 +19,10 @@ def _traversal_priority_UCB1(tree):
     visits = subtree.visits
     reward_sum = subtree.wins
 
-    # TODO: Remove this in favor of a reward transform in the example
-    # If it's black's turn, flip the reward, since black wants to
-    # optimize for the lowest reward, not highest.
+    # If it's black's turn, flip the reward, since black wants to optimize for
+    # the lowest reward, not highest.
+    # TODO: Need a more generic way to do this, since not all use cases of MCTS
+    # will be two player turn based games.
     if not subtree.rollout[0, 0]["turn"]:
         reward_sum = -reward_sum
 
@@ -101,12 +102,12 @@ def MCTS(
         num_steps (int): Number of iterations to traverse.
         max_rollout_steps (int): Maximum number of steps for each rollout.
     """
-    if root not in forest:
-        for action in env.all_actions(root):
-            td = env.step(env.reset(root.clone()).update(action))
-            forest.extend(td.unsqueeze(0))
+    for action in env.all_actions(root):
+        td = env.step(env.reset(root.clone()).update(action))
+        forest.extend(td.unsqueeze(0))
 
     tree = forest.get_tree(root)
+
     tree.wins = torch.zeros_like(td["next", env.reward_key])
     for subtree in tree.subtree:
         subtree.wins = torch.zeros_like(td["next", env.reward_key])
