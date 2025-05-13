@@ -239,10 +239,11 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         with param_and_buf.data.to("meta").to_module(policy):
             policy_new_device = deepcopy(policy)
 
-        param_and_buf.apply(
+        param_and_buf_new_device = param_and_buf.apply(
             functools.partial(_map_weight, policy_device=policy_device),
             filter_empty=False,
-        ).to_module(policy_new_device)
+        )
+        param_and_buf_new_device.to_module(policy_new_device)
         # Sanity check
         if set(TensorDict.from_module(policy_new_device).keys(True, True)) != set(get_original_weights().keys(True, True)):
             raise RuntimeError("Failed to map weights. The weight sets mismatch.")
