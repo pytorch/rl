@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+a31dca3) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+01399e0) &#x25BC</span></a>
     </div>
     
 
@@ -1543,6 +1543,20 @@
     <span class="k">elif</span> <span class="n">_AUTO_UNWRAP</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">_DEFAULT_AUTO_UNWRAP</span>
     <span class="k">return</span> <span class="n">strtobool</span><span class="p">(</span><span class="n">_AUTO_UNWRAP</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">_AUTO_UNWRAP</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="n">_AUTO_UNWRAP</span></div>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">safe_is_current_stream_capturing</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A safe proxy to torch.cuda.is_current_stream_capturing.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_current_stream_capturing</span><span class="p">()</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;torch.cuda.is_current_stream_capturing() exited unexpectedly with the error message </span><span class="si">{</span><span class="n">error</span><span class="si">=}</span><span class="s2">. &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;Returning False by default.&quot;</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="kc">False</span>
 </pre></div>
 
              </article>

@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.8.0+a31dca3) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.8.0+01399e0) &#x25BC</span></a>
     </div>
     
 
@@ -629,7 +629,7 @@
             <span class="k">return</span> <span class="n">policy</span><span class="p">,</span> <span class="kc">None</span>
 
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-            <span class="n">param_and_buf</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="n">as_module</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+            <span class="n">param_and_buf</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="n">as_module</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="c1"># Because we want to reach the warning</span>
             <span class="n">param_and_buf</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">()</span>
@@ -652,19 +652,25 @@
             <span class="k">return</span> <span class="n">policy</span><span class="p">,</span> <span class="kc">None</span>
 
         <span class="c1"># Create a stateless policy, then populate this copy with params on device</span>
-        <span class="k">def</span><span class="w"> </span><span class="nf">get_original_weights</span><span class="p">(</span><span class="n">policy</span><span class="p">):</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">get_original_weights</span><span class="p">(</span><span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">):</span>
             <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">policy</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">td</span><span class="o">.</span><span class="n">data</span>
 
         <span class="c1"># We need to use &quot;.data&quot; otherwise buffers may disappear from the `get_original_weights` function</span>
         <span class="k">with</span> <span class="n">param_and_buf</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;meta&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">policy</span><span class="p">):</span>
-            <span class="n">policy</span> <span class="o">=</span> <span class="n">deepcopy</span><span class="p">(</span><span class="n">policy</span><span class="p">)</span>
+            <span class="n">policy_new_device</span> <span class="o">=</span> <span class="n">deepcopy</span><span class="p">(</span><span class="n">policy</span><span class="p">)</span>
 
-        <span class="n">param_and_buf</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
+        <span class="n">param_and_buf_new_device</span> <span class="o">=</span> <span class="n">param_and_buf</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
             <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">_map_weight</span><span class="p">,</span> <span class="n">policy_device</span><span class="o">=</span><span class="n">policy_device</span><span class="p">),</span>
             <span class="n">filter_empty</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">policy</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">policy</span><span class="p">,</span> <span class="n">get_original_weights</span>
+        <span class="p">)</span>
+        <span class="n">param_and_buf_new_device</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">policy_new_device</span><span class="p">)</span>
+        <span class="c1"># Sanity check</span>
+        <span class="k">if</span> <span class="nb">set</span><span class="p">(</span><span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">policy_new_device</span><span class="p">)</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span> <span class="o">!=</span> <span class="nb">set</span><span class="p">(</span>
+            <span class="n">get_original_weights</span><span class="p">()</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Failed to map weights. The weight sets mismatch.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">policy_new_device</span><span class="p">,</span> <span class="n">get_original_weights</span>
 
 <div class="viewcode-block" id="DataCollectorBase.start"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase.start">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Starts the collector for asynchronous data collection.</span>
@@ -2397,17 +2403,17 @@
             <span class="k">for</span> <span class="n">policy_device</span><span class="p">,</span> <span class="n">env_maker</span><span class="p">,</span> <span class="n">env_maker_kwargs</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">create_env_fn</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">create_env_kwargs</span>
             <span class="p">):</span>
-                <span class="p">(</span><span class="n">policy_copy</span><span class="p">,</span> <span class="n">get_weights_fn</span><span class="p">,)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_policy_and_device</span><span class="p">(</span>
+                <span class="p">(</span><span class="n">policy_new_device</span><span class="p">,</span> <span class="n">get_weights_fn</span><span class="p">,)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_policy_and_device</span><span class="p">(</span>
                     <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
                     <span class="n">policy_device</span><span class="o">=</span><span class="n">policy_device</span><span class="p">,</span>
                     <span class="n">env_maker</span><span class="o">=</span><span class="n">env_maker</span><span class="p">,</span>
                     <span class="n">env_maker_kwargs</span><span class="o">=</span><span class="n">env_maker_kwargs</span><span class="p">,</span>
                 <span class="p">)</span>
-                <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">policy_copy</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="nb">type</span><span class="p">(</span><span class="n">policy</span><span class="p">):</span>
-                    <span class="n">policy</span> <span class="o">=</span> <span class="n">policy_copy</span>
+                <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">policy_new_device</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="nb">type</span><span class="p">(</span><span class="n">policy</span><span class="p">):</span>
+                    <span class="n">policy</span> <span class="o">=</span> <span class="n">policy_new_device</span>
                 <span class="n">weights</span> <span class="o">=</span> <span class="p">(</span>
-                    <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">policy_copy</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
-                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy_copy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span>
+                    <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">policy_new_device</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy_new_device</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span>
                     <span class="k">else</span> <span class="n">TensorDict</span><span class="p">()</span>
                 <span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_policy_weights_dict</span><span class="p">[</span><span class="n">policy_device</span><span class="p">]</span> <span class="o">=</span> <span class="n">weights</span>
