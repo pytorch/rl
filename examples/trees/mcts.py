@@ -26,20 +26,11 @@ env = torchrl.envs.ChessEnv(
 
 
 class TransformReward:
-    def __init__(self):
-        self.first_turn = None
-
-    def reset(self, *args):
-        self.first_turn = None
-
     def __call__(self, td):
         if "reward" not in td:
             return td
 
         reward = td["reward"]
-
-        if self.first_turn is None:
-            self.first_turn = td["turn"]
 
         if reward == 0.5:
             reward = 0
@@ -80,7 +71,6 @@ def tree_format_fn(tree):
 
 
 def get_best_move(fen, mcts_steps, rollout_steps):
-    transform_reward.reset()
     root = env.reset(TensorDict({"fen": fen}))
     tree = torchrl.modules.mcts.MCTS(forest, root, env, mcts_steps, rollout_steps)
     moves = []
