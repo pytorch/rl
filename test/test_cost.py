@@ -53,6 +53,7 @@ from torchrl.envs.transforms import TensorDictPrimer, TransformedEnv
 from torchrl.envs.utils import exploration_type, ExplorationType, set_exploration_type
 from torchrl.modules import (
     DistributionalQValueActor,
+    GRUModule,
     LSTMModule,
     OneHotCategorical,
     QValueActor,
@@ -13761,7 +13762,8 @@ def test_updater(mode, value_network_update_interval, device, dtype):
 
 class TestValues:
     @pytest.mark.skipif(not _has_gym, reason="requires gym")
-    def test_gae_lstm(self):
+    @pytest.mark.parametrize("module", ["lstm", "gru"])
+    def test_gae_recurrent(self, module):
         # Checks that shifted=True and False provide the same result in GAE when an LSTM is used
         env = SerialEnv(
             2,
@@ -13774,28 +13776,43 @@ class TestValues:
         )
         env.set_seed(0)
         torch.manual_seed(0)
-        lstm_module = LSTMModule(
-            input_size=env.observation_spec["observation"].shape[-1],
-            hidden_size=64,
-            in_keys=["observation", "rs_h", "rs_c"],
-            out_keys=["intermediate", ("next", "rs_h"), ("next", "rs_c")],
-            python_based=True,
-        )
-        for p in lstm_module.parameters():
+        if module == "lstm":
+            recurrent_module = LSTMModule(
+                input_size=env.observation_spec["observation"].shape[-1],
+                hidden_size=64,
+                in_keys=["observation", "rs_h", "rs_c"],
+                out_keys=["intermediate", ("next", "rs_h"), ("next", "rs_c")],
+                python_based=True,
+                dropout=0,
+            )
+        elif module == "gru":
+            recurrent_module = GRUModule(
+                input_size=env.observation_spec["observation"].shape[-1],
+                hidden_size=64,
+                in_keys=["observation", "rs_h"],
+                out_keys=["intermediate", ("next", "rs_h")],
+                python_based=True,
+                dropout=0,
+            )
+        else:
+            raise NotImplementedError
+        recurrent_module.eval()
+        for p in recurrent_module.parameters():
             p.data *= 1 + torch.randn_like(p.data) / 10
         mlp_value = MLP(num_cells=[64], out_features=1)
         value_net = Seq(
-            lstm_module,
+            recurrent_module,
             Mod(mlp_value, in_keys=["intermediate"], out_keys=["state_value"]),
         )
         mlp_policy = MLP(num_cells=[64], out_features=1)
         policy_net = Seq(
-            lstm_module, Mod(mlp_policy, in_keys=["intermediate"], out_keys=["action"])
+            recurrent_module,
+            Mod(mlp_policy, in_keys=["intermediate"], out_keys=["action"]),
         )
         # value_net.select_out_keys("state_value")
-        env = env.append_transform(lstm_module.make_tensordict_primer())
+        env = env.append_transform(recurrent_module.make_tensordict_primer())
         vals = env.rollout(1000, policy_net, break_when_any_done=False)
-        # vals["next", "is_init"] = vals["is_init"]
+        value_net(vals.copy())
 
         # Shifted
         gae_shifted = GAE(
@@ -13807,6 +13824,9 @@ class TestValues:
         with set_recurrent_mode(True):
             r0 = gae_shifted(vals.copy())
         a0 = r0["advantage"]
+
+        # TODO: where to put this?
+        vals["next", "is_init"] = vals["is_init"]
         gae = GAE(
             gamma=0.9,
             lmbda=0.99,

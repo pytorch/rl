@@ -183,7 +183,7 @@ def main(cfg: DictConfig):  # noqa: F821
         storing_device=device,
         policy_device=device,
         compile_policy={"mode": compile_mode} if cfg.compile.compile else False,
-        cudagraph_policy=cfg.compile.cudagraphs,
+        cudagraph_policy={"warmup": 10} if cfg.compile.cudagraphs else False,
     )
 
     # Main loop

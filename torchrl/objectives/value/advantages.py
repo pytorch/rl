@@ -525,7 +525,6 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 data_out = _pseudo_vmap(value_net, (0,), randomness=vmap_randomness)(
                     data_in
                 )
-
             value_est = data_out.get(value_key)
             value, value_ = value_est[0], value_est[1]
         data.set(value_key, value)

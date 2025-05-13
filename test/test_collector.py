@@ -3419,7 +3419,7 @@ class TestCollectorRB:
             assert len(rb) == pred_len
         collector.shutdown()
         assert len(rb) == 256
-        if not extend_buffer:
+        if extend_buffer:
             steps_counts = rb["step_count"].squeeze().split(16)
             collector_ids = rb["collector", "traj_ids"].squeeze().split(16)
             for step_count, ids in zip(steps_counts, collector_ids):
@@ -3470,7 +3470,7 @@ class TestCollectorRB:
             assert len(rb) >= pred_len
         collector.shutdown()
         assert len(rb) == 256
-        if not extend_buffer:
+        if extend_buffer:
             steps_counts = rb["step_count"].squeeze().split(16)
             collector_ids = rb["collector", "traj_ids"].squeeze().split(16)
             for step_count, ids in zip(steps_counts, collector_ids):
@@ -3576,6 +3576,40 @@ class TestAsyncCollection:
             collector.async_shutdown(timeout=10)
             del collector
 
+    def test_pause(self):
+        rb = ReplayBuffer(storage=LazyMemmapStorage(max_size=1000))
+        env = CountingEnv()
+        policy = RandomPolicy(action_spec=env.action_spec)
+        collector = aSyncDataCollector(
+            CountingEnv,
+            policy,
+            replay_buffer=rb,
+            total_frames=-1,
+            frames_per_batch=16,
+        )
+        try:
+            num_pauses = 0
+            collector.start()
+            for _ in range(10):
+                time.sleep(0.1)
+                if len(rb) >= 16:
+                    with collector.pause():
+                        num_pauses += 1
+                        n = rb.write_count
+                        for _ in range(10):
+                            assert rb.write_count == n
+                            time.sleep(0.1)
+                    time.sleep(1)
+                    assert rb.write_count > n
+                    if num_pauses == 2:
+                        break
+            else:
+                raise RuntimeError("RB is empty")
+            assert len(rb) >= 16
+        finally:
+            collector.async_shutdown(timeout=10)
+            del collector
+
     @pytest.mark.parametrize("total_frames", [-1, 1_000_000_000])
     @pytest.mark.parametrize("cls", [MultiaSyncDataCollector, MultiSyncDataCollector])
     def test_start_multi(self, total_frames, cls):
@@ -3612,9 +3646,12 @@ class TestAsyncCollection:
         m.bias.data.fill_(0)
         policy = TensorDictSequential(
             TensorDictModule(
-                lambda x: x.float(), in_keys=["observation"], out_keys=["observation"]
+                lambda x: x.float(), in_keys=["observation"], out_keys=["action"]
             ),
-            TensorDictModule(m, in_keys=["observation"], out_keys=["action"]),
+            TensorDictModule(m, in_keys=["action"], out_keys=["action"]),
+            TensorDictModule(
+                lambda x: x.to(torch.int8), in_keys=["action"], out_keys=["action"]
+            ),
         )
         td = TensorDict.from_module(policy).data.clone()
         if cls != SyncDataCollector:
