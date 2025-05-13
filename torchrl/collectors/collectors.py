@@ -1995,11 +1995,6 @@ class _MultiDataCollector(DataCollectorBase):
                     if isinstance(policy_new_device, nn.Module)
                     else TensorDict()
                 )
-                # Sanity check
-                if set(weights.keys(True, True)) != set(
-                    get_weights_fn().keys(True, True)
-                ):
-                    raise RuntimeError("The weights dict is inconsistent.")
                 self._policy_weights_dict[policy_device] = weights
             self._get_weights_fn = get_weights_fn
             if weight_updater is None:
