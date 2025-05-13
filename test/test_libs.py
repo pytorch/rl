@@ -168,7 +168,7 @@ _has_minari = importlib.util.find_spec("minari") is not None
 
 _has_gymnasium = importlib.util.find_spec("gymnasium") is not None
 
-_has_isaaclab = importlib.util.find_spec("scripts_isaaclab") is not None
+_has_isaaclab = importlib.util.find_spec("isaaclab") is not None
 
 _has_gym_regular = importlib.util.find_spec("gym") is not None
 if _has_gymnasium:
