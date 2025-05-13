@@ -42,14 +42,14 @@ bash ./miniconda.sh -b -f -p "${conda_dir}"
 eval "$(${conda_dir}/bin/conda shell.bash hook)"
 
 
-conda create -n env_isaaclab python=3.10 -y
+conda create -n env_isaaclab python=3.10 -y -p ${conda_dir}
 conda activate env_isaaclab
 
 # Pin pytorch to 2.5.1 for IsaacLab
 conda install pytorch==2.5.1 torchvision==0.20.1 pytorch-cuda=12.4 -c pytorch -c nvidia -y
 
-pip install --upgrade pip
-pip install 'isaacsim[all,extscache]==4.5.0' --extra-index-url https://pypi.nvidia.com
+conda run -p ${conda_dir} pip install --upgrade pip
+conda run -p ${conda_dir} pip install 'isaacsim[all,extscache]==4.5.0' --extra-index-url https://pypi.nvidia.com
 conda install conda-forge::"cmake>3.22" -y
 
 git clone https://github.com/isaac-sim/IsaacLab.git
