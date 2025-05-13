@@ -46,8 +46,7 @@ conda create -n env_isaaclab python=3.10 -y
 conda activate env_isaaclab
 
 # Pin pytorch to 2.5.1 for IsaacLab
-conda run -p ${conda_dir} python3 -m pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu124
-conda run -p ${conda_dir} python3 -m pip install torchvision==0.20.1
+conda install pytorch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 pytorch-cuda=12.4 -c pytorch -c nvidia -y
 
 pip install --upgrade pip
 pip install 'isaacsim[all,extscache]==4.5.0' --extra-index-url https://pypi.nvidia.com
