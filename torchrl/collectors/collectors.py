@@ -245,7 +245,9 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         )
         param_and_buf_new_device.to_module(policy_new_device)
         # Sanity check
-        if set(TensorDict.from_module(policy_new_device).keys(True, True)) != set(get_original_weights().keys(True, True)):
+        if set(TensorDict.from_module(policy_new_device).keys(True, True)) != set(
+            get_original_weights().keys(True, True)
+        ):
             raise RuntimeError("Failed to map weights. The weight sets mismatch.")
         return policy_new_device, get_original_weights
 
@@ -1994,7 +1996,9 @@ class _MultiDataCollector(DataCollectorBase):
                     else TensorDict()
                 )
                 # Sanity check
-                if set(weights.keys(True, True)) != set(get_weights_fn().keys(True, True)):
+                if set(weights.keys(True, True)) != set(
+                    get_weights_fn().keys(True, True)
+                ):
                     raise RuntimeError("The weights dict is inconsistent.")
                 self._policy_weights_dict[policy_device] = weights
             self._get_weights_fn = get_weights_fn
