@@ -44,14 +44,15 @@ eval "$(${conda_dir}/bin/conda shell.bash hook)"
 
 conda create -n env_isaaclab python=3.10 -y
 conda activate env_isaaclab
-pip install --upgrade pip
-pip install 'isaacsim[all,extscache]==4.5.0' --extra-index-url https://pypi.nvidia.com
-git clone https://github.com/isaac-sim/IsaacLab.git
+conda run -p ${conda_dir} python3 -m pip install --upgrade pip
+conda run -p ${conda_dir} python3 -m pip install 'isaacsim[all,extscache]==4.5.0' --extra-index-url https://pypi.nvidia.com
 conda install conda-forge::"cmake>3.22" -y
 
 # Pin pytorch to 2.5.1 for IsaacLab
-conda run -p ${conda_dir} python3 -m pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu124
+conda run -p ${conda_dir} python3 -m pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu124
+conda run -p ${conda_dir} python3 -m pip install torchvision==0.20.1
 
+git clone https://github.com/isaac-sim/IsaacLab.git
 cd IsaacLab
 conda run -p ${conda_dir} ./isaaclab.sh --install none
 cd ../
@@ -59,21 +60,21 @@ cd ../
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
   conda install "anaconda::cmake>=3.22" -y
-  pip3 install "pybind11[global]"
-  pip3 install git+https://github.com/pytorch/tensordict.git
+  conda run -p ${conda_dir} python3 -m pip install "pybind11[global]"
+  conda run -p ${conda_dir} python3 -m pip install git+https://github.com/pytorch/tensordict.git
 else
-  pip3 install tensordict
+  conda run -p ${conda_dir} python3 -m pip install tensordict
 fi
 
 # smoke test
-python -c "import tensordict"
+conda run -p ${conda_dir} python -c "import tensordict"
 
 printf "* Installing torchrl\n"
-python setup.py develop
-python -c "import torchrl"
+conda run -p ${conda_dir} python setup.py develop
+conda run -p ${conda_dir} python -c "import torchrl"
 
 # Install pytest
-python -m pip install pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-error-for-skips pytest-asyncio
+conda run -p ${conda_dir} python -m pip install pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-error-for-skips pytest-asyncio
 
 # Run tests
-python -m pytest test/test_libs.py -k isaac
+conda run -p ${conda_dir} python -m pytest test/test_libs.py -k isaac
