@@ -231,19 +231,19 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             return policy, None
 
         # Create a stateless policy, then populate this copy with params on device
-        def get_original_weights(policy):
+        def get_original_weights(policy=policy):
             td = TensorDict.from_module(policy)
             return td.data
 
         # We need to use ".data" otherwise buffers may disappear from the `get_original_weights` function
         with param_and_buf.data.to("meta").to_module(policy):
-            policy = deepcopy(policy)
+            policy_new_device = deepcopy(policy)
 
         param_and_buf.apply(
             functools.partial(_map_weight, policy_device=policy_device),
             filter_empty=False,
-        ).to_module(policy)
-        return policy, get_original_weights
+        ).to_module(policy_new_device)
+        return policy_new_device, get_original_weights
 
     def start(self):
         """Starts the collector for asynchronous data collection.
