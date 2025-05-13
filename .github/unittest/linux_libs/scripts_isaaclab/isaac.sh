@@ -54,7 +54,7 @@ conda install conda-forge::"cmake>3.22" -y
 
 git clone https://github.com/isaac-sim/IsaacLab.git
 cd IsaacLab
-conda run -p ${conda_dir} ./isaaclab.sh --install none
+conda run -p ${conda_dir} ./isaaclab.sh --install sb3
 cd ../
 
 # install tensordict
