@@ -243,6 +243,9 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             functools.partial(_map_weight, policy_device=policy_device),
             filter_empty=False,
         ).to_module(policy_new_device)
+        # Sanity check
+        if set(TensorDict.from_module(policy_new_device).keys(True, True)) != set(get_original_weights().keys(True, True)):
+            raise RuntimeError("Failed to map weights. The weight sets mismatch.")
         return policy_new_device, get_original_weights
 
     def start(self):
@@ -1976,19 +1979,22 @@ class _MultiDataCollector(DataCollectorBase):
             for policy_device, env_maker, env_maker_kwargs in _zip_strict(
                 self.policy_device, self.create_env_fn, self.create_env_kwargs
             ):
-                (policy_copy, get_weights_fn,) = self._get_policy_and_device(
+                (policy_new_device, get_weights_fn,) = self._get_policy_and_device(
                     policy=policy,
                     policy_device=policy_device,
                     env_maker=env_maker,
                     env_maker_kwargs=env_maker_kwargs,
                 )
-                if type(policy_copy) is not type(policy):
-                    policy = policy_copy
+                if type(policy_new_device) is not type(policy):
+                    policy = policy_new_device
                 weights = (
-                    TensorDict.from_module(policy_copy).data
-                    if isinstance(policy_copy, nn.Module)
+                    TensorDict.from_module(policy_new_device).data
+                    if isinstance(policy_new_device, nn.Module)
                     else TensorDict()
                 )
+                # Sanity check
+                if set(weights.keys(True, True)) != set(get_weights_fn().keys(True, True)):
+                    raise RuntimeError("The weights dict is inconsistent.")
                 self._policy_weights_dict[policy_device] = weights
             self._get_weights_fn = get_weights_fn
             if weight_updater is None:
