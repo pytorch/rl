@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+01399e0) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+5056a62) &#x25BC</span></a>
     </div>
     
 
@@ -435,10 +435,14 @@
 <dd><p>Base class for data collectors.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.collectors.DataCollectorBase.async_shutdown">
-<span class="sig-name descname"><span class="pre">async_shutdown</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/collectors/collectors.html#DataCollectorBase.async_shutdown"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.DataCollectorBase.async_shutdown" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">async_shutdown</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">close_env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/collectors/collectors.html#DataCollectorBase.async_shutdown"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.DataCollectorBase.async_shutdown" title="Permalink to this definition">¶</a></dt>
 <dd><p>Shuts down the collector when started asynchronously with the <cite>start</cite> method.</p>
-<dl class="simple">
-<dt>Arg:</dt><dd><p>timeout (float, optional): The maximum time to wait for the collector to shutdown.</p>
+<dl>
+<dt>Arg:</dt><dd><p>timeout (float, optional): The maximum time to wait for the collector to shutdown.
+close_env (bool, optional): If True, the collector will close the contained environment.</p>
+<blockquote>
+<div><p>Defaults to <cite>True</cite>.</p>
+</div></blockquote>
 </dd>
 </dl>
 <div class="admonition seealso">

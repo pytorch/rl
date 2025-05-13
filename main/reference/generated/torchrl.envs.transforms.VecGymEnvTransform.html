@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+01399e0) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+5056a62) &#x25BC</span></a>
     </div>
     
 
@@ -431,7 +431,7 @@
 <h1>VecGymEnvTransform<a class="headerlink" href="#vecgymenvtransform" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.envs.transforms.VecGymEnvTransform">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.transforms.</span></span><span class="sig-name descname"><span class="pre">VecGymEnvTransform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">final_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'final'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#VecGymEnvTransform"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.VecGymEnvTransform" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.transforms.</span></span><span class="sig-name descname"><span class="pre">VecGymEnvTransform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">final_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'final'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">missing_obs_value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">nan</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/transforms.html#VecGymEnvTransform"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.VecGymEnvTransform" title="Permalink to this definition">¶</a></dt>
 <dd><p>A transform for GymWrapper subclasses that handles the auto-reset in a consistent way.</p>
 <p>Gym, gymnasium and SB3 provide vectorized (read, parallel or batched) environments
 that are automatically reset. When this occurs, the actual observation resulting
@@ -455,8 +455,12 @@ do the swap at the next step.</p>
 is created with an async env.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>final_name</strong> (<em>str</em><em>, </em><em>optional</em>) – the name of the final observation in the dict.
-Defaults to <cite>“final”</cite>.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>final_name</strong> (<em>str</em><em>, </em><em>optional</em>) – the name of the final observation in the dict.
+Defaults to <cite>“final”</cite>.</p></li>
+<li><p><strong>missing_obs_value</strong> (<em>Any</em><em>, </em><em>optional</em>) – default value to use as placeholder for missing
+last observations. Defaults to <cite>np.nan</cite>.</p></li>
+</ul>
 </dd>
 </dl>
 <div class="admonition note">

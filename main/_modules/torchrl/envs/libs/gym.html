@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.8.0+01399e0) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.8.0+5056a62) &#x25BC</span></a>
     </div>
     
 
@@ -474,6 +474,7 @@
 
 <span class="n">_has_mo</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;mo_gymnasium&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
 <span class="n">_has_sb3</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;stable_baselines3&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+<span class="n">_has_isaaclab</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;isaaclab&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
 <span class="n">_has_minigrid</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;minigrid&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
 
 
@@ -1214,6 +1215,7 @@
 
 <span class="k">class</span><span class="w"> </span><span class="nc">_GymAsyncMeta</span><span class="p">(</span><span class="n">_EnvPostInit</span><span class="p">):</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">missing_obs_value</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;missing_obs_value&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="n">instance</span><span class="p">:</span> <span class="n">GymWrapper</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
         <span class="c1"># before gym 0.22, there was no final_observation</span>
@@ -1223,6 +1225,15 @@
                 <span class="n">TransformedEnv</span><span class="p">,</span>
                 <span class="n">VecGymEnvTransform</span><span class="p">,</span>
             <span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">_has_isaaclab</span><span class="p">:</span>
+                <span class="kn">from</span><span class="w"> </span><span class="nn">isaaclab.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">ManagerBasedRLEnv</span>
+
+                <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+                <span class="k">if</span> <span class="n">missing_obs_value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;missing_obs_value&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">missing_obs_value</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">instance</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">unwrapped</span><span class="p">,</span> <span class="n">ManagerBasedRLEnv</span><span class="p">):</span>
+                    <span class="k">return</span> <span class="n">TransformedEnv</span><span class="p">(</span><span class="n">instance</span><span class="p">,</span> <span class="n">VecGymEnvTransform</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">))</span>
 
             <span class="k">if</span> <span class="n">_has_sb3</span><span class="p">:</span>
                 <span class="kn">from</span><span class="w"> </span><span class="nn">stable_baselines3.common.vec_env.base_vec_env</span><span class="w"> </span><span class="kn">import</span> <span class="n">VecEnv</span>
@@ -1266,7 +1277,10 @@
                         <span class="n">instance</span><span class="o">.</span><span class="n">observation_spec</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="n">backend</span>
                     <span class="p">)</span>
                 <span class="p">)</span>
-            <span class="k">return</span> <span class="n">TransformedEnv</span><span class="p">(</span><span class="n">instance</span><span class="p">,</span> <span class="n">VecGymEnvTransform</span><span class="p">())</span>
+            <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">if</span> <span class="n">missing_obs_value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;missing_obs_value&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">missing_obs_value</span>
+            <span class="k">return</span> <span class="n">TransformedEnv</span><span class="p">(</span><span class="n">instance</span><span class="p">,</span> <span class="n">VecGymEnvTransform</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">))</span>
         <span class="k">return</span> <span class="n">instance</span>
 
 
@@ -1313,6 +1327,10 @@
 <span class="sd">            env step function. Set this to ``False`` if the environment is evaluated</span>
 <span class="sd">            on GPU, such as IsaacLab.</span>
 <span class="sd">            Defaults to ``True``.</span>
+<span class="sd">        missing_obs_value (Any, optional): default value to use as placeholder for missing observations, when</span>
+<span class="sd">            the environment is auto-resetting and missing observations cannot be found in the info dictionary</span>
+<span class="sd">            (e.g., with IsaacLab). This argument is passed to :class:`~torchrl.envs.VecGymEnvTransform` by</span>
+<span class="sd">            the metaclass.</span>
 
 <span class="sd">    Attributes:</span>
 <span class="sd">        available_envs (List[str]): a list of environments to build.</span>
@@ -1490,14 +1508,17 @@
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_is_batched</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">tuple_of_classes</span> <span class="o">=</span> <span class="p">()</span>
         <span class="k">if</span> <span class="n">_has_sb3</span><span class="p">:</span>
             <span class="kn">from</span><span class="w"> </span><span class="nn">stable_baselines3.common.vec_env.base_vec_env</span><span class="w"> </span><span class="kn">import</span> <span class="n">VecEnv</span>
 
-            <span class="n">tuple_of_classes</span> <span class="o">=</span> <span class="p">(</span><span class="n">VecEnv</span><span class="p">,)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">tuple_of_classes</span> <span class="o">=</span> <span class="p">()</span>
+            <span class="n">tuple_of_classes</span> <span class="o">=</span> <span class="n">tuple_of_classes</span> <span class="o">+</span> <span class="p">(</span><span class="n">VecEnv</span><span class="p">,)</span>
+        <span class="k">if</span> <span class="n">_has_isaaclab</span><span class="p">:</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">isaaclab.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">ManagerBasedRLEnv</span>
+
+            <span class="n">tuple_of_classes</span> <span class="o">=</span> <span class="n">tuple_of_classes</span> <span class="o">+</span> <span class="p">(</span><span class="n">ManagerBasedRLEnv</span><span class="p">,)</span>
         <span class="k">return</span> <span class="nb">isinstance</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="p">,</span> <span class="n">tuple_of_classes</span> <span class="o">+</span> <span class="p">(</span><span class="n">gym_backend</span><span class="p">(</span><span class="s2">&quot;vector&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">VectorEnv</span><span class="p">,)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">unwrapped</span><span class="p">,</span> <span class="n">tuple_of_classes</span> <span class="o">+</span> <span class="p">(</span><span class="n">gym_backend</span><span class="p">(</span><span class="s2">&quot;vector&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">VectorEnv</span><span class="p">,)</span>
         <span class="p">)</span>
 
     <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;gym&quot;</span><span class="p">)</span>
@@ -1983,7 +2004,10 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_replace_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reset</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">):</span>  <span class="c1"># noqa</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">gymnasium</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gym</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">autoreset_mode</span> <span class="o">==</span> <span class="n">gym</span><span class="o">.</span><span class="n">vector</span><span class="o">.</span><span class="n">AutoresetMode</span><span class="o">.</span><span class="n">DISABLED</span><span class="p">:</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="p">,</span> <span class="s2">&quot;autoreset_mode&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="o">==</span> <span class="n">gym</span><span class="o">.</span><span class="n">vector</span><span class="o">.</span><span class="n">AutoresetMode</span><span class="o">.</span><span class="n">DISABLED</span>
+        <span class="p">):</span>
             <span class="n">options</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;reset_mask&quot;</span><span class="p">:</span> <span class="n">reset</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span><span class="o">.</span><span class="n">numpy</span><span class="p">()}</span>
             <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;options&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">options</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">kwargs</span>

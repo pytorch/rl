@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+01399e0) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+5056a62) &#x25BC</span></a>
     </div>
     
 
@@ -710,8 +710,12 @@ Consider using a constructor if the updater needs to be serialized.</p></li>
 <dt class="sig sig-object py" id="torchrl.collectors.MultiSyncDataCollector.async_shutdown">
 <span class="sig-name descname"><span class="pre">async_shutdown</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.collectors.MultiSyncDataCollector.async_shutdown" title="Permalink to this definition">¶</a></dt>
 <dd><p>Shuts down the collector when started asynchronously with the <cite>start</cite> method.</p>
-<dl class="simple">
-<dt>Arg:</dt><dd><p>timeout (float, optional): The maximum time to wait for the collector to shutdown.</p>
+<dl>
+<dt>Arg:</dt><dd><p>timeout (float, optional): The maximum time to wait for the collector to shutdown.
+close_env (bool, optional): If True, the collector will close the contained environment.</p>
+<blockquote>
+<div><p>Defaults to <cite>True</cite>.</p>
+</div></blockquote>
 </dd>
 </dl>
 <div class="admonition seealso">
@@ -785,8 +789,16 @@ environment.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.collectors.MultiSyncDataCollector.shutdown">
-<span class="sig-name descname"><span class="pre">shutdown</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/collectors/collectors.html#MultiSyncDataCollector.shutdown"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.MultiSyncDataCollector.shutdown" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">shutdown</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">close_env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/collectors/collectors.html#MultiSyncDataCollector.shutdown"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.MultiSyncDataCollector.shutdown" title="Permalink to this definition">¶</a></dt>
 <dd><p>Shuts down all processes. This operation is irreversible.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>timeout</strong> (<em>float</em><em>, </em><em>optional</em>) – The timeout for closing pipes between workers.</p></li>
+<li><p><strong>close_env</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to close the environment. Defaults to <cite>True</cite>.</p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">

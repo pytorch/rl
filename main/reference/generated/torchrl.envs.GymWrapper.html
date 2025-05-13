@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+01399e0) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+5056a62) &#x25BC</span></a>
     </div>
     
 
@@ -476,6 +476,10 @@ converted from tensors to numpy arrays and moved to CPU before being passed to t
 env step function. Set this to <code class="docutils literal notranslate"><span class="pre">False</span></code> if the environment is evaluated
 on GPU, such as IsaacLab.
 Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
+<li><p><strong>missing_obs_value</strong> (<em>Any</em><em>, </em><em>optional</em>) – default value to use as placeholder for missing observations, when
+the environment is auto-resetting and missing observations cannot be found in the info dictionary
+(e.g., with IsaacLab). This argument is passed to <code class="xref py py-class docutils literal notranslate"><span class="pre">VecGymEnvTransform</span></code> by
+the metaclass.</p></li>
 </ul>
 </dd>
 <dt class="field-odd">Variables<span class="colon">:</span></dt>
