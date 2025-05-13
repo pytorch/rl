@@ -1126,6 +1126,8 @@ def auto_unwrap_transformed_env(allow_none=False):
 
 def safe_is_current_stream_capturing():
     """A safe proxy to torch.cuda.is_current_stream_capturing."""
+    if not torch.cuda.is_available():
+        return False
     try:
         return torch.cuda.is_current_stream_capturing()
     except Exception as error:
