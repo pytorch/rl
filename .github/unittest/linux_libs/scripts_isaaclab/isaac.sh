@@ -44,13 +44,14 @@ eval "$(${conda_dir}/bin/conda shell.bash hook)"
 
 conda create -n env_isaaclab python=3.10 -y
 conda activate env_isaaclab
-conda run -p ${conda_dir} python3 -m pip install --upgrade pip
-conda run -p ${conda_dir} python3 -m pip install 'isaacsim[all,extscache]==4.5.0' --extra-index-url https://pypi.nvidia.com
-conda install conda-forge::"cmake>3.22" -y
 
 # Pin pytorch to 2.5.1 for IsaacLab
 conda run -p ${conda_dir} python3 -m pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu124
 conda run -p ${conda_dir} python3 -m pip install torchvision==0.20.1
+
+pip install --upgrade pip
+pip install 'isaacsim[all,extscache]==4.5.0' --extra-index-url https://pypi.nvidia.com
+conda install conda-forge::"cmake>3.22" -y
 
 git clone https://github.com/isaac-sim/IsaacLab.git
 cd IsaacLab
