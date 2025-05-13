@@ -77,4 +77,4 @@ conda run -p ${env_dir} python -c "import torchrl"
 conda run -p ${env_dir} python -m pip install pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures pytest-error-for-skips pytest-asyncio
 
 # Run tests
-conda run -p ${env_dir} python -m pytest test/test_libs.py -k isaac
+conda run -p ${env_dir} python -m pytest test/test_libs.py -k isaac -s
