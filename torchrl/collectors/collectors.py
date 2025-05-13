@@ -208,7 +208,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             return policy, None
 
         if isinstance(policy, nn.Module):
-            param_and_buf = TensorDict.from_module(policy, as_module=True).data
+            param_and_buf = TensorDict.from_module(policy, as_module=True)
         else:
             # Because we want to reach the warning
             param_and_buf = TensorDict()
@@ -231,19 +231,25 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             return policy, None
 
         # Create a stateless policy, then populate this copy with params on device
-        def get_original_weights(policy):
+        def get_original_weights(policy=policy):
             td = TensorDict.from_module(policy)
             return td.data
 
         # We need to use ".data" otherwise buffers may disappear from the `get_original_weights` function
         with param_and_buf.data.to("meta").to_module(policy):
-            policy = deepcopy(policy)
+            policy_new_device = deepcopy(policy)
 
-        param_and_buf.apply(
+        param_and_buf_new_device = param_and_buf.apply(
             functools.partial(_map_weight, policy_device=policy_device),
             filter_empty=False,
-        ).to_module(policy)
-        return policy, get_original_weights
+        )
+        param_and_buf_new_device.to_module(policy_new_device)
+        # Sanity check
+        if set(TensorDict.from_module(policy_new_device).keys(True, True)) != set(
+            get_original_weights().keys(True, True)
+        ):
+            raise RuntimeError("Failed to map weights. The weight sets mismatch.")
+        return policy_new_device, get_original_weights
 
     def start(self):
         """Starts the collector for asynchronous data collection.
@@ -1976,17 +1982,17 @@ class _MultiDataCollector(DataCollectorBase):
             for policy_device, env_maker, env_maker_kwargs in _zip_strict(
                 self.policy_device, self.create_env_fn, self.create_env_kwargs
             ):
-                (policy_copy, get_weights_fn,) = self._get_policy_and_device(
+                (policy_new_device, get_weights_fn,) = self._get_policy_and_device(
                     policy=policy,
                     policy_device=policy_device,
                     env_maker=env_maker,
                     env_maker_kwargs=env_maker_kwargs,
                 )
-                if type(policy_copy) is not type(policy):
-                    policy = policy_copy
+                if type(policy_new_device) is not type(policy):
+                    policy = policy_new_device
                 weights = (
-                    TensorDict.from_module(policy_copy).data
-                    if isinstance(policy_copy, nn.Module)
+                    TensorDict.from_module(policy_new_device).data
+                    if isinstance(policy_new_device, nn.Module)
                     else TensorDict()
                 )
                 self._policy_weights_dict[policy_device] = weights
