@@ -208,7 +208,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             return policy, None
 
         if isinstance(policy, nn.Module):
-            param_and_buf = TensorDict.from_module(policy, as_module=True).data
+            param_and_buf = TensorDict.from_module(policy, as_module=True)
         else:
             # Because we want to reach the warning
             param_and_buf = TensorDict()
