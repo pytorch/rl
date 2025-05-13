@@ -136,7 +136,7 @@ def main(cfg: DictConfig):  # noqa: F821
         compile_policy={"mode": compile_mode, "fullgraph": True}
         if compile_mode is not None
         else False,
-        cudagraph_policy=cfg.compile.cudagraphs,
+        cudagraph_policy={"warmup": 10} if cfg.compile.cudagraphs else False,
     )
 
     # Main loop

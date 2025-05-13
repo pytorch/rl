@@ -60,7 +60,7 @@ DEFAULT_RAY_INIT_CONFIG = {
 
 DEFAULT_REMOTE_CLASS_CONFIG = {
     "num_cpus": 1,
-    "num_gpus": 0.2,
+    "num_gpus": 0.2 if torch.cuda.is_available() else None,
     "memory": 2 * 1024**3,
 }
 
