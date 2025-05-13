@@ -19,6 +19,7 @@ export UPLOAD_CHANNEL="nightly"
 export TF_CPP_MIN_LOG_LEVEL=0
 export BATCHED_PIPE_TIMEOUT=60
 export TD_GET_DEFAULTS_TO_NONE=1
+export OMNI_KIT_ACCEPT_EULA=yes
 
 nvidia-smi
 
