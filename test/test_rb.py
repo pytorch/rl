@@ -887,6 +887,20 @@ class TestStorages:
         assert isinstance(s, LazyStackedTensorDict)
         assert len(rb) == 5
 
+    def test_extend_empty_lazy(self):
+
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(6, empty_lazy=True),
+            batch_size=2,
+        )
+        td1 = TensorDict(a=torch.rand(4, 8), batch_size=4)
+        td2 = TensorDict(a=torch.rand(3, 8), batch_size=3)
+        ltd = LazyStackedTensorDict(td1, td2, stack_dim=0)
+        rb.extend(ltd)
+        s = rb.sample(3)
+        assert isinstance(s, LazyStackedTensorDict)
+        assert len(rb) == 2
+
     @pytest.mark.parametrize("device_data", get_default_devices())
     @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
     @pytest.mark.parametrize("data_type", ["tensor", "tc", "td", "pytree"])
