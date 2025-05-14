@@ -12,12 +12,11 @@ from __future__ import annotations
 import warnings
 
 import hydra
-
 from torchrl._utils import compile_with_warmup
 
 
 @hydra.main(config_path="", config_name="config_mujoco", version_base="1.1")
-def main(cfg: "DictConfig"):  # noqa: F821
+def main(cfg: DictConfig):  # noqa: F821
 
     import torch.optim
     import tqdm
@@ -74,7 +73,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         device=device,
         max_frames_per_traj=-1,
         compile_policy={"mode": compile_mode, "warmup": 1} if compile_mode else False,
-        cudagraph_policy=cfg.compile.cudagraphs,
+        cudagraph_policy={"warmup": 10} if cfg.compile.cudagraphs else False,
     )
 
     # Create data buffer

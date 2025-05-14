@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
 
 import torch
 from tensordict import TensorDict
@@ -20,10 +19,9 @@ from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
     default_value_kwargs,
     distance_loss,
-    # distance_loss,
     hold_out_net,
     ValueEstimators,
-)
+)  # distance_loss,
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 
@@ -103,8 +101,8 @@ class DreamerModelLoss(LossModule):
         lambda_kl: float = 1.0,
         lambda_reco: float = 1.0,
         lambda_reward: float = 1.0,
-        reco_loss: Optional[str] = None,
-        reward_loss: Optional[str] = None,
+        reco_loss: str | None = None,
+        reward_loss: str | None = None,
         free_nats: int = 3,
         delayed_clamp: bool = False,
         global_average: bool = False,
@@ -158,15 +156,14 @@ class DreamerModelLoss(LossModule):
         reward_loss = reward_loss.mean().unsqueeze(-1)
         # import ipdb; ipdb.set_trace()
 
+        td_out = TensorDict(
+            loss_model_kl=self.lambda_kl * kl_loss,
+            loss_model_reco=self.lambda_reco * reco_loss,
+            loss_model_reward=self.lambda_reward * reward_loss,
+        )
+        self._clear_weakrefs(tensordict, td_out)
         return (
-            TensorDict(
-                {
-                    "loss_model_kl": self.lambda_kl * kl_loss,
-                    "loss_model_reco": self.lambda_reco * reco_loss,
-                    "loss_model_reward": self.lambda_reward * reward_loss,
-                },
-                [],
-            ),
+            td_out,
             tensordict.detach(),
         )
 
@@ -278,7 +275,7 @@ class DreamerActorLoss(LossModule):
                 value=self._tensor_keys.value,
             )
 
-    def forward(self, tensordict: TensorDict) -> Tuple[TensorDict, TensorDict]:
+    def forward(self, tensordict: TensorDict) -> tuple[TensorDict, TensorDict]:
         tensordict = tensordict.select("state", self.tensor_keys.belief).detach()
 
         with timeit("actor_loss/time-rollout"), hold_out_net(
@@ -310,6 +307,7 @@ class DreamerActorLoss(LossModule):
         else:
             actor_loss = -lambda_target.sum((-2, -1)).mean()
         loss_tensordict = TensorDict({"loss_actor": actor_loss}, [])
+        self._clear_weakrefs(tensordict, loss_tensordict)
         return loss_tensordict, fake_data.detach()
 
     def lambda_target(self, reward: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
@@ -409,7 +407,7 @@ class DreamerValueLoss(LossModule):
     def __init__(
         self,
         value_model: TensorDictModule,
-        value_loss: Optional[str] = None,
+        value_loss: str | None = None,
         discount_loss: bool = True,  # for consistency with paper
         gamma: int = 0.99,
     ):
@@ -454,5 +452,6 @@ class DreamerValueLoss(LossModule):
                 .sum((-1, -2))
                 .mean()
             )
-        loss_tensordict = TensorDict({"loss_value": value_loss}, [])
+        loss_tensordict = TensorDict({"loss_value": value_loss})
+        self._clear_weakrefs(fake_data, loss_tensordict)
         return loss_tensordict, fake_data

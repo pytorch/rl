@@ -2,9 +2,9 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional, Union
 from warnings import warn
 
 import torch
@@ -51,7 +51,7 @@ class TrainerConfig:
     # Optimizer to be used.
     lr_scheduler: str = "cosine"
     # LR scheduler.
-    selected_keys: Optional[List] = None
+    selected_keys: list | None = None
     # a list of strings that indicate the data that should be kept from the data collector. Since storing and
     # retrieving information from the replay buffer does not come for free, limiting the amount of data
     # passed to it can improve the algorithm performance.
@@ -80,14 +80,12 @@ class TrainerConfig:
 def make_trainer(
     collector: DataCollectorBase,
     loss_module: LossModule,
-    recorder: Optional[EnvBase] = None,
-    target_net_updater: Optional[TargetNetUpdater] = None,
-    policy_exploration: Optional[
-        Union[TensorDictModuleWrapper, TensorDictModule]
-    ] = None,
-    replay_buffer: Optional[ReplayBuffer] = None,
-    logger: Optional[Logger] = None,
-    cfg: "DictConfig" = None,  # noqa: F821
+    recorder: EnvBase | None = None,
+    target_net_updater: TargetNetUpdater | None = None,
+    policy_exploration: None | (TensorDictModuleWrapper | TensorDictModule) = None,
+    replay_buffer: ReplayBuffer | None = None,
+    logger: Logger | None = None,
+    cfg: DictConfig = None,  # noqa: F821
 ) -> Trainer:
     """Creates a Trainer instance given its constituents.
 

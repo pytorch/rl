@@ -7,23 +7,20 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
-
 import os.path
+import sys
 import time
 import unittest
 import warnings
 from functools import wraps
 
-# Get relative file path
-# this returns relative path from current file.
-
 import pytest
 import torch
 import torch.cuda
-
 from tensordict import NestedKey, tensorclass, TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 from torch import nn, vmap
+
 from torchrl._utils import (
     implement_for,
     logger as torchrl_logger,
@@ -31,7 +28,6 @@ from torchrl._utils import (
     seed_generator,
 )
 from torchrl.data.utils import CloudpickleWrapper
-
 from torchrl.envs import MultiThreadedEnv, ObservationNorm
 from torchrl.envs.batched_envs import ParallelEnv, SerialEnv
 from torchrl.envs.libs.envpool import _has_envpool
@@ -42,12 +38,20 @@ from torchrl.envs.transforms import (
     ToTensorImage,
     TransformedEnv,
 )
+from torchrl.modules import MLP
 from torchrl.objectives.value.advantages import _vmap_func
+
+# Get relative file path
+# this returns relative path from current file.
 
 # Specified for test_utils.py
 __version__ = "0.3"
 
-from torchrl.modules import MLP
+IS_WIN = sys.platform == "win32"
+if IS_WIN:
+    mp_ctx = "spawn"
+else:
+    mp_ctx = "fork"
 
 
 def CARTPOLE_VERSIONED():
@@ -142,9 +146,20 @@ def _set_gym_environments():  # noqa: F811
     _BREAKOUT_VERSIONED = "ALE/Breakout-v5"
 
 
-@implement_for("gymnasium", "1.0.0", None)
+@implement_for("gymnasium", "1.0.0", "1.1.0")
 def _set_gym_environments():  # noqa: F811
     raise ImportError
+
+
+@implement_for("gymnasium", "1.1.0")
+def _set_gym_environments():  # noqa: F811
+    global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED, _BREAKOUT_VERSIONED
+
+    _CARTPOLE_VERSIONED = "CartPole-v1"
+    _HALFCHEETAH_VERSIONED = "HalfCheetah-v5"
+    _PENDULUM_VERSIONED = "Pendulum-v1"
+    _PONG_VERSIONED = "ALE/Pong-v5"
+    _BREAKOUT_VERSIONED = "ALE/Breakout-v5"
 
 
 if _has_gym:
@@ -265,6 +280,7 @@ def _make_envs(
     N,
     device="cpu",
     kwargs=None,
+    local_mp_ctx=mp_ctx,
 ):
     torch.manual_seed(0)
     if not transformed_in:
@@ -299,7 +315,9 @@ def _make_envs(
                 )
 
     env0 = create_env_fn()
-    env_parallel = ParallelEnv(N, create_env_fn, create_env_kwargs=kwargs)
+    env_parallel = ParallelEnv(
+        N, create_env_fn, create_env_kwargs=kwargs, mp_start_method=local_mp_ctx
+    )
     env_serial = SerialEnv(N, create_env_fn, create_env_kwargs=kwargs)
 
     for key in env0.observation_spec.keys(True, True):
@@ -583,7 +601,7 @@ class LSTMNet(nn.Module):
     TensorDict of size [batch x time_steps].
 
     If a 2D tensor is provided as input, it is assumed that it is a batch of data
-    with only one time step. This means that we explicitely assume that users will
+    with only one time step. This means that we explicitly assume that users will
     unsqueeze inputs of a single batch with multiple time steps.
 
     Args:
@@ -662,7 +680,7 @@ class LSTMNet(nn.Module):
 
         if hidden1_in is None and hidden0_in is None:
             shape = (batch, steps) if not squeeze1 else (batch,)
-            hidden0_in, hidden1_in = [
+            hidden0_in, hidden1_in = (
                 torch.zeros(
                     *shape,
                     self.lstm.num_layers,
@@ -671,7 +689,7 @@ class LSTMNet(nn.Module):
                     dtype=input.dtype,
                 )
                 for _ in range(2)
-            ]
+            )
         elif hidden1_in is None or hidden0_in is None:
             raise RuntimeError(
                 f"got type(hidden0)={type(hidden0_in)} and type(hidden1)={type(hidden1_in)}"

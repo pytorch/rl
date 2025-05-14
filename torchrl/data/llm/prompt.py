@@ -4,12 +4,10 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import Optional
-
 import torch
 from tensordict import tensorclass, TensorDict
 
-from torchrl.data.rlhf.dataset import TensorDictTokenizer, TokenizedDatasetLoader
+from torchrl.data.llm.dataset import TensorDictTokenizer, TokenizedDatasetLoader
 
 DEFAULT_DATASET = "CarperAI/openai_summarize_tldr"
 
@@ -21,9 +19,9 @@ class PromptData:
     input_ids: torch.Tensor
     attention_mask: torch.Tensor
     prompt_rindex: torch.Tensor
-    labels: Optional[torch.Tensor] = None
-    logits: Optional[torch.Tensor] = None
-    loss: Optional[torch.Tensor] = None
+    labels: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    loss: torch.Tensor | None = None
 
     def mask_label(self, pad_token_id=50256):
         _, block_size = self.input_ids.shape
@@ -56,7 +54,7 @@ class PromptData:
             split (str): ``"train"`` or ``"valid"`` depending on the data split needed.
             dataset_name (str, optional): name of the dataset to be processed. Defaults to
                 ``"CarperAI/openai_summarize_comparisons"``.
-            max_length (int, optional): maximum length of the dataset sequenes.
+            max_length (int, optional): maximum length of the dataset sequences.
                 Defaults to 550.
             root_dir (path, optional): the path where the datasets are stored.
                 Defaults to ``"$HOME/.cache/torchrl/data"``
@@ -114,7 +112,7 @@ class PromptTensorDictTokenizer(TensorDictTokenizer):
         padding (str, optional): type of padding. Defaults to ``"max_length"``.
         truncation (bool, optional): whether the sequences should be truncated to max_length.
         return_tensordict (bool, optional): if ``True``, a TensoDict is returned.
-            Otherwise, a the orignal data will be returned.
+            Otherwise, a the original data will be returned.
         device (torch.device, optional): the device where to store the data.
             This option is ignored if ``return_tensordict=False``.
 

@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import argparse
 import dataclasses
@@ -225,6 +226,7 @@ def test_timeit():
 @pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
 @pytest.mark.parametrize("from_pixels", [(), ("from_pixels=True", "catframes=4")])
 def test_transformed_env_constructor_with_state_dict(from_pixels):
+
     config_fields = [
         (config_field.name, config_field.type, config_field)
         for config_cls in (

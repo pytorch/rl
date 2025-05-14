@@ -30,7 +30,7 @@ except Exception:
 
 def get_version():
     version_txt = os.path.join(cwd, "version.txt")
-    with open(version_txt, "r") as f:
+    with open(version_txt) as f:
         version = f.readline().strip()
     if os.getenv("TORCHRL_BUILD_VERSION"):
         version = os.getenv("TORCHRL_BUILD_VERSION")
@@ -64,18 +64,14 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
 def write_version_file(version):
     version_path = os.path.join(cwd, "torchrl", "version.py")
     with open(version_path, "w") as f:
-        f.write("__version__ = '{}'\n".format(version))
-        f.write("git_version = {}\n".format(repr(sha)))
+        f.write(f"__version__ = '{version}'\n")
+        f.write(f"git_version = {repr(sha)}\n")
 
 
 def _get_pytorch_version(is_nightly, is_local):
     # if "PYTORCH_VERSION" in os.environ:
     #     return f"torch=={os.environ['PYTORCH_VERSION']}"
-    if is_nightly:
-        return "torch>=2.6.0.dev"
-    elif is_local:
-        return "torch"
-    return "torch>=2.5.0"
+    return "torch>=2.1.0"
 
 
 def _get_packages():
@@ -176,7 +172,7 @@ def _main(argv):
     if is_nightly:
         tensordict_dep = "tensordict-nightly"
     else:
-        tensordict_dep = "tensordict>=0.6.1"
+        tensordict_dep = "tensordict>=0.8.1,<0.9.0"
 
     if is_nightly:
         version = get_nightly_version()
@@ -185,7 +181,7 @@ def _main(argv):
         version = get_version()
         write_version_file(version)
     TORCHRL_BUILD_VERSION = os.getenv("TORCHRL_BUILD_VERSION")
-    logging.info("Building wheel {}-{}".format(package_name, version))
+    logging.info(f"Building wheel {package_name}-{version}")
     logging.info(f"TORCHRL_BUILD_VERSION is {TORCHRL_BUILD_VERSION}")
 
     is_local = TORCHRL_BUILD_VERSION is None
@@ -207,6 +203,7 @@ def _main(argv):
             "pygame",
         ],
         "dm_control": ["dm_control"],
+        "replay_buffer": ["torch>=2.7.0"],
         "gym_continuous": ["gymnasium<1.0", "mujoco"],
         "rendering": ["moviepy<2.0.0"],
         "tests": [
@@ -216,6 +213,7 @@ def _main(argv):
             "scipy",
             "pytest-mock",
             "pytest-cov",
+            "pytest-asyncio",
             "pytest-benchmark",
             "pytest-rerunfailures",
             "pytest-error-for-skips",
@@ -273,7 +271,7 @@ def _main(argv):
         ),
         ext_modules=get_extensions(),
         cmdclass={
-            "build_ext": BuildExtension.with_options(no_python_abi_suffix=True),
+            "build_ext": BuildExtension.with_options(),
             "clean": clean,
         },
         install_requires=[

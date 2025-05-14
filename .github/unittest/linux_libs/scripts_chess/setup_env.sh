@@ -9,9 +9,27 @@ set -e
 set -v
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+apt-get update && apt-get upgrade -y && apt-get install -y git cmake
 # Avoid error: "fatal: unsafe repository"
-
 git config --global --add safe.directory '*'
+apt-get install -y wget \
+    gcc \
+    g++ \
+    unzip \
+    curl \
+    patchelf \
+    libosmesa6-dev \
+    libgl1-mesa-glx \
+    libglfw3 \
+    swig3.0 \
+    libglew-dev \
+    libglvnd0 \
+    libgl1 \
+    libglx0 \
+    libegl1 \
+    libgles2 \
+    libcairo2-dev
+
 root_dir="$(git rev-parse --show-toplevel)"
 conda_dir="${root_dir}/conda"
 env_dir="${root_dir}/env"
@@ -45,5 +63,8 @@ echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
 pip install pip --upgrade
+
+conda install anaconda::cmake -y
+conda install conda-forge::cairo -y
 
 conda env update --file "${this_dir}/environment.yml" --prune

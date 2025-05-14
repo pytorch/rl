@@ -2,10 +2,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import importlib.util
 
 import os
-from typing import Dict, Sequence, Union
+from typing import Sequence
 
 from torch import Tensor
 
@@ -31,7 +33,7 @@ class TensorboardLogger(Logger):
 
         self._has_imported_moviepy = False
 
-    def _create_experiment(self) -> "SummaryWriter":  # noqa
+    def _create_experiment(self) -> SummaryWriter:  # noqa
         """Creates a tensorboard experiment.
 
         Args:
@@ -91,7 +93,7 @@ class TensorboardLogger(Logger):
             **kwargs,
         )
 
-    def log_hparams(self, cfg: Union["DictConfig", Dict]) -> None:  # noqa: F821
+    def log_hparams(self, cfg: DictConfig | dict) -> None:  # noqa: F821
         """Logs the hyperparameters of the experiment.
 
         Args:

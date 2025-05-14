@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import argparse
 import os
 import sys
@@ -13,6 +15,8 @@ import _utils_internal
 import pytest
 
 import torch
+
+from torchrl.objectives.utils import _pseudo_vmap
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import capture_log_records, get_default_devices
@@ -412,6 +416,33 @@ def test_capture_log_records_recompile():
         torch._logging.set_logs()
 
     assert len(records) == 1
+
+
+def add_one(x):
+    return x + 1
+
+
+@pytest.mark.parametrize("in_dim, out_dim", [(0, 0), (0, 1), (1, 0), (1, 1)])
+def test_vmap_in_out_dims(in_dim, out_dim):
+    # Create a tensor with batch dimension
+    x = torch.arange(10).reshape(2, 5)
+    # Move the input dimension to match in_dim
+    x_moved = torch.moveaxis(x, 0, in_dim)
+    # Using vmap with specified in_dim and out_dim
+    vmapped_add_one = torch.vmap(add_one, in_dims=in_dim, out_dims=out_dim)
+    actual_result = vmapped_add_one(x_moved)
+    pseudo_vmapped_add_one = _pseudo_vmap(add_one, in_dims=in_dim, out_dims=out_dim)
+    pseudo_actual_result = pseudo_vmapped_add_one(x_moved)
+
+    # Expected result by applying add_one on each element of the batch separately
+    expected_result = x + 1
+    # Move the output dimension to match the expected result
+    if out_dim == 1:
+        actual_result = torch.moveaxis(actual_result, out_dim, 0)
+        pseudo_actual_result = torch.moveaxis(pseudo_actual_result, out_dim, 0)
+    # Assert the results are as expected
+    assert torch.allclose(actual_result, expected_result)
+    assert torch.allclose(pseudo_actual_result, expected_result)
 
 
 if __name__ == "__main__":

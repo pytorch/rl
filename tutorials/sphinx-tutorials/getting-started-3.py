@@ -16,6 +16,8 @@ Get started with data collection and storage
 
 """
 
+import tempfile
+
 #################################
 #
 # There is no learning without data. In supervised learning, users are
@@ -56,11 +58,11 @@ Get started with data collection and storage
 
 import torch
 
-torch.manual_seed(0)
-
 from torchrl.collectors import SyncDataCollector
 from torchrl.envs import GymEnv
 from torchrl.envs.utils import RandomPolicy
+
+torch.manual_seed(0)
 
 env = GymEnv("CartPole-v1")
 env.set_seed(0)
@@ -141,7 +143,11 @@ print(data["collector", "traj_ids"])
 
 from torchrl.data.replay_buffers import LazyMemmapStorage, ReplayBuffer
 
-buffer = ReplayBuffer(storage=LazyMemmapStorage(max_size=1000))
+buffer_scratch_dir = tempfile.TemporaryDirectory().name
+
+buffer = ReplayBuffer(
+    storage=LazyMemmapStorage(max_size=1000, scratch_dir=buffer_scratch_dir)
+)
 
 #################################
 # Populating the buffer can be done via the
@@ -190,3 +196,18 @@ print(sample)
 #   batch-size in the constructor, then try to iterate over it. This is
 #   equivalent to calling ``rb.sample()`` within a loop!
 #
+
+# sphinx_gallery_start_ignore
+
+# Remove scratch dir
+try:
+    import shutil
+
+    # Use shutil.rmtree() to delete the directory and all its contents
+    shutil.rmtree(buffer_scratch_dir)
+    print(f"Directory '{buffer_scratch_dir}' deleted successfully.")
+except FileNotFoundError:
+    print(f"Directory '{buffer_scratch_dir}' not found.")
+except Exception as e:
+    print(f"Error deleting directory: {e}")
+# sphinx_gallery_end_ignore

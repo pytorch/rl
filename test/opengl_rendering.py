@@ -22,8 +22,8 @@ Typical usage:
     create_opengl_context((width, height))
     # OpenGL context is available here.
 """
+from __future__ import annotations
 
-from __future__ import print_function
 
 # pylint: disable=unused-import,g-import-not-at-top,g-statement-before-imports
 

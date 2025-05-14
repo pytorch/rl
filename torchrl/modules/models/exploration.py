@@ -7,10 +7,9 @@ from __future__ import annotations
 import functools
 import math
 import warnings
-from typing import List, Optional, Sequence, Union
+from typing import Sequence
 
 import torch
-
 from tensordict.nn import TensorDictModuleBase
 from tensordict.utils import NestedKey
 from torch import distributions as d, nn
@@ -18,6 +17,7 @@ from torch.nn import functional as F
 from torch.nn.modules.dropout import _DropoutNd
 from torch.nn.modules.lazy import LazyModuleMixin
 from torch.nn.parameter import UninitializedBuffer, UninitializedParameter
+
 from torchrl._utils import prod
 from torchrl.data.tensor_specs import Unbounded
 from torchrl.data.utils import DEVICE_TYPING, DEVICE_TYPING_ARGS
@@ -56,8 +56,8 @@ class NoisyLinear(nn.Linear):
         in_features: int,
         out_features: int,
         bias: bool = True,
-        device: Optional[DEVICE_TYPING] = None,
-        dtype: Optional[torch.dtype] = None,
+        device: DEVICE_TYPING | None = None,
+        dtype: torch.dtype | None = None,
         std_init: float = 0.1,
     ):
         nn.Module.__init__(self)
@@ -128,7 +128,7 @@ class NoisyLinear(nn.Linear):
         if self.bias_mu is not None:
             self.bias_epsilon.copy_(epsilon_out)
 
-    def _scale_noise(self, size: Union[int, torch.Size, Sequence]) -> torch.Tensor:
+    def _scale_noise(self, size: int | torch.Size | Sequence) -> torch.Tensor:
         if isinstance(size, int):
             size = (size,)
         x = torch.randn(*size, device=self.weight_mu.device)
@@ -142,7 +142,7 @@ class NoisyLinear(nn.Linear):
             return self.weight_mu
 
     @property
-    def bias(self) -> Optional[torch.Tensor]:
+    def bias(self) -> torch.Tensor | None:
         if self.bias_mu is not None:
             if self.training:
                 return self.bias_mu + self.bias_sigma * self.bias_epsilon
@@ -177,8 +177,8 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
         self,
         out_features: int,
         bias: bool = True,
-        device: Optional[DEVICE_TYPING] = None,
-        dtype: Optional[torch.dtype] = None,
+        device: DEVICE_TYPING | None = None,
+        dtype: torch.dtype | None = None,
         std_init: float = 0.1,
     ):
         super().__init__(0, 0, False, device=device)
@@ -251,7 +251,7 @@ class gSDEModule(nn.Module):
     The noise input should be reset through a :obj:`torchrl.envs.transforms.gSDENoise`
     instance: each time the environment is reset, the input noise will be set to
     zero by the environment transform, indicating to gSDEModule that it has to be resampled.
-    This scheme allows us to have the environemt tell the module to resample a
+    This scheme allows us to have the environment tell the module to resample a
     noise only the latter knows the shape of.
 
     A variable transform function can also be provided to map the noicy action
@@ -323,8 +323,8 @@ class gSDEModule(nn.Module):
         scale_min: float = 0.01,
         scale_max: float = 10.0,
         learn_sigma: bool = True,
-        transform: Optional[d.Transform] = None,
-        device: Optional[DEVICE_TYPING] = None,
+        transform: d.Transform | None = None,
+        device: DEVICE_TYPING | None = None,
     ) -> None:
         super().__init__()
         self.action_dim = action_dim
@@ -416,7 +416,7 @@ class gSDEModule(nn.Module):
             action = self.transform(action)
         return mu, sigma, action, _eps_gSDE
 
-    def to(self, device_or_dtype: Union[torch.dtype, DEVICE_TYPING]):
+    def to(self, device_or_dtype: torch.dtype | DEVICE_TYPING):
         if isinstance(device_or_dtype, DEVICE_TYPING_ARGS):
             self.transform = _cast_transform_device(self.transform, device_or_dtype)
         return super().to(device_or_dtype)
@@ -458,8 +458,8 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
         scale_min: float = 0.01,
         scale_max: float = 10.0,
         learn_sigma: bool = True,
-        transform: Optional[d.Transform] = None,
-        device: Optional[DEVICE_TYPING] = None,
+        transform: d.Transform | None = None,
+        device: DEVICE_TYPING | None = None,
     ) -> None:
         super().__init__(
             0,
@@ -617,13 +617,13 @@ class ConsistentDropoutModule(TensorDictModuleBase):
 
     Keyword Args:
         input_shape (tuple, optional): the shape of the input (non-batchted), used to generate the
-            tensordict primers with :meth:`~.make_tensordict_primer`.
-        input_dtype (torch.dtype, optional): the dtype of the input for the primer. If none is pased,
+            tensordict primers with :meth:`make_tensordict_primer`.
+        input_dtype (torch.dtype, optional): the dtype of the input for the primer. If none is passed,
             ``torch.get_default_dtype`` is assumed.
 
     .. note:: To use this class within a policy, one needs the mask to be reset at reset time.
       This can be achieved through a :class:`~torchrl.envs.TensorDictPrimer` transform that can be obtained
-      with :meth:`~.make_tensordict_primer`. See this method for more information.
+      with :meth:`make_tensordict_primer`. See this method for more information.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -642,8 +642,8 @@ class ConsistentDropoutModule(TensorDictModuleBase):
     def __init__(
         self,
         p: float,
-        in_keys: NestedKey | List[NestedKey],
-        out_keys: NestedKey | List[NestedKey] | None = None,
+        in_keys: NestedKey | list[NestedKey],
+        out_keys: NestedKey | list[NestedKey] | None = None,
         input_shape: torch.Size = None,
         input_dtype: torch.dtype | None = None,
     ):
@@ -719,7 +719,7 @@ class ConsistentDropoutModule(TensorDictModuleBase):
         if shape is None:
             raise RuntimeError(
                 "Cannot infer the shape of the input automatically. "
-                "Please pass the shape of the tensor to `ConstistentDropoutModule` during construction "
+                "Please pass the shape of the tensor to `ConsistentDropoutModule` during construction "
                 "with the `input_shape` kwarg."
             )
         return TensorDictPrimer(
@@ -727,4 +727,5 @@ class ConsistentDropoutModule(TensorDictModuleBase):
             default_value=functools.partial(
                 self.consistent_dropout.make_mask, shape=shape
             ),
+            expand_specs=False,
         )

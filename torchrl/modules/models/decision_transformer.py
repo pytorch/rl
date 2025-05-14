@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import dataclasses
-
 import importlib
 from contextlib import nullcontext
 from dataclasses import dataclass
@@ -18,7 +17,7 @@ _has_transformers = importlib.util.find_spec("transformers") is not None
 
 
 class DecisionTransformer(nn.Module):
-    """Online Decion Transformer.
+    """Online Decision Transformer.
 
     Desdescribed in https://arxiv.org/abs/2202.05607 .
 
@@ -113,7 +112,7 @@ class DecisionTransformer(nn.Module):
                     f"Config of type {type(config)} is not supported."
                 ) from err
 
-        super(DecisionTransformer, self).__init__()
+        super().__init__()
 
         with torch.device(device) if device is not None else nullcontext():
             gpt_config = transformers.GPT2Config(

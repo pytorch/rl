@@ -8,13 +8,11 @@ import importlib.util
 import os.path
 import shutil
 import tempfile
-
 from contextlib import nullcontext
 from pathlib import Path
 from typing import Callable
 
 import torch
-
 from tensordict import PersistentTensorDict, TensorDict
 from torchrl._utils import (
     KeyDependentDefaultDict,
@@ -57,7 +55,7 @@ class RobosetExperienceReplay(BaseDatasetExperienceReplay):
         root (Path or str, optional): The Roboset dataset root directory.
             The actual dataset memory-mapped files will be saved under
             `<root>/<dataset_id>`. If none is provided, it defaults to
-            ``~/.cache/torchrl/roboset`.
+            `~/.cache/torchrl/atari`.roboset`.
         download (bool or str, optional): Whether the dataset should be downloaded if
             not found. Defaults to ``True``. Download can also be passed as ``"force"``,
             in which case the downloaded data will be overwritten.
@@ -162,7 +160,7 @@ class RobosetExperienceReplay(BaseDatasetExperienceReplay):
         collate_fn: Callable | None = None,
         pin_memory: bool = False,
         prefetch: int | None = None,
-        transform: "torchrl.envs.Transform" | None = None,  # noqa-F821
+        transform: torchrl.envs.Transform | None = None,  # noqa-F821
         split_trajs: bool = False,
         **env_kwargs,
     ):

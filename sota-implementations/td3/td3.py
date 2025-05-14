@@ -20,11 +20,8 @@ import torch
 import torch.cuda
 import tqdm
 from tensordict.nn import CudaGraphModule
-
 from torchrl._utils import compile_with_warmup, timeit
-
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-
 from torchrl.record.loggers import generate_exp_name, get_logger
 from utils import (
     dump_video,
@@ -37,12 +34,11 @@ from utils import (
     make_td3_agent,
 )
 
-
 torch.set_float32_matmul_precision("high")
 
 
 @hydra.main(version_base="1.1", config_path="", config_name="config")
-def main(cfg: "DictConfig"):  # noqa: F821
+def main(cfg: DictConfig):  # noqa: F821
     device = cfg.network.device
     if device in ("", None):
         if torch.cuda.is_available():

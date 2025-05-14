@@ -2,11 +2,13 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import importlib.util
 
 import os
 import warnings
-from typing import Dict, Optional, Sequence, Union
+from typing import Sequence
 
 from torch import Tensor
 
@@ -93,7 +95,7 @@ class WandbLogger(Logger):
 
         self.video_log_counter = 0
 
-    def _create_experiment(self) -> "WandbLogger":
+    def _create_experiment(self) -> WandbLogger:
         """Creates a wandb experiment.
 
         Args:
@@ -111,7 +113,7 @@ class WandbLogger(Logger):
 
         return wandb.init(**self._wandb_kwargs)
 
-    def log_scalar(self, name: str, value: float, step: Optional[int] = None) -> None:
+    def log_scalar(self, name: str, value: float, step: int | None = None) -> None:
         """Logs a scalar value to wandb.
 
         Args:
@@ -173,7 +175,7 @@ class WandbLogger(Logger):
             **kwargs,
         )
 
-    def log_hparams(self, cfg: Union["DictConfig", Dict]) -> None:  # noqa: F821
+    def log_hparams(self, cfg: DictConfig | dict) -> None:  # noqa: F821
         """Logs the hyperparameters of the experiment.
 
         Args:

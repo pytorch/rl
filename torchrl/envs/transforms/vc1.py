@@ -3,11 +3,12 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from __future__ import annotations
+
 import importlib
 import os
 import subprocess
 from functools import partial
-from typing import Union
 
 import torch
 from tensordict import TensorDictBase
@@ -154,22 +155,22 @@ class VC1Transform(Transform):
         else:
             raise NotImplementedError(type(model_transforms))
 
-    def _call(self, tensordict):
+    def _call(self, next_tensordict):
         if not self.del_keys:
             in_keys = [
                 in_key
                 for in_key, out_key in zip(self.in_keys, self.out_keys)
                 if in_key != out_key
             ]
-            saved_td = tensordict.select(*in_keys)
-        with tensordict.view(-1) as tensordict_view:
+            saved_td = next_tensordict.select(*in_keys)
+        with next_tensordict.view(-1) as tensordict_view:
             super()._call(self.model_transforms(tensordict_view))
         if self.del_keys:
-            tensordict.exclude(*self.in_keys, inplace=True)
+            next_tensordict.exclude(*self.in_keys, inplace=True)
         else:
             # reset in_keys
-            tensordict.update(saved_td)
-        return tensordict
+            next_tensordict.update(saved_td)
+        return next_tensordict
 
     forward = _call
 
@@ -212,7 +213,7 @@ class VC1Transform(Transform):
 
         return observation_spec
 
-    def to(self, dest: Union[DEVICE_TYPING, torch.dtype]):
+    def to(self, dest: DEVICE_TYPING | torch.dtype):
         if isinstance(dest, torch.dtype):
             self._dtype = dest
         else:

@@ -13,10 +13,13 @@ dependencies:
     - pytest-instafail
     - pytest-rerunfailures
     - pytest-error-for-skips
+    - pytest-asyncio
     - expecttest
+    - pybind11[global]
     - pyyaml
     - scipy
     - hydra-core
     - chess
     - transformers
     - cairosvg
+    - pycairo

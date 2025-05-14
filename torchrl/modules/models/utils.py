@@ -6,13 +6,11 @@ from __future__ import annotations
 
 import inspect
 import warnings
-from typing import Callable, Sequence, Type
+from typing import Callable, Sequence
 
 import torch
 from torch import nn
-
 from torchrl.data.utils import DEVICE_TYPING
-
 from torchrl.modules.models.exploration import NoisyLazyLinear, NoisyLinear
 
 LazyMapping = {
@@ -114,7 +112,7 @@ def _find_depth(depth: int | None, *list_or_ints: Sequence):
 
 
 def create_on_device(
-    module_class: Type[nn.Module] | Callable,
+    module_class: type[nn.Module] | Callable,
     device: DEVICE_TYPING | None,
     *args,
     **kwargs,

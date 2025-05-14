@@ -7,36 +7,55 @@ from __future__ import annotations
 import importlib.util
 import io
 import pathlib
-from typing import Dict
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-from torchrl.data import Binary, Bounded, Categorical, Composite, NonTensor, Unbounded
-
+from torchrl.data.tensor_specs import (
+    Binary,
+    Bounded,
+    Categorical,
+    Composite,
+    NonTensor,
+    Unbounded,
+)
 from torchrl.envs import EnvBase
 from torchrl.envs.common import _EnvPostInit
-
 from torchrl.envs.utils import _classproperty
 
 
 class _ChessMeta(_EnvPostInit):
     def __call__(cls, *args, **kwargs):
         instance = super().__call__(*args, **kwargs)
-        if kwargs.get("include_hash"):
+        include_hash = kwargs.get("include_hash")
+        include_hash_inv = kwargs.get("include_hash_inv")
+        if include_hash:
             from torchrl.envs import Hash
 
             in_keys = []
             out_keys = []
-            if instance.include_san:
-                in_keys.append("san")
-                out_keys.append("san_hash")
-            if instance.include_fen:
-                in_keys.append("fen")
-                out_keys.append("fen_hash")
-            if instance.include_pgn:
-                in_keys.append("pgn")
-                out_keys.append("pgn_hash")
-            instance = instance.append_transform(Hash(in_keys, out_keys))
+            in_keys_inv = [] if include_hash_inv else None
+            out_keys_inv = [] if include_hash_inv else None
+
+            def maybe_add_keys(condition, in_key, out_key):
+                if condition:
+                    in_keys.append(in_key)
+                    out_keys.append(out_key)
+                    if include_hash_inv:
+                        in_keys_inv.append(in_key)
+                        out_keys_inv.append(out_key)
+
+            maybe_add_keys(instance.include_san, "san", "san_hash")
+            maybe_add_keys(instance.include_fen, "fen", "fen_hash")
+            maybe_add_keys(instance.include_pgn, "pgn", "pgn_hash")
+
+            instance = instance.append_transform(
+                Hash(in_keys, out_keys, in_keys_inv, out_keys_inv)
+            )
+        elif include_hash_inv:
+            raise ValueError(
+                "'include_hash_inv=True' can only be set if"
+                f"'include_hash=True', but got 'include_hash={include_hash}'."
+            )
         if kwargs.get("mask_actions", True):
             from torchrl.envs import ActionMask
 
@@ -180,7 +199,7 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
 
     """
 
-    _hash_table: Dict[int, str] = {}
+    _hash_table: dict[int, str] = {}
     _PGN_RESTART = """[Event "?"]
 [Site "?"]
 [Date "????.??.??"]
@@ -214,7 +233,7 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
     def _legal_moves_to_index(
         self,
         tensordict: TensorDictBase | None = None,
-        board: "chess.Board" | None = None,  # noqa: F821
+        board: chess.Board | None = None,  # noqa: F821
         return_mask: bool = False,
         pad: bool = False,
     ) -> torch.Tensor:
@@ -265,6 +284,7 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
         include_pgn: bool = False,
         include_legal_moves: bool = False,
         include_hash: bool = False,
+        include_hash_inv: bool = False,
         mask_actions: bool = True,
         pixels: bool = False,
     ):
@@ -338,6 +358,15 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
 
     def _is_done(self, board):
         return board.is_game_over() | board.is_fifty_moves()
+
+    def all_actions(self, tensordict: TensorDictBase | None = None) -> TensorDictBase:
+        if not self.mask_actions:
+            raise RuntimeError(
+                "Cannot generate legal actions since 'mask_actions=False' was "
+                "set. If you really want to generate all actions, not just "
+                "legal ones, call 'env.full_action_spec.enumerate()'."
+            )
+        return super().all_actions(tensordict)
 
     def _reset(self, tensordict=None):
         fen = None
@@ -449,8 +478,8 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
 
     @classmethod
     def _pgn_to_board(
-        cls, pgn_string: str, board: "chess.Board" | None = None  # noqa: F821
-    ) -> "chess.Board":  # noqa: F821
+        cls, pgn_string: str, board: chess.Board | None = None  # noqa: F821
+    ) -> chess.Board:  # noqa: F821
         pgn_io = io.StringIO(pgn_string)
         game = cls.lib.pgn.read_game(pgn_io)
         if board is None:
@@ -462,7 +491,7 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
         return board
 
     @classmethod
-    def _add_move_to_pgn(cls, pgn_string: str, move: "chess.Move") -> str:  # noqa: F821
+    def _add_move_to_pgn(cls, pgn_string: str, move: chess.Move) -> str:  # noqa: F821
         pgn_io = io.StringIO(pgn_string)
         game = cls.lib.pgn.read_game(pgn_io)
         if game is None:
@@ -471,7 +500,7 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
         return str(game)
 
     @classmethod
-    def _board_to_pgn(cls, board: "chess.Board") -> str:  # noqa: F821
+    def _board_to_pgn(cls, board: chess.Board) -> str:  # noqa: F821
         game = cls.lib.pgn.Game.from_board(board)
         pgn_string = str(game)
         return pgn_string
@@ -577,13 +606,13 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
         reward = torch.tensor([reward_val], dtype=torch.float32)
         dest.set("reward", reward)
         dest.set("turn", turn)
-        dest.set("done", [done])
-        dest.set("terminated", [done])
+        dest.set("done", torch.tensor([done]))
+        dest.set("terminated", torch.tensor([done]))
         if self.pixels:
             dest.set("pixels", self._get_tensor_image(board=self.board))
         return dest
 
-    def _set_seed(self, *args, **kwargs):
+    def _set_seed(self, *args, **kwargs) -> None:
         ...
 
     def cardinality(self, tensordict: TensorDictBase | None = None) -> int:

@@ -11,7 +11,6 @@ from typing import Callable
 import numpy as np
 from tensordict import TensorDict
 from torchrl.data.datasets.common import BaseDatasetExperienceReplay
-
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers import (
     Sampler,
@@ -67,7 +66,7 @@ class OpenMLExperienceReplay(BaseDatasetExperienceReplay):
         collate_fn: Callable | None = None,
         pin_memory: bool = False,
         prefetch: int | None = None,
-        transform: "Transform" | None = None,  # noqa-F821
+        transform: Transform | None = None,  # noqa-F821
     ):
 
         if sampler is None:

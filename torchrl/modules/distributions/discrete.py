@@ -2,9 +2,11 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 from enum import Enum
 from functools import wraps
-from typing import Any, Optional, Sequence, Union
+from typing import Any, Sequence
 
 import torch
 import torch.distributions as D
@@ -17,8 +19,8 @@ __all__ = ["OneHotCategorical", "MaskedCategorical", "Ordinal", "OneHotOrdinal"]
 
 
 def _treat_categorical_params(
-    params: Optional[torch.Tensor] = None,
-) -> Optional[torch.Tensor]:
+    params: torch.Tensor | None = None,
+) -> torch.Tensor | None:
     if params is None:
         return None
     if params.shape[-1] == 1:
@@ -94,8 +96,8 @@ class OneHotCategorical(D.Categorical):
 
     def __init__(
         self,
-        logits: Optional[torch.Tensor] = None,
-        probs: Optional[torch.Tensor] = None,
+        logits: torch.Tensor | None = None,
+        probs: torch.Tensor | None = None,
         grad_method: ReparamGradientStrategy = ReparamGradientStrategy.PassThrough,
         **kwargs,
     ) -> None:
@@ -126,12 +128,10 @@ class OneHotCategorical(D.Categorical):
         return -p_log_p.sum(-1)
 
     @_one_hot_wrapper(D.Categorical)
-    def sample(
-        self, sample_shape: Optional[Union[torch.Size, Sequence]] = None
-    ) -> torch.Tensor:
+    def sample(self, sample_shape: torch.Size | Sequence | None = None) -> torch.Tensor:
         ...
 
-    def rsample(self, sample_shape: Union[torch.Size, Sequence] = None) -> torch.Tensor:
+    def rsample(self, sample_shape: torch.Size | Sequence = None) -> torch.Tensor:
         if sample_shape is None:
             sample_shape = torch.Size([])
         if hasattr(self, "logits") and self.logits is not None:
@@ -157,7 +157,7 @@ class OneHotCategorical(D.Categorical):
             return out
         else:
             raise ValueError(
-                f"Unknown reparametrization strategy {self.reparam_strategy}."
+                f"Unknown reparameterization strategy {self.reparam_strategy}."
             )
 
 
@@ -184,7 +184,10 @@ class MaskedCategorical(D.Categorical):
             invalid (out-of-mask) indices. Defaults to -inf.
         padding_value: The padding value in the mask tensor. When
             sparse_mask == True, the padding_value will be ignored.
+        use_cross_entropy (bool, optional): For faster computation of the log-probability,
+            the cross_entropy loss functional can be used. Defaults to ``False``.
 
+    Examples:
         >>> torch.manual_seed(0)
         >>> logits = torch.randn(4) / 100  # almost equal probabilities
         >>> mask = torch.tensor([True, False, True, True])
@@ -217,13 +220,14 @@ class MaskedCategorical(D.Categorical):
 
     def __init__(
         self,
-        logits: Optional[torch.Tensor] = None,
-        probs: Optional[torch.Tensor] = None,
+        logits: torch.Tensor | None = None,
+        probs: torch.Tensor | None = None,
         *,
         mask: torch.Tensor = None,
         indices: torch.Tensor = None,
         neg_inf: float = float("-inf"),
-        padding_value: Optional[int] = None,
+        padding_value: int | None = None,
+        use_cross_entropy: bool = False,
     ) -> None:
         if not ((mask is None) ^ (indices is None)):
             raise ValueError(
@@ -246,6 +250,7 @@ class MaskedCategorical(D.Categorical):
             probs = probs / probs.sum(-1, keepdim=True)
             logits = probs.log()
         num_samples = logits.shape[-1]
+        self.use_cross_entropy = use_cross_entropy
         logits = self._mask_logits(
             logits,
             mask,
@@ -261,7 +266,7 @@ class MaskedCategorical(D.Categorical):
         self.num_samples = num_samples
 
     def sample(
-        self, sample_shape: Optional[Union[torch.Size, Sequence[int]]] = None
+        self, sample_shape: torch.Size | Sequence[int] | None = None
     ) -> torch.Tensor:
         if sample_shape is None:
             sample_shape = torch.Size()
@@ -281,27 +286,44 @@ class MaskedCategorical(D.Categorical):
 
     def log_prob(self, value: torch.Tensor) -> torch.Tensor:
         if not self._sparse_mask:
-            return super().log_prob(value)
+            if self.use_cross_entropy:
+                logits = self.logits
+                if logits.ndim > 2:
+                    # Bring channels in 2nd dim
+                    logits = logits.transpose(-1, 1)
+                result = -torch.nn.functional.cross_entropy(logits, value, reduce=False)
+            else:
+                result = super().log_prob(value)
+            result = torch.where(torch.isfinite(result), result, self.neg_inf)
+            return result
 
         idx_3d = self._mask.view(1, -1, self._num_events)
         val_3d = value.view(-1, idx_3d.size(1), 1)
         mask = idx_3d == val_3d
         idx = mask.int().argmax(dim=-1, keepdim=True)
-        ret = super().log_prob(idx.view_as(value))
+        idx = idx.view_as(value)
+        if self.use_cross_entropy:
+            logits = self.logits
+            if logits.ndim > 2:
+                # Bring channels in 2nd dim
+                logits = logits.transpose(-1, 1)
+            ret = -torch.nn.functional.cross_entropy(logits, idx, reduce=False)
+        else:
+            ret = super().log_prob(idx)
         # Fill masked values with neg_inf.
         ret = ret.view_as(val_3d)
         ret = ret.masked_fill(
             torch.logical_not(mask.any(dim=-1, keepdim=True)), self.neg_inf
         )
-        return ret.resize_as(value)
+        return ret.view_as(value)
 
     @staticmethod
     def _mask_logits(
         logits: torch.Tensor,
-        mask: Optional[torch.Tensor] = None,
+        mask: torch.Tensor | None = None,
         neg_inf: float = float("-inf"),
         sparse_mask: bool = False,
-        padding_value: Optional[int] = None,
+        padding_value: int | None = None,
     ) -> torch.Tensor:
         if mask is None:
             return logits
@@ -401,12 +423,12 @@ class MaskedOneHotCategorical(MaskedCategorical):
 
     def __init__(
         self,
-        logits: Optional[torch.Tensor] = None,
-        probs: Optional[torch.Tensor] = None,
+        logits: torch.Tensor | None = None,
+        probs: torch.Tensor | None = None,
         mask: torch.Tensor = None,
         indices: torch.Tensor = None,
         neg_inf: float = float("-inf"),
-        padding_value: Optional[int] = None,
+        padding_value: int | None = None,
         grad_method: ReparamGradientStrategy = ReparamGradientStrategy.PassThrough,
     ) -> None:
         self.grad_method = grad_method
@@ -421,7 +443,7 @@ class MaskedOneHotCategorical(MaskedCategorical):
 
     @_one_hot_wrapper(MaskedCategorical)
     def sample(
-        self, sample_shape: Optional[Union[torch.Size, Sequence[int]]] = None
+        self, sample_shape: torch.Size | Sequence[int] | None = None
     ) -> torch.Tensor:
         ...
 
@@ -439,7 +461,7 @@ class MaskedOneHotCategorical(MaskedCategorical):
     def log_prob(self, value: torch.Tensor) -> torch.Tensor:
         return super().log_prob(value.argmax(dim=-1))
 
-    def rsample(self, sample_shape: Union[torch.Size, Sequence] = None) -> torch.Tensor:
+    def rsample(self, sample_shape: torch.Size | Sequence = None) -> torch.Tensor:
         if sample_shape is None:
             sample_shape = torch.Size([])
         if hasattr(self, "logits") and self.logits is not None:
@@ -503,7 +525,7 @@ class MaskedOneHotCategorical(MaskedCategorical):
             return out
         else:
             raise ValueError(
-                f"Unknown reparametrization strategy {self.reparam_strategy}."
+                f"Unknown reparameterization strategy {self.reparam_strategy}."
             )
 
 

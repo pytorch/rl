@@ -7,7 +7,7 @@ ImportError: /usr/local/lib/python3.7/dist-packages/torchrl/_torchrl.so: undefin
 ```
 
 ### How to reproduce
-1. Create an Colab Notebook (at 24/11/2022 Colab enviroment has Python 3.7 and Pytorch 1.12 installed by default).
+1. Create an Colab Notebook (at 24/11/2022 Colab environment has Python 3.7 and Pytorch 1.12 installed by default).
 2. ``` !pip install torchrl ```
 3. ``` import torchrl ```
 
@@ -20,4 +20,4 @@ before the ```!pip install torchrl``` command. This will install the latest pyto
 ### Workarounds
 There are two workarounds to this issue
 1. Install/upgrade to the latest pytorch release before installing torchrl.
-2. If you need to use a previous pytorch relase: Install functorch version related to your torch distribution: e.g. ``` pip install functorch==0.2.0 ``` and install library from source ``` pip install git+https://github.com/pytorch/rl@<lib_version_here> ```.
+2. If you need to use a previous pytorch release: Install functorch version related to your torch distribution: e.g. ``` pip install functorch==0.2.0 ``` and install library from source ``` pip install git+https://github.com/pytorch/rl@<lib_version_here> ```.

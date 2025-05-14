@@ -5,13 +5,11 @@
 from __future__ import annotations
 
 import importlib.util
-from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
 from packaging import version
 from tensordict import TensorDict, TensorDictBase
-
 from torchrl.envs.common import _EnvPostInit
 from torchrl.envs.utils import _classproperty
 
@@ -51,7 +49,7 @@ def _get_envs():
 
 def _jumanji_to_torchrl_spec_transform(
     spec,
-    dtype: Optional[torch.dtype] = None,
+    dtype: torch.dtype | None = None,
     device: DEVICE_TYPING = None,
     categorical_action_encoding: bool = True,
 ) -> TensorSpec:
@@ -169,13 +167,13 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
         device (torch.device, optional): if provided, the device on which the data
             is to be cast. Defaults to ``torch.device("cpu")``.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
-            for envs to be ``done`` just after :meth:`~.reset` is called.
+            for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
         jit (bool, optional): whether the step and reset method should be wrapped in `jit`.
             Defaults to ``False``.
 
     Attributes:
-        available_envs: environments availalbe to build
+        available_envs: environments available to build
 
     Examples:
         >>> import jumanji
@@ -352,7 +350,7 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
 
     def __init__(
         self,
-        env: "jumanji.env.Environment" = None,  # noqa: F821
+        env: jumanji.env.Environment = None,  # noqa: F821
         categorical_action_encoding=True,
         jit: bool = True,
         **kwargs,
@@ -388,11 +386,11 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
     def _build_env(
         self,
         env,
-        _seed: Optional[int] = None,
+        _seed: int | None = None,
         from_pixels: bool = False,
-        render_kwargs: Optional[dict] = None,
+        render_kwargs: dict | None = None,
         pixels_only: bool = False,
-        camera_id: Union[int, str] = 0,
+        camera_id: int | str = 0,
         **kwargs,
     ):
         self.from_pixels = from_pixels
@@ -480,7 +478,7 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
             reward_spec.shape = torch.Size([1])
         return reward_spec.expand([*self.batch_size, *reward_spec.shape])
 
-    def _make_specs(self, env: "jumanji.env.Environment") -> None:  # noqa: F821
+    def _make_specs(self, env: jumanji.env.Environment) -> None:  # noqa: F821
 
         # extract spec from jumanji definition
         self.action_spec = self._make_action_spec(env)
@@ -495,7 +493,7 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
         # build state example for data conversion
         self._state_example = self._make_state_example(env)
 
-    def _check_kwargs(self, kwargs: Dict):
+    def _check_kwargs(self, kwargs: dict):
         jumanji = self.lib
         if "env" not in kwargs:
             raise TypeError("Could not find environment key 'env' in kwargs.")
@@ -519,7 +517,7 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
     def key(self, value):
         self._key = value
 
-    def _set_seed(self, seed):
+    def _set_seed(self, seed: int | None) -> None:
         import jax
 
         if seed is None:
@@ -674,7 +672,7 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
         return tensordict_out
 
     def _reset(
-        self, tensordict: Optional[TensorDictBase] = None, **kwargs
+        self, tensordict: TensorDictBase | None = None, **kwargs
     ) -> TensorDictBase:
         import jax
         from jax import numpy as jnp
@@ -736,10 +734,10 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
 
         return reward
 
-    def _output_transform(self, step_outputs_tuple: Tuple) -> Tuple:
+    def _output_transform(self, step_outputs_tuple: tuple) -> tuple:
         ...
 
-    def _reset_output_transform(self, reset_outputs_tuple: Tuple) -> Tuple:
+    def _reset_output_transform(self, reset_outputs_tuple: tuple) -> tuple:
         ...
 
 
@@ -776,11 +774,11 @@ class JumanjiEnv(JumanjiWrapper):
             With ``jumanji``, this indicates the number of vectorized environments.
             Defaults to ``torch.Size([])``.
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
-            for envs to be ``done`` just after :meth:`~.reset` is called.
+            for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
 
     Attributes:
-        available_envs: environments availalbe to build
+        available_envs: environments available to build
 
     Examples:
         >>> from torchrl.envs import JumanjiEnv
@@ -938,7 +936,7 @@ class JumanjiEnv(JumanjiWrapper):
         self,
         env_name: str,
         **kwargs,
-    ) -> "jumanji.env.Environment":  # noqa: F821
+    ) -> jumanji.env.Environment:  # noqa: F821
         if not _has_jumanji:
             raise ImportError(
                 f"jumanji not found, unable to create {env_name}. "
@@ -957,7 +955,7 @@ class JumanjiEnv(JumanjiWrapper):
     def env_name(self):
         return self._constructor_kwargs["env_name"]
 
-    def _check_kwargs(self, kwargs: Dict):
+    def _check_kwargs(self, kwargs: dict):
         if "env_name" not in kwargs:
             raise TypeError("Expected 'env_name' to be part of kwargs")
 

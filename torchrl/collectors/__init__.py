@@ -12,3 +12,22 @@ from .collectors import (
     MultiSyncDataCollector,
     SyncDataCollector,
 )
+from .weight_update import (
+    MultiProcessedWeightUpdate,
+    RayWeightUpdater,
+    VanillaWeightUpdater,
+    WeightUpdaterBase,
+)
+
+__all__ = [
+    "RandomPolicy",
+    "WeightUpdaterBase",
+    "VanillaWeightUpdater",
+    "RayWeightUpdater",
+    "MultiProcessedWeightUpdate",
+    "aSyncDataCollector",
+    "DataCollectorBase",
+    "MultiaSyncDataCollector",
+    "MultiSyncDataCollector",
+    "SyncDataCollector",
+]

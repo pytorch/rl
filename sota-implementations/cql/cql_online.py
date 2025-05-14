@@ -21,12 +21,10 @@ import torch
 import tqdm
 from tensordict import TensorDict
 from tensordict.nn import CudaGraphModule
-
 from torchrl._utils import timeit
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives import group_optimizers
 from torchrl.record.loggers import generate_exp_name, get_logger
-
 from utils import (
     dump_video,
     log_metrics,
@@ -42,7 +40,7 @@ torch.set_float32_matmul_precision("high")
 
 
 @hydra.main(version_base="1.1", config_path="", config_name="online_config")
-def main(cfg: "DictConfig"):  # noqa: F821
+def main(cfg: DictConfig):  # noqa: F821
     # Create logger
     exp_name = generate_exp_name("CQL-online", cfg.logger.exp_name)
     logger = None

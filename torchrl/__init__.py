@@ -46,13 +46,16 @@ except RuntimeError as err:
             )
 
 
-import torchrl.collectors
-import torchrl.data
-import torchrl.envs
-import torchrl.modules
-import torchrl.objectives
-import torchrl.trainers
-from torchrl._utils import compile_with_warmup, timeit
+from torchrl._utils import (
+    auto_unwrap_transformed_env,
+    compile_with_warmup,
+    implement_for,
+    logger,
+    set_auto_unwrap_transformed_env,
+    timeit,
+)
+
+torchrl_logger = logger
 
 # Filter warnings in subprocesses: True by default given the multiple optional
 # deps of the library. This can be turned on via `torchrl.filter_warnings_subprocess = False`.
@@ -101,3 +104,13 @@ def _inv(self):
 
 
 ComposeTransform.inv = _inv
+
+__all__ = [
+    "auto_unwrap_transformed_env",
+    "compile_with_warmup",
+    "implement_for",
+    "set_auto_unwrap_transformed_env",
+    "timeit",
+    "logger",
+    "torchrl_logger",
+]

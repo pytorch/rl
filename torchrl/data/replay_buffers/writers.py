@@ -11,14 +11,14 @@ from abc import ABC, abstractmethod
 from copy import copy
 from multiprocessing.context import get_spawning_popen
 from pathlib import Path
-from typing import Any, Dict, Sequence
+from typing import Any, Sequence
 
 import numpy as np
 import torch
-
 from tensordict import is_tensor_collection, MemoryMappedTensor, TensorDictBase
-from tensordict.utils import _STRDTYPE2DTYPE, expand_as_right, is_tensorclass
+from tensordict.utils import expand_as_right, is_tensorclass
 from torch import multiprocessing as mp
+from torchrl._utils import _STRDTYPE2DTYPE
 
 try:
     from torch.utils._pytree import tree_leaves
@@ -70,11 +70,11 @@ class Writer(ABC):
         ...
 
     @abstractmethod
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         ...
 
     @abstractmethod
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         ...
 
     def _replicate_index(self, index):
@@ -131,10 +131,10 @@ class ImmutableDatasetWriter(Writer):
     def loads(self, path):
         ...
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         return {}
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         return
 
 
@@ -160,7 +160,7 @@ class RoundRobinWriter(Writer):
 
     def loads(self, path):
         path = Path(path).absolute()
-        with open(path / "metadata.json", "r") as file:
+        with open(path / "metadata.json") as file:
             metadata = json.load(file)
             self._cursor = metadata["cursor"]
 
@@ -209,14 +209,15 @@ class RoundRobinWriter(Writer):
             ent.mark_update(index)
         return index
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         return {"_cursor": self._cursor}
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         self._cursor = state_dict["_cursor"]
 
     def _empty(self):
         self._cursor = 0
+        self._write_count = 0
 
     @property
     def _cursor(self):
@@ -611,7 +612,7 @@ class TensorDictMaxValueWriter(Writer):
 
     def loads(self, path):
         path = Path(path).absolute()
-        with open(path / "metadata.json", "r") as file:
+        with open(path / "metadata.json") as file:
             metadata = json.load(file)
             self._cursor = metadata["cursor"]
             self._rank_key = metadata["rank_key"]
@@ -623,10 +624,10 @@ class TensorDictMaxValueWriter(Writer):
             shape=shape,
         ).tolist()
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         raise NotImplementedError
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         raise NotImplementedError
 
     def __repr__(self):
@@ -705,7 +706,7 @@ class WriterEnsemble(Writer):
                 )
             if index.is_floating_point():
                 raise TypeError(
-                    "A floating point index was recieved when an integer dtype was expected."
+                    "A floating point index was received when an integer dtype was expected."
                 )
         if isinstance(index, int) or (not isinstance(index, slice) and len(index) == 0):
             try:
@@ -731,8 +732,8 @@ class WriterEnsemble(Writer):
         writers = textwrap.indent(f"writers={self._writers}", " " * 4)
         return f"WriterEnsemble(\n{writers})"
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         raise NotImplementedError
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         raise NotImplementedError

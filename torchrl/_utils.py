@@ -5,12 +5,9 @@
 from __future__ import annotations
 
 import collections
-
 import functools
 import inspect
-
 import logging
-
 import math
 import os
 import pickle
@@ -21,16 +18,14 @@ import traceback
 import warnings
 from contextlib import nullcontext
 from copy import copy
-from distutils.util import strtobool
 from functools import wraps
 from importlib import import_module
-from typing import Any, Callable, cast, Dict, Tuple, TypeVar, Union
+from typing import Any, Callable, cast, TypeVar
 
 import numpy as np
 import torch
 from packaging.version import parse
 from tensordict import unravel_key
-
 from tensordict.utils import NestedKey
 from torch import multiprocessing as mp, Tensor
 
@@ -38,6 +33,21 @@ try:
     from torch.compiler import is_compiling
 except ImportError:
     from torch._dynamo import is_compiling
+
+
+def strtobool(val: Any) -> bool:
+    """Convert a string representation of truth to a boolean.
+
+    True values are 'y', 'yes', 't', 'true', 'on', and '1'; false values are 'n', 'no', 'f', 'false', 'off', and '0'.
+    Raises ValueError if 'val' is anything else.
+    """
+    val = val.lower()
+    if val in ("y", "yes", "t", "true", "on", "1"):
+        return True
+    if val in ("n", "no", "f", "false", "off", "0"):
+        return False
+    raise ValueError(f"Invalid truth value {val!r}")
+
 
 LOGGING_LEVEL = os.environ.get("RL_LOGGING_LEVEL", "INFO")
 logger = logging.getLogger("torchrl")
@@ -67,9 +77,41 @@ VERBOSE = strtobool(os.environ.get("VERBOSE", str(logger.isEnabledFor(logging.DE
 _os_is_windows = sys.platform == "win32"
 RL_WARNINGS = strtobool(os.environ.get("RL_WARNINGS", "1"))
 if RL_WARNINGS:
-    warnings.simplefilter("once", DeprecationWarning)
+    warnings.filterwarnings("once", category=DeprecationWarning, module="torchrl")
 
 BATCHED_PIPE_TIMEOUT = float(os.environ.get("BATCHED_PIPE_TIMEOUT", "10000.0"))
+
+_TORCH_DTYPES = (
+    torch.bfloat16,
+    torch.bool,
+    torch.complex128,
+    torch.complex32,
+    torch.complex64,
+    torch.float16,
+    torch.float32,
+    torch.float64,
+    torch.int16,
+    torch.int32,
+    torch.int64,
+    torch.int8,
+    torch.qint32,
+    torch.qint8,
+    torch.quint4x2,
+    torch.quint8,
+    torch.uint8,
+)
+if hasattr(torch, "uint16"):
+    _TORCH_DTYPES = _TORCH_DTYPES + (torch.uint16,)
+if hasattr(torch, "uint32"):
+    _TORCH_DTYPES = _TORCH_DTYPES + (torch.uint32,)
+if hasattr(torch, "uint64"):
+    _TORCH_DTYPES = _TORCH_DTYPES + (torch.uint64,)
+_STR_DTYPE_TO_DTYPE = {str(dtype): dtype for dtype in _TORCH_DTYPES}
+_STRDTYPE2DTYPE = _STR_DTYPE_TO_DTYPE
+_DTYPE_TO_STR_DTYPE = {
+    dtype: str_dtype for str_dtype, dtype in _STR_DTYPE_TO_DTYPE.items()
+}
+_DTYPE2STRDTYPE = _STR_DTYPE_TO_DTYPE
 
 
 class timeit:
@@ -162,14 +204,20 @@ class timeit:
 def _check_for_faulty_process(processes):
     terminate = False
     for p in processes:
-        if not p.is_alive():
+        if not p._closed and not p.is_alive():
             terminate = True
             for _p in processes:
-                if _p.is_alive():
-                    _p.terminate()
-                    _p.close()
-        if terminate:
-            break
+                _p: mp.Process
+                if not _p._closed and _p.is_alive():
+                    try:
+                        _p.terminate()
+                    except Exception:
+                        _p.kill()
+                    finally:
+                        time.sleep(0.1)
+                        _p.close()
+            if terminate:
+                break
     if terminate:
         raise RuntimeError(
             "At least one process failed. Check for more infos in the log."
@@ -339,7 +387,7 @@ class implement_for:
 
     def __init__(
         self,
-        module_name: Union[str, Callable],
+        module_name: str | Callable,
         from_version: str = None,
         to_version: str = None,
         *,
@@ -375,7 +423,7 @@ class implement_for:
         elif fn_str[0].startswith("<function "):
             first = fn_str[0][len("<function ") :]
         else:
-            raise RuntimeError(f"Unkown func representation {fn}")
+            raise RuntimeError(f"Unknown func representation {fn}")
         last = fn_str[1:]
         if last:
             first = [first]
@@ -407,13 +455,20 @@ class implement_for:
         else:
             # class not yet defined
             return
+        try:
+            delattr(cls, self.fn.__name__)
+        except AttributeError:
+            pass
+
+        name = self.fn.__name__
         if self.class_method:
-            setattr(cls, self.fn.__name__, classmethod(self.fn))
+            fn = classmethod(self.fn)
         else:
-            setattr(cls, self.fn.__name__, self.fn)
+            fn = self.fn
+        setattr(cls, name, fn)
 
     @classmethod
-    def import_module(cls, module_name: Union[Callable, str]) -> str:
+    def import_module(cls, module_name: Callable | str) -> str:
         """Imports module and returns its version."""
         if not callable(module_name):
             module = cls._cache_modules.get(module_name, None)
@@ -509,11 +564,11 @@ class implement_for:
         return unsupported
 
     @classmethod
-    def reset(cls, setters_dict: Dict[str, implement_for] = None):
+    def reset(cls, setters_dict: dict[str, implement_for] = None):
         """Resets the setters in setter_dict.
 
         ``setter_dict`` is a copy of implementations. We just need to iterate through its
-        values and call :meth:`~.module_set` for each.
+        values and call :meth:`module_set` for each.
 
         """
         if VERBOSE:
@@ -527,7 +582,7 @@ class implement_for:
         return (
             f"{self.__class__.__name__}("
             f"module_name={self.module_name}({self.from_version, self.to_version}), "
-            f"fn_name={self.fn.__name__}, cls={self._get_cls(self.fn)}, is_set={self.do_set})"
+            f"fn_name={self.fn.__name__}, cls={self._get_cls(self.fn)})"
         )
 
 
@@ -874,7 +929,7 @@ class _ContextManager:
 
 def _standardize(
     input: Tensor,
-    exclude_dims: Tuple[int] = (),
+    exclude_dims: tuple[int] = (),
     mean: Tensor | None = None,
     std: Tensor | None = None,
     eps: float | None = None,
@@ -888,7 +943,7 @@ def _standardize(
         exclude_dims (Tuple[int]): dimensions to exclude from the statistics, can be negative. Default: ().
         mean (Tensor): a mean to be used for standardization. Must be of shape broadcastable to input. Default: None.
         std (Tensor): a standard deviation to be used for standardization. Must be of shape broadcastable to input. Default: None.
-        eps (float): epsilon to be used for numerical stability. Default: float32 resolution.
+        eps (:obj:`float`): epsilon to be used for numerical stability. Default: float32 resolution.
 
     """
     if eps is None:
@@ -984,3 +1039,100 @@ def compile_with_warmup(*args, warmup: int = 1, **kwargs):
             return compiled_model(*model_args, **model_kwargs)
 
         return count_and_compile
+
+
+# auto unwrap control
+_DEFAULT_AUTO_UNWRAP = True
+_AUTO_UNWRAP = os.environ.get("AUTO_UNWRAP_TRANSFORMED_ENV")
+
+
+class set_auto_unwrap_transformed_env(_DecoratorContextManager):
+    """A context manager or decorator to control whether TransformedEnv should automatically unwrap nested TransformedEnv instances.
+
+    Args:
+        mode (bool): Whether to automatically unwrap nested :class:`~torchrl.envs.TransformedEnv`
+            instances. If ``False``, :class:`~torchrl.envs.TransformedEnv` will not unwrap nested instances.
+            Defaults to ``True``.
+
+    .. note:: Until v0.9, this will raise a warning if :class:`~torchrl.envs.TransformedEnv` are nested
+        and the value is not set explicitly (`auto_unwrap=True` default behavior).
+        You can set the value of :func:`~torchrl.envs.auto_unwrap_transformed_env`
+        through:
+
+        - The ``AUTO_UNWRAP_TRANSFORMED_ENV`` environment variable;
+        - By setting ``torchrl.set_auto_unwrap_transformed_env(val: bool).set()`` at the
+          beginning of your script;
+        - By using ``torchrl.set_auto_unwrap_transformed_env(val: bool)`` as a context
+          manager or a decorator.
+
+    .. seealso:: :class:`~torchrl.envs.TransformedEnv`
+
+    Examples:
+        >>> with set_auto_unwrap_transformed_env(False):
+        ...     env = TransformedEnv(TransformedEnv(env))
+        ...     assert not isinstance(env.base_env, TransformedEnv)
+        >>> @set_auto_unwrap_transformed_env(False)
+        ... def my_function():
+        ...     env = TransformedEnv(TransformedEnv(env))
+        ...     assert not isinstance(env.base_env, TransformedEnv)
+        ...     return env
+
+    """
+
+    def __init__(self, mode: bool) -> None:
+        super().__init__()
+        self.mode = mode
+
+    def clone(self) -> set_auto_unwrap_transformed_env:
+        # override this method if your children class takes __init__ parameters
+        return type(self)(self.mode)
+
+    def __enter__(self) -> None:
+        self.set()
+
+    def set(self) -> None:
+        global _AUTO_UNWRAP
+        self._old_mode = _AUTO_UNWRAP
+        _AUTO_UNWRAP = bool(self.mode)
+        # we do this such that sub-processes see the same lazy op than the main one
+        os.environ["AUTO_UNWRAP_TRANSFORMED_ENV"] = str(_AUTO_UNWRAP)
+
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
+        global _AUTO_UNWRAP
+        _AUTO_UNWRAP = self._old_mode
+        os.environ["AUTO_UNWRAP_TRANSFORMED_ENV"] = str(_AUTO_UNWRAP)
+
+
+def auto_unwrap_transformed_env(allow_none=False):
+    """Get the current setting for automatically unwrapping TransformedEnv instances.
+
+    Args:
+        allow_none (bool, optional): If True, returns ``None`` if no setting has been
+            specified. Otherwise, returns the default setting. Defaults to ``False``.
+
+    seealso: :func:`~torchrl.set_auto_unwrap_transformed_env`
+
+    Returns:
+        bool or None: The current setting for automatically unwrapping TransformedEnv
+            instances.
+    """
+    global _AUTO_UNWRAP
+    if _AUTO_UNWRAP is None and allow_none:
+        return None
+    elif _AUTO_UNWRAP is None:
+        return _DEFAULT_AUTO_UNWRAP
+    return strtobool(_AUTO_UNWRAP) if isinstance(_AUTO_UNWRAP, str) else _AUTO_UNWRAP
+
+
+def safe_is_current_stream_capturing():
+    """A safe proxy to torch.cuda.is_current_stream_capturing."""
+    if not torch.cuda.is_available():
+        return False
+    try:
+        return torch.cuda.is_current_stream_capturing()
+    except Exception as error:
+        warnings.warn(
+            f"torch.cuda.is_current_stream_capturing() exited unexpectedly with the error message {error=}. "
+            f"Returning False by default."
+        )
+        return False

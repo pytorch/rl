@@ -9,10 +9,10 @@ set -v
 
 if [[ $OSTYPE != 'darwin'* ]]; then
   apt-get update && apt-get upgrade -y
-  apt-get install -y vim git wget libsdl2-dev libsdl2-2.0-0
+  apt-get install -y vim git wget libsdl2-dev libsdl2-2.0-0 cmake
 
   apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev
-  apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2
+  apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2 xvfb
 
   if [ "${CU_VERSION:-}" == cpu ] ; then
     # solves version `GLIBCXX_3.4.29' not found for tensorboard
@@ -76,11 +76,12 @@ else
   export MUJOCO_GL=egl
 fi
 
-export DISPLAY=:0
 export SDL_VIDEODRIVER=dummy
 
 # legacy from bash scripts: remove?
-conda env config vars set MUJOCO_GL=$MUJOCO_GL PYOPENGL_PLATFORM=$MUJOCO_GL DISPLAY=:0 SDL_VIDEODRIVER=dummy LAZY_LEGACY_OP=False RL_LOGGING_LEVEL=DEBUG
+conda env config vars set \
+  MAX_IDLE_COUNT=1000 \
+  MUJOCO_GL=$MUJOCO_GL PYOPENGL_PLATFORM=$MUJOCO_GL DISPLAY=:99 SDL_VIDEODRIVER=dummy LAZY_LEGACY_OP=False RL_LOGGING_LEVEL=DEBUG TOKENIZERS_PARALLELISM=true
 
 pip3 install pip --upgrade
 pip install virtualenv
@@ -95,9 +96,9 @@ echo "installing gymnasium"
 if [[ "$PYTHON_VERSION" == "3.12" ]]; then
   pip3 install ale-py
   pip3 install sympy
-  pip3 install "gymnasium[accept-rom-license,mujoco]<1.0" mo-gymnasium[mujoco]
+  pip3 install "gymnasium[mujoco]>=1.1" mo-gymnasium[mujoco]
 else
-  pip3 install "gymnasium[atari,accept-rom-license,mujoco]<1.0" mo-gymnasium[mujoco]
+  pip3 install "gymnasium[atari,mujoco]>=1.1" mo-gymnasium[mujoco]
 fi
 pip3 install "mujoco" -U
 
@@ -199,6 +200,8 @@ export MKL_THREADING_LAYER=GNU
 export CKPT_BACKEND=torch
 export MAX_IDLE_COUNT=100
 export BATCHED_PIPE_TIMEOUT=60
+
+Xvfb :99 -screen 0 1024x768x24 &
 
 pytest test/smoke_test.py -v --durations 200
 pytest test/smoke_test_deps.py -v --durations 200 -k 'test_gym or test_dm_control_pixels or test_dm_control or test_tb'

@@ -7,13 +7,12 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Tuple
 
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import dispatch, TensorDictModule
-
 from tensordict.utils import NestedKey, unravel_key
+
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
@@ -303,6 +302,14 @@ class DDPGLoss(LossModule):
             source={"loss_actor": loss_actor, "loss_value": loss_value, **metadata},
             batch_size=[],
         )
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            "value_network_params",
+            "target_value_network_params",
+            "target_actor_network_params",
+            "actor_network_params",
+        )
         return td_out
 
     def loss_actor(
@@ -319,12 +326,20 @@ class DDPGLoss(LossModule):
         loss_actor = -td_copy.get(self.tensor_keys.state_action_value).squeeze(-1)
         metadata = {}
         loss_actor = _reduce(loss_actor, self.reduction)
+        self._clear_weakrefs(
+            tensordict,
+            loss_actor,
+            "value_network_params",
+            "target_value_network_params",
+            "target_actor_network_params",
+            "actor_network_params",
+        )
         return loss_actor, metadata
 
     def loss_value(
         self,
         tensordict: TensorDictBase,
-    ) -> Tuple[torch.Tensor, dict]:
+    ) -> tuple[torch.Tensor, dict]:
         # value loss
         td_copy = tensordict.select(*self.value_network.in_keys, strict=False).detach()
         with self.value_network_params.to_module(self.value_network):
@@ -358,6 +373,13 @@ class DDPGLoss(LossModule):
                 "pred_value_max": pred_val.max(),
             }
         loss_value = _reduce(loss_value, self.reduction)
+        self._clear_weakrefs(
+            tensordict,
+            "value_network_params",
+            "target_value_network_params",
+            "target_actor_network_params",
+            "actor_network_params",
+        )
         return loss_value, metadata
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):

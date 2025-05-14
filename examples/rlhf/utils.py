@@ -22,9 +22,9 @@ from torchrl.data import (
     TensorDictReplayBuffer,
     TensorStorage,
 )
+from torchrl.data.llm.dataset import get_dataloader
+from torchrl.data.llm.prompt import PromptData
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
-from torchrl.data.rlhf.dataset import get_dataloader
-from torchrl.data.rlhf.prompt import PromptData
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value import GAE
 

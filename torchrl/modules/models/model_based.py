@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import warnings
 
 import torch
@@ -228,6 +230,7 @@ class RSSMRollout(TensorDictModuleBase):
         The rollout requires a belief and posterior state primer.
 
         At each step, two probability distributions are built and sampled from:
+
         - A prior distribution p(s_{t+1} | s_t, a_t, b_t) where b_t is a
             deterministic transform of the form b_t(s_{t-1}, a_{t-1}). The
             previous state s_t is sampled according to the posterior

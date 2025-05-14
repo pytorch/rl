@@ -11,6 +11,7 @@ import hydra
 import torch
 import torch.cuda
 import tqdm
+
 from dreamer_utils import (
     _default_device,
     dump_video,
@@ -27,7 +28,6 @@ from torch.nn.utils import clip_grad_norm_
 from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import RSSMRollout
-
 from torchrl.objectives.dreamer import (
     DreamerActorLoss,
     DreamerModelLoss,
@@ -37,7 +37,7 @@ from torchrl.record.loggers import generate_exp_name, get_logger
 
 
 @hydra.main(version_base="1.1", config_path="", config_name="config")
-def main(cfg: "DictConfig"):  # noqa: F821
+def main(cfg: DictConfig):  # noqa: F821
     # cfg = correct_for_frame_skip(cfg)
 
     device = _default_device(cfg.networks.device)

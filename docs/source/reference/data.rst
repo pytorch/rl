@@ -20,6 +20,8 @@ widely used replay buffers:
     PrioritizedReplayBuffer
     TensorDictReplayBuffer
     TensorDictPrioritizedReplayBuffer
+    RayReplayBuffer
+    RemoteTensorDictReplayBuffer
 
 Composable Replay Buffers
 -------------------------
@@ -585,6 +587,51 @@ should have a considerably lower memory footprint than observations, for instanc
 This format eliminates any ambiguity regarding the matching of an observation with
 its action, info, or done state.
 
+A note on singleton dimensions in TED
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. _reward_done_singleton:
+
+In TorchRL, the standard practice is that `done` states (including terminated and truncated) and rewards should have a
+dimension that can be expanded to match the shape of observations, states, and actions without recurring to anything
+else than repetition (i.e., the reward must have as many dimensions as the observation and/or action, or their
+embeddings).
+
+Essentially, this format is acceptable (though not strictly enforced):
+
+    >>> print(rollout[t])
+    ... TensorDict(
+    ...     fields={
+    ...         action: Tensor(n_action),
+    ...         done: Tensor(1),  # The done state has a rightmost singleton dimension
+    ...         next: TensorDict(
+    ...             fields={
+    ...                 done: Tensor(1),
+    ...                 observation: Tensor(n_obs),
+    ...                 reward: Tensor(1),  # The reward has a rightmost singleton dimension
+    ...                 terminated: Tensor(1),
+    ...                 truncated: Tensor(1),
+    ...             batch_size=torch.Size([]),
+    ...             device=cpu,
+    ...             is_shared=False),
+    ...         observation: Tensor(n_obs),  # the observation at reset
+    ...         terminated: Tensor(1),  # the terminated at reset
+    ...         truncated: Tensor(1),  # the truncated at reset
+    ...     batch_size=torch.Size([]),
+    ...     device=cpu,
+    ...     is_shared=False)
+
+The rationale behind this is to ensure that the results of operations (such as value estimation) on observations and/or
+actions have the same number of dimensions as the reward and `done` state. This consistency allows subsequent operations
+to proceed without issues:
+
+    >>> state_value = f(observation)
+    >>> next_state_value = state_value + reward
+
+Without this singleton dimension at the end of the reward, broadcasting rules (which only work when tensors can be
+expanded from the left) would try to expand the reward on the left. This could lead to failures (at best) or introduce
+bugs (at worst).
+
 Flattening TED to reduce memory consumption
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -885,7 +932,7 @@ It is important that your environment specs match the input and output that it s
 :class:`~torchrl.envs.ParallelEnv` will create buffers from these specs to communicate with the spawn processes.
 Check the :func:`torchrl.envs.utils.check_env_specs` method for a sanity check.
 
-If needed, specs can be automatially generated from data using the :func:`~torchrl.envs.utils.make_composite_from_td`
+If needed, specs can be automatically generated from data using the :func:`~torchrl.envs.utils.make_composite_from_td`
 function.
 
 Specs fall in two main categories, numerical and categorical.
@@ -1028,7 +1075,7 @@ Then, a second storage keeps track of the actions and results associated with th
     >>> next_data = forest.data_map[index]
 
 The ``next_data`` entry can have any shape, but it will usually match the shape of ``index`` (since at each index
-corresponds one action). Once ``next_data`` is obtrained, it can be put together with ``data`` to form a set of nodes,
+corresponds one action). Once ``next_data`` is obtained, it can be put together with ``data`` to form a set of nodes,
 and the tree can be expanded for each of these. The following figure shows how this is done.
 
 .. figure:: /_static/img/collector-copy.png
@@ -1060,10 +1107,10 @@ and the tree can be expanded for each of these. The following figure shows how t
     Tree
 
 
-Reinforcement Learning From Human Feedback (RLHF)
--------------------------------------------------
+Large language models and Reinforcement Learning From Human Feedback (RLHF)
+---------------------------------------------------------------------------
 
-Data is of utmost importance in Reinforcement Learning from Human Feedback (RLHF).
+Data is of utmost importance in LLM post-training (e.g., GRPO or Reinforcement Learning from Human Feedback (RLHF)).
 Given that these techniques are commonly employed in the realm of language,
 which is scarcely addressed in other subdomains of RL within the library,
 we offer specific utilities to facilitate interaction with external libraries
@@ -1088,6 +1135,9 @@ efficient sampling.
     get_dataloader
     ConstantKLController
     AdaptiveKLController
+    LLMData
+    LLMInput
+    LLMOutput
 
 
 Utils
@@ -1099,16 +1149,17 @@ Utils
     :toctree: generated/
     :template: rl_template.rst
 
-    MultiStep
-    consolidate_spec
-    check_no_exclusive_keys
-    contains_lazy_spec
-    Nested2TED
+    DensifyReward
     Flat2TED
     H5Combine
     H5Split
+    MultiStep
+    Nested2TED
     TED2Flat
     TED2Nested
+    check_no_exclusive_keys
+    consolidate_spec
+    contains_lazy_spec
 
 .. currentmodule:: torchrl.envs.transforms.rb_transforms
 

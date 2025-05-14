@@ -7,13 +7,10 @@ from __future__ import annotations
 import importlib.util
 import os
 from pathlib import Path
-
-from typing import Sequence, Type
+from typing import Sequence
 
 import torch
-
 from tensordict import TensorDict, TensorDictBase
-
 from tensordict.utils import NestedKey
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.replay_buffers import (
@@ -34,7 +31,7 @@ class TokenizedDatasetLoader:
         max_length (int): the maximum sequence length.
         dataset_name (str): the name of the dataset.
         tokenizer_fn (callable): the tokeinizing method constructor, such as
-            :class:`torchrl.data.rlhf.TensorDictTokenizer`. When called,
+            :class:`torchrl.data.llm.TensorDictTokenizer`. When called,
             it should return a :class:`tensordict.TensorDict` instance
             or a dictionary-like structure with the tokenized data.
         pre_tokenization_hook (callable, optional): called on
@@ -57,7 +54,7 @@ class TokenizedDatasetLoader:
         num_workers (int, optional): number of workers for :meth:`datasets.dataset.map`
             which is called during tokenization.
             Defaults to ``max(os.cpu_count() // 2, 1)``.
-        tokenizer_class (type, optional): A tokenizer class, such as
+        tokenizer_class (Type, optional): A tokenizer class, such as
             :class:`~transformers.AutoTokenizer` (default).
         tokenizer_model_name (str, optional): The model from which the vocabulary
             should be gathered. Defaults to ``"gpt2"``.
@@ -65,8 +62,8 @@ class TokenizedDatasetLoader:
     The dataset will be stored in ``<root_dir>/<split>/<max_length>/``.
 
     Examples:
-        >>> from torchrl.data.rlhf import TensorDictTokenizer
-        >>> from torchrl.data.rlhf.reward import  pre_tokenization_hook
+        >>> from torchrl.data.llm import TensorDictTokenizer
+        >>> from torchrl.data.llm.reward import  pre_tokenization_hook
         >>> split = "train"
         >>> max_length = 550
         >>> dataset_name = "CarperAI/openai_summarize_comparisons"
@@ -94,7 +91,7 @@ class TokenizedDatasetLoader:
         split,
         max_length,
         dataset_name,
-        tokenizer_fn: Type[TensorDictTokenizer],
+        tokenizer_fn: type[TensorDictTokenizer],
         pre_tokenization_hook=None,
         root_dir=None,
         from_disk=False,
@@ -148,9 +145,10 @@ class TokenizedDatasetLoader:
         dataset = self._load_dataset()
         dataset = self._tokenize(dataset)
         prefix = (split, str(max_length))
-        return self.dataset_to_tensordict(
+        result = self.dataset_to_tensordict(
             dataset, data_dir=data_dir, prefix=prefix, valid_mask_key="valid_sample"
-        )[prefix]
+        )
+        return result[prefix]
 
     def _load_dataset(self):
         """Loads a text dataset from ``datasets``.
@@ -182,7 +180,7 @@ class TokenizedDatasetLoader:
         """Preprocesses a text dataset from ``datasets``.
 
         Args:
-            dataset (datasets.Dataset): a dataset loaded using :meth:`~.load_dataset`.
+            dataset (datasets.Dataset): a dataset loaded using :meth:`load_dataset`.
             excluded_features (sequence of str, optional): the features to exclude
                 once tokenization is complete. Defaults to ``{"text", "prompt", "label", "valid_sample"}``.
 
@@ -213,7 +211,9 @@ class TokenizedDatasetLoader:
                     for key, value in dataset_dict.items()
                     if key not in excluded_features
                 }
-            dataset = TensorDict.from_dict(dataset_dict)
+            dataset = TensorDict.from_dict(
+                dataset_dict, auto_batch_size=True, batch_dims=1
+            )
         elif excluded_features:
             dataset = dataset.exclude(*excluded_features)
         # keep non empty rows (i.e. where at least one token is not eos)
@@ -224,20 +224,20 @@ class TokenizedDatasetLoader:
 
     @staticmethod
     def dataset_to_tensordict(
-        dataset: "datasets.Dataset" | TensorDict,  # noqa: F821
+        dataset: datasets.Dataset | TensorDict,  # noqa: F821
         data_dir: Path,
         prefix: NestedKey = None,
         features: Sequence[str] = None,
         batch_dims=1,
         valid_mask_key=None,
     ):
-        """Convers a dataset to a memory-mapped TensorDict.
+        """Converts a dataset to a memory-mapped TensorDict.
 
         If the dataset is already a :class:`TensorDict` instance, it is simply converted
         to a memory-mapped TensorDict.
         Otherwise, the dataset is expected to have a ``features`` attribute
         which is a sequence of strings indicating the features that can be found
-        in the dataset. If it does not, the ``features`` must be passed explicitely
+        in the dataset. If it does not, the ``features`` must be passed explicitly
         to this function.
 
         Args:
@@ -294,14 +294,16 @@ class TokenizedDatasetLoader:
             if prefix is None:
                 prefix = ()
             data_dict = {key: torch.as_tensor(dataset[key]) for key in features}
-            out = TensorDict.from_dict(data_dict, batch_dims=batch_dims)
+            out = TensorDict.from_dict(
+                data_dict, batch_dims=batch_dims, auto_batch_size=True
+            )
         else:
             out = dataset
         if valid_mask_key is not None and valid_mask_key in out.keys(
             include_nested=True
         ):
             out = out[out.get(valid_mask_key)]
-        out = TensorDict({prefix: out}, [])
+        out = TensorDict({prefix: out})
         out.memmap_(prefix=data_dir)
         return out
 
@@ -315,7 +317,7 @@ def create_infinite_iterator(iterator):
 def get_dataloader(
     batch_size: int,
     block_size: int,
-    tensorclass_type: Type,
+    tensorclass_type: type,
     device: torch.device,
     dataset_name: str | None = None,
     infinite: bool = True,
@@ -357,7 +359,7 @@ def get_dataloader(
             Defaults to ``max(os.cpu_count() // 2, 1)``.
 
     Examples:
-        >>> from torchrl.data.rlhf.reward import PairwiseDataset
+        >>> from torchrl.data.llm.reward import PairwiseDataset
         >>> dataloader = get_dataloader(
         ...     batch_size=256, block_size=550, tensorclass_type=PairwiseDataset, device="cpu")
         >>> for d in dataloader:
@@ -414,7 +416,7 @@ class TensorDictTokenizer:
         padding (str, optional): type of padding. Defaults to ``"max_length"``.
         truncation (bool, optional): whether the sequences should be truncated to max_length.
         return_tensordict (bool, optional): if ``True``, a TensoDict is returned.
-            Otherwise, a the orignal data will be returned.
+            Otherwise, a the original data will be returned.
         device (torch.device, optional): the device where to store the data.
             This option is ignored if ``return_tensordict=False``.
 
@@ -481,6 +483,9 @@ class TensorDictTokenizer:
         batch_size = [] if isinstance(input, str) else [len(input)]
         if self.return_tensordict:
             return TensorDict.from_dict(
-                dict(tokenized_sample), batch_size=batch_size, device=self.device
+                dict(tokenized_sample),
+                batch_size=batch_size,
+                device=self.device,
+                auto_batch_size=True,
             )
         return tokenized_sample
