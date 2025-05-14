@@ -1363,6 +1363,11 @@ class MCTSForest:
     def __len__(self):
         return len(self.data_map)
 
+    def __contains__(self, root: TensorDictBase):
+        if self.node_map is None:
+            return False
+        return root.select(*self.node_map.in_keys) in self.node_map
+
     def to_string(self, td_root, node_format_fn=lambda tree: tree.node_data.to_dict()):
         """Generates a string representation of a tree in the forest.
 
