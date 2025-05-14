@@ -173,6 +173,5 @@ class ModelBasedEnvBase(EnvBase):
     def _reset(self, tensordict: TensorDict, **kwargs) -> TensorDict:
         raise NotImplementedError
 
-    def _set_seed(self, seed: int | None) -> int:
+    def _set_seed(self, seed: int | None) -> None:
         warnings.warn("Set seed isn't needed for model based environments")
-        return seed

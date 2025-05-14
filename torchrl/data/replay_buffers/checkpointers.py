@@ -18,7 +18,7 @@ from tensordict import (
     TensorDict,
 )
 from tensordict.memmap import MemoryMappedTensor
-from tensordict.utils import _STRDTYPE2DTYPE
+from torchrl._utils import _STRDTYPE2DTYPE
 
 from torchrl.data.replay_buffers.utils import (
     _save_pytree,

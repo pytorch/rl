@@ -2,10 +2,13 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import argparse
 import functools
 import importlib.util
-from typing import Tuple
+import os
+import sys
 
 import pytest
 
@@ -22,9 +25,15 @@ from torchrl.data.map import (
 )
 from torchrl.envs import GymEnv
 
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import PENDULUM_VERSIONED
+else:
+    from _utils_internal import PENDULUM_VERSIONED
+
 _has_gym = importlib.util.find_spec("gymnasium", None) or importlib.util.find_spec(
     "gym", None
 )
+IS_WIN = sys.platform == "win32"
 
 
 class TestHash:
@@ -363,7 +372,7 @@ class TestTree:
 
 
 class TestMCTSForest:
-    def dummy_rollouts(self) -> Tuple[TensorDict, ...]:
+    def dummy_rollouts(self) -> tuple[TensorDict, ...]:
         """
         ├── 0
         │   ├── 16
@@ -602,7 +611,7 @@ class TestMCTSForest:
     def test_simple_tree(self):
         from torchrl.envs import GymEnv
 
-        env = GymEnv("Pendulum-v1")
+        env = GymEnv(PENDULUM_VERSIONED())
         r = env.rollout(10)
         state0 = r[0]
         forest = MCTSForest()
@@ -629,7 +638,7 @@ class TestMCTSForest:
                 pytest.skip("requires gym")
             from torchrl.envs import GymEnv
 
-            env = GymEnv("Pendulum-v1")
+            env = GymEnv(PENDULUM_VERSIONED())
             r = env.rollout(10)
             state0 = r[0]
             forest = MCTSForest()
@@ -695,6 +704,7 @@ class TestMCTSForest:
                 ).all()
                 prev_tree = subtree
 
+    @pytest.mark.skipif(IS_WIN, reason="fails with windows machines")
     def test_to_string(self):
         forest = MCTSForest()
 

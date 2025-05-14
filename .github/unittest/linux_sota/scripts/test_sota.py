@@ -39,6 +39,7 @@ commands = {
   collector.frames_per_batch=20 \
   collector.num_workers=1 \
   logger.backend= \
+  env.backend=gym \
   logger.test_interval=10
 """,
     "ppo_mujoco": """python sota-implementations/ppo/ppo_mujoco.py \
@@ -56,6 +57,7 @@ commands = {
   loss.mini_batch_size=20 \
   loss.ppo_epochs=2 \
   logger.backend= \
+  env.backend=gym \
   logger.test_interval=10
 """,
     "ddpg": """python sota-implementations/ddpg/ddpg.py \
@@ -82,6 +84,7 @@ commands = {
   collector.frames_per_batch=20 \
   loss.mini_batch_size=20 \
   logger.backend= \
+  env.backend=gym \
   logger.test_interval=40
 """,
     "dqn_atari": """python sota-implementations/dqn/dqn_atari.py \
@@ -91,6 +94,7 @@ commands = {
   buffer.batch_size=10 \
   loss.num_updates=1 \
   logger.backend= \
+  env.backend=gym \
   buffer.buffer_size=120
 """,
     "discrete_cql_online": """python sota-implementations/cql/discrete_cql_online.py \

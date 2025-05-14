@@ -5,12 +5,14 @@
 from __future__ import annotations
 
 import argparse
+
 import contextlib
 import functools
 import gc
 import os
 import subprocess
 import sys
+import time
 from unittest.mock import patch
 
 import numpy as np
@@ -39,12 +41,13 @@ from torchrl._utils import (
     prod,
     seed_generator,
 )
-from torchrl.collectors import aSyncDataCollector, SyncDataCollector
+from torchrl.collectors import aSyncDataCollector, SyncDataCollector, WeightUpdaterBase
 from torchrl.collectors.collectors import (
     _Interruptor,
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
 )
+
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
     Composite,
@@ -146,6 +149,7 @@ IS_OSX = sys.platform == "darwin"
 PYTHON_3_10 = sys.version_info.major == 3 and sys.version_info.minor == 10
 PYTHON_3_7 = sys.version_info.major == 3 and sys.version_info.minor == 7
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
+_has_cuda = torch.cuda.is_available()
 
 
 class WrappablePolicy(nn.Module):
@@ -893,7 +897,7 @@ class EnvThatWaitsFor1Sec(EnvBase):
             .update(self.full_reward_spec.zero())
         )
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: Optional[int]) -> None:
         ...
 
 if __name__ == "__main__":
@@ -1595,8 +1599,8 @@ class TestCollectorDevices:
                     device=None,
                 )
 
-        def _set_seed(self, seed: int | None = None):
-            return seed
+        def _set_seed(self, seed: int | None = None) -> None:
+            ...
 
     class EnvWithDevice(EnvBase):
         def __init__(self, default_device):
@@ -1652,8 +1656,8 @@ class TestCollectorDevices:
                     device=self.default_device,
                 )
 
-        def _set_seed(self, seed: int | None = None):
-            return seed
+        def _set_seed(self, seed: int | None = None) -> None:
+            ...
 
     class DeviceLessPolicy(TensorDictModuleBase):
         in_keys = ["observation"]
@@ -1818,8 +1822,8 @@ class TestCollectorDevices:
         def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
             return self.full_done_specs.zeros().update(self.observation_spec.zeros())
 
-        def _set_seed(self, seed: int | None):
-            return seed
+        def _set_seed(self, seed: int | None) -> None:
+            ...
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
     @pytest.mark.parametrize("env_device", ["cuda:0", "cpu"])
@@ -2305,7 +2309,9 @@ class TestNestedEnvsCollector:
         torch.manual_seed(seed)
         env_fn = lambda: TransformedEnv(NestedCountingEnv(), InitTracker())
         env = NestedCountingEnv()
-        policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
+        policy = CountingEnvCountPolicy(
+            env.full_action_spec[env.action_key], env.action_key
+        )
 
         ccollector = MultiaSyncDataCollector(
             create_env_fn=[env_fn],
@@ -2371,7 +2377,9 @@ class TestNestedEnvsCollector:
             nest_obs_action=nested_obs_action,
         )
         torch.manual_seed(seed)
-        policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
+        policy = CountingEnvCountPolicy(
+            env.full_action_spec[env.action_key], env.action_key
+        )
         ccollector = SyncDataCollector(
             create_env_fn=env,
             policy=policy,
@@ -2398,7 +2406,9 @@ class TestNestedEnvsCollector:
         env = NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
         env_fn = lambda: NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
         torch.manual_seed(0)
-        policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
+        policy = CountingEnvCountPolicy(
+            env.full_action_spec[env.action_key], env.action_key
+        )
         policy(env.reset())
         ccollector = SyncDataCollector(
             create_env_fn=env_fn,
@@ -2638,8 +2648,8 @@ class TestUpdateParams:
                 {"state": self.state.clone()}, self.batch_size, device=self.device
             )
 
-        def _set_seed(self, seed):
-            return seed
+        def _set_seed(self, seed: int | None) -> None:
+            ...
 
     class Policy(TensorDictModuleBase):
         def __init__(self):
@@ -3370,11 +3380,11 @@ class TestCollectorRB:
         assert assert_allclose_td(rbdata0, rbdata1)
 
     @pytest.mark.skipif(not _has_gym, reason="requires gym.")
-    @pytest.mark.parametrize("replay_buffer_chunk", [False, True])
+    @pytest.mark.parametrize("extend_buffer", [False, True])
     @pytest.mark.parametrize("env_creator", [False, True])
     @pytest.mark.parametrize("storagetype", [LazyTensorStorage, LazyMemmapStorage])
     def test_collector_rb_multisync(
-        self, replay_buffer_chunk, env_creator, storagetype, tmpdir
+        self, extend_buffer, env_creator, storagetype, tmpdir
     ):
         if not env_creator:
             env = GymEnv(CARTPOLE_VERSIONED()).append_transform(StepCounter())
@@ -3399,7 +3409,7 @@ class TestCollectorRB:
             replay_buffer=rb,
             total_frames=256,
             frames_per_batch=32,
-            replay_buffer_chunk=replay_buffer_chunk,
+            extend_buffer=extend_buffer,
         )
         torch.manual_seed(0)
         pred_len = 0
@@ -3409,7 +3419,7 @@ class TestCollectorRB:
             assert len(rb) == pred_len
         collector.shutdown()
         assert len(rb) == 256
-        if not replay_buffer_chunk:
+        if extend_buffer:
             steps_counts = rb["step_count"].squeeze().split(16)
             collector_ids = rb["collector", "traj_ids"].squeeze().split(16)
             for step_count, ids in zip(steps_counts, collector_ids):
@@ -3421,11 +3431,11 @@ class TestCollectorRB:
                 assert (idsdiff >= 0).all()
 
     @pytest.mark.skipif(not _has_gym, reason="requires gym.")
-    @pytest.mark.parametrize("replay_buffer_chunk", [False, True])
+    @pytest.mark.parametrize("extend_buffer", [False, True])
     @pytest.mark.parametrize("env_creator", [False, True])
     @pytest.mark.parametrize("storagetype", [LazyTensorStorage, LazyMemmapStorage])
     def test_collector_rb_multiasync(
-        self, replay_buffer_chunk, env_creator, storagetype, tmpdir
+        self, extend_buffer, env_creator, storagetype, tmpdir
     ):
         if not env_creator:
             env = GymEnv(CARTPOLE_VERSIONED()).append_transform(StepCounter())
@@ -3450,7 +3460,7 @@ class TestCollectorRB:
             replay_buffer=rb,
             total_frames=256,
             frames_per_batch=16,
-            replay_buffer_chunk=replay_buffer_chunk,
+            extend_buffer=extend_buffer,
         )
         torch.manual_seed(0)
         pred_len = 0
@@ -3460,7 +3470,7 @@ class TestCollectorRB:
             assert len(rb) >= pred_len
         collector.shutdown()
         assert len(rb) == 256
-        if not replay_buffer_chunk:
+        if extend_buffer:
             steps_counts = rb["step_count"].squeeze().split(16)
             collector_ids = rb["collector", "traj_ids"].squeeze().split(16)
             for step_count, ids in zip(steps_counts, collector_ids):
@@ -3474,6 +3484,205 @@ class TestCollectorRB:
 
 def __deepcopy_error__(*args, **kwargs):
     raise RuntimeError("deepcopy not allowed")
+
+
+class TestPolicyFactory:
+    class MPSWeightUpdaterBase(WeightUpdaterBase):
+        def __init__(self, policy_weights, num_workers):
+            # Weights are on mps device, which cannot be shared
+            self.policy_weights = policy_weights.data
+            self.num_workers = num_workers
+
+        def _sync_weights_with_worker(
+            self, worker_id: int | torch.device, server_weights: TensorDictBase
+        ) -> TensorDictBase:
+            # Send weights on cpu - the local workers will do the cpu->mps copy
+            self.collector.pipes[worker_id].send((server_weights, "update"))
+            val, msg = self.collector.pipes[worker_id].recv()
+            assert msg == "updated"
+            return server_weights
+
+        def _get_server_weights(self) -> TensorDictBase:
+            return self.policy_weights.cpu()
+
+        def _maybe_map_weights(self, server_weights: TensorDictBase) -> TensorDictBase:
+            return server_weights
+
+        def all_worker_ids(self) -> list[int] | list[torch.device]:
+            return list(range(self.num_workers))
+
+    @pytest.mark.skipif(not _has_cuda, reason="requires cuda another device than CPU.")
+    @pytest.mark.skipif(not _has_gym, reason="requires gym")
+    def test_weight_update(self):
+        device = "cuda:0"
+        env_maker = lambda: GymEnv("Pendulum-v1", device="cpu")
+        policy_factory = lambda: TensorDictModule(
+            nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"]
+        ).to(device)
+        policy = policy_factory()
+        policy_weights = TensorDict.from_module(policy)
+
+        collector = MultiSyncDataCollector(
+            create_env_fn=[env_maker, env_maker],
+            policy_factory=policy_factory,
+            total_frames=2000,
+            max_frames_per_traj=50,
+            frames_per_batch=200,
+            init_random_frames=-1,
+            reset_at_each_iter=False,
+            device=device,
+            storing_device="cpu",
+            weight_updater=self.MPSWeightUpdaterBase(policy_weights, 2),
+        )
+
+        collector.update_policy_weights_()
+        try:
+            for i, data in enumerate(collector):
+                if i == 2:
+                    assert (data["action"] != 0).any()
+                    # zero the policy
+                    policy_weights.data.zero_()
+                    collector.update_policy_weights_()
+                elif i == 3:
+                    assert (data["action"] == 0).all(), data["action"]
+                    break
+        finally:
+            collector.shutdown()
+
+
+class TestAsyncCollection:
+    @pytest.mark.parametrize("total_frames", [-1, 1_000_000_000])
+    def test_start_single(self, total_frames):
+        rb = ReplayBuffer(storage=LazyMemmapStorage(max_size=1000))
+        env = CountingEnv()
+        policy = RandomPolicy(action_spec=env.action_spec)
+        collector = SyncDataCollector(
+            env,
+            policy,
+            replay_buffer=rb,
+            total_frames=total_frames,
+            frames_per_batch=16,
+        )
+        try:
+            collector.start()
+            for _ in range(10):
+                time.sleep(0.1)
+                if len(rb) >= 16:
+                    break
+            else:
+                raise RuntimeError("RB is empty")
+            assert len(rb) >= 16
+        finally:
+            collector.async_shutdown(timeout=10)
+            del collector
+
+    def test_pause(self):
+        rb = ReplayBuffer(storage=LazyMemmapStorage(max_size=1000))
+        env = CountingEnv()
+        policy = RandomPolicy(action_spec=env.action_spec)
+        collector = aSyncDataCollector(
+            CountingEnv,
+            policy,
+            replay_buffer=rb,
+            total_frames=-1,
+            frames_per_batch=16,
+        )
+        try:
+            num_pauses = 0
+            collector.start()
+            for _ in range(10):
+                time.sleep(0.1)
+                if len(rb) >= 16:
+                    with collector.pause():
+                        num_pauses += 1
+                        n = rb.write_count
+                        for _ in range(10):
+                            assert rb.write_count == n
+                            time.sleep(0.1)
+                    time.sleep(1)
+                    assert rb.write_count > n
+                    if num_pauses == 2:
+                        break
+            else:
+                raise RuntimeError("RB is empty")
+            assert len(rb) >= 16
+        finally:
+            collector.async_shutdown(timeout=10)
+            del collector
+
+    @pytest.mark.parametrize("total_frames", [-1, 1_000_000_000])
+    @pytest.mark.parametrize("cls", [MultiaSyncDataCollector, MultiSyncDataCollector])
+    def test_start_multi(self, total_frames, cls):
+        rb = ReplayBuffer(storage=LazyMemmapStorage(max_size=1000))
+        policy = RandomPolicy(action_spec=CountingEnv().action_spec)
+        collector = cls(
+            [CountingEnv, CountingEnv],
+            policy,
+            replay_buffer=rb,
+            total_frames=total_frames,
+            frames_per_batch=16,
+        )
+        try:
+            collector.start()
+            for _ in range(10):
+                time.sleep(0.1)  # Use asyncio.sleep instead of time.sleep
+                if len(rb) >= 16:
+                    break
+            else:
+                raise RuntimeError("RB is empty")
+        finally:
+            collector.async_shutdown()
+            del collector
+
+    @pytest.mark.parametrize("total_frames", [-1, 1_000_000_000])
+    @pytest.mark.parametrize(
+        "cls", [SyncDataCollector, MultiaSyncDataCollector, MultiSyncDataCollector]
+    )
+    def test_start_update_policy(self, total_frames, cls):
+        rb = ReplayBuffer(storage=LazyMemmapStorage(max_size=1000))
+        env = CountingEnv()
+        m = nn.Linear(env.observation_spec["observation"].shape[-1], 1)
+        m.weight.data.fill_(0)
+        m.bias.data.fill_(0)
+        policy = TensorDictSequential(
+            TensorDictModule(
+                lambda x: x.float(), in_keys=["observation"], out_keys=["action"]
+            ),
+            TensorDictModule(m, in_keys=["action"], out_keys=["action"]),
+            TensorDictModule(
+                lambda x: x.to(torch.int8), in_keys=["action"], out_keys=["action"]
+            ),
+        )
+        td = TensorDict.from_module(policy).data.clone()
+        if cls != SyncDataCollector:
+            env = [CountingEnv] * 2
+        collector = cls(
+            env,
+            policy,
+            replay_buffer=rb,
+            total_frames=total_frames,
+            frames_per_batch=16,
+        )
+        try:
+            collector.start()
+            for _ in range(10):
+                time.sleep(0.1)
+                if len(rb) >= 16:
+                    break
+            else:
+                raise RuntimeError("RB is empty")
+            assert (rb[-16:]["action"] == 0).all()
+            td["module", "1", "module", "bias"] += 1
+            collector.update_policy_weights_(td)
+            for _ in range(10):
+                time.sleep(0.1)
+                if (rb[-16:]["action"] == 1).all():
+                    break
+            else:
+                raise RuntimeError
+        finally:
+            collector.async_shutdown(timeout=10)
+            del collector
 
 
 if __name__ == "__main__":

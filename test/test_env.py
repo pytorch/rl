@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import argparse
 import contextlib
@@ -12,11 +13,10 @@ import os.path
 import pickle
 import random
 import re
-import string
 from collections import defaultdict
 from functools import partial
 from sys import platform
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import pytest
@@ -29,6 +29,7 @@ from tensordict import (
     dense_stack_tds,
     LazyStackedTensorDict,
     set_capture_non_tensor_stack,
+    set_list_to_stack,
     TensorDict,
     TensorDictBase,
 )
@@ -41,19 +42,19 @@ from torchrl import set_auto_unwrap_transformed_env
 from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
 from torchrl.data.tensor_specs import Categorical, Composite, NonTensor, Unbounded
 from torchrl.envs import (
+    AsyncEnvPool,
     CatFrames,
     CatTensors,
     ChessEnv,
     ConditionalSkip,
-    DataLoadingPrimer,
     DoubleToFloat,
     EnvBase,
     EnvCreator,
-    LLMEnv,
     LLMHashingEnv,
     ParallelEnv,
     PendulumEnv,
     SerialEnv,
+    set_gym_backend,
     TicTacToeEnv,
 )
 from torchrl.envs.batched_envs import _stackable
@@ -61,7 +62,6 @@ from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv, GymWrapper
 from torchrl.envs.transforms import Compose, StepCounter, TransformedEnv
-from torchrl.envs.transforms.llm import as_padded_tensor
 from torchrl.envs.transforms.transforms import (
     AutoResetEnv,
     AutoResetTransform,
@@ -87,6 +87,7 @@ pytestmark = [
     pytest.mark.filterwarnings(
         "ignore:Got multiple backends for torchrl.data.replay_buffers.storages"
     ),
+    pytest.mark.filterwarnings("ignore:unclosed file"),
 ]
 
 gym_version = None
@@ -284,7 +285,7 @@ class TestEnvBase:
         ) -> TensorDictBase:
             ...
 
-        def _set_seed(self, seed: Optional[int]):
+        def _set_seed(self, seed: int | None) -> None:
             ...
 
     def test_env_lock(self):
@@ -446,9 +447,8 @@ class TestEnvBase:
                 )
                 self.seed = 0
 
-            def _set_seed(self, seed):
+            def _set_seed(self, seed: int | None) -> None:
                 self.seed = seed
-                return seed
 
             def _reset(self, tensordict):
                 td = self.observation_spec.zero().update(self.done_spec.zero())
@@ -1211,38 +1211,45 @@ class TestParallel:
     @pytest.mark.skipif(not _has_dmc, reason="no dm_control")
     @pytest.mark.parametrize("env_task", ["stand,stand,stand", "stand,walk,stand"])
     @pytest.mark.parametrize("share_individual_td", [True, False])
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_multi_task_serial_parallel(
-        self, env_task, share_individual_td, maybe_fork_ParallelEnv
+        self, env_task, share_individual_td, maybe_fork_ParallelEnv, device
     ):
+        tasks = env_task.split(",")
+        if len(tasks) == 1:
+            single_task = True
+
+            def env_make():
+                return DMControlEnv("humanoid", tasks[0], device=device)
+
+        elif len(set(tasks)) == 1 and len(tasks) == 3:
+            single_task = True
+            env_make = [lambda: DMControlEnv("humanoid", tasks[0], device=device)] * 3
+        else:
+            single_task = False
+            env_make = [
+                lambda task=task: DMControlEnv("humanoid", task, device=device)
+                for task in tasks
+            ]
+
+        env_serial = SerialEnv(3, env_make, share_individual_td=share_individual_td)
         try:
-            tasks = env_task.split(",")
-            if len(tasks) == 1:
-                single_task = True
-
-                def env_make():
-                    return DMControlEnv("humanoid", tasks[0])
-
-            elif len(set(tasks)) == 1 and len(tasks) == 3:
-                single_task = True
-                env_make = [lambda: DMControlEnv("humanoid", tasks[0])] * 3
-            else:
-                single_task = False
-                env_make = [
-                    lambda task=task: DMControlEnv("humanoid", task) for task in tasks
-                ]
-
-            env_serial = SerialEnv(3, env_make, share_individual_td=share_individual_td)
             env_serial.start()
             assert env_serial._single_task is single_task
+
+            env_serial.set_seed(0)
+            torch.manual_seed(0)
+            td_serial = env_serial.rollout(max_steps=50)
+        finally:
+            env_serial.close(raise_if_closed=False)
+            gc.collect()
+
+        try:
             env_parallel = maybe_fork_ParallelEnv(
                 3, env_make, share_individual_td=share_individual_td
             )
             env_parallel.start()
             assert env_parallel._single_task is single_task
-
-            env_serial.set_seed(0)
-            torch.manual_seed(0)
-            td_serial = env_serial.rollout(max_steps=50)
 
             env_parallel.set_seed(0)
             torch.manual_seed(0)
@@ -1251,7 +1258,7 @@ class TestParallel:
             assert_allclose_td(td_serial, td_parallel)
         finally:
             env_parallel.close(raise_if_closed=False)
-            env_serial.close(raise_if_closed=False)
+            gc.collect()
 
     @pytest.mark.skipif(not _has_dmc, reason="no dm_control")
     def test_multitask(self, maybe_fork_ParallelEnv):
@@ -2505,6 +2512,7 @@ class TestInfoDict:
             import gymnasium as gym
         except ModuleNotFoundError:
             import gym
+        set_gym_backend(gym).set()
 
         env = GymWrapper(gym.make(HALFCHEETAH_VERSIONED()), device=device)
         env.set_info_dict_reader(
@@ -2536,7 +2544,7 @@ class TestInfoDict:
             ),
             [Unbounded((), dtype=torch.float64)],
         ):
-            env2 = GymWrapper(gym.make("HalfCheetah-v4"))
+            env2 = GymWrapper(gym.make("HalfCheetah-v5"))
             env2.set_info_dict_reader(
                 default_info_dict_reader(["x_position"], spec=spec)
             )
@@ -2804,18 +2812,23 @@ class TestNestedSpecs:
         else:
             raise NotImplementedError
         reset = env.reset()
-        with pytest.warns(
-            DeprecationWarning, match="non-trivial"
-        ) if envclass == "NestedCountingEnv" else contextlib.nullcontext():
+        if envclass == "NestedCountingEnv":
+            assert isinstance(env.reward_spec, Composite)
+        else:
             assert not isinstance(env.reward_spec, Composite)
         for done_key in env.done_keys:
             assert (
                 env.full_done_spec[done_key]
                 == env.output_spec[("full_done_spec", *_unravel_key_to_tuple(done_key))]
             )
-        with pytest.warns(
-            DeprecationWarning, match="non-trivial"
-        ) if envclass == "NestedCountingEnv" else contextlib.nullcontext():
+        if envclass == "NestedCountingEnv":
+            assert (
+                env.full_reward_spec[env.reward_key]
+                == env.output_spec[
+                    ("full_reward_spec", *_unravel_key_to_tuple(env.reward_key))
+                ]
+            )
+        else:
             assert (
                 env.reward_spec
                 == env.output_spec[
@@ -3088,6 +3101,7 @@ def test_mocking_envs(envclass):
             check_env_specs(env, seed=100, return_contiguous=False)
 
 
+@set_list_to_stack(True)
 class TestTerminatedOrTruncated:
     @pytest.mark.parametrize("done_key", ["done", "terminated", "truncated"])
     def test_root_prevail(self, done_key):
@@ -3403,6 +3417,7 @@ def test_single_task_share_individual_td():
         )
 
 
+@set_list_to_stack(True)
 def test_stackable():
     # Tests the _stackable util
     stack = [TensorDict({"a": 0}, []), TensorDict({"b": 1}, [])]
@@ -3701,14 +3716,15 @@ class TestNonTensorEnv:
 
     @pytest.mark.parametrize("bwad", [True, False])
     @pytest.mark.parametrize("use_buffers", [False, True])
-    def test_parallel(self, bwad, use_buffers):
+    def test_parallel(self, bwad, use_buffers, maybe_fork_ParallelEnv):
         N = 50
-        env = ParallelEnv(2, EnvWithMetadata, use_buffers=use_buffers)
+        env = maybe_fork_ParallelEnv(2, EnvWithMetadata, use_buffers=use_buffers)
         try:
             r = env.rollout(N, break_when_any_done=bwad)
             assert r.get("non_tensor").tolist() == [list(range(N))] * 2
         finally:
             env.close(raise_if_closed=False)
+            del env
 
     class AddString(Transform):
         def __init__(self):
@@ -3758,7 +3774,7 @@ class TestNonTensorEnv:
                 env.close(raise_if_closed=False)
 
     @pytest.mark.skipif(not _has_transformers, reason="transformers required")
-    def test_str2str_env_tokenizer(self):
+    def test_from_text_env_tokenizer(self):
         env = Str2StrEnv()
         env.set_seed(0)
         env = env.append_transform(
@@ -3781,7 +3797,7 @@ class TestNonTensorEnv:
 
     @pytest.mark.skipif(not _has_transformers, reason="transformers required")
     @set_auto_unwrap_transformed_env(False)
-    def test_str2str_env_tokenizer_catframes(self):
+    def test_from_text_env_tokenizer_catframes(self):
         """Tests that we can use Unsqueeze + CatFrames with tokenized strings of variable lengths."""
         env = Str2StrEnv()
         env.set_seed(0)
@@ -3806,7 +3822,7 @@ class TestNonTensorEnv:
         assert r["obs_tokens_cat"].shape == (3, 4, 10)
 
     @pytest.mark.skipif(not _has_transformers, reason="transformers required")
-    def test_str2str_rb_slicesampler(self):
+    def test_from_text_rb_slicesampler(self):
         """Dedicated test for replay buffer sampling of trajectories with variable token length"""
         from torchrl.data import LazyStackStorage, ReplayBuffer, SliceSampler
         from torchrl.envs import TrajCounter
@@ -4252,7 +4268,7 @@ class TestChessEnv:
             if stateful:
                 all_actions = env.all_actions()
             else:
-                # Reset the the initial state first, just to make sure
+                # Reset theinitial state first, just to make sure
                 # `all_actions` knows how to get the board state from the input.
                 env.reset()
                 all_actions = env.all_actions(td.clone())
@@ -4571,197 +4587,66 @@ class TestEnvWithHistory:
             count += 1
 
 
-class TestLLMEnv:
-    @pytest.fixture(scope="class", autouse=True)
-    def set_capture(self):
-        with set_capture_non_tensor_stack(False):
-            yield None
-        return
+class TestAsyncEnvPool:
+    def make_env(self, *, makers, backend):
+        return AsyncEnvPool(makers, backend=backend)
 
-    class DummyDataLoader:
-        def __init__(self, batch_size=0):
-            self.batch_size = batch_size
+    @pytest.fixture(scope="module")
+    def make_envs(self):
+        yield [
+            partial(CountingEnv),
+            partial(CountingEnv),
+            partial(CountingEnv),
+            partial(CountingEnv),
+        ]
 
-        def generate_random_string(self, length=10):
-            """Generate a random string of a given length."""
-            return "".join(random.choice(string.ascii_lowercase) for _ in range(length))
-
-        def __iter__(self):
-            return self
-
-        def __next__(self):
-            if self.batch_size == 0:
-                return self.generate_random_string()
-            else:
-                return [self.generate_random_string() for _ in range(self.batch_size)]
-
-    class DummyTensorDataLoader:
-        def __init__(self, batch_size=0, max_length=10, padding=False):
-            self.batch_size = batch_size
-            self.max_length = max_length
-            self.padding = padding
-
-        def generate_random_tensor(self):
-            """Generate a tensor of random int64 values."""
-            length = random.randint(1, self.max_length)
-            return torch.tensor(
-                [random.randint(0, 100) for _ in range(length)], dtype=torch.int64
-            )
-
-        def pad_tensor(self, tensor):
-            """Pad a tensor to the maximum length."""
-            padding_length = self.max_length - len(tensor)
-            return torch.cat((torch.zeros(padding_length, dtype=torch.int64), tensor))
-
-        def __iter__(self):
-            return self
-
-        def __next__(self):
-            if self.batch_size == 0:
-                tensor = self.generate_random_tensor()
-                return self.pad_tensor(tensor) if self.padding else tensor
-            else:
-                tensors = [
-                    self.generate_random_tensor() for _ in range(self.batch_size)
-                ]
-                if self.padding:
-                    tensors = [self.pad_tensor(tensor) for tensor in tensors]
-                    return torch.stack(tensors)
-                else:
-                    return tensors
-
-    @pytest.mark.parametrize(
-        "str2str,stack_method",
-        [
-            [True, None],
-            [False, "as_padded_tensor"],
-            # TODO: a bit experimental, fails with check_env_specs
-            # [False, "as_nested_tensor"],
-            [False, None],
-        ],
-    )
-    @pytest.mark.parametrize("batched", [True, False])
-    @pytest.mark.parametrize("batch_size", [0, 4])
-    @pytest.mark.parametrize("device", [None, "cpu"])
-    def test_llm_env(self, str2str, batched, stack_method, device, batch_size):
-        env = LLMEnv(str2str=str2str, device=device)
-        if str2str:
-            primer = DataLoadingPrimer(
-                dataloader=self.DummyDataLoader(batch_size=batch_size),
-                data_keys=["observation"],
-                example_data="a string!",
-            )
-        else:
-            if stack_method is None:
-                stack_method = as_padded_tensor
-            primer = DataLoadingPrimer(
-                dataloader=self.DummyTensorDataLoader(
-                    batch_size=batch_size, padding=True
-                ),
-                data_keys=["observation"],
-                data_specs=[Unbounded(shape=(-1,), dtype=torch.int64)],
-                stack_method=stack_method,
-            )
-        assert not env.batch_locked
-        env = env.append_transform(primer)
-        assert not env.batch_locked
-        if batched:
-            td = env.reset(TensorDict(batch_size=[3]))
-            env.check_env_specs(break_when_any_done="both", tensordict=td)
-            r = env.rollout(10, tensordict=TensorDict(batch_size=[3]))
-        else:
+    @pytest.mark.parametrize("backend", ["multiprocessing", "threading"])
+    def test_specs(self, backend, make_envs):
+        env = self.make_env(makers=make_envs, backend=backend)
+        assert env.batch_size == (4,)
+        try:
+            r = env.reset()
+            assert r.shape == env.shape
+            s = env.rand_step(r)
+            assert s.shape == env.shape
             env.check_env_specs(break_when_any_done="both")
+        finally:
+            env._maybe_shutdown()
 
-    @pytest.mark.parametrize(
-        "str2str,stack_method",
-        [
-            [True, None],
-            [False, "as_padded_tensor"],
-            # TODO: a bit experimental, fails with check_env_specs
-            # [False, "as_nested_tensor"],
-            [False, None],
-        ],
-    )
-    @pytest.mark.parametrize("batched", [True, False])
-    @pytest.mark.parametrize("device", [None, "cpu"])
-    @pytest.mark.parametrize("batch_size", [0, 4])
-    def test_llm_from_dataloader(
-        self, str2str, batched, stack_method, device, batch_size
-    ):
-        if str2str:
-            kwargs = {
-                "dataloader": self.DummyDataLoader(batch_size=batch_size),
-                "data_keys": ["observation"],
-                "example_data": "a string!",
-            }
-        else:
-            if stack_method is None:
-                stack_method = as_padded_tensor
-            kwargs = {
-                "dataloader": self.DummyTensorDataLoader(
-                    padding=True, batch_size=batch_size
-                ),
-                "data_keys": ["observation"],
-                "data_specs": [Unbounded(shape=(-1,), dtype=torch.int64)],
-                "stack_method": stack_method,
-            }
-        kwargs.update({"str2str": str2str, "device": device})
-        env = LLMEnv.from_dataloader(**kwargs)
-        assert not env.batch_locked
-        if batched:
-            td = env.reset(TensorDict(batch_size=[3]))
-            env.check_env_specs(break_when_any_done="both", tensordict=td)
-        else:
+    @pytest.mark.parametrize("backend", ["multiprocessing", "threading"])
+    @pytest.mark.parametrize("min_get", [None, 1, 2])
+    @set_capture_non_tensor_stack(False)
+    def test_async_reset_and_step(self, backend, make_envs, min_get):
+        env = self.make_env(makers=make_envs, backend=backend)
+        try:
+            env.async_reset_send(
+                TensorDict(
+                    {env._env_idx_key: NonTensorStack(*range(env.batch_size.numel()))},
+                    batch_size=env.batch_size,
+                )
+            )
+            r = env.async_reset_recv(min_get=min_get)
+            if min_get is not None:
+                assert r.numel() >= min_get
+            assert env._env_idx_key in r
+            # take an action
+            r.set("action", torch.ones(r.shape + (1,)))
+            env.async_step_send(r)
+            s = env.async_step_recv(min_get=min_get)
+            if min_get is not None:
+                assert s.numel() >= min_get
+            assert env._env_idx_key in s
+        finally:
+            env._maybe_shutdown()
+
+    @pytest.mark.parametrize("backend", ["multiprocessing", "threading"])
+    def test_async_transformed(self, backend, make_envs):
+        base_env = self.make_env(makers=make_envs, backend=backend)
+        try:
+            env = TransformedEnv(base_env, StepCounter())
             env.check_env_specs(break_when_any_done="both")
-        if batch_size > 0:
-
-            def policy(td):
-                if str2str:
-                    if not td.shape:
-                        td["action"] = "<nothing>"
-                    else:
-                        td["action"] = NonTensorStack(
-                            *["<nothing>" for _ in range(td.shape[0])]
-                        )
-                else:
-                    td["action"] = torch.ones(td.shape + (1,), dtype=torch.int64)
-                return td
-
-            if batched:
-                # Tell the env that we want 3 sub-envs
-                r = env.rollout(10, policy, tensordict=TensorDict(batch_size=[3]))
-                assert r.ndim == 2
-                if str2str:
-                    assert isinstance(r[0, 0]["observation"], str)
-                    assert isinstance(r[0, 1]["observation"], str)
-                    assert (
-                        r[0, 0]["observation"]
-                        == r[0, 1]["observation"][: -len(r[0, 0]["action"])]
-                    )
-                    assert (
-                        r[0, 1]["observation"]
-                        == r[0, 2]["observation"][: -len(r[0, 1]["action"])]
-                    )
-                    assert (
-                        r[-1, 0]["observation"]
-                        == r[-1, 1]["observation"][: -len(r[-1, 0]["action"])]
-                    )
-                    assert (
-                        r[-1, 1]["observation"]
-                        == r[-1, 2]["observation"][: -len(r[-1, 1]["action"])]
-                    )
-                else:
-                    assert (r[0, 0]["observation"] == r[0, 1]["observation"][:-1]).all()
-                    assert (r[0, 1]["observation"] == r[0, 2]["observation"][:-1]).all()
-                    assert (
-                        r[-1, 0]["observation"] == r[-1, 1]["observation"][:-1]
-                    ).all()
-                    assert (
-                        r[-1, 1]["observation"] == r[-1, 2]["observation"][:-1]
-                    ).all()
-            else:
-                r = env.rollout(10, policy, tensordict=TensorDict(batch_size=[]))
-                assert r.ndim == 1
+        finally:
+            base_env._maybe_shutdown()
 
 
 if __name__ == "__main__":

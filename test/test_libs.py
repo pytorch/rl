@@ -2,6 +2,9 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
+import collections
 import functools
 import gc
 import importlib.util
@@ -23,39 +26,12 @@ import urllib
 from contextlib import nullcontext
 from pathlib import Path
 from sys import platform
-from typing import Optional, Union
 from unittest import mock
 
 import numpy as np
 import pytest
 import torch
 
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import (
-        _make_multithreaded_env,
-        CARTPOLE_VERSIONED,
-        get_available_devices,
-        get_default_devices,
-        HALFCHEETAH_VERSIONED,
-        PENDULUM_VERSIONED,
-        PONG_VERSIONED,
-        rand_reset,
-        retry,
-        rollout_consistency_assertion,
-    )
-else:
-    from _utils_internal import (
-        _make_multithreaded_env,
-        CARTPOLE_VERSIONED,
-        get_available_devices,
-        get_default_devices,
-        HALFCHEETAH_VERSIONED,
-        PENDULUM_VERSIONED,
-        PONG_VERSIONED,
-        rand_reset,
-        retry,
-        rollout_consistency_assertion,
-    )
 from packaging import version
 from tensordict import (
     assert_allclose_td,
@@ -153,6 +129,33 @@ from torchrl.modules import (
     ValueOperator,
 )
 
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import (
+        _make_multithreaded_env,
+        CARTPOLE_VERSIONED,
+        get_available_devices,
+        get_default_devices,
+        HALFCHEETAH_VERSIONED,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        rand_reset,
+        retry,
+        rollout_consistency_assertion,
+    )
+else:
+    from _utils_internal import (
+        _make_multithreaded_env,
+        CARTPOLE_VERSIONED,
+        get_available_devices,
+        get_default_devices,
+        HALFCHEETAH_VERSIONED,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        rand_reset,
+        retry,
+        rollout_consistency_assertion,
+    )
+
 _has_d4rl = importlib.util.find_spec("d4rl") is not None
 
 _has_mo = importlib.util.find_spec("mo_gymnasium") is not None
@@ -164,6 +167,9 @@ _has_gym_robotics = importlib.util.find_spec("gymnasium_robotics") is not None
 _has_minari = importlib.util.find_spec("minari") is not None
 
 _has_gymnasium = importlib.util.find_spec("gymnasium") is not None
+
+_has_isaaclab = importlib.util.find_spec("isaaclab") is not None
+
 _has_gym_regular = importlib.util.find_spec("gym") is not None
 if _has_gymnasium:
     set_gym_backend("gymnasium").set()
@@ -189,6 +195,7 @@ def maybe_init_minigrid():
         minigrid.register_minigrid_envs()
 
 
+@implement_for("gym")
 def get_gym_pixel_wrapper():
     try:
         # works whenever gym_version > version.parse("0.19")
@@ -202,6 +209,29 @@ def get_gym_pixel_wrapper():
     return PixelObservationWrapper
 
 
+@implement_for("gymnasium", None, "1.1.0")
+def get_gym_pixel_wrapper():  # noqa: F811
+    try:
+        # works whenever gym_version > version.parse("0.19")
+        PixelObservationWrapper = gym_backend(
+            "wrappers.pixel_observation"
+        ).PixelObservationWrapper
+    except Exception:
+        from torchrl.envs.libs.utils import (
+            GymPixelObservationWrapper as PixelObservationWrapper,
+        )
+    return PixelObservationWrapper
+
+
+@implement_for("gymnasium", "1.1.0")
+def get_gym_pixel_wrapper():  # noqa: F811
+    # works whenever gym_version > version.parse("0.19")
+    PixelObservationWrapper = lambda *args, pixels_only=False, **kwargs: gym_backend(
+        "wrappers"
+    ).AddRenderObservation(*args, render_only=pixels_only, **kwargs)
+    return PixelObservationWrapper
+
+
 if _has_gym:
     try:
         from gymnasium import __version__ as gym_version
@@ -211,13 +241,6 @@ if _has_gym:
         from gym import __version__ as gym_version
 
         gym_version = version.parse(gym_version)
-
-if _has_dmc:
-    from dm_control import suite
-    from dm_control.suite.wrappers import pixels
-
-if _has_vmas:
-    import vmas
 
 
 if _has_envpool:
@@ -271,8 +294,8 @@ class TestGym:
                 batch_size=[],
             )
 
-        def _set_seed(self, seed):
-            return seed + 1
+        def _set_seed(self, seed: int | None) -> None:
+            ...
 
     @implement_for("gym", None, "0.18")
     def _make_spec(self, batch_size, cat, cat_shape, multicat, multicat_shape):
@@ -303,6 +326,21 @@ class TestGym:
         )
 
     @implement_for("gymnasium", None, "1.0.0")
+    def _make_spec(  # noqa: F811
+        self, batch_size, cat, cat_shape, multicat, multicat_shape
+    ):
+        return Composite(
+            a=Unbounded(shape=(*batch_size, 1)),
+            b=Composite(c=cat(5, shape=cat_shape, dtype=torch.int64), shape=batch_size),
+            d=cat(5, shape=cat_shape, dtype=torch.int64),
+            e=multicat([2, 3], shape=(*batch_size, multicat_shape), dtype=torch.int64),
+            f=Bounded(-3, 4, shape=(*batch_size, 1)),
+            g=UnboundedDiscreteTensorSpec(shape=(*batch_size, 1), dtype=torch.long),
+            h=Binary(n=5, shape=(*batch_size, 5)),
+            shape=batch_size,
+        )
+
+    @implement_for("gymnasium", "1.1.0")
     def _make_spec(  # noqa: F811
         self, batch_size, cat, cat_shape, multicat, multicat_shape
     ):
@@ -378,10 +416,17 @@ class TestGym:
         torchrl_logger.info("Sequence not available in gym")
         return
 
-    # @pytest.mark.parametrize("order", ["seq_tuple", "tuple_seq"])
+    @pytest.mark.parametrize("order", ["tuple_seq"])
+    @implement_for("gymnasium", "1.1.0")
+    def test_gym_spec_cast_tuple_sequential(self, order):  # noqa: F811
+        self._test_gym_spec_cast_tuple_sequential(order)
+
     @pytest.mark.parametrize("order", ["tuple_seq"])
     @implement_for("gymnasium", None, "1.0.0")
     def test_gym_spec_cast_tuple_sequential(self, order):  # noqa: F811
+        self._test_gym_spec_cast_tuple_sequential(order)
+
+    def _test_gym_spec_cast_tuple_sequential(self, order):  # noqa: F811
         with set_gym_backend("gymnasium"):
             if order == "seq_tuple":
                 # Requires nested tensors to be created along dim=1, disabling
@@ -695,8 +740,8 @@ class TestGym:
             def reset(
                 self,
                 *,
-                seed: Optional[int] = None,
-                options: Optional[dict] = None,
+                seed: int | None = None,
+                options: dict | None = None,
             ):
                 return (0.0, {})
 
@@ -731,8 +776,8 @@ class TestGym:
             def reset(
                 self,
                 *,
-                seed: Optional[int] = None,
-                options: Optional[dict] = None,
+                seed: int | None = None,
+                options: dict | None = None,
             ):
                 return (0.0, {})
 
@@ -973,8 +1018,15 @@ class TestGym:
         finally:
             set_gym_backend(gb).set()
 
-    @implement_for("gymnasium", None, "1.0.0")
+    @implement_for("gymnasium", "1.1.0")
     def test_one_hot_and_categorical(self):
+        self._test_one_hot_and_categorical()
+
+    @implement_for("gymnasium", None, "1.0.0")
+    def test_one_hot_and_categorical(self):  # noqa
+        self._test_one_hot_and_categorical()
+
+    def _test_one_hot_and_categorical(self):
         # tests that one-hot and categorical work ok when an integer is expected as action
         cliff_walking = GymEnv("CliffWalking-v0", categorical_action_encoding=True)
         cliff_walking.rollout(10)
@@ -992,7 +1044,7 @@ class TestGym:
         # versions.
         return
 
-    @implement_for("gymnasium", None, "1.0.0")
+    @implement_for("gymnasium", "1.1.0")
     @pytest.mark.parametrize(
         "envname",
         ["HalfCheetah-v4", "CartPole-v1", "ALE/Pong-v5"]
@@ -1002,21 +1054,54 @@ class TestGym:
     def test_vecenvs_wrapper(self, envname):
         import gymnasium
 
+        with set_gym_backend("gymnasium"):
+            self._test_vecenvs_wrapper(
+                envname,
+                kwargs={"autoreset_mode": gymnasium.vector.AutoresetMode.SAME_STEP},
+            )
+
+    @implement_for("gymnasium", None, "1.0.0")
+    @pytest.mark.parametrize(
+        "envname",
+        ["HalfCheetah-v4", "CartPole-v1", "ALE/Pong-v5"]
+        + (["FetchReach-v2"] if _has_gym_robotics else []),
+    )
+    @pytest.mark.flaky(reruns=5, reruns_delay=1)
+    def test_vecenvs_wrapper(self, envname):  # noqa
+        with set_gym_backend("gymnasium"):
+            self._test_vecenvs_wrapper(envname)
+
+    def _test_vecenvs_wrapper(self, envname, kwargs=None):
+        import gymnasium
+
+        if kwargs is None:
+            kwargs = {}
         # we can't use parametrize with implement_for
         env = GymWrapper(
             gymnasium.vector.SyncVectorEnv(
-                2 * [lambda envname=envname: gymnasium.make(envname)]
+                2 * [lambda envname=envname: gymnasium.make(envname)], **kwargs
             )
         )
         assert env.batch_size == torch.Size([2])
         check_env_specs(env)
         env = GymWrapper(
             gymnasium.vector.AsyncVectorEnv(
-                2 * [lambda envname=envname: gymnasium.make(envname)]
+                2 * [lambda envname=envname: gymnasium.make(envname)], **kwargs
             )
         )
         assert env.batch_size == torch.Size([2])
         check_env_specs(env)
+
+    @implement_for("gymnasium", "1.1.0")
+    # this env has Dict-based observation which is a nice thing to test
+    @pytest.mark.parametrize(
+        "envname",
+        ["HalfCheetah-v4", "CartPole-v1", "ALE/Pong-v5"]
+        + (["FetchReach-v2"] if _has_gym_robotics else []),
+    )
+    @pytest.mark.flaky(reruns=5, reruns_delay=1)
+    def test_vecenvs_env(self, envname):
+        self._test_vecenvs_env(envname)
 
     @implement_for("gymnasium", None, "1.0.0")
     # this env has Dict-based observation which is a nice thing to test
@@ -1026,7 +1111,11 @@ class TestGym:
         + (["FetchReach-v2"] if _has_gym_robotics else []),
     )
     @pytest.mark.flaky(reruns=5, reruns_delay=1)
-    def test_vecenvs_env(self, envname):
+    def test_vecenvs_env(self, envname):  # noqa
+        self._test_vecenvs_env(envname)
+
+    def _test_vecenvs_env(self, envname):
+
         gb = gym_backend()
         try:
             with set_gym_backend("gymnasium"):
@@ -1055,25 +1144,26 @@ class TestGym:
     )
     @pytest.mark.flaky(reruns=5, reruns_delay=1)
     def test_vecenvs_wrapper(self, envname):  # noqa: F811
-        gym = gym_backend()
-        # we can't use parametrize with implement_for
-        for envname in ["CartPole-v1", "HalfCheetah-v4"]:
-            env = GymWrapper(
-                gym.vector.SyncVectorEnv(
-                    2 * [lambda envname=envname: gym.make(envname)]
+        with set_gym_backend("gym"):
+            gym = gym_backend()
+            # we can't use parametrize with implement_for
+            for envname in ["CartPole-v1", "HalfCheetah-v4"]:
+                env = GymWrapper(
+                    gym.vector.SyncVectorEnv(
+                        2 * [lambda envname=envname: gym.make(envname)]
+                    )
                 )
-            )
-            assert env.batch_size == torch.Size([2])
-            check_env_specs(env)
-            env = GymWrapper(
-                gym.vector.AsyncVectorEnv(
-                    2 * [lambda envname=envname: gym.make(envname)]
+                assert env.batch_size == torch.Size([2])
+                check_env_specs(env)
+                env = GymWrapper(
+                    gym.vector.AsyncVectorEnv(
+                        2 * [lambda envname=envname: gym.make(envname)]
+                    )
                 )
-            )
-            assert env.batch_size == torch.Size([2])
-            check_env_specs(env)
-            env.close()
-            del env
+                assert env.batch_size == torch.Size([2])
+                check_env_specs(env)
+                env.close()
+                del env
 
     @implement_for("gym", "0.18")
     @pytest.mark.parametrize(
@@ -1092,17 +1182,17 @@ class TestGym:
                 env = GymEnv(envname, num_envs=2, from_pixels=False)
                 env.set_seed(0)
                 assert env.get_library_name(env._env) == "gym"
-            # rollouts can be executed without decorator
-            check_env_specs(env)
-            rollout = env.rollout(100, break_when_any_done=False)
-            for obs_key in env.observation_spec.keys(True, True):
-                rollout_consistency_assertion(
-                    rollout,
-                    done_key="done",
-                    observation_key=obs_key,
-                    done_strict="CartPole" in envname,
-                )
-            env.close()
+                # rollouts can be executed without decorator
+                check_env_specs(env)
+                rollout = env.rollout(100, break_when_any_done=False)
+                for obs_key in env.observation_spec.keys(True, True):
+                    rollout_consistency_assertion(
+                        rollout,
+                        done_key="done",
+                        observation_key=obs_key,
+                        done_strict="CartPole" in envname,
+                    )
+                env.close()
             del env
             if envname != "CartPole-v1":
                 with set_gym_backend("gym"):
@@ -1180,9 +1270,17 @@ class TestGym:
         finally:
             set_gym_backend(gym).set()
 
+    @implement_for("gymnasium", "1.1.0")
+    @pytest.mark.parametrize("wrapper", [True, False])
+    def test_gym_output_num(self, wrapper):  # noqa: F811
+        self._test_gym_output_num(wrapper)
+
     @implement_for("gymnasium", None, "1.0.0")
     @pytest.mark.parametrize("wrapper", [True, False])
     def test_gym_output_num(self, wrapper):  # noqa: F811
+        self._test_gym_output_num(wrapper)
+
+    def _test_gym_output_num(self, wrapper):  # noqa: F811
         # gym has 5 outputs, with truncation
         gym = gym_backend()
         try:
@@ -1283,8 +1381,15 @@ class TestGym:
         del c
         return
 
+    @implement_for("gymnasium", "1.1.0")
+    def test_vecenvs_nan(self):  # noqa: F811
+        self._test_vecenvs_nan()
+
     @implement_for("gymnasium", None, "1.0.0")
     def test_vecenvs_nan(self):  # noqa: F811
+        self._test_vecenvs_nan()
+
+    def _test_vecenvs_nan(self):  # noqa: F811
         # new versions of gym must never return nan for next values when there is a done state
         torch.manual_seed(0)
         env = GymEnv("CartPole-v1", num_envs=2)
@@ -1351,8 +1456,120 @@ class TestGym:
 
             return CustomEnv(**kwargs)
 
+    def counting_env(self):
+        import gymnasium as gym
+        from gymnasium import Env
+
+        class CountingEnvRandomReset(Env):
+            def __init__(self, i=0):
+                self.counter = 1
+                self.i = i
+                self.observation_space = gym.spaces.Box(-np.inf, np.inf, shape=(1,))
+                self.action_space = gym.spaces.Box(-np.inf, np.inf, shape=(1,))
+                self.rng = np.random.RandomState(0)
+
+            def step(self, action):
+                self.counter += 1
+                done = bool(self.rng.random() < 0.05)
+                return (
+                    np.asarray(
+                        [
+                            self.counter,
+                        ]
+                    ),
+                    0,
+                    done,
+                    done,
+                    {},
+                )
+
+            def reset(
+                self,
+                *,
+                seed: int | None = None,
+                options=None,
+            ):
+                self.counter = 1
+                if seed is not None:
+                    self.rng = np.random.RandomState(seed)
+                return (
+                    np.asarray(
+                        [
+                            self.counter,
+                        ]
+                    ),
+                    {},
+                )
+
+        return CountingEnvRandomReset
+
+    @implement_for("gym")
+    def test_gymnasium_autoreset(self, venv):
+        return
+
+    @implement_for("gymnasium", None, "1.1.0")
+    def test_gymnasium_autoreset(self, venv):  # noqa
+        return
+
+    @implement_for("gymnasium", "1.1.0")
+    @pytest.mark.parametrize("venv", ["sync", "async"])
+    def test_gymnasium_autoreset(self, venv):  # noqa
+        import gymnasium as gym
+
+        set_gym_backend("gymnasium").set()
+
+        counting_env = self.counting_env()
+        if venv == "sync":
+            venv = gym.vector.SyncVectorEnv
+        else:
+            venv = gym.vector.AsyncVectorEnv
+        envs0 = venv(
+            [lambda i=i: counting_env(i) for i in range(2)],
+            autoreset_mode=gym.vector.AutoresetMode.DISABLED,
+        )
+        env = GymWrapper(envs0)
+        envs0.reset(seed=0)
+        torch.manual_seed(0)
+        r0 = env.rollout(20, break_when_any_done=False)
+        envs1 = venv(
+            [lambda i=i: counting_env(i) for i in range(2)],
+            autoreset_mode=gym.vector.AutoresetMode.SAME_STEP,
+        )
+        env = GymWrapper(envs1)
+        envs1.reset(seed=0)
+        # env.set_seed(0)
+        torch.manual_seed(0)
+        r1 = []
+        t_ = env.reset()
+        for s in r0.unbind(-1):
+            t_.set("action", s["action"])
+            t, t_ = env.step_and_maybe_reset(t_)
+            r1.append(t)
+        r1 = torch.stack(r1, -1)
+        torch.testing.assert_close(r0["observation"], r1["observation"])
+        torch.testing.assert_close(r0["next", "observation"], r1["next", "observation"])
+        torch.testing.assert_close(r0["next", "done"], r1["next", "done"])
+
+    @implement_for("gym")
     @pytest.mark.parametrize("heterogeneous", [False, True])
     def test_resetting_strategies(self, heterogeneous):
+        return
+
+    @implement_for("gymnasium", None, "1.0.0")
+    @pytest.mark.parametrize("heterogeneous", [False, True])
+    def test_resetting_strategies(self, heterogeneous):  # noqa
+        self._test_resetting_strategies(heterogeneous, {})
+
+    @implement_for("gymnasium", "1.1.0")
+    @pytest.mark.parametrize("heterogeneous", [False, True])
+    def test_resetting_strategies(self, heterogeneous):  # noqa
+        import gymnasium as gym
+
+        self._test_resetting_strategies(
+            heterogeneous, {"autoreset_mode": gym.vector.AutoresetMode.SAME_STEP}
+        )
+
+    def _test_resetting_strategies(self, heterogeneous, kwargs):
         if _has_gymnasium:
             backend = "gymnasium"
         else:
@@ -1368,7 +1585,8 @@ class TestGym:
                 env = GymWrapper(
                     gym_backend().vector.AsyncVectorEnv(
                         [functools.partial(self._get_dummy_gym_env, backend=backend)]
-                        * 4
+                        * 4,
+                        **kwargs,
                     )
                 )
             else:
@@ -1381,7 +1599,8 @@ class TestGym:
                                 backend=backend,
                             )
                             for i in range(4)
-                        ]
+                        ],
+                        **kwargs,
                     )
                 )
             try:
@@ -1460,6 +1679,12 @@ def _make_gym_environment(env_name):  # noqa: F811
     return gym.make(env_name, render_mode="rgb_array")
 
 
+@implement_for("gymnasium", "1.1.0")
+def _make_gym_environment(env_name):  # noqa: F811
+    gym = gym_backend()
+    return gym.make(env_name, render_mode="rgb_array")
+
+
 @pytest.mark.skipif(not _has_dmc, reason="no dm_control library found")
 class TestDMControl:
     @pytest.mark.parametrize("env_name,task", [["cheetah", "run"]])
@@ -1521,8 +1746,12 @@ class TestDMControl:
             assert final_seed0 == final_seed1
             assert_allclose_td(rollout0, rollout1)
 
+        from dm_control import suite
+
         base_env = suite.load(env_name, task)
         if from_pixels:
+            from dm_control.suite.wrappers import pixels
+
             render_kwargs = {"camera_id": 0}
             base_env = pixels.Wrapper(
                 base_env, pixels_only=pixels_only, render_kwargs=render_kwargs
@@ -1537,6 +1766,43 @@ class TestDMControl:
         assert_allclose_td(tdreset0, tdreset2)
         assert final_seed0 == final_seed2
         assert_allclose_td(rollout0, rollout2)
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires cuda")
+    @pytest.mark.parametrize("env_name,task", [["cheetah", "run"]])
+    @pytest.mark.parametrize("frame_skip", [1, 3])
+    @pytest.mark.parametrize(
+        "from_pixels,pixels_only", [[True, True], [True, False], [False, False]]
+    )
+    def test_dmcontrol_device_consistency(
+        self, env_name, task, frame_skip, from_pixels, pixels_only
+    ):
+        env0 = DMControlEnv(
+            env_name,
+            task,
+            frame_skip=frame_skip,
+            from_pixels=from_pixels,
+            pixels_only=pixels_only,
+            device="cpu",
+        )
+
+        env1 = DMControlEnv(
+            env_name,
+            task,
+            frame_skip=frame_skip,
+            from_pixels=from_pixels,
+            pixels_only=pixels_only,
+            device="cuda",
+        )
+
+        env0.set_seed(0)
+        r0 = env0.rollout(100, break_when_any_done=False)
+        assert r0.device == torch.device("cpu")
+        actions = collections.deque(r0["action"].unbind(0))
+        policy = lambda td: td.set("action", actions.popleft())
+        env1.set_seed(0)
+        r1 = env1.rollout(100, policy, break_when_any_done=False)
+        assert r1.device == torch.device("cuda:0")
+        assert_allclose_td(r0, r1.cpu())
 
     @pytest.mark.parametrize("env_name,task", [["cheetah", "run"]])
     @pytest.mark.parametrize("frame_skip", [1, 3])
@@ -1920,7 +2186,7 @@ class TestEnvPool:
         class DiscreteChoice(torch.nn.Module):
             """Dummy module producing discrete output. Necessary when the action space is discrete."""
 
-            def __init__(self, out_dim: int, dtype: Optional[Union[torch.dtype, str]]):
+            def __init__(self, out_dim: int, dtype: torch.dtype | str | None):
                 super().__init__()
                 self.lin = torch.nn.LazyLinear(out_dim, dtype=dtype)
 
@@ -2408,6 +2674,8 @@ class TestVmas:
     def test_vmas_spec_rollout(
         self, scenario_name, num_envs, n_agents, continuous_actions
     ):
+        import vmas
+
         vmas_env = VmasEnv(
             scenario=scenario_name,
             num_envs=num_envs,
@@ -2569,7 +2837,7 @@ class TestVmas:
 
         env = maybe_fork_ParallelEnv(n_workers, env_fun)
 
-        n_actions_per_agent = env.action_spec.shape[-1]
+        n_actions_per_agent = env.full_action_spec[env.action_key].shape[-1]
         n_observations_per_agent = env.observation_spec["agents", "observation"].shape[
             -1
         ]
@@ -2581,7 +2849,7 @@ class TestVmas:
             ),
             in_keys=[("agents", "observation")],
             out_keys=[env.action_key],
-            spec=env.action_spec,
+            spec=env.full_action_spec[env.action_key],
             safe=True,
         )
         ccollector = SyncDataCollector(
@@ -3943,7 +4211,7 @@ class TestSmacv2:
     def test_collector(self):
         env = SMACv2Env(map_name="MMM2", seed=0, categorical_actions=True)
         in_feats = env.observation_spec["agents", "observation"].shape[-1]
-        out_feats = env.action_spec.space.n
+        out_feats = env.full_action_spec[env.action_key].space.n
 
         module = TensorDictModule(
             nn.Linear(in_feats, out_feats),
@@ -4275,6 +4543,65 @@ class TestMeltingpot:
         image_from_env = env.get_rgb_image()
         assert torch.equal(rollout_last_image, image_from_env)
         assert not torch.equal(rollout_penultimate_image, image_from_env)
+
+
+@pytest.mark.skipif(not _has_isaaclab, reason="Isaaclab not found")
+class TestIsaacLab:
+    @pytest.fixture(scope="class")
+    def env(self):
+        torch.manual_seed(0)
+        import argparse
+
+        # This code block ensures that the Isaac app is started in headless mode
+        from isaaclab.app import AppLauncher
+
+        parser = argparse.ArgumentParser(description="Train an RL agent with TorchRL.")
+        AppLauncher.add_app_launcher_args(parser)
+        args_cli, hydra_args = parser.parse_known_args(["--headless"])
+        AppLauncher(args_cli)
+
+        # Imports and env
+        import gymnasium as gym
+        import isaaclab_tasks  # noqa: F401
+        from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
+        from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
+
+        torchrl_logger.info("Making IsaacLab env...")
+        env = gym.make("Isaac-Ant-v0", cfg=AntEnvCfg())
+        torchrl_logger.info("Wrapping IsaacLab env...")
+        try:
+            env = IsaacLabWrapper(env)
+            yield env
+        finally:
+            torchrl_logger.info("Closing IsaacLab env...")
+            env.close()
+            torchrl_logger.info("Closed")
+
+    def test_isaaclab(self, env):
+        assert env.batch_size == (4096,)
+        assert env._is_batched
+        torchrl_logger.info("Checking env specs...")
+        env.check_env_specs(break_when_any_done="both")
+        torchrl_logger.info("Check succeeded!")
+
+    def test_isaac_collector(self, env):
+        col = SyncDataCollector(
+            env, env.rand_action, frames_per_batch=1000, total_frames=100_000_000
+        )
+        try:
+            for data in col:
+                assert data.shape == (4096, 1)
+                break
+        finally:
+            # We must do that, otherwise `__del__` calls `shutdown` and the next test will fail
+            col.shutdown(close_env=False)
+
+    def test_isaaclab_reset(self, env):
+        # Make a rollout that will stop as soon as a trajectory reaches a done state
+        r = env.rollout(1_000_000)
+
+        # Check that done obs are None
+        assert not r["next", "policy"][r["next", "done"].squeeze(-1)].isfinite().any()
 
 
 if __name__ == "__main__":

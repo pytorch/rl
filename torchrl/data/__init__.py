@@ -8,9 +8,6 @@ from .llm import (
     ConstantKLController,
     create_infinite_iterator,
     get_dataloader,
-    LLMData,
-    LLMInput,
-    LLMOutput,
     PairwiseDataset,
     PromptData,
     PromptTensorDictTokenizer,
@@ -30,7 +27,7 @@ from .map import (
     TensorMap,
     Tree,
 )
-from .postprocs import MultiStep
+from .postprocs import DensifyReward, MultiStep
 from .replay_buffers import (
     Flat2TED,
     FlatStorageCheckpointer,
@@ -49,6 +46,7 @@ from .replay_buffers import (
     PrioritizedSampler,
     PrioritizedSliceSampler,
     RandomSampler,
+    RayReplayBuffer,
     RemoteTensorDictReplayBuffer,
     ReplayBuffer,
     ReplayBufferEnsemble,
@@ -119,6 +117,7 @@ __all__ = [
     "CompositeSpec",
     "ConstantKLController",
     "DEVICE_TYPING",
+    "DensifyReward",
     "DiscreteTensorSpec",
     "Flat2TED",
     "FlatStorageCheckpointer",
@@ -127,9 +126,6 @@ __all__ = [
     "H5StorageCheckpointer",
     "HashToInt",
     "ImmutableDatasetWriter",
-    "LLMData",
-    "LLMInput",
-    "LLMOutput",
     "LazyMemmapStorage",
     "LazyStackStorage",
     "LazyStackedCompositeSpec",
@@ -158,6 +154,7 @@ __all__ = [
     "QueryModule",
     "RandomProjectionHash",
     "RandomSampler",
+    "RayReplayBuffer",
     "RemoteTensorDictReplayBuffer",
     "ReplayBuffer",
     "ReplayBufferEnsemble",

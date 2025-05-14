@@ -2208,8 +2208,8 @@ class MultiStepActorWrapper(TensorDictModuleBase):
 
     Args:
         actor (TensorDictModuleBase): An actor.
-        n_steps (int): the number of actions the actor outputs at once
-            (lookahead window).
+        n_steps (int, optional): the number of actions the actor outputs at once
+            (lookahead window). Defaults to `None`.
 
     Keyword Args:
         action_keys (list of NestedKeys, optional): the action keys from
@@ -2220,6 +2220,8 @@ class MultiStepActorWrapper(TensorDictModuleBase):
             when the environment has gone through a reset.
             Defaults to ``"is_init"`` which is the ``out_key`` from the
             :class:`~torchrl.envs.transforms.InitTracker` transform.
+        keep_dim (bool, optional): whether to keep the time dimension of
+            the macro during indexing. Defaults to ``False``.
 
     Examples:
         >>> import torch.nn
@@ -2288,14 +2290,16 @@ class MultiStepActorWrapper(TensorDictModuleBase):
     def __init__(
         self,
         actor: TensorDictModuleBase,
-        n_steps: int,
+        n_steps: int | None = None,
         *,
         action_keys: list[NestedKey] | None = None,
         init_key: list[NestedKey] | None = None,
+        keep_dim: bool = False,
     ):
         self.action_keys = action_keys
         self.init_key = init_key
         self.n_steps = n_steps
+        self.keep_dim = keep_dim
 
         super().__init__()
         self.actor = actor
@@ -2367,7 +2371,10 @@ class MultiStepActorWrapper(TensorDictModuleBase):
                 action_entry = parent_td.get(action_key_orig[-1], None)
             if action_entry is None:
                 raise self._NO_INIT_ERR
-            if action_entry.shape[parent_td.ndim] != self.n_steps:
+            if (
+                self.n_steps is not None
+                and action_entry.shape[parent_td.ndim] != self.n_steps
+            ):
                 raise RuntimeError(
                     f"The action's time dimension (dim={parent_td.ndim}) doesn't match the n_steps argument ({self.n_steps}). "
                     f"The action shape was {action_entry.shape}."
@@ -2377,7 +2384,10 @@ class MultiStepActorWrapper(TensorDictModuleBase):
                     None,
                 ),
             ) * parent_td.ndim
-            cur_action = action_entry[base_idx + (0,)]
+            if not self.keep_dim:
+                cur_action = action_entry[base_idx + (0,)]
+            else:
+                cur_action = action_entry[base_idx + (slice(1),)]
             tensordict.set(action_key, cur_action)
             tensordict.set(
                 action_key_orig,

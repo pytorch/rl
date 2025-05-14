@@ -13,7 +13,7 @@ Exporting TorchRL modules
 
         !pip install tensordict
         !pip install torchrl
-        !pip install "gymnasium[atari,accept-rom-license]"<1.0.0
+        !pip install "gymnasium[atari]"
 
 Introduction
 ------------

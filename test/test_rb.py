@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import argparse
 import contextlib
@@ -16,23 +17,6 @@ from unittest import mock
 import numpy as np
 import pytest
 import torch
-
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import (
-        capture_log_records,
-        CARTPOLE_VERSIONED,
-        get_default_devices,
-        make_tc,
-    )
-    from pytorch.rl.test.mocking_classes import CountingEnv
-else:
-    from _utils_internal import (
-        capture_log_records,
-        CARTPOLE_VERSIONED,
-        get_default_devices,
-        make_tc,
-    )
-    from mocking_classes import CountingEnv
 
 from packaging import version
 from packaging.version import parse
@@ -121,11 +105,29 @@ from torchrl.envs.transforms.transforms import (
 )
 
 
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import (
+        capture_log_records,
+        CARTPOLE_VERSIONED,
+        get_default_devices,
+        make_tc,
+    )
+    from pytorch.rl.test.mocking_classes import CountingEnv
+else:
+    from _utils_internal import (
+        capture_log_records,
+        CARTPOLE_VERSIONED,
+        get_default_devices,
+        make_tc,
+    )
+    from mocking_classes import CountingEnv
+
 OLD_TORCH = parse(torch.__version__) < parse("2.0.0")
 _has_tv = importlib.util.find_spec("torchvision") is not None
 _has_gym = importlib.util.find_spec("gym") is not None
 _has_snapshot = importlib.util.find_spec("torchsnapshot") is not None
 _os_is_windows = sys.platform == "win32"
+_has_transformers = importlib.util.find_spec("transformers") is not None
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 torch_2_3 = version.parse(
@@ -1117,6 +1119,9 @@ class TestStorages:
         assert (rb[:, 10:20] == 0).all()
         assert len(rb) == 100
 
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+    )
     @pytest.mark.parametrize("max_size", [1000, None])
     @pytest.mark.parametrize("stack_dim", [-1, 0])
     def test_lazy_stack_storage(self, max_size, stack_dim):

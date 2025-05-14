@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import argparse
 import os
@@ -390,7 +391,9 @@ class TestOrnsteinUhlenbeckProcess:
             exploratory_policy = TensorDictSequential(
                 policy,
                 OrnsteinUhlenbeckProcessModule(
-                    spec=action_spec, action_key=env.action_key, is_init_key=is_init_key
+                    spec=action_spec.clone(),
+                    action_key=env.action_key,
+                    is_init_key=is_init_key,
                 ).to(device),
             )
         else:

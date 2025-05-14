@@ -146,9 +146,20 @@ def _set_gym_environments():  # noqa: F811
     _BREAKOUT_VERSIONED = "ALE/Breakout-v5"
 
 
-@implement_for("gymnasium", "1.0.0", None)
+@implement_for("gymnasium", "1.0.0", "1.1.0")
 def _set_gym_environments():  # noqa: F811
     raise ImportError
+
+
+@implement_for("gymnasium", "1.1.0")
+def _set_gym_environments():  # noqa: F811
+    global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED, _BREAKOUT_VERSIONED
+
+    _CARTPOLE_VERSIONED = "CartPole-v1"
+    _HALFCHEETAH_VERSIONED = "HalfCheetah-v5"
+    _PENDULUM_VERSIONED = "Pendulum-v1"
+    _PONG_VERSIONED = "ALE/Pong-v5"
+    _BREAKOUT_VERSIONED = "ALE/Breakout-v5"
 
 
 if _has_gym:

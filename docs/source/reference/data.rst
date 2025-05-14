@@ -20,6 +20,8 @@ widely used replay buffers:
     PrioritizedReplayBuffer
     TensorDictReplayBuffer
     TensorDictPrioritizedReplayBuffer
+    RayReplayBuffer
+    RemoteTensorDictReplayBuffer
 
 Composable Replay Buffers
 -------------------------
@@ -1105,10 +1107,10 @@ and the tree can be expanded for each of these. The following figure shows how t
     Tree
 
 
-Reinforcement Learning From Human Feedback (RLHF)
--------------------------------------------------
+Large language models and Reinforcement Learning From Human Feedback (RLHF)
+---------------------------------------------------------------------------
 
-Data is of utmost importance in Reinforcement Learning from Human Feedback (RLHF).
+Data is of utmost importance in LLM post-training (e.g., GRPO or Reinforcement Learning from Human Feedback (RLHF)).
 Given that these techniques are commonly employed in the realm of language,
 which is scarcely addressed in other subdomains of RL within the library,
 we offer specific utilities to facilitate interaction with external libraries
@@ -1147,16 +1149,17 @@ Utils
     :toctree: generated/
     :template: rl_template.rst
 
-    MultiStep
-    consolidate_spec
-    check_no_exclusive_keys
-    contains_lazy_spec
-    Nested2TED
+    DensifyReward
     Flat2TED
     H5Combine
     H5Split
+    MultiStep
+    Nested2TED
     TED2Flat
     TED2Nested
+    check_no_exclusive_keys
+    consolidate_spec
+    contains_lazy_spec
 
 .. currentmodule:: torchrl.envs.transforms.rb_transforms
 

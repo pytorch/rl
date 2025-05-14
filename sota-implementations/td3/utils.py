@@ -125,7 +125,7 @@ def make_collector(cfg, train_env, actor_model_explore, compile_mode, device):
         reset_at_each_iter=cfg.collector.reset_at_each_iter,
         device=collector_device,
         compile_policy={"mode": compile_mode} if compile_mode else False,
-        cudagraph_policy=cfg.compile.cudagraphs,
+        cudagraph_policy={"warmup": 10} if cfg.compile.cudagraphs else False,
     )
     collector.set_seed(cfg.env.seed)
     return collector

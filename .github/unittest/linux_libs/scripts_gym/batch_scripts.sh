@@ -126,7 +126,7 @@ do
   conda activate ./cloned_env
 
   echo "Testing gym version: ${GYM_VERSION}"
-  pip3 install 'gymnasium[atari,accept-rom-license,ale-py]'==$GYM_VERSION
+  pip3 install 'gymnasium[atari,ale-py]'==$GYM_VERSION
 
   $DIR/run_test.sh
 
@@ -135,12 +135,27 @@ do
   conda env remove --prefix ./cloned_env -y
 done
 
+# Prev gymnasium
+conda deactivate
+conda create --prefix ./cloned_env --clone ./env -y
+conda activate ./cloned_env
+
+pip3 install 'gymnasium[ale-py,atari]>=1.1.0' mo-gymnasium gymnasium-robotics -U
+
+$DIR/run_test.sh
+
+# delete the conda copy
+conda deactivate
+conda env remove --prefix ./cloned_env -y
+
+# Skip 1.0.0
+
 # Latest gymnasium
 conda deactivate
 conda create --prefix ./cloned_env --clone ./env -y
 conda activate ./cloned_env
 
-pip3 install 'gymnasium[accept-rom-license,ale-py,atari]<1.0' mo-gymnasium gymnasium-robotics -U
+pip3 install 'gymnasium[ale-py,atari]>=1.1.0' mo-gymnasium gymnasium-robotics -U
 
 $DIR/run_test.sh
 

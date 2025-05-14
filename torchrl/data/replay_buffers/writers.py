@@ -16,8 +16,9 @@ from typing import Any, Sequence
 import numpy as np
 import torch
 from tensordict import is_tensor_collection, MemoryMappedTensor, TensorDictBase
-from tensordict.utils import _STRDTYPE2DTYPE, expand_as_right, is_tensorclass
+from tensordict.utils import expand_as_right, is_tensorclass
 from torch import multiprocessing as mp
+from torchrl._utils import _STRDTYPE2DTYPE
 
 try:
     from torch.utils._pytree import tree_leaves
@@ -216,6 +217,7 @@ class RoundRobinWriter(Writer):
 
     def _empty(self):
         self._cursor = 0
+        self._write_count = 0
 
     @property
     def _cursor(self):

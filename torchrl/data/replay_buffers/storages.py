@@ -19,6 +19,7 @@ import tensordict
 import torch
 from tensordict import (
     is_tensor_collection,
+    lazy_stack,
     LazyStackedTensorDict,
     TensorDict,
     TensorDictBase,
@@ -344,7 +345,10 @@ class ListStorage(Storage):
         return state
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(items=[{self._storage[0]}, ...])"
+        storage = getattr(self, "_storage", [None])
+        if not storage:
+            return f"{self.__class__.__name__}()"
+        return f"{self.__class__.__name__}(items=[{storage[0]}, ...])"
 
     def contains(self, item):
         if isinstance(item, int):
@@ -427,7 +431,7 @@ class LazyStackStorage(ListStorage):
             stack_dim = self.stack_dim
             if stack_dim < 0:
                 stack_dim = out[0].ndim + 1 + stack_dim
-            out = LazyStackedTensorDict(*out, stack_dim=stack_dim)
+            out = lazy_stack(list(out), stack_dim)
             return out
         return out
 
@@ -1536,10 +1540,10 @@ def _collate_id(x):
 
 
 def _get_default_collate(storage, _is_tensordict=False):
-    if isinstance(storage, ListStorage):
-        return _stack_anything
-    elif isinstance(storage, TensorStorage):
+    if isinstance(storage, LazyStackStorage) or isinstance(storage, TensorStorage):
         return _collate_id
+    elif isinstance(storage, ListStorage):
+        return _stack_anything
     else:
         raise NotImplementedError(
             f"Could not find a default collate_fn for storage {type(storage)}."
