@@ -727,4 +727,5 @@ class ConsistentDropoutModule(TensorDictModuleBase):
             default_value=functools.partial(
                 self.consistent_dropout.make_mask, shape=shape
             ),
+            expand_specs=False,
         )

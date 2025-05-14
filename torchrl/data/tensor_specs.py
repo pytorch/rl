@@ -7,13 +7,14 @@ from __future__ import annotations
 
 import abc
 import enum
+import functools
 import gc
 import math
 import warnings
 import weakref
 from collections.abc import Iterable
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import wraps
 from textwrap import indent
 from typing import (
@@ -570,10 +571,44 @@ class TensorSpec(metaclass=abc.ABCMeta):
     shape: torch.Size
     space: None | Box
     device: torch.device | None = None
-    dtype: torch.dtype = torch.float
+    dtype: torch.dtype = torch.get_default_dtype()
     domain: str = ""
+    _encode_memo_dict: dict[Any, Callable[[Any], Any]] = field(
+        default_factory=dict,
+    )
 
     SPEC_HANDLED_FUNCTIONS = {}
+
+    def memoize_encode(self, mode: bool = True) -> None:
+        """Creates a cached sequence of callables for the `encode` method that speeds up its execution.
+
+        This should only be used whenever the input type, shape etc. are expected to be consistent across calls
+        for a given spec.
+
+        Args:
+            mode (bool, optional): Whether the cache should be used. Defaults to `True`.
+
+        .. seealso:: the cache can be erased via :meth:`~torchrl.data.TensorSpec.erase_memoize_cache`.
+        """
+        warnings.warn(
+            "memoized encoding is an experimental feature. Use at your own risks."
+        )
+        if mode:
+            self.encode = self._encode_memo
+        else:
+            self.encode = self._encode_eager
+
+    def erase_memoize_cache(self) -> None:
+        """Clears the memoized cache for cached encode execution.
+
+        .. seealso:: :meth:`~torchrl.data.TensorSpec.memoize_encode`.
+        """
+        self._encode_memo_dict.clear()
+
+    def __getstate__(self):
+        state = dict(self.__dict__)
+        state["_encode"] = {}
+        return state
 
     @classmethod
     def implements_for_spec(cls, torch_function: Callable) -> Callable:
@@ -617,7 +652,7 @@ class TensorSpec(metaclass=abc.ABCMeta):
 
     def encode(
         self,
-        val: np.ndarray | torch.Tensor | TensorDictBase,
+        val: np.ndarray | list | torch.Tensor | TensorDictBase,
         *,
         ignore_device: bool = False,
     ) -> torch.Tensor | TensorDictBase:
@@ -639,6 +674,16 @@ class TensorSpec(metaclass=abc.ABCMeta):
             torch.Tensor matching the required tensor specs.
 
         """
+        raise NotImplementedError(
+            "This is a placeholder that needs to be set during construction"
+        )
+
+    def _encode_eager(
+        self,
+        val: np.ndarray | list | torch.Tensor | TensorDictBase,
+        *,
+        ignore_device: bool = False,
+    ) -> torch.Tensor | TensorDictBase:
         if not isinstance(val, torch.Tensor):
             if isinstance(val, list):
                 if len(val) == 1:
@@ -673,6 +718,76 @@ class TensorSpec(metaclass=abc.ABCMeta):
         if _CHECK_SPEC_ENCODE:
             self.assert_is_in(val)
         return val
+
+    def _encode_memo(
+        self,
+        val: np.ndarray | list | torch.Tensor | TensorDictBase,
+        *,
+        ignore_device: bool = False,
+    ) -> torch.Tensor | TensorDictBase:
+        funcs = self._encode_memo_dict.get(ignore_device)
+        if funcs is not None:
+            return funcs(val)
+
+        funcs = []
+        val_orig = val
+        if not isinstance(val, torch.Tensor):
+            if isinstance(val, list):
+                if len(val) == 1:
+                    # gym used to return lists of images since 0.26.0
+                    # We convert these lists in np.array or take the first element
+                    # if there is just one.
+                    # See https://github.com/pytorch/rl/pull/403/commits/73d77d033152c61d96126ccd10a2817fecd285a1
+                    funcs.append(lambda val: val[0])
+                else:
+                    funcs.append(lambda val: np.array(val))
+            val = _reduce_funcs(funcs)(val_orig)
+            if isinstance(val, np.ndarray) and not all(
+                stride > 0 for stride in val.strides
+            ):
+                funcs.append(lambda val: val.copy())
+            val = _reduce_funcs(funcs)(val_orig)
+            if not ignore_device:
+                funcs.append(
+                    lambda val: torch.as_tensor(
+                        val, device=self.device, dtype=self.dtype
+                    )
+                )
+            else:
+                funcs.append(lambda val: torch.as_tensor(val, dtype=self.dtype))
+            val = _reduce_funcs(funcs)(val_orig)
+        if val.shape != self.shape:
+            # if val.shape[-len(self.shape) :] != self.shape:
+            # option 1: add a singleton dim at the end
+            if val.shape == self.shape and self.shape[-1] == 1:
+                funcs.append(lambda val: val.unsqueeze(-1))
+            else:
+
+                def reshape(val):
+                    try:
+                        return val.reshape(self.shape)
+                    except Exception as err:
+                        raise RuntimeError(
+                            f"Shape mismatch: the value has shape {val.shape} which "
+                            f"is incompatible with the spec shape {self.shape}."
+                        ) from err
+
+                funcs.append(reshape)
+            val = _reduce_funcs(funcs)(val_orig)
+        if _CHECK_SPEC_ENCODE:
+
+            def check(val):
+                self.assert_is_in(val)
+                return val
+
+            funcs.append(check)
+        if len(funcs) == 0:
+            self._encode_memo_dict[ignore_device] = lambda x: x
+        elif len(funcs) == 1:
+            self._encode_memo_dict[ignore_device] = funcs[0]
+        else:
+            self._encode_memo_dict[ignore_device] = _reduce_funcs(funcs)
+        return self._encode_memo_dict[ignore_device](val_orig)
 
     @abc.abstractmethod
     def __eq__(self, other: Any) -> bool:
@@ -1494,7 +1609,7 @@ class Stacked(_LazyStackedMixin[TensorSpec], TensorSpec):
     def _project(self, val: TensorDictBase) -> TensorDictBase:
         raise NOT_IMPLEMENTED_ERROR
 
-    def encode(
+    def _encode_eager(
         self, val: np.ndarray | torch.Tensor, *, ignore_device=False
     ) -> torch.Tensor:
         if self.dim != 0 and not isinstance(val, tuple):
@@ -1567,8 +1682,11 @@ class OneHot(TensorSpec):
     shape: torch.Size
     space: CategoricalBox
     device: torch.device | None = None
-    dtype: torch.dtype = torch.float
+    dtype: torch.dtype = torch.get_default_dtype()
     domain: str = ""
+    _encode_memo_dict: dict[Any, Callable[[Any], Any]] = field(
+        default_factory=dict,
+    )
 
     def __init__(
         self,
@@ -1597,6 +1715,7 @@ class OneHot(TensorSpec):
             shape=shape, space=space, device=device, dtype=dtype, domain="discrete"
         )
         self.update_mask(mask)
+        self.encode = self._encode_eager
 
     @property
     def n(self):
@@ -1818,7 +1937,7 @@ class OneHot(TensorSpec):
         # out.scatter_(-1, m, 1)
         return out
 
-    def encode(
+    def _encode_eager(
         self,
         val: np.ndarray | torch.Tensor,
         space: CategoricalBox | None = None,
@@ -1844,6 +1963,57 @@ class OneHot(TensorSpec):
 
         val = torch.nn.functional.one_hot(val.long(), space.n).to(self.dtype)
         return val
+
+    def _encode_memo(
+        self,
+        val: np.ndarray | torch.Tensor,
+        space: CategoricalBox | None = None,
+        *,
+        ignore_device: bool = False,
+    ) -> torch.Tensor:
+
+        funcs = self._encode_memo_dict.get(ignore_device)
+        if funcs is not None:
+            return funcs(val)
+        funcs = []
+        val_orig = val
+        if not isinstance(val, torch.Tensor):
+            if ignore_device:
+                funcs.append(torch.as_tensor)
+            else:
+                funcs.append(lambda val: torch.as_tensor(val, device=self.device))
+        val = _reduce_funcs(funcs)(val_orig)
+        if space is None:
+            # TODO: make sure this is the case when the encoding is cached
+            space = self.space
+
+        if self.use_register:
+
+            def from_register(val):
+                if val not in space.register:
+                    space.register[val] = len(space.register)
+                return space.register[val]
+
+            funcs.append(from_register)
+
+        val = _reduce_funcs(funcs)(val_orig)
+
+        def check_and_one_hot(val):
+            if (val >= space.n).any():
+                raise AssertionError("Value must be less than action space.")
+            val = torch.nn.functional.one_hot(val.long(), space.n).to(self.dtype)
+            return val
+
+        funcs.append(check_and_one_hot)
+        if len(funcs) == 0:
+            self._encode_memo_dict[ignore_device] = lambda x: x
+        elif len(funcs) == 1:
+            self._encode_memo_dict[ignore_device] = funcs[0]
+        else:
+            self._encode_memo_dict[ignore_device] = functools.partial(
+                functools.reduce, lambda x, f: f(x), funcs
+            )
+        return self._encode_memo_dict[ignore_device](val_orig)
 
     def to_numpy(self, val: torch.Tensor, safe: bool = None) -> np.ndarray:
         if safe is None:
@@ -1897,7 +2067,7 @@ class OneHot(TensorSpec):
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
         if self.mask is None:
-            out = torch.multinomial(val.to(torch.float), 1).squeeze(-1)
+            out = torch.multinomial(val.to(torch.get_default_dtype()), 1).squeeze(-1)
             out = torch.nn.functional.one_hot(out, self.space.n).to(self.dtype)
             return out
         shape = self.mask.shape
@@ -2194,6 +2364,7 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
             dtype=dtype,
             domain=domain,
         )
+        self.encode = self._encode_eager
 
     def index(
         self, index: INDEX_TYPING, tensor_to_index: torch.Tensor | TensorDictBase
@@ -2228,13 +2399,6 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
-        if any(
-            orig_val != val and val < 0
-            for val, orig_val in zip(shape[-len(self.shape) :], self.shape)
-        ):
-            raise ValueError(
-                f"{self.__class__.__name__}.expand does not support negative shapes."
-            )
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
                 f"The last {self.ndim} of the expanded shape {shape} must match the"
@@ -2461,6 +2625,7 @@ class BoundedContinuous(Bounded, metaclass=_BoundedMeta):
         super().__init__(
             low=low, high=high, shape=shape, device=device, dtype=dtype, domain=domain
         )
+        self.encode = self._encode_eager
 
 
 class BoundedDiscrete(Bounded, metaclass=_BoundedMeta):
@@ -2483,6 +2648,7 @@ class BoundedDiscrete(Bounded, metaclass=_BoundedMeta):
             dtype=dtype,
             domain=domain,
         )
+        self.encode = self._encode_eager
 
 
 def _is_nested_list(index, notuple=False):
@@ -2557,6 +2723,7 @@ class NonTensor(TensorSpec):
         )
         self.example_data = example_data
         self.batched = batched
+        self.encode = self._encode_eager
 
     def __repr__(self):
         shape_str = indent("shape=" + str(self.shape), " " * 4)
@@ -2745,13 +2912,13 @@ class NonTensor(TensorSpec):
     ) -> np.ndarray | dict:
         return val
 
-    def encode(
+    def _encode_eager(
         self,
         val: np.ndarray | torch.Tensor | TensorDictBase,
         *,
         ignore_device: bool = False,
     ) -> torch.Tensor | TensorDictBase:
-        return val
+        return NonTensorData(val, device=self.device, batch_size=self.shape)
 
 
 class _UnboundedMeta(abc.ABCMeta):
@@ -2864,6 +3031,7 @@ class Unbounded(TensorSpec, metaclass=_UnboundedMeta):
         super().__init__(
             shape=shape, space=box, device=device, dtype=dtype, domain=domain, **kwargs
         )
+        self.encode = self._encode_eager
 
     def cardinality(self) -> int:
         raise NotImplementedError(
@@ -3005,6 +3173,7 @@ class UnboundedDiscrete(Unbounded):
         **kwargs,
     ):
         super().__init__(shape=shape, device=device, dtype=dtype, **kwargs)
+        self.encode = self._encode_eager
 
 
 @dataclass(repr=False)
@@ -3076,6 +3245,7 @@ class MultiOneHot(OneHot):
             domain="discrete",
         )
         self.update_mask(mask)
+        self.encode = self._encode_eager
 
     def cardinality(self) -> int:
         return torch.as_tensor(self.nvec).prod()
@@ -3212,7 +3382,7 @@ class MultiOneHot(OneHot):
             out.append(m)
         return torch.cat(out, -1)
 
-    def encode(
+    def _encode_eager(
         self, val: np.ndarray | torch.Tensor, *, ignore_device: bool = False
     ) -> torch.Tensor:
         if not isinstance(val, torch.Tensor):
@@ -3227,8 +3397,58 @@ class MultiOneHot(OneHot):
                 raise RuntimeError(
                     f"value {v} is greater than the allowed max {space.n}"
                 )
-            x.append(super().encode(v, space, ignore_device=ignore_device))
+            x.append(
+                super(type(self), self)._encode_eager(
+                    v, space, ignore_device=ignore_device
+                )
+            )
         return torch.cat(x, -1).reshape(self.shape)
+
+    def _encode_memo(
+        self, val: np.ndarray | torch.Tensor, *, ignore_device: bool = False
+    ) -> torch.Tensor:
+        funcs = self._encode_memo_dict.get(ignore_device)
+        if funcs is not None:
+            return funcs(val)
+        funcs = []
+        val_orig = val
+        if not isinstance(val, torch.Tensor):
+            if not ignore_device:
+
+                def as_tensor(val):
+                    val = torch.tensor(val, device=self.device)
+
+            else:
+                as_tensor = torch.as_tensor
+            funcs.append(as_tensor)
+        val = _reduce_funcs(funcs)(val_orig)
+
+        def cat(val):
+            x = []
+            for v, space in zip(val.unbind(-1), self.space):
+                if not (v < space.n).all():
+                    raise RuntimeError(
+                        f"value {v} is greater than the allowed max {space.n}"
+                    )
+                x.append(
+                    super(type(self), self)._encode_eager(
+                        v, space, ignore_device=ignore_device
+                    )
+                )
+            return torch.cat(x, -1).reshape(self.shape)
+
+        funcs.append(cat)
+        val = _reduce_funcs(funcs)(val_orig)
+
+        if len(funcs) == 0:
+            self._encode_memo_dict[ignore_device] = lambda x: x
+        elif len(funcs) == 1:
+            self._encode_memo_dict[ignore_device] = funcs[0]
+        else:
+            self._encode_memo_dict[ignore_device] = functools.partial(
+                functools.reduce, lambda x, f: f(x), funcs
+            )
+        return self._encode_memo_dict[ignore_device](val_orig)
 
     def _split(self, val: torch.Tensor) -> torch.Tensor | None:
         split_sizes = [space.n for space in self.space]
@@ -3515,7 +3735,7 @@ class Categorical(TensorSpec):
     shape: torch.Size
     space: CategoricalBox
     device: torch.device | None = None
-    dtype: torch.dtype = torch.float
+    dtype: torch.dtype = torch.get_default_dtype()
     domain: str = ""
 
     # SPEC_HANDLED_FUNCTIONS = {}
@@ -3539,6 +3759,7 @@ class Categorical(TensorSpec):
         )
         self.update_mask(mask)
         self._provisional_n = None
+        self.encode = self._encode_eager
 
     @property
     def _undefined_n(self):
@@ -3945,6 +4166,7 @@ class Choice(TensorSpec):
         )
 
         self._choices = [choice.clone() for choice in choices]
+        self.encode = self._encode_eager
 
     def _rand_idx(self):
         return torch.randint(0, len(self._choices), ()).item()
@@ -4095,6 +4317,7 @@ class Binary(Categorical):
                     f"Got n={n} and shape={shape}."
                 )
         super().__init__(n=2, shape=shape, device=device, dtype=dtype)
+        self.encode = self._encode_eager
 
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
@@ -4265,6 +4488,7 @@ class MultiCategorical(Categorical):
         )
         self.update_mask(mask)
         self.remove_singleton = remove_singleton
+        self.encode = self._encode_eager
 
     def enumerate(self, use_mask: bool = False) -> torch.Tensor:
         if use_mask:
@@ -4781,6 +5005,22 @@ class Composite(TensorSpec):
         for k, item in kwargs.items():
             self[k] = item
         self.data_cls = data_cls
+        self.encode = self._encode_eager
+        self._encode_memo_dict = {}
+
+    def memoize_encode(self, mode: bool = True) -> None:
+        super().memoize_encode(mode=mode)
+        for spec in self._specs.values():
+            if spec is None:
+                continue
+            spec.memoize_encode(mode=mode)
+
+    def erase_memoize_cache(self) -> None:
+        self._encode_memo_dict.clear()
+        for spec in self._specs.values():
+            if spec is None:
+                continue
+            spec.erase_memoize_cache()
 
     @property
     def batch_size(self):
@@ -4941,7 +5181,7 @@ class Composite(TensorSpec):
                     spec.shape = self.shape
                 else:
                     raise ValueError(
-                        f"The shape of the spec {type(spec).__name__} and the Composite {type(self).__name__} mismatch: the first "
+                        f"The shapes of the spec {type(spec).__name__} and the {type(self).__name__} mismatch: the first "
                         f"{self.ndim} dimensions should match but got spec.shape={spec.shape} and "
                         f"Composite.shape={self.shape}."
                     )
@@ -5071,7 +5311,7 @@ class Composite(TensorSpec):
             raise ValueError(f"Key name {key} is prohibited.")
         del self._specs[key]
 
-    def encode(
+    def _encode_eager(
         self, vals: dict[str, Any], *, ignore_device: bool = False
     ) -> dict[str, torch.Tensor]:
         if isinstance(vals, TensorDict):
@@ -5098,6 +5338,66 @@ class Composite(TensorSpec):
         if self.data_cls is not None:
             return self.data_cls.from_dict(out)
         return out
+
+    def _encode_memo(
+        self, vals: dict[str, Any], *, ignore_device: bool = False
+    ) -> dict[str, torch.Tensor]:
+        funcs = self._encode_memo_dict.get(ignore_device)
+        if funcs is not None:
+            return funcs(vals)
+        funcs = []
+        vals_orig = vals
+        if isinstance(vals, TensorDictBase):
+
+            def empty(vals):
+                out = vals.empty()  # create and empty tensordict similar to vals
+                return vals, out
+
+        elif self.data_cls is not None:
+
+            def empty(vals):
+                out = {}
+                return vals, out
+
+        else:
+
+            def empty(vals):
+                out = TensorDict._new_unsafe({}, _size([]))
+                return vals, out
+
+        funcs.append(empty)
+
+        def populate(vals_out):
+            vals, out = vals_out
+            for key, item in vals.items():
+                if item is None:
+                    raise RuntimeError(
+                        "Composite.encode cannot be used with missing values."
+                    )
+                try:
+                    out[key] = self[key].encode(item, ignore_device=ignore_device)
+                except KeyError:
+                    raise KeyError(
+                        f"The Composite instance with keys {self.keys()} does not have a '{key}' key."
+                    )
+                except RuntimeError as err:
+                    raise RuntimeError(
+                        f"Encoding key {key} raised a RuntimeError. Scroll up to know more."
+                    ) from err
+            return out
+
+        funcs.append(populate)
+        if self.data_cls is not None:
+            funcs.append(self.data_cls.from_dict)
+        if len(funcs) == 0:
+            self._encode_memo_dict[ignore_device] = lambda x: x
+        elif len(funcs) == 1:
+            self._encode_memo_dict[ignore_device] = funcs[0]
+        else:
+            self._encode_memo_dict[ignore_device] = functools.partial(
+                functools.reduce, lambda x, f: f(x), funcs
+            )
+        return self._encode_memo_dict[ignore_device](vals_orig)
 
     def __repr__(self) -> str:
         sub_str = [
@@ -5284,9 +5584,20 @@ class Composite(TensorSpec):
     def to(self, dest: torch.dtype | DEVICE_TYPING) -> Composite:
         if dest is None:
             return self
+        if isinstance(dest, torch.dtype):
+            items = list(self.items())
+            kwargs = {}
+            for key, value in items:
+                if value is None:
+                    kwargs[key] = value
+                    continue
+                kwargs[key] = value.to(dest)
+            return self.__class__(
+                **kwargs, device=self.device, shape=self.shape, data_cls=self.data_cls
+            )
         if not isinstance(dest, (str, int, torch.device)):
             raise ValueError(
-                "Only device casting is allowed with specs of type Composite."
+                "Only device/dtype casting is allowed with specs of type Composite."
             )
         if self._device and self._device == torch.device(dest):
             return self
@@ -5654,13 +5965,7 @@ class Composite(TensorSpec):
             # TODO: See what to do when compiling
             pass
         if recurse is None:
-            warnings.warn(
-                "You have not specified a value for recurse when calling CompositeSpec.lock_(). "
-                "The current default is False but it will be turned to True in v0.8. To adapt to these changes "
-                "and silence this warning, pass the value of recurse explicitly.",
-                category=DeprecationWarning,
-            )
-            recurse = False
+            recurse = True
         self._propagate_lock(recurse=recurse, is_compiling=is_comp)
         return self
 
@@ -5720,13 +6025,7 @@ class Composite(TensorSpec):
         """
         try:
             if recurse is None:
-                warnings.warn(
-                    "You have not specified a value for recurse when calling CompositeSpec.unlock_(). "
-                    "The current default is False but it will be turned to True in v0.8. To adapt to these changes "
-                    "and silence this warning, pass the value of recurse explicitly.",
-                    category=DeprecationWarning,
-                )
-                recurse = False
+                recurse = True
             sub_specs = self._propagate_unlock(recurse=recurse)
             if recurse:
                 for sub_spec in sub_specs:
@@ -6058,7 +6357,7 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
             [spec.empty() for spec in self._specs], dim=self.stack_dim
         )
 
-    def encode(
+    def _encode_eager(
         self, vals: dict[str, Any], ignore_device: bool = False
     ) -> dict[str, torch.Tensor]:
         raise NOT_IMPLEMENTED_ERROR
@@ -6537,3 +6836,7 @@ class UnboundedDiscreteTensorSpec(
         **kwargs,
     ):
         super().__init__(shape=shape, device=device, dtype=dtype, **kwargs)
+
+
+def _reduce_funcs(funcs):
+    return functools.partial(functools.reduce, lambda x, f: f(x), funcs)

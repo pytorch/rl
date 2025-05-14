@@ -334,7 +334,7 @@ class OpenSpielWrapper(_EnvWrapper):
         self.action_spec = Composite(action_spec)
         self.reward_spec = Composite(reward_spec)
 
-    def _set_seed(self, seed):
+    def _set_seed(self, seed: int | None) -> None:
         if seed is not None:
             raise NotImplementedError("This environment has no seed.")
 
@@ -469,8 +469,6 @@ class OpenSpielWrapper(_EnvWrapper):
                 agent_group = group
                 agent_index_in_group = agents.index(agent)
                 break
-
-        assert agent_group is not None
 
         action_tensor = tensordict[agent_group, "action"][agent_index_in_group]
         action = self._get_action_from_tensor(action_tensor)

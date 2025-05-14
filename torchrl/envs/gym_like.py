@@ -6,9 +6,10 @@
 from __future__ import annotations
 
 import abc
+import functools
 import re
 import warnings
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence, TypeVar
 
 import numpy as np
 import torch
@@ -17,6 +18,8 @@ from tensordict import NonTensorData, TensorDict, TensorDictBase
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.tensor_specs import Composite, NonTensor, TensorSpec, Unbounded
 from torchrl.envs.common import _EnvWrapper, _maybe_unlock, EnvBase
+
+T = TypeVar("T", bound=EnvBase)
 
 
 class BaseInfoDictReader(metaclass=abc.ABCMeta):
@@ -175,6 +178,50 @@ class GymLikeEnv(_EnvWrapper):
 
         return self
 
+    def fast_encoding(self, mode: bool = True) -> T:
+        """Skips several checks during encoding of the environment output to accelerate the execution of the environment.
+
+        Args:
+            mode (bool, optional): the memoization mode. If ``True``, input checks will be executed only once and then
+                the encoding pipeline will be pre-recorded.
+
+        .. seealso:: :meth:`~torchrl.data.TensorSpec.memoize_cache`.
+
+        Example:
+            >>> from torchrl.envs import GymEnv
+            >>> from torch.utils.benchmark import Timer
+            >>>
+            >>> env = GymEnv("Pendulum-v1")
+            >>> t = Timer("env.rollout(1000, break_when_any_done=False)", globals=globals(), num_threads=32).adaptive_autorange()
+            >>> m = t.median
+            >>> print(f"Speed without memoizing: {1000/t.median: 4.4f}fps")
+            Speed without memoizing:  10141.5742fps
+            >>>
+            >>> env.fast_encoding()
+            >>> t = Timer("env.rollout(1000, break_when_any_done=False)", globals=globals(), num_threads=32).adaptive_autorange()
+            >>> m = t.median
+            >>> print(f"Speed with memoizing: {1000/t.median: 4.4f}fps")
+            Speed with memoizing:  10576.8388fps
+
+        """
+        self.specs.memoize_encode(mode=mode)
+        if mode:
+            if type(self).read_obs is not GymLikeEnv.read_obs:
+                raise RuntimeError(
+                    "Cannot use fast_encoding as the read_obs method has been overwritten."
+                )
+            if type(self).read_reward is not GymLikeEnv.read_reward:
+                raise RuntimeError(
+                    "Cannot use fast_encoding as the read_reward method has been overwritten."
+                )
+
+        if mode:
+            self.read_reward = self._read_reward_memo
+            self.read_obs = self._read_obs_memo
+        else:
+            self.read_reward = self._read_reward_eager
+            self.read_obs = self._read_obs_eager
+
     def read_action(self, action):
         """Reads the action obtained from the input TensorDict and transforms it in the format expected by the contained environment.
 
@@ -184,7 +231,11 @@ class GymLikeEnv(_EnvWrapper):
         Returns: an action in a format compatible with the contained environment.
 
         """
-        return self.action_spec.to_numpy(action, safe=False)
+        action_spec = self.full_action_spec
+        action_keys = self.action_keys
+        if len(action_keys) == 1:
+            action_spec = action_spec[action_keys[0]]
+        return action_spec.to_numpy(action, safe=False)
 
     def read_done(
         self,
@@ -240,6 +291,8 @@ class GymLikeEnv(_EnvWrapper):
             do_break.any() if not isinstance(do_break, bool) else do_break,
         )
 
+    _read_reward: Callable[[Any], Any] | None = None
+
     def read_reward(self, reward):
         """Reads the reward and maps it to the reward space.
 
@@ -247,6 +300,9 @@ class GymLikeEnv(_EnvWrapper):
             reward (torch.Tensor or TensorDict): reward to be mapped.
 
         """
+        return self._read_reward_eager(reward)
+
+    def _read_reward_eager(self, reward):
         if isinstance(reward, int) and reward == 0:
             return self.reward_spec.zero()
         reward = self.reward_spec.encode(reward, ignore_device=True)
@@ -255,6 +311,39 @@ class GymLikeEnv(_EnvWrapper):
             reward = torch.tensor(np.nan).expand(self.reward_spec.shape)
 
         return reward
+
+    def _read_reward_memo(self, reward):
+        func = self._read_reward
+        if func is not None:
+            return func(reward)
+        funcs = []
+        if isinstance(reward, int) and reward == 0:
+
+            def process_zero(reward):
+                return self.reward_spec.zero()
+
+            funcs.append(process_zero)
+        else:
+
+            def encode_reward(reward):
+                return self.reward_spec.encode(reward, ignore_device=True)
+
+            funcs.append(encode_reward)
+
+        if reward is None:
+
+            def check_none(reward):
+                return torch.tensor(np.nan).expand(self.reward_spec.shape)
+
+            funcs.append(check_none)
+
+        if len(funcs) == 1:
+            self._read_reward = funcs[0]
+        else:
+            self._read_reward = functools.partial(
+                functools.reduce, lambda x, f: f(x), funcs
+            )
+        return self._read_reward(reward)
 
     def read_obs(
         self, observations: dict[str, Any] | torch.Tensor | np.ndarray
@@ -265,6 +354,11 @@ class GymLikeEnv(_EnvWrapper):
             observations (observation under a format dictated by the inner env): observation to be read.
 
         """
+        return self._read_obs_eager(observations)
+
+    def _read_obs_eager(
+        self, observations: dict[str, Any] | torch.Tensor | np.ndarray
+    ) -> dict[str, Any]:
         if isinstance(observations, dict):
             if "state" in observations and "observation" not in observations:
                 # we rename "state" in "observation" as "observation" is the conventional name
@@ -292,6 +386,57 @@ class GymLikeEnv(_EnvWrapper):
                     )
         return observations
 
+    _read_obs: Callable[[Any], Any] | None = None
+
+    def _read_obs_memo(
+        self, observations: dict[str, Any] | torch.Tensor | np.ndarray
+    ) -> dict[str, Any]:
+        func = self._read_obs
+        if func is not None:
+            return func(observations)
+        funcs = []
+        if isinstance(observations, (dict, Mapping)):
+            if "state" in observations and "observation" not in observations:
+
+                def process_dict_pop(observations):
+                    observations["observation"] = observations.pop("state")
+                    return observations
+
+                funcs.append(process_dict_pop)
+            for key in observations.keys():
+                if isinstance(self.observation_spec[key], NonTensor):
+
+                    def process_dict(observations, key=key):
+                        observations[key] = NonTensorData(observations[key])
+                        return observations
+
+                else:
+
+                    def process_dict(observations, key=key):
+                        observations[key] = self.observation_spec[key].encode(
+                            observations[key], ignore_device=True
+                        )
+                        return observations
+
+                funcs.append(process_dict)
+        else:
+            key = next(iter(self.observation_spec.keys(True, True)), None)
+            if key is None:
+                raise RuntimeError("Could not find any element in observation_spec.")
+            spec = self.observation_spec[key]
+
+            def process_non_dict(observations, spec=spec):
+                return {key: spec.encode(observations, ignore_device=True)}
+
+            funcs.append(process_non_dict)
+        if len(funcs) == 1:
+            self._read_obs = funcs[0]
+        else:
+            self._read_obs = functools.partial(
+                functools.reduce, lambda x, f: f(x), funcs
+            )
+        return self._read_obs(observations)
+
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         if len(self.action_keys) == 1:
             # Use brackets to get non-tensor data
@@ -303,6 +448,7 @@ class GymLikeEnv(_EnvWrapper):
 
         reward = 0
         for _ in range(self.wrapper_frame_skip):
+            step_result = self._env.step(action)
             (
                 obs,
                 _reward,
@@ -310,7 +456,7 @@ class GymLikeEnv(_EnvWrapper):
                 truncated,
                 done,
                 info_dict,
-            ) = self._output_transform(self._env.step(action))
+            ) = self._output_transform(step_result)
 
             if _reward is not None:
                 reward = reward + _reward
@@ -343,14 +489,14 @@ class GymLikeEnv(_EnvWrapper):
                     for key, val in TensorDict(obs_dict, []).items(True, True)
                 )
         else:
-            tensordict_out = TensorDict(
+            tensordict_out = TensorDict._new_unsafe(
                 obs_dict,
                 batch_size=tensordict.batch_size,
             )
         if self.device is not None:
             tensordict_out = tensordict_out.to(self.device)
 
-        if self.info_dict_reader and (info_dict is not None):
+        if self.info_dict_reader and info_dict is not None:
             if not isinstance(info_dict, dict):
                 warnings.warn(
                     f"Expected info to be a dictionary but got a {type(info_dict)} with values {str(info_dict)[:100]}."
@@ -373,6 +519,12 @@ class GymLikeEnv(_EnvWrapper):
     def _reset(
         self, tensordict: TensorDictBase | None = None, **kwargs
     ) -> TensorDictBase:
+        if (
+            tensordict is not None
+            and "_reset" in tensordict
+            and not tensordict["_reset"].all()
+        ):
+            raise RuntimeError("Partial resets are not handled at this level.")
         obs, info = self._reset_output_transform(self._env.reset(**kwargs))
 
         source = self.read_obs(obs)

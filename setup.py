@@ -71,11 +71,7 @@ def write_version_file(version):
 def _get_pytorch_version(is_nightly, is_local):
     # if "PYTORCH_VERSION" in os.environ:
     #     return f"torch=={os.environ['PYTORCH_VERSION']}"
-    if is_nightly:
-        return "torch>=2.7.0.dev"
-    elif is_local:
-        return "torch"
-    return "torch>=2.6.0"
+    return "torch>=2.1.0"
 
 
 def _get_packages():
@@ -176,7 +172,7 @@ def _main(argv):
     if is_nightly:
         tensordict_dep = "tensordict-nightly"
     else:
-        tensordict_dep = "tensordict>=0.7.0"
+        tensordict_dep = "tensordict>=0.8.1,<0.9.0"
 
     if is_nightly:
         version = get_nightly_version()
@@ -207,6 +203,7 @@ def _main(argv):
             "pygame",
         ],
         "dm_control": ["dm_control"],
+        "replay_buffer": ["torch>=2.7.0"],
         "gym_continuous": ["gymnasium<1.0", "mujoco"],
         "rendering": ["moviepy<2.0.0"],
         "tests": [
@@ -216,6 +213,7 @@ def _main(argv):
             "scipy",
             "pytest-mock",
             "pytest-cov",
+            "pytest-asyncio",
             "pytest-benchmark",
             "pytest-rerunfailures",
             "pytest-error-for-skips",
@@ -273,7 +271,7 @@ def _main(argv):
         ),
         ext_modules=get_extensions(),
         cmdclass={
-            "build_ext": BuildExtension.with_options(no_python_abi_suffix=True),
+            "build_ext": BuildExtension.with_options(),
             "clean": clean,
         },
         install_requires=[

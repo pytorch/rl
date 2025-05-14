@@ -10,6 +10,8 @@ set -e
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
 apt-get update && apt-get install -y git wget gcc g++
+apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev libsdl2-dev libsdl2-2.0-0
+apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2 xvfb libegl-dev libx11-dev freeglut3-dev
 
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
@@ -69,12 +71,13 @@ printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
+
 export MUJOCO_GL=egl
 conda env config vars set \
   MAX_IDLE_COUNT=1000 \
   MUJOCO_GL=egl \
   SDL_VIDEODRIVER=dummy \
-  DISPLAY=unix:0.0 \
+  DISPLAY=:99 \
   PYOPENGL_PLATFORM=egl \
   LD_PRELOAD=$glew_path \
   NVIDIA_PATH=/usr/src/nvidia-470.63.01 \
@@ -87,7 +90,7 @@ conda env config vars set \
 # make env variables apparent
 conda deactivate && conda activate "${env_dir}"
 
-pip install pip --upgrade
+# pip install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
 #conda install -c conda-forge fltk -y

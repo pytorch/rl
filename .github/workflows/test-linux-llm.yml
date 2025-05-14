@@ -1,4 +1,4 @@
-name: RLHF Tests on Linux
+name: LLM Tests on Linux
 
 on:
   pull_request:
@@ -50,7 +50,7 @@ jobs:
         export TF_CPP_MIN_LOG_LEVEL=0
         export TD_GET_DEFAULTS_TO_NONE=1
 
-        bash .github/unittest/linux_libs/scripts_rlhf/setup_env.sh
-        bash .github/unittest/linux_libs/scripts_rlhf/install.sh
-        bash .github/unittest/linux_libs/scripts_rlhf/run_test.sh
-        bash .github/unittest/linux_libs/scripts_rlhf/post_process.sh
+        bash .github/unittest/linux_libs/scripts_llm/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_llm/install.sh
+        bash .github/unittest/linux_libs/scripts_llm/run_test.sh
+        bash .github/unittest/linux_libs/scripts_llm/post_process.sh

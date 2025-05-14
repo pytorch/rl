@@ -34,6 +34,7 @@ jobs:
           - repository: pytorch/rl
             smoke-test-script: test/smoke_test.py
             package-name: torchrl
+            pre-script: .github/scripts/pre-build-script.sh
     name: ${{ matrix.repository }}
     uses: pytorch/test-infra/.github/workflows/build_wheels_macos.yml@main
     with:
@@ -43,7 +44,7 @@ jobs:
       test-infra-ref: main
       build-matrix: ${{ needs.generate-matrix.outputs.matrix }}
       package-name: ${{ matrix.package-name }}
-      runner-type: macos-m1-stable
+      runner-type: macos-m2-15
       smoke-test-script: ${{ matrix.smoke-test-script }}
       trigger-event: ${{ github.event_name }}
       env-var-script: .github/scripts/td_script.sh

@@ -16,6 +16,7 @@ from torchrl.envs import (
     NoopResetEnv,
     Resize,
     RewardSum,
+    set_gym_backend,
     SignTransform,
     StepCounter,
     ToTensorImage,
@@ -32,15 +33,16 @@ from torchrl.record import VideoRecorder
 # --------------------------------------------------------------------
 
 
-def make_env(env_name, frame_skip, device, is_test=False):
-    env = GymEnv(
-        env_name,
-        frame_skip=frame_skip,
-        from_pixels=True,
-        pixels_only=False,
-        device=device,
-        categorical_action_encoding=True,
-    )
+def make_env(env_name, frame_skip, device, gym_backend, is_test=False):
+    with set_gym_backend(gym_backend):
+        env = GymEnv(
+            env_name,
+            frame_skip=frame_skip,
+            from_pixels=True,
+            pixels_only=False,
+            device=device,
+            categorical_action_encoding=True,
+        )
     env = TransformedEnv(env)
     env.append_transform(NoopResetEnv(noops=30, random=True))
     if not is_test:
@@ -94,8 +96,10 @@ def make_dqn_modules_pixels(proof_environment, device):
     return qvalue_module
 
 
-def make_dqn_model(env_name, frame_skip, device):
-    proof_environment = make_env(env_name, frame_skip, device=device)
+def make_dqn_model(env_name, gym_backend, frame_skip, device):
+    proof_environment = make_env(
+        env_name, frame_skip, gym_backend=gym_backend, device=device
+    )
     qvalue_module = make_dqn_modules_pixels(proof_environment, device=device)
     del proof_environment
     return qvalue_module

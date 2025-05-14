@@ -1,4 +1,4 @@
-.. currentmodule:: torchrl.collectors
+from torchrl.collectors import SyncDataCollector.. currentmodule:: torchrl.collectors
 
 torchrl.collectors package
 ==========================
@@ -117,6 +117,50 @@ try to limit the cases where a deepcopy will be executed. The following chart sh
 
    Policy copy decision tree in Collectors.
 
+Weight Synchronization in Distributed Environments
+--------------------------------------------------
+
+In distributed and multiprocessed environments, ensuring that all instances of a policy are synchronized with the
+latest trained weights is crucial for consistent performance. The API introduces a flexible and extensible
+mechanism for updating policy weights across different devices and processes, accommodating various deployment scenarios.
+
+Sending and receiving model weights with WeightUpdaters
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The weight synchronization process is facilitated by one dedicated extension point:
+:class:`~torchrl.collectors.WeightUpdaterBase`. These base class provides a structured interface for
+implementing custom weight update logic, allowing users to tailor the synchronization process to their specific needs.
+
+:class:`~torchrl.collectors.WeightUpdaterBase` handles the distribution of policy weights to
+the policy or to remote inference workers, as well as formatting / gathering the weights from a server if necessary.
+Every collector -- server or worker -- should have a `WeightUpdaterBase` instance to handle the
+weight synchronization with the policy.
+Even the simplest collectors use a :class:`~torchrl.collectors.VanillaWeightUpdater` instance to update the policy
+state-dict (assuming it is a :class:`~torch.nn.Module` instance).
+
+Extending the Updater Class
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To accommodate diverse use cases, the API allows users to extend the updater classes with custom implementations.
+The goal is to be able to customize the weight sync strategy while leaving the collector and policy implementation
+untouched.
+This flexibility is particularly beneficial in scenarios involving complex network architectures or specialized hardware
+setups.
+By implementing the abstract methods in these base classes, users can define how weights are retrieved,
+transformed, and applied, ensuring seamless integration with their existing infrastructure.
+
+.. currentmodule:: torchrl.collectors
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    WeightUpdaterBase
+    VanillaWeightUpdater
+    MultiProcessedWeightUpdater
+    RayWeightUpdater
+    DistributedWeightUpdater
+    RPCWeightUpdater
 
 Collectors and replay buffers interoperability
 ----------------------------------------------
@@ -184,6 +228,36 @@ Using replay buffers that sample trajectories with :class:`~torchrl.collectors.M
 isn't currently fully supported as the data batches can come from any worker and in most cases consecutive
 batches written in the buffer won't come from the same source (thereby interrupting the trajectories).
 
+Running the Collector Asynchronously
+------------------------------------
+
+Passing replay buffers to a collector allows us to start the collection and get rid of the iterative nature of the
+collector.
+If you want to run a data collector in the background, simply run :meth:`~torchrl.DataCollectorBase.start`:
+
+    >>> collector = SyncDataCollector(..., replay_buffer=rb) # pass your replay buffer
+    >>> collector.start()
+    >>> # little pause
+    >>> time.sleep(10)
+    >>> # Start training
+    >>> for i in range(optim_steps):
+    ...     data = rb.sample()  # Sampling from the replay buffer
+    ...     # rest of the training loop
+
+Single-process collectors (:class:`~torchrl.collectors.SyncDataCollector`) will run the process using multithreading,
+so be mindful of Python's GIL and related multithreading restrictions.
+
+Multiprocessed collectors will on the other hand let the child processes handle the filling of the buffer on their own,
+which truly decouples the data collection and training.
+
+Data collectors that have been started with `start()` should be shut down using
+:meth:`~torchrl.DataCollectorBase.async_shutdown`.
+
+.. warning:: Running a collector asynchronously decouples the collection from training, which means that the training
+    performance may be drastically different depending on the hardware, load and other factors (although it is generally
+    expected to provide significant speed-ups). Make sure you understand how this may affect your algorithm and if it
+    is a legitimate thing to do! (For example, on-policy algorithms such as PPO should not be run asynchronously
+    unless properly benchmarked).
 
 Single node data collectors
 ---------------------------
@@ -248,7 +322,6 @@ node or across multiple nodes.
     DistributedSyncDataCollector
     submitit_delayed_launcher
     RayCollector
-
 
 Helper functions
 ----------------

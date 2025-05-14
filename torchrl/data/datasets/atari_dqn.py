@@ -508,6 +508,12 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
             if not os.listdir(tempdir):
                 os.makedirs(tempdir, exist_ok=True)
                 # get the list of runs
+                try:
+                    subprocess.run(
+                        ["gsutil", "version"], check=True, capture_output=True
+                    )
+                except subprocess.CalledProcessError:
+                    raise RuntimeError("gsutil is not installed or not found in PATH.")
                 command = f"gsutil -m ls -R gs://atari-replay-datasets/dqn/{self.dataset_id}/replay_logs"
                 output = subprocess.run(
                     command, shell=True, capture_output=True
@@ -520,9 +526,7 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
                 self.remote_gz_files = self._list_runs(None, files)
                 remote_gz_files = list(self.remote_gz_files)
                 if not len(remote_gz_files):
-                    raise RuntimeError(
-                        "Could not load the file list. Did you install gsutil?"
-                    )
+                    raise RuntimeError("No files in file list.")
 
                 total_runs = remote_gz_files[-1]
                 if self.num_procs == 0:

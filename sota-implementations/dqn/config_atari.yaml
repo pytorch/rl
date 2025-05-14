@@ -3,6 +3,7 @@ device: null
 # Environment
 env:
   env_name: PongNoFrameskip-v4
+  backend: gymnasium
 
 # collector
 collector:

@@ -298,7 +298,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
         return {k[0]: torch.as_tensor(v) for k, v in treevalue.flatten(tv)}
 
-    def _set_seed(self, seed: int | None):
+    def _set_seed(self, seed: int | None) -> None:
         if seed is not None:
             torchrl_logger.info(
                 "MultiThreadedEnvWrapper._set_seed ignored, as setting seed in an existing envorinment is not\
@@ -387,7 +387,7 @@ class MultiThreadedEnv(MultiThreadedEnvWrapper):
         )
         return super()._build_env(env)
 
-    def _set_seed(self, seed: int | None):
+    def _set_seed(self, seed: int | None) -> None:
         """Library EnvPool only supports setting a seed by recreating the environment."""
         if seed is not None:
             torchrl_logger.debug("Recreating EnvPool environment to set seed.")

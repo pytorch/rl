@@ -17,7 +17,9 @@ dependencies:
     - pytest-instafail
     - pytest-rerunfailures
     - pytest-timeout
+    - pytest-asyncio
     - expecttest
+    - pybind11[global]
     - pyyaml
     - scipy
     - hydra-core

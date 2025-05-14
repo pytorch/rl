@@ -537,7 +537,7 @@ class PettingZooWrapper(_EnvWrapper):
         self.cached_step_output_zero.update(self.output_spec["full_reward_spec"].zero())
         self.cached_step_output_zero.update(self.output_spec["full_done_spec"].zero())
 
-    def _set_seed(self, seed: int):
+    def _set_seed(self, seed: int | None) -> None:
         self.seed = seed
         self.reset(seed=self.seed)
 

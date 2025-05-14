@@ -287,7 +287,7 @@ class DMControlWrapper(GymLikeEnv):
         seed = self.set_seed(seed)
         return seed
 
-    def _set_seed(self, _seed: int | None) -> int | None:
+    def _set_seed(self, _seed: int | None) -> None:
         from dm_control.suite.wrappers import pixels
 
         if _seed is None:
@@ -302,7 +302,6 @@ class DMControlWrapper(GymLikeEnv):
                 raise RuntimeError("self._env._env.task._random does not exist")
             self._env.task._random = random_state
         self.reset()
-        return _seed
 
     def _output_transform(
         self, timestep_tuple: tuple[TimeStep]  # noqa: F821

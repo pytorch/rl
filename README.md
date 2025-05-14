@@ -849,11 +849,17 @@ pip3 install torchrl
 This should work on linux, Windows 10 and OsX (Intel or Silicon chips).
 On certain Windows machines (Windows 11), one should install the library locally (see below).
 
+For AArch64 machines, the binaries are not yet stored on PyPI so you will need to download them directly from
+the [release page](https://github.com/pytorch/rl/releases/) or install the library via
+```
+pip3 install git+https://github.com/pytorch/rl@v0.8.0
+```
+
 The **nightly build** can be installed via
 ```bash
-pip3 install torchrl-nightly
+pip3 install tensordict-nightly torchrl-nightly
 ```
-which we currently only ship for Linux and OsX (Intel) machines.
+which we currently only ship for Linux machines.
 Importantly, the nightly builds require the nightly builds of PyTorch too.
 
 To install extra dependencies, call
@@ -862,12 +868,26 @@ pip3 install "torchrl[atari,dm_control,gym_continuous,rendering,tests,utils,marl
 ```
 or a subset of these.
 
+To install torchrl with the latest pytorch, use
+```bash
+pip3 install "torchrl[replay_buffer]"
+```
+since some features in the replay buffer require PyTorch 2.7.0 or above.
+
 One may also desire to install the library locally. Three main reasons can motivate this:
 - the nightly/stable release isn't available for one's platform (eg, Windows 11, nightlies for Apple Silicon etc.);
 - contributing to the code;
-- install torchrl with a previous version of PyTorch (any version >= 2.0) (note that this should also be doable via a regular install followed
+- install torchrl with a previous version of PyTorch (any version >= 2.1) (note that this should also be doable via a regular install followed
   by a downgrade to a previous pytorch version -- but the C++ binaries will not be available so some feature will not work,  
   such as prioritized replay buffers and the like.)
+
+  **Disclaimer**: As of today, TorchRL is roughly compatible with any pytorch version >= 2.1 and installing it will not
+  directly require a newer version of pytorch to be installed. Indirectly though, tensordict still requires the latest
+  PyTorch to be installed and we are working hard to loosen that requirement. 
+  The C++ binaries of TorchRL (mainly for prioritized replay buffers) will only work with PyTorch 2.7.0 and above.
+  Some features (e.g., working with nested jagged tensors) may also
+  be limited with older versions of pytorch. It is recommended to use the latest TorchRL with the latest PyTorch version
+  unless there is a strong reason not to do so.
 
 To install the library locally, start by cloning the repo:
 ```bash
@@ -875,7 +895,7 @@ git clone https://github.com/pytorch/rl
 ```
 and don't forget to check out the branch or tag you want to use for the build:
 ```bash
-git checkout v0.4.0
+git checkout v0.8.0
 ```
 
 Go to the directory where you have cloned the torchrl repo and install it (after

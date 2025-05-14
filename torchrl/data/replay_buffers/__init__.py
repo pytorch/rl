@@ -12,6 +12,7 @@ from .checkpointers import (
     StorageEnsembleCheckpointer,
     TensorStorageCheckpointer,
 )
+from .ray_buffer import RayReplayBuffer
 from .replay_buffers import (
     PrioritizedReplayBuffer,
     RemoteTensorDictReplayBuffer,
@@ -57,6 +58,7 @@ __all__ = [
     "StorageCheckpointerBase",
     "StorageEnsembleCheckpointer",
     "TensorStorageCheckpointer",
+    "RayReplayBuffer",
     "PrioritizedReplayBuffer",
     "RemoteTensorDictReplayBuffer",
     "ReplayBuffer",

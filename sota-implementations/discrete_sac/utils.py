@@ -139,7 +139,7 @@ def make_collector(
         device=device,
         storing_device="cpu",
         compile_policy=False if not compile else {"mode": compile_mode},
-        cudagraph_policy=cudagraphs,
+        cudagraph_policy={"warmup": 10} if cudagraphs else False,
     )
     collector.set_seed(cfg.env.seed)
     return collector
