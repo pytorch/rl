@@ -46,16 +46,20 @@ from torch import autograd, nn
 from torchrl._utils import _standardize
 from torchrl.data import Bounded, Categorical, Composite, MultiOneHot, OneHot, Unbounded
 from torchrl.data.postprocs.postprocs import MultiStep
-from torchrl.envs import EnvBase
+from torchrl.envs import EnvBase, GymEnv, InitTracker, SerialEnv
+from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import TensorDictPrimer, TransformedEnv
 from torchrl.envs.utils import exploration_type, ExplorationType, set_exploration_type
 from torchrl.modules import (
     DistributionalQValueActor,
+    GRUModule,
+    LSTMModule,
     OneHotCategorical,
     QValueActor,
     recurrent_mode,
     SafeSequential,
+    set_recurrent_mode,
     WorldModelWrapper,
 )
 from torchrl.modules.distributions.continuous import TanhDelta, TanhNormal
@@ -146,6 +150,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         dtype_fixture,
         get_available_devices,
         get_default_devices,
+        PENDULUM_VERSIONED,
     )
     from pytorch.rl.test.mocking_classes import ContinuousActionConvMockEnv
 else:
@@ -154,6 +159,7 @@ else:
         dtype_fixture,
         get_available_devices,
         get_default_devices,
+        PENDULUM_VERSIONED,
     )
     from mocking_classes import ContinuousActionConvMockEnv
 
@@ -13755,6 +13761,79 @@ def test_updater(mode, value_network_update_interval, device, dtype):
 
 
 class TestValues:
+    @pytest.mark.skipif(not _has_gym, reason="requires gym")
+    @pytest.mark.parametrize("module", ["lstm", "gru"])
+    def test_gae_recurrent(self, module):
+        # Checks that shifted=True and False provide the same result in GAE when an LSTM is used
+        env = SerialEnv(
+            2,
+            [
+                functools.partial(
+                    TransformedEnv, GymEnv(PENDULUM_VERSIONED()), InitTracker()
+                )
+                for _ in range(2)
+            ],
+        )
+        env.set_seed(0)
+        torch.manual_seed(0)
+        if module == "lstm":
+            recurrent_module = LSTMModule(
+                input_size=env.observation_spec["observation"].shape[-1],
+                hidden_size=64,
+                in_keys=["observation", "rs_h", "rs_c"],
+                out_keys=["intermediate", ("next", "rs_h"), ("next", "rs_c")],
+                python_based=True,
+                dropout=0,
+            )
+        elif module == "gru":
+            recurrent_module = GRUModule(
+                input_size=env.observation_spec["observation"].shape[-1],
+                hidden_size=64,
+                in_keys=["observation", "rs_h"],
+                out_keys=["intermediate", ("next", "rs_h")],
+                python_based=True,
+                dropout=0,
+            )
+        else:
+            raise NotImplementedError
+        recurrent_module.eval()
+        mlp_value = MLP(num_cells=[64], out_features=1)
+        value_net = Seq(
+            recurrent_module,
+            Mod(mlp_value, in_keys=["intermediate"], out_keys=["state_value"]),
+        )
+        mlp_policy = MLP(num_cells=[64], out_features=1)
+        policy_net = Seq(
+            recurrent_module,
+            Mod(mlp_policy, in_keys=["intermediate"], out_keys=["action"]),
+        )
+        env = env.append_transform(recurrent_module.make_tensordict_primer())
+        vals = env.rollout(1000, policy_net, break_when_any_done=False)
+        value_net(vals.copy())
+
+        # Shifted
+        gae_shifted = GAE(
+            gamma=0.9,
+            lmbda=0.99,
+            value_network=value_net,
+            shifted=True,
+        )
+        with set_recurrent_mode(True):
+            r0 = gae_shifted(vals.copy())
+        a0 = r0["advantage"]
+
+        gae = GAE(
+            gamma=0.9,
+            lmbda=0.99,
+            value_network=value_net,
+            shifted=False,
+            deactivate_vmap=True,
+        )
+        with set_recurrent_mode(True):
+            r1 = gae(vals.copy())
+        a1 = r1["advantage"]
+        torch.testing.assert_close(a0, a1)
+
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("gamma", [0.1, 0.5, 0.99])
     @pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])

@@ -730,10 +730,16 @@ class LSTMModule(ModuleBase):
         # packed sequences do not help to get the accurate last hidden values
         # if splits is not None:
         #     value = torch.nn.utils.rnn.pack_padded_sequence(value, splits, batch_first=True)
-        if hidden0 is not None:
+
+        if not self.recurrent_mode and hidden0 is not None:
+            # We zero the hidden states if we're calling the lstm recursively
+            #  as we assume the hidden state comes from the previous trajectory.
+            #  When using the recurrent_mode=True option, the lstm can be called from
+            #  any intermediate state, hence zeroing should not be done.
             is_init_expand = expand_as_right(is_init, hidden0)
             hidden0 = torch.where(is_init_expand, 0, hidden0)
             hidden1 = torch.where(is_init_expand, 0, hidden1)
+
         val, hidden0, hidden1 = self._lstm(
             value, batch, steps, device, dtype, hidden0, hidden1
         )
@@ -782,8 +788,8 @@ class LSTMModule(ModuleBase):
             )
 
         # we only need the first hidden state
-        _hidden0_in = hidden0_in[:, 0]
-        _hidden1_in = hidden1_in[:, 0]
+        _hidden0_in = hidden0_in[..., 0, :, :]
+        _hidden1_in = hidden1_in[..., 0, :, :]
         hidden = (
             _hidden0_in.transpose(-3, -2).contiguous(),
             _hidden1_in.transpose(-3, -2).contiguous(),
@@ -1517,7 +1523,7 @@ class GRUModule(ModuleBase):
         # packed sequences do not help to get the accurate last hidden values
         # if splits is not None:
         #     value = torch.nn.utils.rnn.pack_padded_sequence(value, splits, batch_first=True)
-        if is_init.any() and hidden is not None:
+        if not self.recurrent_mode and is_init.any() and hidden is not None:
             is_init_expand = expand_as_right(is_init, hidden)
             hidden = torch.where(is_init_expand, 0, hidden)
         val, hidden = self._gru(value, batch, steps, device, dtype, hidden)
