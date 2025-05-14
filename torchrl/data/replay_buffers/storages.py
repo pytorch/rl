@@ -1099,12 +1099,19 @@ class LazyTensorStorage(TensorStorage):
 
         if is_tensor_collection(data):
             out = data.to(self.device)
-            if self.empty_lazy and shape is None:
-                raise RuntimeError(
-                    "Make sure you have called `extend` and not `add` first when setting `empty_lazy=True`."
+            if self.empty_lazy:
+                if shape is None:
+                    # shape is None in add
+                    raise RuntimeError(
+                        "Make sure you have called `extend` and not `add` first when setting `empty_lazy=True`."
+                    )
+                out: TensorDictBase = torch.empty_like(
+                    out.expand(max_size_along_dim0(data.shape))
                 )
             elif shape is None:
                 shape = data.shape
+            else:
+                out = out[0]
             out: TensorDictBase = out.new_empty(
                 max_size_along_dim0(shape), empty_lazy=self.empty_lazy
             )
