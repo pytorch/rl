@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.8.0+231555d) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.8.0+1813e8e) &#x25BC</span></a>
     </div>
     
 
@@ -1151,10 +1151,16 @@
         <span class="c1"># packed sequences do not help to get the accurate last hidden values</span>
         <span class="c1"># if splits is not None:</span>
         <span class="c1">#     value = torch.nn.utils.rnn.pack_padded_sequence(value, splits, batch_first=True)</span>
-        <span class="k">if</span> <span class="n">hidden0</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span> <span class="ow">and</span> <span class="n">hidden0</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># We zero the hidden states if we&#39;re calling the lstm recursively</span>
+            <span class="c1">#  as we assume the hidden state comes from the previous trajectory.</span>
+            <span class="c1">#  When using the recurrent_mode=True option, the lstm can be called from</span>
+            <span class="c1">#  any intermediate state, hence zeroing should not be done.</span>
             <span class="n">is_init_expand</span> <span class="o">=</span> <span class="n">expand_as_right</span><span class="p">(</span><span class="n">is_init</span><span class="p">,</span> <span class="n">hidden0</span><span class="p">)</span>
             <span class="n">hidden0</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">is_init_expand</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">hidden0</span><span class="p">)</span>
             <span class="n">hidden1</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">is_init_expand</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">hidden1</span><span class="p">)</span>
+
         <span class="n">val</span><span class="p">,</span> <span class="n">hidden0</span><span class="p">,</span> <span class="n">hidden1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lstm</span><span class="p">(</span>
             <span class="n">value</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">steps</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> <span class="n">hidden0</span><span class="p">,</span> <span class="n">hidden1</span>
         <span class="p">)</span>
@@ -1203,8 +1209,8 @@
             <span class="p">)</span>
 
         <span class="c1"># we only need the first hidden state</span>
-        <span class="n">_hidden0_in</span> <span class="o">=</span> <span class="n">hidden0_in</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span>
-        <span class="n">_hidden1_in</span> <span class="o">=</span> <span class="n">hidden1_in</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span>
+        <span class="n">_hidden0_in</span> <span class="o">=</span> <span class="n">hidden0_in</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>
+        <span class="n">_hidden1_in</span> <span class="o">=</span> <span class="n">hidden1_in</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>
         <span class="n">hidden</span> <span class="o">=</span> <span class="p">(</span>
             <span class="n">_hidden0_in</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">(),</span>
             <span class="n">_hidden1_in</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">(),</span>
@@ -1938,7 +1944,7 @@
         <span class="c1"># packed sequences do not help to get the accurate last hidden values</span>
         <span class="c1"># if splits is not None:</span>
         <span class="c1">#     value = torch.nn.utils.rnn.pack_padded_sequence(value, splits, batch_first=True)</span>
-        <span class="k">if</span> <span class="n">is_init</span><span class="o">.</span><span class="n">any</span><span class="p">()</span> <span class="ow">and</span> <span class="n">hidden</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span> <span class="ow">and</span> <span class="n">is_init</span><span class="o">.</span><span class="n">any</span><span class="p">()</span> <span class="ow">and</span> <span class="n">hidden</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">is_init_expand</span> <span class="o">=</span> <span class="n">expand_as_right</span><span class="p">(</span><span class="n">is_init</span><span class="p">,</span> <span class="n">hidden</span><span class="p">)</span>
             <span class="n">hidden</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">is_init_expand</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">hidden</span><span class="p">)</span>
         <span class="n">val</span><span class="p">,</span> <span class="n">hidden</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gru</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">steps</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> <span class="n">hidden</span><span class="p">)</span>
