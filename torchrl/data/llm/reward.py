@@ -5,13 +5,10 @@
 from __future__ import annotations
 
 import importlib
-from typing import Optional
 
 import torch
-
 from tensordict import tensorclass
-
-from torchrl.data.rlhf.dataset import TensorDictTokenizer, TokenizedDatasetLoader
+from torchrl.data.llm.dataset import TensorDictTokenizer, TokenizedDatasetLoader
 
 DEFAULT_DATASET = "CarperAI/openai_summarize_comparisons"
 _has_datasets = importlib.util.find_spec("datasets") is not None
@@ -24,8 +21,8 @@ class RewardData:
 
     input_ids: torch.Tensor
     attention_mask: torch.Tensor
-    rewards: Optional[torch.Tensor] = None
-    end_scores: Optional[torch.Tensor] = None
+    rewards: torch.Tensor | None = None
+    end_scores: torch.Tensor | None = None
 
 
 @tensorclass
@@ -81,7 +78,7 @@ class PairwiseDataset:
             split (str): ``"train"`` or ``"valid"`` depending on the data split needed.
             dataset_name (str, optional): name of the dataset to be processed. Defaults to
                 ``"CarperAI/openai_summarize_comparisons"``.
-            max_length (int, optional): maximum length of the dataset sequenes.
+            max_length (int, optional): maximum length of the dataset sequences.
                 Defaults to 550.
             root_dir (path, optional): the path where the datasets are stored.
                 Defaults to ``"$HOME/.cache/torchrl/data"``

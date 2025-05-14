@@ -108,7 +108,6 @@ except RuntimeError:
     # If we can't set the method globally we can still run the parallel env with "fork"
     # This will fail on windows! Use "spawn" and put the script within `if __name__ == "__main__"`
     mp_context = "fork"
-    pass
 
 # sphinx_gallery_end_ignore
 import os
@@ -380,11 +379,15 @@ def make_model(dummy_env):
 # time must always have the same shape.
 
 
-def get_replay_buffer(buffer_size, n_optim, batch_size):
+buffer_scratch_dir = tempfile.TemporaryDirectory().name
+
+
+def get_replay_buffer(buffer_size, n_optim, batch_size, device):
     replay_buffer = TensorDictReplayBuffer(
         batch_size=batch_size,
-        storage=LazyMemmapStorage(buffer_size),
+        storage=LazyMemmapStorage(buffer_size, scratch_dir=buffer_scratch_dir),
         prefetch=n_optim,
+        transform=lambda td: td.to(device),
     )
     return replay_buffer
 
@@ -660,7 +663,7 @@ trainer = Trainer(
 #   requires 3 hooks (``extend``, ``sample`` and ``update_priority``) which
 #   can be cumbersome to implement.
 buffer_hook = ReplayBufferTrainer(
-    get_replay_buffer(buffer_size, n_optim, batch_size=batch_size),
+    get_replay_buffer(buffer_size, n_optim, batch_size=batch_size, device=device),
     flatten_tensordicts=True,
 )
 buffer_hook.register(trainer)
@@ -739,7 +742,7 @@ def print_csv_files_in_folder(folder_path):
                 csv_files.append(os.path.join(dirpath, file))
     for csv_file in csv_files:
         output_str += f"File: {csv_file}\n"
-        with open(csv_file, "r") as f:
+        with open(csv_file) as f:
             for i, line in enumerate(f):
                 if i == 10:
                     break
@@ -749,6 +752,9 @@ def print_csv_files_in_folder(folder_path):
 
 
 print_csv_files_in_folder(logger.experiment.log_dir)
+
+trainer.shutdown()
+del trainer
 
 ###############################################################################
 # Conclusion and possible improvements
@@ -773,3 +779,19 @@ print_csv_files_in_folder(logger.experiment.log_dir)
 # - A distributional loss (see :class:`~torchrl.objectives.DistributionalDQNLoss`
 #   for more information).
 # - More fancy exploration techniques, such as :class:`~torchrl.modules.NoisyLinear` layers and such.
+
+
+# sphinx_gallery_start_ignore
+
+# Remove scratch dir
+try:
+    import shutil
+
+    # Use shutil.rmtree() to delete the directory and all its contents
+    shutil.rmtree(buffer_scratch_dir)
+    print(f"Directory '{buffer_scratch_dir}' deleted successfully.")
+except FileNotFoundError:
+    print(f"Directory '{buffer_scratch_dir}' not found.")
+except Exception as e:
+    print(f"Error deleting directory: {e}")
+# sphinx_gallery_end_ignore

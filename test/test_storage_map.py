@@ -2,17 +2,20 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import argparse
 import functools
 import importlib.util
-from typing import Tuple
+import os
+import sys
 
 import pytest
 
 import torch
 
 from tensordict import assert_close, TensorDict
-from torchrl.data import LazyTensorStorage, ListStorage, MCTSForest
+from torchrl.data import LazyTensorStorage, ListStorage, MCTSForest, Tree
 from torchrl.data.map import (
     BinaryToDecimal,
     QueryModule,
@@ -22,9 +25,15 @@ from torchrl.data.map import (
 )
 from torchrl.envs import GymEnv
 
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import PENDULUM_VERSIONED
+else:
+    from _utils_internal import PENDULUM_VERSIONED
+
 _has_gym = importlib.util.find_spec("gymnasium", None) or importlib.util.find_spec(
     "gym", None
 )
+IS_WIN = sys.platform == "win32"
 
 
 class TestHash:
@@ -248,8 +257,122 @@ class TesttTensorDictMap:
         assert not contains[rollout.shape[-1] :].any()
 
 
+# Tests Tree independent of MCTSForest
+class TestTree:
+    def dummy_tree(self):
+        """Creates a tree with the following node IDs:
+
+        0
+        ├── 1
+        |   ├── 3
+        |   └── 4
+        └── 2
+            ├── 5
+            └── 6
+        """
+
+        class IDGen:
+            def __init__(self):
+                self.next_id = 0
+
+            def __call__(self):
+                res = self.next_id
+                self.next_id += 1
+                return res
+
+        gen_id = IDGen()
+        gen_hash = lambda: hash(torch.rand(1).item())
+
+        def dummy_node_stack(observations):
+            return TensorDict.lazy_stack(
+                [
+                    Tree(
+                        node_data=TensorDict({"obs": torch.tensor(obs)}),
+                        hash=gen_hash(),
+                        node_id=gen_id(),
+                    )
+                    for obs in observations
+                ]
+            )
+
+        tree = dummy_node_stack([0])[0]
+        tree.subtree = dummy_node_stack([1, 2])
+        tree.subtree[0].subtree = dummy_node_stack([3, 4])
+        tree.subtree[1].subtree = dummy_node_stack([6, 7])
+        return tree
+
+    # Checks that when adding nodes to a tree, the `parent` property is set
+    # correctly
+    def test_parents(self):
+        tree = self.dummy_tree()
+
+        def check_parents_recursive(tree, parent):
+            if parent is None:
+                if tree.parent is not None:
+                    return False
+            elif tree.parent.node_data is not parent.node_data:
+                return False
+
+            if tree.subtree is not None:
+                for subtree in tree.subtree:
+                    if not check_parents_recursive(subtree, tree):
+                        return False
+
+            return True
+
+        assert check_parents_recursive(tree, None)
+
+    def test_vertices(self):
+        tree = self.dummy_tree()
+        N = 7
+        assert tree.num_vertices(count_repeat=False) == N
+        assert tree.num_vertices(count_repeat=True) == N
+        assert len(tree.vertices(key_type="hash")) == N
+        assert len(tree.vertices(key_type="id")) == N
+        assert len(tree.vertices(key_type="path")) == N
+
+        for path, vertex in tree.vertices(key_type="path").items():
+            vertex_check = tree
+            for i in path:
+                vertex_check = vertex_check.subtree[i]
+            assert vertex.node_data is vertex_check.node_data
+
+    def test_in(self):
+        for tree in self.dummy_tree().vertices().values():
+            for path, subtree in tree.vertices(key_type="path").items():
+                assert subtree in tree
+
+                if len(path) == 0:
+                    assert tree in subtree
+                else:
+                    assert tree not in subtree
+
+    def test_valid_paths(self):
+        tree = self.dummy_tree()
+        paths = set(tree.valid_paths())
+        paths_check = {(0, 0), (0, 1), (1, 0), (1, 1)}
+        assert paths == paths_check
+
+    def test_edges(self):
+        tree = self.dummy_tree()
+        edges = set(tree.edges())
+        edges_check = {(0, 1), (0, 2), (1, 3), (1, 4), (2, 5), (2, 6)}
+        assert edges == edges_check
+
+    def test_make_node(self):
+        td = TensorDict({"obs": torch.tensor([0])})
+        tree = Tree(node_data=td)
+        assert tree.node_data is not None
+
+        tree = Tree.make_node(data=td)
+        assert tree.node_data is not None
+
+        tree = Tree.make_node(td)
+        assert tree.node_data is not None
+
+
 class TestMCTSForest:
-    def dummy_rollouts(self) -> Tuple[TensorDict, ...]:
+    def dummy_rollouts(self) -> tuple[TensorDict, ...]:
         """
         ├── 0
         │   ├── 16
@@ -488,7 +611,7 @@ class TestMCTSForest:
     def test_simple_tree(self):
         from torchrl.envs import GymEnv
 
-        env = GymEnv("Pendulum-v1")
+        env = GymEnv(PENDULUM_VERSIONED())
         r = env.rollout(10)
         state0 = r[0]
         forest = MCTSForest()
@@ -515,7 +638,7 @@ class TestMCTSForest:
                 pytest.skip("requires gym")
             from torchrl.envs import GymEnv
 
-            env = GymEnv("Pendulum-v1")
+            env = GymEnv(PENDULUM_VERSIONED())
             r = env.rollout(10)
             state0 = r[0]
             forest = MCTSForest()
@@ -580,6 +703,94 @@ class TestMCTSForest:
                     == subtree.rollout[..., -1]["next", "observation"]
                 ).all()
                 prev_tree = subtree
+
+    @pytest.mark.skipif(IS_WIN, reason="fails with windows machines")
+    def test_to_string(self):
+        forest = MCTSForest()
+
+        td_root = TensorDict(
+            {
+                "observation": 0,
+            }
+        )
+
+        rollouts_data = [
+            # [(action, obs), ...]
+            [(3, 123), (1, 456)],
+            [(2, 359), (2, 3094)],
+            [(3, 123), (9, 392), (6, 989), (20, 809), (21, 847)],
+            [(1, 75)],
+            [(3, 123), (0, 948)],
+            [(2, 359), (2, 3094), (10, 68)],
+            [(2, 359), (2, 3094), (11, 9045)],
+        ]
+
+        default_string_check = "\n".join(
+            [
+                "(0,) {'observation': tensor(123)}",
+                " (0, 0) {'observation': tensor(456)}",
+                " (0, 1) {'observation': tensor(847)}",
+                " (0, 2) {'observation': tensor(948)}",
+                "(1,) {'observation': tensor(3094)}",
+                " (1, 0) {'observation': tensor(68)}",
+                " (1, 1) {'observation': tensor(9045)}",
+                "(2,) {'observation': tensor(75)}",
+            ]
+        )
+
+        obs_string_check = "\n".join(
+            [
+                "(0,) [123]",
+                " (0, 0) [456]",
+                " (0, 1) [392, 989, 809, 847]",
+                " (0, 2) [948]",
+                "(1,) [359, 3094]",
+                " (1, 0) [68]",
+                " (1, 1) [9045]",
+                "(2,) [75]",
+            ]
+        )
+
+        action_string_check = "\n".join(
+            [
+                "(0,) [3]",
+                " (0, 0) [1]",
+                " (0, 1) [9, 6, 20, 21]",
+                " (0, 2) [0]",
+                "(1,) [2, 2]",
+                " (1, 0) [10]",
+                " (1, 1) [11]",
+                "(2,) [1]",
+            ]
+        )
+
+        for rollout_data in rollouts_data:
+            td = td_root.clone().unsqueeze(0)
+            for action, obs in rollout_data:
+                td = td.update(
+                    TensorDict(
+                        {
+                            "action": [action],
+                            "next": TensorDict({"observation": [obs]}, [1]),
+                        },
+                        [1],
+                    )
+                )
+                forest.extend(td)
+                td = td["next"].clone()
+
+        default_string = forest.to_string(td_root)
+        assert default_string == default_string_check
+
+        obs_string = forest.to_string(
+            td_root, lambda tree: tree.rollout["next", "observation"].tolist()
+        )
+        assert obs_string == obs_string_check
+
+        action_string = forest.to_string(
+            td_root, lambda tree: tree.rollout["action"].tolist()
+        )
+        assert action_string == action_string_check
 
 
 if __name__ == "__main__":

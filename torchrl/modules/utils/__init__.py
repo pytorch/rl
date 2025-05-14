@@ -10,9 +10,9 @@ from packaging import version
 
 
 if version.parse(torch.__version__) >= version.parse("1.12.0"):
-    from torch.nn.parameter import _disabled_torch_function_impl, _ParameterMeta
+    from torch.nn.parameter import _ParameterMeta
 else:
-    from torch.nn.parameter import _disabled_torch_function_impl
+    pass
 
     # Metaclass to combine _TensorMeta and the instance check override for Parameter.
     class _ParameterMeta(torch._C._TensorMeta):
@@ -26,3 +26,13 @@ else:
 
 from .mappings import biased_softplus, inv_softplus, mappings
 from .utils import get_primers_from_module
+
+__all__ = [
+    "OrderedDict",
+    "torch",
+    "version",
+    "biased_softplus",
+    "inv_softplus",
+    "mappings",
+    "get_primers_from_module",
+]

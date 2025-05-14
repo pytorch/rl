@@ -6,11 +6,9 @@ from __future__ import annotations
 
 import torch.nn as nn
 import torch.optim
-
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.envs import DoubleToFloat
-
 from torchrl.modules import SafeModule
 
 
@@ -45,7 +43,7 @@ def make_gail_discriminator(cfg, train_env, device="cpu"):
     # Define Discriminator Network
     class Discriminator(nn.Module):
         def __init__(self, state_dim, action_dim):
-            super(Discriminator, self).__init__()
+            super().__init__()
             self.fc1 = nn.Linear(state_dim + action_dim, hidden_dim)
             self.fc2 = nn.Linear(hidden_dim, hidden_dim)
             self.fc3 = nn.Linear(hidden_dim, 1)

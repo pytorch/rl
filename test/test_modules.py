@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import argparse
 import os
 import re
@@ -939,7 +941,7 @@ class TestMultiAgent:
         else:
             return
         mlp = nn.Sequential(mlp)
-        mlp_device = mlp.to(device)
+        mlp.to(device)
         param_set = set(mlp.parameters())
         for p in mlp[0].params.values(True, True):
             assert p in param_set

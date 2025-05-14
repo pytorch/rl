@@ -9,7 +9,6 @@ import json
 import os.path
 import shutil
 import tempfile
-
 from collections import defaultdict
 from contextlib import nullcontext
 from dataclasses import asdict
@@ -17,7 +16,6 @@ from pathlib import Path
 from typing import Callable
 
 import torch
-
 from tensordict import PersistentTensorDict, TensorDict
 from torchrl._utils import KeyDependentDefaultDict, logger as torchrl_logger
 from torchrl.data.datasets.common import BaseDatasetExperienceReplay
@@ -66,7 +64,7 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
         root (Path or str, optional): The Minari dataset root directory.
             The actual dataset memory-mapped files will be saved under
             `<root>/<dataset_id>`. If none is provided, it defaults to
-            ``~/.cache/torchrl/minari`.
+            `~/.cache/torchrl/atari`.minari`.
         download (bool or str, optional): Whether the dataset should be downloaded if
             not found. Defaults to ``True``. Download can also be passed as ``"force"``,
             in which case the downloaded data will be overwritten.
@@ -167,7 +165,7 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
         collate_fn: Callable | None = None,
         pin_memory: bool = False,
         prefetch: int | None = None,
-        transform: "torchrl.envs.Transform" | None = None,  # noqa-F821
+        transform: torchrl.envs.Transform | None = None,  # noqa-F821
         split_trajs: bool = False,
     ):
         self.dataset_id = dataset_id
@@ -381,7 +379,7 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
         return TensorDict.load_memmap(self.data_path)
 
     def _load_and_proc_metadata(self):
-        with open(self.metadata_path, "r") as file:
+        with open(self.metadata_path) as file:
             self.metadata = json.load(file)
         self.metadata["observation_space"] = _proc_spec(
             self.metadata["observation_space"]
@@ -445,7 +443,7 @@ def _spec_to_dict(spec):
 
 def _patch_info(info_td):
     # Some info dicts have tensors with one less element than others
-    # We explicitely assume that the missing item is in the first position because
+    # We explicitly assume that the missing item is in the first position because
     # it wasn't given at reset time.
     # An alternative explanation could be that the last element is missing because
     # deemed useless for training...

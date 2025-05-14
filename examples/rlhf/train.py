@@ -17,8 +17,8 @@ from models.transformer import init_transformer
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torchrl._utils import logger as torchrl_logger
 
-from torchrl.data.rlhf.dataset import get_dataloader
-from torchrl.data.rlhf.prompt import PromptData
+from torchrl.data.llm.dataset import get_dataloader
+from torchrl.data.llm.prompt import PromptData
 from utils import get_file_logger, resolve_name_or_path, setup
 
 

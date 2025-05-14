@@ -6,10 +6,31 @@
 # Do not install PyTorch and torchvision here, otherwise they also get cached.
 
 set -e
-
-this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+apt-get update && apt-get upgrade -y && apt-get install -y git cmake
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
+apt-get install -y wget \
+    gcc \
+    g++ \
+    unzip \
+    curl \
+    patchelf \
+    libosmesa6-dev \
+    libgl1-mesa-glx \
+    libglfw3 \
+    swig3.0 \
+    libglew-dev \
+    libglvnd0 \
+    libgl1 \
+    libglx0 \
+    libegl1 \
+    libgles2
+
+
+# Upgrade specific package
+apt-get upgrade -y libstdc++6
+
+this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 root_dir="$(git rev-parse --show-toplevel)"
 conda_dir="${root_dir}/conda"
 env_dir="${root_dir}/env"
@@ -47,7 +68,10 @@ pip install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
 
-yum install -y mesa-libGL
+apt update
+conda env config vars set \
+  LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6 \
+  MUJOCO_GL=egl
 
 conda deactivate
 conda activate "${env_dir}"
@@ -57,15 +81,7 @@ if [[ $OSTYPE != 'darwin'* ]]; then
   # rename them
   PY_VERSION=$(python --version)
   echo "installing ale-py for ${PY_PY_VERSION}"
-  if [[ $PY_VERSION == *"3.7"* ]]; then
-    wget https://files.pythonhosted.org/packages/ab/fd/6615982d9460df7f476cad265af1378057eee9daaa8e0026de4cedbaffbd/ale_py-0.8.0-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-    pip install ale_py-0.8.0-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-    rm ale_py-0.8.0-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-  elif [[ $PY_VERSION == *"3.8"* ]]; then
-    wget https://files.pythonhosted.org/packages/0f/8a/feed20571a697588bc4bfef05d6a487429c84f31406a52f8af295a0346a2/ale_py-0.8.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-    pip install ale_py-0.8.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-    rm ale_py-0.8.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-  elif [[ $PY_VERSION == *"3.9"* ]]; then
+  if [[ $PY_VERSION == *"3.9"* ]]; then
     wget https://files.pythonhosted.org/packages/a0/98/4316c1cedd9934f9a91b6e27a9be126043b4445594b40cfa391c8de2e5e8/ale_py-0.8.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
     pip install ale_py-0.8.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
     rm ale_py-0.8.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl

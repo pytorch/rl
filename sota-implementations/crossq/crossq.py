@@ -15,19 +15,15 @@ from __future__ import annotations
 import warnings
 
 import hydra
-
 import numpy as np
-
 import torch
 import torch.cuda
 import tqdm
 from tensordict import TensorDict
 from tensordict.nn import CudaGraphModule
-
 from torchrl._utils import timeit
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives import group_optimizers
-
 from torchrl.record.loggers import generate_exp_name, get_logger
 from utils import (
     log_metrics,
@@ -43,7 +39,7 @@ torch.set_float32_matmul_precision("high")
 
 
 @hydra.main(version_base="1.1", config_path=".", config_name="config")
-def main(cfg: "DictConfig"):  # noqa: F821
+def main(cfg: DictConfig):  # noqa: F821
     device = cfg.network.device
     if device in ("", None):
         if torch.cuda.is_available():

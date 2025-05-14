@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import argparse
 import importlib.util
@@ -13,6 +14,7 @@ from time import sleep
 
 import pytest
 import torch
+from packaging import version
 from tensordict import MemoryMappedTensor
 
 from torchrl.envs import check_env_specs, GymEnv, ParallelEnv
@@ -24,6 +26,12 @@ from torchrl.record.recorder import PixelRenderTransform, VideoRecorder
 
 if _has_tv:
     import torchvision
+
+    TORCHVISION_VERSION = version.parse(
+        version.parse(torchvision.__version__).base_version
+    )
+else:
+    TORCHVISION_VERSION = version.parse("0.0.1")
 
 if _has_tb:
     from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
@@ -154,7 +162,7 @@ class TestCSVLogger:
                 step=steps[i] if steps else None,
             )
 
-        with open(os.path.join(tmpdir, exp_name, "scalars", "foo.csv"), "r") as file:
+        with open(os.path.join(tmpdir, exp_name, "scalars", "foo.csv")) as file:
             for i, row in enumerate(file.readlines()):
                 step = steps[i] if steps else i
                 assert row == f"{step},{values[i].item()}\n"
@@ -162,6 +170,9 @@ class TestCSVLogger:
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
     @pytest.mark.parametrize(
         "video_format", ["pt", "memmap"] + ["mp4"] if _has_tv else []
+    )
+    @pytest.mark.skipif(
+        TORCHVISION_VERSION < version.parse("0.20.0"), reason="av compatibility bug"
     )
     def test_log_video(self, steps, video_format, tmpdir):
         torch.manual_seed(0)
@@ -187,14 +198,14 @@ class TestCSVLogger:
         sleep(0.01)  # wait until events are registered
 
         # check that the logged videos are the same as the initial video
-        extention = (
+        extension = (
             ".pt"
             if video_format == "pt"
             else ".memmap"
             if video_format == "memmap"
             else ".mp4"
         )
-        video_file_name = "foo_" + ("0" if not steps else str(steps[0])) + extention
+        video_file_name = "foo_" + ("0" if not steps else str(steps[0])) + extension
         path = os.path.join(tmpdir, exp_name, "videos", video_file_name)
         if video_format == "pt":
             logged_video = torch.load(path)
@@ -239,7 +250,7 @@ class TestCSVLogger:
         logger = CSVLogger(log_dir=tmpdir, exp_name=exp_name)
         logger.log_hparams(cfg=config)
 
-        with open(os.path.join(tmpdir, exp_name, "texts", "hparams0.txt"), "r") as file:
+        with open(os.path.join(tmpdir, exp_name, "texts", "hparams0.txt")) as file:
             txt = "\n".join([f"{k}: {val}" for k, val in sorted(config.items())])
             text = "".join(file.readlines())
             assert text == txt

@@ -53,49 +53,17 @@ jobs:
         ## setup_env.sh
         bash .github/unittest/linux/scripts/run_all.sh
 
-  tests-cpu-oldget:
-    # Tests that TD_GET_DEFAULTS_TO_NONE=0 works fine as this will be the default for TD up to 0.7
-    strategy:
-      matrix:
-        python_version: ["3.12"]
-      fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
-    with:
-      runner: linux.12xlarge
-      repository: pytorch/rl
-      docker-image: "nvidia/cuda:12.2.0-devel-ubuntu22.04"
-      timeout: 90
-      script: |
-        if [[ "${{ github.ref }}" =~ release/* ]]; then
-          export RELEASE=1
-          export TORCH_VERSION=stable
-        else
-          export RELEASE=0
-          export TORCH_VERSION=nightly
-        fi
-        export TD_GET_DEFAULTS_TO_NONE=0
-
-        # Set env vars from matrix
-        export PYTHON_VERSION=${{ matrix.python_version }}
-        export CU_VERSION="cpu"
-
-        echo "PYTHON_VERSION: $PYTHON_VERSION"
-        echo "CU_VERSION: $CU_VERSION"
-
-        ## setup_env.sh
-        bash .github/unittest/linux/scripts/run_all.sh
-
   tests-gpu:
     strategy:
       matrix:
         python_version: ["3.11"]
-        cuda_arch_version: ["12.4"]
+        cuda_arch_version: ["12.8"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/rl
-      docker-image: "nvidia/cuda:12.1.0-devel-ubuntu22.04"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 90
@@ -126,18 +94,21 @@ jobs:
   tests-olddeps:
     strategy:
       matrix:
-        python_version: ["3.8"]
+        python_version: ["3.9"]
         cuda_arch_version: ["11.6"]
+      fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
+      runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/rl
-      runner: "linux.g5.4xlarge.nvidia.gpu"
-      docker-image: "nvidia/cudagl:11.4.0-base"
-      timeout: 120
+      docker-image: "nvidia/cuda:11.8.0-cudnn8-devel-ubuntu20.04"
+      gpu-arch-type: cuda
+      gpu-arch-version: ${{ matrix.cuda_arch_version }}
+      timeout: 90
       script: |
         set -euo pipefail
-        export PYTHON_VERSION="3.8"
-        export CU_VERSION="cu116"
+        export PYTHON_VERSION="3.9"
+        export CU_VERSION="cu118"
         export TAR_OPTIONS="--no-same-owner"
         if [[ "${{ github.ref }}" =~ release/* ]]; then
           export RELEASE=1
@@ -158,13 +129,13 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.11"]
-        cuda_arch_version: ["12.4"]
+        cuda_arch_version: ["12.8"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/rl
-      docker-image: "nvidia/cuda:12.1.0-devel-ubuntu22.04"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 90
@@ -199,7 +170,7 @@ jobs:
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/rl
-      docker-image: "nvidia/cuda:12.1.0-devel-ubuntu22.04"
+      docker-image: "nvidia/cuda:12.4.0-devel-ubuntu22.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 90

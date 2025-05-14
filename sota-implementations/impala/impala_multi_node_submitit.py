@@ -16,7 +16,7 @@ from torchrl._utils import logger as torchrl_logger
 @hydra.main(
     config_path="", config_name="config_multi_node_submitit", version_base="1.1"
 )
-def main(cfg: "DictConfig"):  # noqa: F821
+def main(cfg: DictConfig):  # noqa: F821
 
     import time
 
@@ -61,7 +61,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     ) * cfg.loss.sgd_updates
 
     # Create models (check utils.py)
-    actor, critic = make_ppo_models(cfg.env.env_name)
+    actor, critic = make_ppo_models(cfg.env.env_name, cfg.env.backend)
     actor, critic = actor.to(device), critic.to(device)
 
     slurm_kwargs = {
@@ -81,7 +81,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
             f"device assignment not implemented for backend {cfg.collector.backend}"
         )
     collector = DistributedDataCollector(
-        create_env_fn=[make_env(cfg.env.env_name, device)] * num_workers,
+        create_env_fn=[make_env(cfg.env.env_name, device, gym_backend=cfg.env.backend)]
+        * num_workers,
         policy=actor,
         num_workers_per_collector=1,
         frames_per_batch=frames_per_batch,
@@ -146,7 +147,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         )
 
     # Create test environment
-    test_env = make_env(cfg.env.env_name, device, is_test=True)
+    test_env = make_env(
+        cfg.env.env_name, device, gym_backend=cfg.env.backend, is_test=True
+    )
     test_env.eval()
 
     # Main loop

@@ -21,15 +21,23 @@ permissions:
 
 jobs:
   unittests-cpu:
+    strategy:
+      matrix:
+        python-version:
+          - "3.10"
+        runner: ["windows.4xlarge"]
+        gpu-arch-type: ["cpu"]
+      fail-fast: false
     uses: pytorch/test-infra/.github/workflows/windows_job.yml@main
     with:
-      runner: "windows.4xlarge"
       repository: pytorch/rl
-      timeout: 40
+      runner: ${{ matrix.runner }}
+      timeout: 60
+      test-infra-ref: main
       script: |
         set -euxo pipefail
 
-        export PYTHON_VERSION="3.9"
+        export PYTHON_VERSION=${{ matrix.python-version }}
         export CU_VERSION="cpu"
         export torch_cuda="False"
 
@@ -48,17 +56,7 @@ jobs:
         fi
         export TD_GET_DEFAULTS_TO_NONE=1
 
-        ## setup_env.sh
-        ./.github/unittest/windows_optdepts/scripts/setup_env.sh
-
-        ## install.sh
-        ./.github/unittest/windows_optdepts/scripts/install.sh
-
-        ## run_test.sh
-        ./.github/unittest/windows_optdepts/scripts/run_test.sh
-
-        ## post_process.sh
-        ./.github/unittest/windows_optdepts/scripts/post_process.sh
+        ./.github/unittest/windows_optdepts/scripts/unittest.sh
 
 #  unittests-gpu:
 #    uses: pytorch/test-infra/.github/workflows/windows_job.yml@main

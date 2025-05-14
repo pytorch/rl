@@ -7,15 +7,12 @@ from __future__ import annotations
 import importlib.util
 import math
 from copy import copy
-from typing import Callable, List, Optional, Sequence, Union
+from typing import Callable, Sequence
 
 import numpy as np
 import torch
-
 from tensordict import NonTensorData, TensorDictBase
-
 from tensordict.utils import NestedKey
-
 from torchrl._utils import _can_be_pickled
 from torchrl.data import TensorSpec
 from torchrl.data.tensor_specs import NonTensor, Unbounded
@@ -108,11 +105,11 @@ class VideoRecorder(ObservationTransform):
         self,
         logger: Logger,
         tag: str,
-        in_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys: Sequence[NestedKey] | None = None,
         skip: int | None = None,
-        center_crop: Optional[int] = None,
+        center_crop: int | None = None,
         make_grid: bool | None = None,
-        out_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Sequence[NestedKey] | None = None,
         fps: int | None = None,
         **kwargs,
     ) -> None:
@@ -124,7 +121,7 @@ class VideoRecorder(ObservationTransform):
         video_kwargs = {}
         video_kwargs.update(kwargs)
         if fps is not None:
-            self.video_kwargs["fps"] = fps
+            video_kwargs["fps"] = fps
         self.video_kwargs = video_kwargs
         self.iter = 0
         self.skip = skip
@@ -239,7 +236,7 @@ class VideoRecorder(ObservationTransform):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         return self._call(tensordict)
 
-    def dump(self, suffix: Optional[str] = None) -> None:
+    def dump(self, suffix: str | None = None) -> None:
         """Writes the video to the ``self.logger`` attribute.
 
         Calling ``dump`` when no image has been stored in a no-op.
@@ -296,7 +293,7 @@ class TensorDictRecorder(Transform):
         out_file_base: str,
         skip_reset: bool = True,
         skip: int = 4,
-        in_keys: Optional[Sequence[str]] = None,
+        in_keys: Sequence[str] | None = None,
     ) -> None:
         if in_keys is None:
             in_keys = []
@@ -309,16 +306,16 @@ class TensorDictRecorder(Transform):
         self.skip = skip
         self.count = 0
 
-    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
         self.count += 1
         if self.count % self.skip == 0:
-            _td = tensordict
+            _td = next_tensordict
             if self.in_keys:
-                _td = tensordict.select(*self.in_keys).to_tensordict()
+                _td = next_tensordict.select(*self.in_keys).to_tensordict()
             self.td.append(_td)
-        return tensordict
+        return next_tensordict
 
-    def dump(self, suffix: Optional[str] = None) -> None:
+    def dump(self, suffix: str | None = None) -> None:
         if suffix is None:
             tag = self.tag
         else:
@@ -346,7 +343,7 @@ class TensorDictRecorder(Transform):
 class PixelRenderTransform(Transform):
     """A transform to call render on the parent environment and register the pixel observation in the tensordict.
 
-    This transform offers an alternative to the ``from_pixels`` syntatic sugar when instantiating an environment
+    This transform offers an alternative to the ``from_pixels`` syntactic sugar when instantiating an environment
     that offers rendering is expensive, or when ``from_pixels`` is not implemented.
     It can be used within a single environment or over batched environments alike.
 
@@ -430,7 +427,7 @@ class PixelRenderTransform(Transform):
 
     def __init__(
         self,
-        out_keys: List[NestedKey] = None,
+        out_keys: list[NestedKey] = None,
         preproc: Callable[
             [np.ndarray | torch.Tensor], np.ndarray | torch.Tensor
         ] = None,
@@ -462,15 +459,15 @@ class PixelRenderTransform(Transform):
     ) -> TensorDictBase:
         return self._call(tensordict_reset)
 
-    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
         if not self._enabled:
-            return tensordict
+            return next_tensordict
 
         method = getattr(self.parent, self.render_method)
         if not self.pass_tensordict:
             array = method(**self.kwargs)
         else:
-            array = method(tensordict, **self.kwargs)
+            array = method(next_tensordict, **self.kwargs)
 
         if self.preproc:
             array = self.preproc(array)
@@ -490,18 +487,18 @@ class PixelRenderTransform(Transform):
                 self.as_non_tensor = False
         if not self.as_non_tensor:
             try:
-                tensordict.set(self.out_keys[0], array)
+                next_tensordict.set(self.out_keys[0], array)
             except Exception:
                 raise RuntimeError(
                     f"An exception was raised while writing the rendered array "
-                    f"(shape={getattr(array, 'shape', None)}, dtype={getattr(array, 'dtype', None)}) in the tensordict with shape {tensordict.shape}. "
+                    f"(shape={getattr(array, 'shape', None)}, dtype={getattr(array, 'dtype', None)}) in the tensordict with shape {next_tensordict.shape}. "
                     f"Consider adapting your preproc function in {type(self).__name__}. You can also "
                     f"pass keyword arguments to the render function of the parent environment, or save "
                     f"this observation as a non-tensor data with as_non_tensor=True."
                 )
         else:
-            tensordict.set_non_tensor(self.out_keys[0], array)
-        return tensordict
+            next_tensordict.set_non_tensor(self.out_keys[0], array)
+        return next_tensordict
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         # Adds the pixel observation spec by calling render on the parent env
@@ -544,7 +541,7 @@ class PixelRenderTransform(Transform):
         """Whether the recorder is enabled."""
         return self._enabled
 
-    def set_container(self, container: Union[Transform, EnvBase]) -> None:
+    def set_container(self, container: Transform | EnvBase) -> None:
         out = super().set_container(container)
         if isinstance(self.parent, EnvBase):
             # Start the env if needed

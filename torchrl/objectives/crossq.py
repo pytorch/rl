@@ -7,19 +7,17 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from functools import wraps
-from typing import Dict, List, Tuple, Union
 
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
-
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 from torch import Tensor
+
 from torchrl.data.tensor_specs import Composite
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import ProbabilisticActor
 from torchrl.objectives.common import LossModule
-
 from torchrl.objectives.utils import (
     _cache_values,
     _reduce,
@@ -80,7 +78,7 @@ class CrossQLoss(LossModule):
             initial value. Otherwise, alpha will be optimized to
             match the 'target_entropy' value.
             Default is ``False``.
-        target_entropy (float or str, optional): Target entropy for the
+        target_entropy (:obj:`float` or str, optional): Target entropy for the
             stochastic policy. Default is "auto", where target entropy is
             computed as :obj:`-prod(n_actions)`.
         priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
@@ -256,7 +254,7 @@ class CrossQLoss(LossModule):
     def __init__(
         self,
         actor_network: ProbabilisticActor,
-        qvalue_network: TensorDictModule | List[TensorDictModule],
+        qvalue_network: TensorDictModule | list[TensorDictModule],
         *,
         num_qvalue_nets: int = 2,
         loss_function: str = "smooth_l1",
@@ -265,7 +263,7 @@ class CrossQLoss(LossModule):
         max_alpha: float = None,
         action_spec=None,
         fixed_alpha: bool = False,
-        target_entropy: Union[str, float] = "auto",
+        target_entropy: str | float = "auto",
         priority_key: str = None,
         separate_losses: bool = False,
         reduction: str = None,
@@ -376,7 +374,7 @@ class CrossQLoss(LossModule):
                     return
                 raise RuntimeError(
                     "Cannot infer the dimensionality of the action. Consider providing "
-                    "the target entropy explicitely or provide the spec of the "
+                    "the target entropy explicitly or provide the spec of the "
                     "action tensor in the actor network."
                 )
             if not isinstance(action_spec, Composite):
@@ -542,6 +540,14 @@ class CrossQLoss(LossModule):
             **value_metadata,
         }
         td_out = TensorDict(out)
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+        )
         return td_out
 
     @property
@@ -551,7 +557,7 @@ class CrossQLoss(LossModule):
 
     def actor_loss(
         self, tensordict: TensorDictBase
-    ) -> Tuple[Tensor, Dict[str, Tensor]]:
+    ) -> tuple[Tensor, dict[str, Tensor]]:
         """Compute the actor loss.
 
         The actor loss should be computed after the :meth:`~.qvalue_loss` and before the `~.alpha_loss` which
@@ -593,7 +599,7 @@ class CrossQLoss(LossModule):
 
     def qvalue_loss(
         self, tensordict: TensorDictBase
-    ) -> Tuple[Tensor, Dict[str, Tensor]]:
+    ) -> tuple[Tensor, dict[str, Tensor]]:
         """Compute the q-value loss.
 
         The q-value loss should be computed before the :meth:`~.actor_loss`.

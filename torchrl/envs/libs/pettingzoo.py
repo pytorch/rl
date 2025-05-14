@@ -7,7 +7,7 @@ from __future__ import annotations
 import copy
 import importlib
 import warnings
-from typing import Dict, List, Tuple, Union
+from typing import Dict
 
 import numpy as np
 import packaging
@@ -36,7 +36,7 @@ def _get_envs():
     return list(all_environments.keys())
 
 
-def _load_available_envs() -> Dict:
+def _load_available_envs() -> dict:
     all_environments = {}
     try:
         from pettingzoo.mpe.all_modules import mpe_environments
@@ -73,9 +73,7 @@ def _load_available_envs() -> Dict:
     return all_environments
 
 
-def _extract_nested_with_index(
-    data: Union[np.ndarray, Dict[str, np.ndarray]], index: int
-):
+def _extract_nested_with_index(data: np.ndarray | dict[str, np.ndarray], index: int):
     if isinstance(data, np.ndarray):
         return data[index]
     elif isinstance(data, dict):
@@ -163,7 +161,7 @@ class PettingZooWrapper(_EnvWrapper):
         use_mask (bool, optional): whether the environment should output a ``"mask"``. This is compulsory in
             wrapped ``pettingzoo.AECEnv`` to mask out non-acting agents and should be also used
             for ``pettingzoo.ParallelEnv`` when the number of agents can vary. Defaults to ``False``.
-        categorical_actions (bool, optional): if the enviornments actions are discrete, whether to transform
+        categorical_actions (bool, optional): if the environments actions are discrete, whether to transform
             them to categorical or one-hot.
         seed (int, optional): the seed. Defaults to ``None``.
         done_on_any (bool, optional): whether the environment's done keys are set by aggregating the agent keys
@@ -208,12 +206,12 @@ class PettingZooWrapper(_EnvWrapper):
 
     def __init__(
         self,
-        env: Union[
-            "pettingzoo.utils.env.ParallelEnv",  # noqa: F821
-            "pettingzoo.utils.env.AECEnv",  # noqa: F821
-        ] = None,
+        env: (
+            pettingzoo.utils.env.ParallelEnv  # noqa: F821
+            | pettingzoo.utils.env.AECEnv  # noqa: F821
+        ) = None,
         return_state: bool = False,
-        group_map: MarlGroupMapType | Dict[str, List[str]] | None = None,
+        group_map: MarlGroupMapType | dict[str, list[str]] | None = None,
         use_mask: bool = False,
         categorical_actions: bool = True,
         seed: int | None = None,
@@ -232,7 +230,7 @@ class PettingZooWrapper(_EnvWrapper):
 
         super().__init__(**kwargs, allow_done_after_reset=True)
 
-    def _get_default_group_map(self, agent_names: List[str]):
+    def _get_default_group_map(self, agent_names: list[str]):
         # This function performs the default grouping in pettingzoo
         if not self.parallel:
             # In AEC envs we will have one group per agent by default
@@ -273,10 +271,10 @@ class PettingZooWrapper(_EnvWrapper):
 
     def _build_env(
         self,
-        env: Union[
-            "pettingzoo.utils.env.ParallelEnv",  # noqa: F821
-            "pettingzoo.utils.env.AECEnv",  # noqa: F821
-        ],
+        env: (
+            pettingzoo.utils.env.ParallelEnv  # noqa: F821
+            | pettingzoo.utils.env.AECEnv  # noqa: F821
+        ),
     ):
         import pettingzoo
 
@@ -300,10 +298,10 @@ class PettingZooWrapper(_EnvWrapper):
     @set_gym_backend("gymnasium")
     def _make_specs(
         self,
-        env: Union[
-            "pettingzoo.utils.env.ParallelEnv",  # noqa: F821
-            "pettingzoo.utils.env.AECEnv",  # noqa: F821
-        ],
+        env: (
+            pettingzoo.utils.env.ParallelEnv  # noqa: F821
+            | pettingzoo.utils.env.AECEnv  # noqa: F821
+        ),
     ) -> None:
         # Set default for done on any or all
         if self.done_on_any is None:
@@ -359,7 +357,7 @@ class PettingZooWrapper(_EnvWrapper):
         self.reward_spec = reward_spec
         self.done_spec = done_spec
 
-    def _make_group_specs(self, group_name: str, agent_names: List[str]):
+    def _make_group_specs(self, group_name: str, agent_names: list[str]):
         n_agents = len(agent_names)
         action_specs = []
         observation_specs = []
@@ -457,7 +455,7 @@ class PettingZooWrapper(_EnvWrapper):
             group_done_spec,
         )
 
-    def _check_kwargs(self, kwargs: Dict):
+    def _check_kwargs(self, kwargs: dict):
         import pettingzoo
 
         if "env" not in kwargs:
@@ -539,7 +537,7 @@ class PettingZooWrapper(_EnvWrapper):
         self.cached_step_output_zero.update(self.output_spec["full_reward_spec"].zero())
         self.cached_step_output_zero.update(self.output_spec["full_done_spec"].zero())
 
-    def _set_seed(self, seed: int):
+    def _set_seed(self, seed: int | None) -> None:
         self.seed = seed
         self.reset(seed=self.seed)
 
@@ -588,7 +586,7 @@ class PettingZooWrapper(_EnvWrapper):
 
         return tensordict_out
 
-    def _reset_aec(self, **kwargs) -> Tuple[Dict, Dict]:
+    def _reset_aec(self, **kwargs) -> tuple[dict, dict]:
         self._env.reset(**kwargs)
 
         observation_dict = {
@@ -597,7 +595,7 @@ class PettingZooWrapper(_EnvWrapper):
         info_dict = self._env.infos
         return observation_dict, info_dict
 
-    def _reset_parallel(self, **kwargs) -> Tuple[Dict, Dict]:
+    def _reset_parallel(self, **kwargs) -> tuple[dict, dict]:
         return self._env.reset(**kwargs)
 
     def _step(
@@ -741,7 +739,7 @@ class PettingZooWrapper(_EnvWrapper):
     def _step_parallel(
         self,
         tensordict: TensorDictBase,
-    ) -> Tuple[Dict, Dict, Dict, Dict, Dict]:
+    ) -> tuple[dict, dict, dict, dict, dict]:
         action_dict = {}
         for group, agents in self.group_map.items():
             group_action = tensordict.get((group, "action"))
@@ -758,7 +756,7 @@ class PettingZooWrapper(_EnvWrapper):
     def _step_aec(
         self,
         tensordict: TensorDictBase,
-    ) -> Tuple[Dict, Dict, Dict, Dict, Dict]:
+    ) -> tuple[dict, dict, dict, dict, dict]:
         for group, agents in self.group_map.items():
             if self.agent_selection in agents:
                 agent_index = agents.index(self._env.agent_selection)
@@ -837,7 +835,7 @@ class PettingZooWrapper(_EnvWrapper):
                     if agent not in agents_acting:
                         group_mask[index] = False
 
-    def close(self) -> None:
+    def close(self, *, raise_if_closed: bool = True) -> None:
         self._env.close()
 
 
@@ -926,7 +924,7 @@ class PettingZooEnv(PettingZooWrapper):
         use_mask (bool, optional): whether the environment should output an ``"mask"``. This is compulsory in
             wrapped ``pettingzoo.AECEnv`` to mask out non-acting agents and should be also used
             for ``pettingzoo.ParallelEnv`` when the number of agents can vary. Defaults to ``False``.
-        categorical_actions (bool, optional): if the enviornments actions are discrete, whether to transform
+        categorical_actions (bool, optional): if the environments actions are discrete, whether to transform
             them to categorical or one-hot.
         seed (int, optional): the seed.  Defaults to ``None``.
         done_on_any (bool, optional): whether the environment's done keys are set by aggregating the agent keys
@@ -966,7 +964,7 @@ class PettingZooEnv(PettingZooWrapper):
         task: str,
         parallel: bool,
         return_state: bool = False,
-        group_map: MarlGroupMapType | Dict[str, List[str]] | None = None,
+        group_map: MarlGroupMapType | dict[str, list[str]] | None = None,
         use_mask: bool = False,
         categorical_actions: bool = True,
         seed: int | None = None,
@@ -989,7 +987,7 @@ class PettingZooEnv(PettingZooWrapper):
 
         super().__init__(**kwargs)
 
-    def _check_kwargs(self, kwargs: Dict):
+    def _check_kwargs(self, kwargs: dict):
         if "task" not in kwargs:
             raise TypeError("Could not find environment key 'task' in kwargs.")
         if "parallel" not in kwargs:
@@ -1000,10 +998,10 @@ class PettingZooEnv(PettingZooWrapper):
         task: str,
         parallel: bool,
         **kwargs,
-    ) -> Union[
-        "pettingzoo.utils.env.ParallelEnv",  # noqa: F821
-        "pettingzoo.utils.env.AECEnv",  # noqa: F821
-    ]:
+    ) -> (
+        pettingzoo.utils.env.ParallelEnv  # noqa: F821
+        | pettingzoo.utils.env.AECEnv  # noqa: F821
+    ):
         self.task_name = task
 
         try:

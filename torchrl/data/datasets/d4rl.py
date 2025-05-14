@@ -10,22 +10,17 @@ import shutil
 import tempfile
 import urllib
 import warnings
-
 from pathlib import Path
 from typing import Callable
 
 import numpy as np
-
 import torch
-
 from tensordict import make_tensordict, PersistentTensorDict, TensorDict
 
 from torchrl._utils import logger as torchrl_logger
-
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 from torchrl.data.datasets.d4rl_infos import D4RL_DATASETS
-
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers.samplers import Sampler
 from torchrl.data.replay_buffers.storages import TensorStorage
@@ -106,7 +101,7 @@ class D4RLExperienceReplay(BaseDatasetExperienceReplay):
         root (Path or str, optional): The D4RL dataset root directory.
             The actual dataset memory-mapped files will be saved under
             `<root>/<dataset_id>`. If none is provided, it defaults to
-            ``~/.cache/torchrl/d4rl`.
+            `~/.cache/torchrl/atari`.d4rl`.
         download (bool, optional): Whether the dataset should be downloaded if
             not found. Defaults to ``True``.
         **env_kwargs (key-value pairs): additional kwargs for
@@ -145,7 +140,7 @@ class D4RLExperienceReplay(BaseDatasetExperienceReplay):
         collate_fn: Callable | None = None,
         pin_memory: bool = False,
         prefetch: int | None = None,
-        transform: "torchrl.envs.Transform" | None = None,  # noqa-F821
+        transform: torchrl.envs.Transform | None = None,  # noqa-F821
         split_trajs: bool = False,
         from_env: bool = False,
         use_truncated_as_done: bool = True,
@@ -291,7 +286,8 @@ class D4RLExperienceReplay(BaseDatasetExperienceReplay):
                     k: torch.from_numpy(item)
                     for k, item in dataset.items()
                     if isinstance(item, np.ndarray)
-                }
+                },
+                auto_batch_size=True,
             )
         dataset = dataset.unflatten_keys("/")
         if "metadata" in dataset.keys():
@@ -299,7 +295,9 @@ class D4RLExperienceReplay(BaseDatasetExperienceReplay):
             dataset = dataset.exclude("metadata")
             self.metadata = metadata
             # find batch size
-            dataset = make_tensordict(dataset.flatten_keys("/").to_dict())
+            dataset = make_tensordict(
+                dataset.flatten_keys("/").to_dict(), auto_batch_size=True
+            )
             dataset = dataset.unflatten_keys("/")
         else:
             self.metadata = {}
@@ -361,7 +359,8 @@ class D4RLExperienceReplay(BaseDatasetExperienceReplay):
                     k: torch.from_numpy(item)
                     for k, item in env.get_dataset().items()
                     if isinstance(item, np.ndarray)
-                }
+                },
+                auto_batch_size=True,
             )
         dataset = dataset.unflatten_keys("/")
         dataset = self._process_data_from_env(dataset, env)
@@ -373,7 +372,9 @@ class D4RLExperienceReplay(BaseDatasetExperienceReplay):
             dataset = dataset.exclude("metadata")
             self.metadata = metadata
             # find batch size
-            dataset = make_tensordict(dataset.flatten_keys("/").to_dict())
+            dataset = make_tensordict(
+                dataset.flatten_keys("/").to_dict(), auto_batch_size=True
+            )
             dataset = dataset.unflatten_keys("/")
         else:
             self.metadata = {}
@@ -453,7 +454,7 @@ def _download_dataset_from_url(dataset_url, dataset_path):
         torchrl_logger.info(f"Downloading dataset: {dataset_url} to {dataset_filepath}")
         urllib.request.urlretrieve(dataset_url, dataset_filepath)
     if not os.path.exists(dataset_filepath):
-        raise IOError("Failed to download dataset from %s" % dataset_url)
+        raise OSError("Failed to download dataset from %s" % dataset_url)
     return dataset_filepath
 
 

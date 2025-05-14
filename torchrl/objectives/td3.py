@@ -5,18 +5,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
 
 import torch
-
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
-from torchrl.data.tensor_specs import Bounded, Composite, TensorSpec
 
+from torchrl.data.tensor_specs import Bounded, Composite, TensorSpec
 from torchrl.envs.utils import step_mdp
 from torchrl.objectives.common import LossModule
-
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
@@ -226,10 +223,10 @@ class TD3Loss(LossModule):
     def __init__(
         self,
         actor_network: TensorDictModule,
-        qvalue_network: TensorDictModule | List[TensorDictModule],
+        qvalue_network: TensorDictModule | list[TensorDictModule],
         *,
         action_spec: TensorSpec = None,
-        bounds: Optional[Tuple[float]] = None,
+        bounds: tuple[float] | None = None,
         num_qvalue_nets: int = 2,
         policy_noise: float = 0.2,
         noise_clip: float = 0.5,
@@ -373,7 +370,7 @@ class TD3Loss(LossModule):
             [self.actor_network_params, self.target_actor_network_params], 0
         )
 
-    def actor_loss(self, tensordict) -> Tuple[torch.Tensor, dict]:
+    def actor_loss(self, tensordict) -> tuple[torch.Tensor, dict]:
         tensordict_actor_grad = tensordict.select(
             *self.actor_network.in_keys, strict=False
         )
@@ -397,9 +394,16 @@ class TD3Loss(LossModule):
             "state_action_value_actor": state_action_value_actor.detach(),
         }
         loss_actor = _reduce(loss_actor, reduction=self.reduction)
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+        )
         return loss_actor, metadata
 
-    def value_loss(self, tensordict) -> Tuple[torch.Tensor, dict]:
+    def value_loss(self, tensordict) -> tuple[torch.Tensor, dict]:
         tensordict = tensordict.clone(False)
 
         act = tensordict.get(self.tensor_keys.action)
@@ -474,6 +478,13 @@ class TD3Loss(LossModule):
             "target_value": target_value.detach(),
         }
         loss_qval = _reduce(loss_qval, reduction=self.reduction)
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+        )
         return loss_qval, metadata
 
     @dispatch
@@ -489,13 +500,17 @@ class TD3Loss(LossModule):
                 f"QVal and actor loss have different shape: {loss_qval.shape} and {loss_actor.shape}"
             )
         td_out = TensorDict(
-            source={
-                "loss_actor": loss_actor,
-                "loss_qvalue": loss_qval,
-                **metadata_actor,
-                **metadata_value,
-            },
-            batch_size=[],
+            loss_actor=loss_actor,
+            loss_qvalue=loss_qval,
+            **metadata_actor,
+            **metadata_value,
+        )
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
         )
         return td_out
 

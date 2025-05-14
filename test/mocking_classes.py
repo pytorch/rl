@@ -6,15 +6,15 @@ from __future__ import annotations
 
 import random
 import string
-from typing import Dict, List, Optional
 
+import numpy as np
 import torch
 import torch.nn as nn
-from tensordict import TensorDict, TensorDictBase
+from tensordict import tensorclass, TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 from tensordict.utils import expand_right, NestedKey
 
-from torchrl.data.tensor_specs import (
+from torchrl.data import (
     Binary,
     Bounded,
     Categorical,
@@ -26,6 +26,7 @@ from torchrl.data.tensor_specs import (
     Unbounded,
 )
 from torchrl.data.utils import consolidate_spec
+from torchrl.envs import Transform
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based.common import ModelBasedEnvBase
 from torchrl.envs.utils import (
@@ -33,7 +34,6 @@ from torchrl.envs.utils import (
     check_marl_grouping,
     MarlGroupMapType,
 )
-
 
 spec_dict = {
     "bounded": Bounded,
@@ -128,29 +128,29 @@ class _MockEnv(EnvBase):
         self.is_closed = False
 
     @property
-    def maxstep(self):
+    def maxstep(self) -> int:
         return 100
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None) -> None:
         self.seed = seed
         self.counter = seed % 17  # make counter a small number
 
-    def custom_fun(self):
+    def custom_fun(self) -> int:
         return 0
 
     custom_attr = 1
 
     @property
-    def custom_prop(self):
+    def custom_prop(self) -> int:
         return 2
 
     @property
-    def custom_td(self):
+    def custom_td(self) -> TensorDict:
         return TensorDict({"a": torch.zeros(3)}, [])
 
 
 class MockSerialEnv(EnvBase):
-    """A simple counting env that is reset after a predifined max number of steps."""
+    """A simple counting env that is reset after a predefined max number of steps."""
 
     @classmethod
     def __new__(
@@ -216,16 +216,16 @@ class MockSerialEnv(EnvBase):
         return super().__new__(*args, **kwargs)
 
     def __init__(self, device="cpu"):
-        super(MockSerialEnv, self).__init__(device=device)
+        super().__init__(device=device)
         self.is_closed = False
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None) -> None:
         assert seed >= 1
         self.seed = seed
         self.counter = seed % 17  # make counter a small number
         self.max_val = max(self.counter + 100, self.counter * 2)
 
-    def _step(self, tensordict):
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         self.counter += 1
         n = torch.tensor(
             [self.counter], device=self.device, dtype=torch.get_default_dtype()
@@ -257,7 +257,7 @@ class MockSerialEnv(EnvBase):
             device=self.device,
         )
 
-    def rand_step(self, tensordict: Optional[TensorDictBase] = None) -> TensorDictBase:
+    def rand_step(self, tensordict: TensorDictBase | None = None) -> TensorDictBase:
         return self.step(tensordict)
 
 
@@ -336,18 +336,18 @@ class MockBatchedLockedEnv(EnvBase):
         return super().__new__(cls, *args, **kwargs)
 
     def __init__(self, device="cpu", batch_size=None):
-        super(MockBatchedLockedEnv, self).__init__(device=device, batch_size=batch_size)
+        super().__init__(device=device, batch_size=batch_size)
         self.counter = 0
 
     rand_step = MockSerialEnv.rand_step
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None) -> None:
         assert seed >= 1
         self.seed = seed
         self.counter = seed % 17  # make counter a small number
         self.max_val = max(self.counter + 100, self.counter * 2)
 
-    def _step(self, tensordict):
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         if len(self.batch_size):
             leading_batch_size = (
                 tensordict.shape[: -len(self.batch_size)]
@@ -358,13 +358,11 @@ class MockBatchedLockedEnv(EnvBase):
             leading_batch_size = tensordict.shape if tensordict is not None else []
         self.counter += 1
         # We use tensordict.batch_size instead of self.batch_size since this method will also be used by MockBatchedUnLockedEnv
-        n = (
-            torch.full(
-                [*leading_batch_size, *self.observation_spec["observation"].shape],
-                self.counter,
-            )
-            .to(self.device)
-            .to(torch.get_default_dtype())
+        n = torch.full(
+            [*leading_batch_size, *self.observation_spec["observation"].shape],
+            self.counter,
+            device=self.device,
+            dtype=torch.get_default_dtype(),
         )
         done = self.counter >= self.max_val
         done = torch.full(
@@ -391,13 +389,11 @@ class MockBatchedLockedEnv(EnvBase):
         else:
             leading_batch_size = tensordict.shape if tensordict is not None else []
 
-        n = (
-            torch.full(
-                [*leading_batch_size, *self.observation_spec["observation"].shape],
-                self.counter,
-            )
-            .to(self.device)
-            .to(torch.get_default_dtype())
+        n = torch.full(
+            [*leading_batch_size, *self.observation_spec["observation"].shape],
+            self.counter,
+            device=self.device,
+            dtype=torch.get_default_dtype(),
         )
         done = self.counter >= self.max_val
         done = torch.full(
@@ -417,20 +413,101 @@ class MockBatchedLockedEnv(EnvBase):
 
 
 class MockBatchedUnLockedEnv(MockBatchedLockedEnv):
-    """Mocks an env whose batch_size does not define the size of the output tensordict.
+    """Mocks an env which batch_size does not define the size of the output tensordict.
 
     The size of the output tensordict is defined by the input tensordict itself.
 
     """
 
     def __init__(self, device="cpu", batch_size=None):
-        super(MockBatchedUnLockedEnv, self).__init__(
-            batch_size=batch_size, device=device
-        )
+        super().__init__(batch_size=batch_size, device=device)
 
     @classmethod
     def __new__(cls, *args, **kwargs):
         return super().__new__(cls, *args, _batch_locked=False, **kwargs)
+
+
+class StateLessCountingEnv(EnvBase):
+    def __init__(self):
+        self.observation_spec = Composite(
+            count=Unbounded((1,), dtype=torch.int32),
+            max_count=Unbounded((1,), dtype=torch.int32),
+        )
+        self.full_action_spec = Composite(
+            action=Unbounded((1,), dtype=torch.int32),
+        )
+        self.full_done_spec = Composite(
+            done=Unbounded((1,), dtype=torch.bool),
+            termindated=Unbounded((1,), dtype=torch.bool),
+            truncated=Unbounded((1,), dtype=torch.bool),
+        )
+        self.reward_spec = Composite(reward=Unbounded((1,), dtype=torch.float))
+        super().__init__()
+        self._batch_locked = False
+
+    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+
+        max_count = None
+        count = None
+        if tensordict is not None:
+            max_count = tensordict.get("max_count")
+            count = tensordict.get("count")
+            tensordict = TensorDict(
+                batch_size=tensordict.batch_size, device=tensordict.device
+            )
+            shape = tensordict.batch_size
+        else:
+            shape = ()
+            tensordict = TensorDict(device=self.device)
+        tensordict.update(
+            TensorDict(
+                count=torch.zeros(
+                    (
+                        *shape,
+                        1,
+                    ),
+                    dtype=torch.int32,
+                )
+                if count is None
+                else count,
+                max_count=torch.randint(
+                    10,
+                    20,
+                    (
+                        *shape,
+                        1,
+                    ),
+                    dtype=torch.int32,
+                )
+                if max_count is None
+                else max_count,
+                **self.done_spec.zero(shape),
+                **self.full_reward_spec.zero(shape),
+            )
+        )
+        return tensordict
+
+    def _step(
+        self,
+        tensordict: TensorDictBase,
+    ) -> TensorDictBase:
+        action = tensordict["action"]
+        count = tensordict["count"] + action
+        terminated = done = count >= tensordict["max_count"]
+        truncated = torch.zeros_like(done)
+        return TensorDict(
+            count=count,
+            max_count=tensordict["max_count"],
+            done=done,
+            terminated=terminated,
+            truncated=truncated,
+            reward=self.reward_spec.zero(tensordict.shape),
+            batch_size=tensordict.batch_size,
+            device=tensordict.device,
+        )
+
+    def _set_seed(self, seed: int | None) -> None:
+        ...
 
 
 class DiscreteActionVecMockEnv(_MockEnv):
@@ -538,6 +615,8 @@ class DiscreteActionVecMockEnv(_MockEnv):
 
 
 class ContinuousActionVecMockEnv(_MockEnv):
+    adapt_dtype: bool = True
+
     @classmethod
     def __new__(
         cls,
@@ -635,7 +714,14 @@ class ContinuousActionVecMockEnv(_MockEnv):
         while done.shape != tensordict.shape:
             done = done.any(-1)
         done = reward = done.unsqueeze(-1)
-        tensordict.set("reward", reward.to(torch.get_default_dtype()))
+        tensordict.set(
+            "reward",
+            reward.to(
+                self.reward_spec.dtype
+                if self.adapt_dtype
+                else torch.get_default_dtype()
+            ).expand(self.reward_spec.shape),
+        )
         tensordict.set("done", done)
         tensordict.set("terminated", done)
         return tensordict
@@ -652,7 +738,7 @@ class DiscreteActionVecPolicy(TensorDictModuleBase):
         obs = tensordict.get(*self.in_keys)
         return obs
 
-    def __call__(self, tensordict):
+    def __call__(self, tensordict: TensorDictBase) -> TensorDictBase:
         obs = self._get_in_obs(tensordict)
         max_obs = (obs == obs.max(dim=-1, keepdim=True)[0]).cumsum(-1).argmax(-1)
         k = tensordict.get(*self.in_keys).shape[-1]
@@ -882,15 +968,15 @@ class DiscreteActionConvPolicy(DiscreteActionVecPolicy):
 
 
 class DummyModelBasedEnvBase(ModelBasedEnvBase):
-    """Dummy environnement for Model Based RL sota-implementations.
+    """Dummy environment for Model Based RL sota-implementations.
 
-    This class is meant to be used to test the model based environnement.
+    This class is meant to be used to test the model based environment.
 
     Args:
-        world_model (WorldModel): the world model to use for the environnement.
-        device (str or torch.device, optional): the device to use for the environnement.
-        dtype (torch.dtype, optional): the dtype to use for the environnement.
-        batch_size (sequence of int, optional): the batch size to use for the environnement.
+        world_model (WorldModel): the world model to use for the environment.
+        device (str or torch.device, optional): the device to use for the environment.
+        dtype (torch.dtype, optional): the dtype to use for the environment.
+        batch_size (sequence of int, optional): the batch size to use for the environment.
     """
 
     def __init__(
@@ -959,6 +1045,7 @@ class ActionObsMergeLinear(nn.Module):
 class CountingEnvCountPolicy(TensorDictModuleBase):
     def __init__(self, action_spec: TensorSpec, action_key: NestedKey = "action"):
         super().__init__()
+        assert not isinstance(action_spec, Composite)
         self.action_spec = action_spec
         self.action_key = action_key
         self.in_keys = []
@@ -1011,10 +1098,7 @@ class CountingEnv(EnvBase):
         self.done_spec = Categorical(
             2,
             dtype=torch.bool,
-            shape=(
-                *self.batch_size,
-                1,
-            ),
+            shape=(*self.batch_size, 1),
             device=self.device,
         )
         self.action_spec = Binary(n=1, shape=[*self.batch_size, 1], device=self.device)
@@ -1023,7 +1107,7 @@ class CountingEnv(EnvBase):
             torch.zeros((*self.batch_size, 1), device=self.device, dtype=torch.int),
         )
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None) -> None:
         torch.manual_seed(seed)
 
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
@@ -1055,12 +1139,17 @@ class CountingEnv(EnvBase):
             dtype=torch.int,
             device=device if self.device is None else self.device,
         )
+        if self.reward_keys:
+            reward_spec = self.full_reward_spec[self.reward_keys[0]]
+            reward_spec_dtype = reward_spec.dtype
+        else:
+            reward_spec_dtype = torch.get_default_dtype()
         tensordict = TensorDict(
             source={
                 "observation": self.count.clone(),
                 "done": self.count > self.max_steps,
                 "terminated": self.count > self.max_steps,
-                "reward": torch.zeros_like(self.count, dtype=torch.float),
+                "reward": torch.zeros_like(self.count, dtype=reward_spec_dtype),
             },
             batch_size=self.batch_size,
             device=self.device,
@@ -1116,7 +1205,7 @@ class MultiAgentCountingEnv(EnvBase):
         self,
         n_agents: int,
         group_map: MarlGroupMapType
-        | Dict[str, List[str]] = MarlGroupMapType.ALL_IN_ONE_GROUP,
+        | dict[str, list[str]] = MarlGroupMapType.ALL_IN_ONE_GROUP,
         max_steps: int = 5,
         start_val: int = 0,
         **kwargs,
@@ -1197,7 +1286,7 @@ class MultiAgentCountingEnv(EnvBase):
             torch.zeros((*self.batch_size, 1), device=self.device, dtype=torch.int),
         )
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None) -> None:
         torch.manual_seed(seed)
 
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
@@ -1214,7 +1303,11 @@ class MultiAgentCountingEnv(EnvBase):
                 source[group_name][agent_name] = TensorDict(
                     source={
                         "observation": torch.rand(
-                            (*self.batch_size, 3, 4), device=self.device
+                            (*self.batch_size, 3, 4),
+                            device=self.device,
+                            dtype=self.full_observation_spec[
+                                group_name, agent_name, "observation"
+                            ].dtype,
                         ),
                         "done": self.count > self.max_steps,
                         "terminated": self.count > self.max_steps,
@@ -1238,11 +1331,20 @@ class MultiAgentCountingEnv(EnvBase):
                 source[group_name][agent_name] = TensorDict(
                     source={
                         "observation": torch.rand(
-                            (*self.batch_size, 3, 4), device=self.device
+                            (*self.batch_size, 3, 4),
+                            device=self.device,
+                            dtype=self.full_observation_spec[
+                                group_name, agent_name, "observation"
+                            ].dtype,
                         ),
                         "done": self.count > self.max_steps,
                         "terminated": self.count > self.max_steps,
-                        "reward": torch.zeros_like(self.count, dtype=torch.float),
+                        "reward": torch.zeros_like(
+                            self.count,
+                            dtype=self.full_reward_spec[
+                                group_name, agent_name, "reward"
+                            ].dtype,
+                        ),
                     },
                     batch_size=self.batch_size,
                     device=self.device,
@@ -1310,11 +1412,13 @@ class NestedCountingEnv(CountingEnv):
                 },
                 shape=self.batch_size,
             )
-            self.action_spec = Composite(
+            action_spec = self.full_action_spec[self.action_key]
+            assert not isinstance(action_spec, Composite)
+            self.full_action_spec = Composite(
                 {
                     "data": Composite(
                         {
-                            "action": self.action_spec.unsqueeze(-1).expand(
+                            "action": action_spec.unsqueeze(-1).expand(
                                 *self.batch_size, self.nested_dim, 1
                             )
                         },
@@ -1510,7 +1614,7 @@ class CountingBatchedEnv(EnvBase):
         elif start_val.numel() <= 1:
             self.start_val = start_val.expand_as(self.count)
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None) -> None:
         torch.manual_seed(seed)
 
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
@@ -1726,7 +1830,7 @@ class HeterogeneousCountingEnv(EnvBase):
 
         return td
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None) -> None:
         torch.manual_seed(seed)
 
 
@@ -1957,7 +2061,7 @@ class MultiKeyCountingEnv(EnvBase):
         assert td.batch_size == self.batch_size
         return td
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None) -> None:
         torch.manual_seed(seed)
 
 
@@ -1994,8 +2098,8 @@ class EnvWithMetadata(EnvBase):
         data.update(self._saved_full_reward_spec.zero())
         return data
 
-    def _set_seed(self, seed: Optional[int]):
-        return seed
+    def _set_seed(self, seed: int | None) -> None:
+        ...
 
 
 class AutoResettingCountingEnv(CountingEnv):
@@ -2120,9 +2224,8 @@ class EnvWithDynamicSpec(EnvBase):
         reward = self.full_reward_spec.zero()
         return observation.update(done).update(reward)
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None) -> None:
         self.manual_seed = seed
-        return seed
 
 
 class EnvWithScalarAction(EnvBase):
@@ -2190,7 +2293,7 @@ class EnvWithScalarAction(EnvBase):
             ),
         )
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None) -> None:
         ...
 
 
@@ -2204,7 +2307,7 @@ class EnvThatDoesNothing(EnvBase):
     ) -> TensorDictBase:
         return TensorDict(batch_size=self.batch_size, device=self.device)
 
-    def _set_seed(self, seed):
+    def _set_seed(self, seed: int | None) -> None:
         ...
 
 
@@ -2238,7 +2341,195 @@ class Str2StrEnv(EnvBase):
     def get_random_string(self):
         return get_random_string(self.min_size, self.max_size)
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int | None) -> None:
         random.seed(seed)
         torch.manual_seed(0)
-        return seed
+
+
+class EnvThatErrorsAfter10Iters(EnvBase):
+    def __init__(self):
+        self.action_spec = Composite(action=Unbounded((1,)))
+        self.reward_spec = Composite(reward=Unbounded((1,)))
+        self.done_spec = Composite(done=Unbounded((1,)))
+        self.observation_spec = Composite(observation=Unbounded((1,)))
+        self.counter = 0
+        super().__init__()
+
+    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDict:
+        return self.full_observation_spec.zero().update(self.full_done_spec.zero())
+
+    def _step(self, tensordict: TensorDictBase, **kwargs) -> TensorDict:
+        if self.counter >= 10:
+            raise RuntimeError("max steps!")
+        self.counter += 1
+        return (
+            self.full_observation_spec.zero()
+            .update(self.full_done_spec.zero())
+            .update(self.full_reward_spec.zero())
+        )
+
+    def _set_seed(self, seed: int | None) -> None:
+        ...
+
+
+@tensorclass()
+class TC:
+    field0: str
+    field1: torch.Tensor
+
+
+class EnvWithTensorClass(CountingEnv):
+    tc_cls = TC
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.observation_spec["tc"] = Composite(
+            field0=NonTensor(example_data="an observation!", shape=self.batch_size),
+            field1=Unbounded(shape=self.batch_size),
+            shape=self.batch_size,
+            data_cls=TC,
+        )
+
+    def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+        td = super()._reset(tensordict, **kwargs)
+        td["tc"] = TC("0", torch.zeros(self.batch_size))
+        return td
+
+    def _step(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+        td = super()._step(tensordict, **kwargs)
+        default = TC("0", 0)
+        f0 = tensordict.get("tc", default).field0
+        if f0 is None:
+            f0 = "0"
+        f1 = tensordict.get("tc", default).field1
+        if f1 is None:
+            f1 = torch.zeros(self.batch_size)
+        td["tc"] = TC(
+            str(int(f0) + 1),
+            f1 + 1,
+        )
+        return td
+
+
+@tensorclass
+class History:
+    role: str
+    content: str
+
+
+class HistoryTransform(Transform):
+    """A mocking class to record history."""
+
+    def transform_observation_spec(self, observation_spec: Composite) -> Composite:
+        defaults = {
+            "role": NonTensor(
+                example_data="a role!",
+                shape=(-1,),
+            ),
+            "content": NonTensor(
+                example_data="a content!",
+                shape=(-1,),
+            ),
+        }
+        observation_spec["history"] = Composite(
+            defaults,
+            shape=(-1,),
+            data_cls=History,
+        )
+        assert observation_spec.device == self.parent.device
+        assert observation_spec["history"].device == self.parent.device
+        return observation_spec
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        assert tensordict_reset.device == self.parent.device
+        tensordict_reset["history"] = torch.stack(
+            [
+                History(role="system", content="0"),
+                History(role="user", content="1"),
+            ]
+        )
+        assert tensordict_reset["history"].device == self.parent.device
+        return tensordict_reset
+
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        assert next_tensordict.device == self.parent.device
+        history = tensordict["history"]
+        local_history = History(
+            role=np.random.choice(["user", "system", "assistant"]),
+            content=str(int(history.content[-1]) + 1),
+            device=history.device,
+        )
+        # history = tensordict["history"].append(local_history)
+        try:
+            history = torch.stack(list(history.unbind(0)) + [local_history])
+        except Exception:
+            raise
+        assert isinstance(history, History)
+        next_tensordict["history"] = history
+        assert next_tensordict["history"].device == self.parent.device, (
+            next_tensordict["history"],
+            self.parent.device,
+        )
+        return next_tensordict
+
+
+class DummyStrDataLoader:
+    def __init__(self, batch_size=0):
+        if isinstance(batch_size, tuple):
+            batch_size = torch.Size(batch_size).numel()
+        self.batch_size = batch_size
+
+    def generate_random_string(self, length=10):
+        """Generate a random string of a given length."""
+        return "".join(random.choice(string.ascii_lowercase) for _ in range(length))
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.batch_size == 0:
+            return {"text": self.generate_random_string()}
+        else:
+            return {
+                "text": [self.generate_random_string() for _ in range(self.batch_size)]
+            }
+
+
+class DummyTensorDataLoader:
+    def __init__(self, batch_size=0, max_length=10, padding=False):
+        if isinstance(batch_size, tuple):
+            batch_size = torch.Size(batch_size).numel()
+        self.batch_size = batch_size
+        self.max_length = max_length
+        self.padding = padding
+
+    def generate_random_tensor(self):
+        """Generate a tensor of random int64 values."""
+        length = random.randint(1, self.max_length)
+        rt = torch.randint(1, 10000, (length,))
+        return rt
+
+    def pad_tensor(self, tensor):
+        """Pad a tensor to the maximum length."""
+        padding_length = self.max_length - len(tensor)
+        return torch.cat((torch.zeros(padding_length, dtype=torch.int64), tensor))
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.batch_size == 0:
+            tensor = self.generate_random_tensor()
+            tokens = self.pad_tensor(tensor) if self.padding else tensor
+        else:
+            tensors = [self.generate_random_tensor() for _ in range(self.batch_size)]
+            if self.padding:
+                tensors = [self.pad_tensor(tensor) for tensor in tensors]
+                tokens = torch.stack(tensors)
+            else:
+                tokens = tensors
+        return {"tokens": tokens, "attention_mask": tokens != 0}

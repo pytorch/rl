@@ -6,16 +6,14 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Union
 
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
-
 from torch import distributions as d
-from torchrl.modules import ProbabilisticActor
 
+from torchrl.modules import ProbabilisticActor
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import _reduce, distance_loss
 
@@ -39,7 +37,7 @@ class OnlineDTLoss(LossModule):
             initial value. Otherwise, alpha will be optimized to
             match the 'target_entropy' value.
             Default is ``False``.
-        target_entropy (float or str, optional): Target entropy for the
+        target_entropy (:obj:`float` or str, optional): Target entropy for the
             stochastic policy. Default is "auto", where target entropy is
             computed as :obj:`-prod(n_actions)`.
         samples_mc_entropy (int): number of samples to estimate the entropy
@@ -85,7 +83,7 @@ class OnlineDTLoss(LossModule):
         min_alpha: float = None,
         max_alpha: float = None,
         fixed_alpha: bool = False,
-        target_entropy: Union[str, float] = "auto",
+        target_entropy: str | float = "auto",
         samples_mc_entropy: int = 1,
         reduction: str = None,
     ) -> None:
@@ -139,7 +137,7 @@ class OnlineDTLoss(LossModule):
             if actor_network.spec is None:
                 raise RuntimeError(
                     "Cannot infer the dimensionality of the action. Consider providing "
-                    "the target entropy explicitely or provide the spec of the "
+                    "the target entropy explicitly or provide the spec of the "
                     "action tensor in the actor network."
                 )
             if isinstance(self.tensor_keys.action_pred, tuple):
@@ -241,7 +239,12 @@ class OnlineDTLoss(LossModule):
             lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
             if name.startswith("loss_")
             else value,
-            batch_size=[],
+        )
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            "actor_network_params",
+            "target_actor_network_params",
         )
         return td_out
 
@@ -360,4 +363,10 @@ class DTLoss(LossModule):
         )
         loss = _reduce(loss, reduction=self.reduction)
         td_out = TensorDict(loss=loss)
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            "actor_network_params",
+            "target_actor_network_params",
+        )
         return td_out

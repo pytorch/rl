@@ -9,7 +9,7 @@ The trainer package provides utilities to write re-usable training scripts. The 
 trainer that implements a nested loop, where the outer loop runs the data collection steps and the inner
 loop the optimization steps. We believe this fits multiple RL training schemes, such as
 on-policy, off-policy, model-based and model-free solutions, offline RL and others.
-More particular cases, such as meta-RL algorithms may have training schemes that differ substentially.
+More particular cases, such as meta-RL algorithms may have training schemes that differ substantially.
 
 The ``trainer.train()`` method can be sketched as follows:
 

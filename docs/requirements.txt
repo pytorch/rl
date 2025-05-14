@@ -28,3 +28,4 @@ vmas
 onnxscript
 onnxruntime
 onnx
+psutil

@@ -2,6 +2,7 @@
 env:
   env_name: PongNoFrameskip-v4
   num_envs: 8
+  backend: gymnasium
 
 # collector
 collector:

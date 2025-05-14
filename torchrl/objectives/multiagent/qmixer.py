@@ -8,7 +8,6 @@ from __future__ import annotations
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
@@ -17,15 +16,11 @@ from tensordict.utils import NestedKey
 from torch import nn
 
 from torchrl.data.tensor_specs import TensorSpec
-
 from torchrl.data.utils import _find_action_space
-
 from torchrl.modules import SafeSequential
 from torchrl.modules.tensordict_module.actors import QValueActor
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
-
 from torchrl.objectives.common import LossModule
-
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
@@ -44,7 +39,7 @@ class QMixerLoss(LossModule):
     uses DQN updates on the global value.
     This loss is for multi-agent applications.
     Therefore, it expects the 'local_value', 'action_value' and 'action' keys
-    to have an agent dimension (this is visible in the dafault AcceptedKeys).
+    to have an agent dimension (this is visible in the default AcceptedKeys).
     This dimension will be mixed by the mixer which will compute a 'global_value' key, used for a DQN objective.
     The premade mixers of type :class:`torchrl.modules.models.multiagent.Mixer` will expect the multi-agent
     dimension to be the penultimate one.
@@ -193,13 +188,13 @@ class QMixerLoss(LossModule):
 
     def __init__(
         self,
-        local_value_network: Union[QValueActor, nn.Module],
-        mixer_network: Union[TensorDictModule, nn.Module],
+        local_value_network: QValueActor | nn.Module,
+        mixer_network: TensorDictModule | nn.Module,
         *,
-        loss_function: Optional[str] = "l2",
+        loss_function: str | None = "l2",
         delay_value: bool = True,
         gamma: float = None,
-        action_space: Union[str, TensorSpec] = None,
+        action_space: str | TensorSpec = None,
         priority_key: str = None,
     ) -> None:
         super().__init__()

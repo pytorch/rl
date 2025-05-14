@@ -7,11 +7,9 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from numbers import Number
-from typing import List, Tuple, Union
 
 import numpy as np
 import torch
-
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import composite_lp_aggregate, dispatch, TensorDictModule
 from tensordict.utils import NestedKey
@@ -149,7 +147,7 @@ class REDQLoss_deprecated(LossModule):
     def __init__(
         self,
         actor_network: TensorDictModule,
-        qvalue_network: TensorDictModule | List[TensorDictModule],
+        qvalue_network: TensorDictModule | list[TensorDictModule],
         *,
         num_qvalue_nets: int = 10,
         sub_sample_len: int = 2,
@@ -159,7 +157,7 @@ class REDQLoss_deprecated(LossModule):
         max_alpha: float = 10.0,
         action_spec=None,
         fixed_alpha: bool = False,
-        target_entropy: Union[str, Number] = "auto",
+        target_entropy: str | Number = "auto",
         delay_qvalue: bool = True,
         gSDE: bool = False,
         gamma: float = None,
@@ -256,7 +254,7 @@ class REDQLoss_deprecated(LossModule):
                 if action_spec is None:
                     raise RuntimeError(
                         "Cannot infer the dimensionality of the action. Consider providing "
-                        "the target entropy explicitely or provide the spec of the "
+                        "the target entropy explicitly or provide the spec of the "
                         "action tensor in the actor network."
                     )
                 if not isinstance(action_spec, Composite):
@@ -347,6 +345,14 @@ class REDQLoss_deprecated(LossModule):
             else value,
             batch_size=[],
         )
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            "actor_network_params",
+            "qvalue_network_params",
+            "target_actor_network_params",
+            "target_qvalue_network_params",
+        )
         return td_out
 
     @property
@@ -354,7 +360,7 @@ class REDQLoss_deprecated(LossModule):
     def _cached_detach_qvalue_network_params(self):
         return self.qvalue_network_params.detach()
 
-    def _actor_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
+    def _actor_loss(self, tensordict: TensorDictBase) -> tuple[Tensor, Tensor]:
         obs_keys = self.actor_network.in_keys
         tensordict_clone = tensordict.select(*obs_keys, strict=False)
         with set_exploration_type(

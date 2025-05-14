@@ -6,10 +6,8 @@ from __future__ import annotations
 
 import contextlib
 import warnings
-
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import List, Tuple
 
 import torch
 from tensordict import (
@@ -32,7 +30,6 @@ from torch import distributions as d
 
 from torchrl._utils import _standardize
 from torchrl.objectives.common import LossModule
-
 from torchrl.objectives.utils import (
     _cache_values,
     _clip_value_loss,
@@ -298,11 +295,11 @@ class PPOLoss(LossModule):
         advantage: NestedKey = "advantage"
         value_target: NestedKey = "value_target"
         value: NestedKey = "state_value"
-        sample_log_prob: NestedKey | List[NestedKey] | None = None
-        action: NestedKey | List[NestedKey] = "action"
-        reward: NestedKey | List[NestedKey] = "reward"
-        done: NestedKey | List[NestedKey] = "done"
-        terminated: NestedKey | List[NestedKey] = "terminated"
+        sample_log_prob: NestedKey | list[NestedKey] | None = None
+        action: NestedKey | list[NestedKey] = "action"
+        reward: NestedKey | list[NestedKey] = "reward"
+        done: NestedKey | list[NestedKey] = "done"
+        terminated: NestedKey | list[NestedKey] = "terminated"
 
         def __post_init__(self):
             if self.sample_log_prob is None:
@@ -330,10 +327,10 @@ class PPOLoss(LossModule):
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
         entropy_coef: float = 0.01,
-        critic_coef: float = 1.0,
+        critic_coef: float | None = None,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
-        normalize_advantage_exclude_dims: Tuple[int] = (),
+        normalize_advantage_exclude_dims: tuple[int] = (),
         gamma: float = None,
         separate_losses: bool = False,
         advantage_key: str = None,
@@ -352,7 +349,15 @@ class PPOLoss(LossModule):
         if critic is not None:
             critic_network = critic
             del critic
-        if actor_network is None or critic_network is None:
+
+        if critic_coef is None and critic_network is not None:
+            critic_coef = 1.0
+        elif critic_coef in (None, 0) and critic_network is not None:
+            critic_coef = None
+
+        if actor_network is None or (
+            critic_network is None and critic_coef not in (None, 0.0)
+        ):
             raise TypeError(
                 "Missing positional arguments actor_network or critic_network."
             )
@@ -376,7 +381,7 @@ class PPOLoss(LossModule):
             policy_params = list(actor_network.parameters())
         else:
             policy_params = None
-        if functional:
+        if functional and critic_network is not None:
             self.convert_to_functional(
                 critic_network, "critic_network", compare_against=policy_params
             )
@@ -402,6 +407,7 @@ class PPOLoss(LossModule):
             )
         else:
             self.critic_coef = None
+        self._has_critic = bool(self.critic_coef is not None and self.critic_coef > 0)
         self.loss_critic_type = loss_critic_type
         self.normalize_advantage = normalize_advantage
         self.normalize_advantage_exclude_dims = normalize_advantage_exclude_dims
@@ -427,12 +433,15 @@ class PPOLoss(LossModule):
                     f"clip_value must be a float or a scalar tensor, got {clip_value}."
                 )
         self.register_buffer("clip_value", clip_value)
-        log_prob_keys = self.actor_network.log_prob_keys
-        action_keys = self.actor_network.dist_sample_keys
-        if len(log_prob_keys) > 1:
-            self.set_keys(sample_log_prob=log_prob_keys, action=action_keys)
-        else:
-            self.set_keys(sample_log_prob=log_prob_keys[0], action=action_keys[0])
+        try:
+            log_prob_keys = self.actor_network.log_prob_keys
+            action_keys = self.actor_network.dist_sample_keys
+            if len(log_prob_keys) > 1:
+                self.set_keys(sample_log_prob=log_prob_keys, action=action_keys)
+            else:
+                self.set_keys(sample_log_prob=log_prob_keys[0], action=action_keys[0])
+        except AttributeError:
+            pass
 
     @property
     def functional(self):
@@ -442,7 +451,8 @@ class PPOLoss(LossModule):
         keys = []
         _maybe_add_or_extend_key(keys, self.actor_network.in_keys)
         _maybe_add_or_extend_key(keys, self.actor_network.in_keys, "next")
-        _maybe_add_or_extend_key(keys, self.critic_network.in_keys)
+        if self.critic_network is not None:
+            _maybe_add_or_extend_key(keys, self.critic_network.in_keys)
         _maybe_add_or_extend_key(keys, self.tensor_keys.action)
         _maybe_add_or_extend_key(keys, self.tensor_keys.sample_log_prob)
         _maybe_add_or_extend_key(keys, self.tensor_keys.reward, "next")
@@ -494,7 +504,9 @@ class PPOLoss(LossModule):
     def reset(self) -> None:
         pass
 
-    def _get_entropy(self, dist: d.Distribution) -> torch.Tensor | TensorDict:
+    def _get_entropy(
+        self, dist: d.Distribution, adv_shape: torch.Size
+    ) -> torch.Tensor | TensorDict:
         try:
             entropy = dist.entropy()
         except NotImplementedError:
@@ -513,66 +525,98 @@ class PPOLoss(LossModule):
                         log_prob = log_prob.select(*self.tensor_keys.sample_log_prob)
 
             entropy = -log_prob.mean(0)
+            if is_tensor_collection(entropy) and entropy.batch_size != adv_shape:
+                entropy.batch_size = adv_shape
         return entropy.unsqueeze(-1)
 
-    def _log_weight(
-        self, tensordict: TensorDictBase
-    ) -> Tuple[torch.Tensor, d.Distribution, torch.Tensor]:
+    def _get_cur_log_prob(self, tensordict):
 
-        with self.actor_network_params.to_module(
-            self.actor_network
-        ) if self.functional else contextlib.nullcontext():
-            dist = self.actor_network.get_dist(tensordict)
-        if isinstance(dist, CompositeDistribution):
-            is_composite = True
-        else:
-            is_composite = False
+        if isinstance(
+            self.actor_network,
+            (ProbabilisticTensorDictSequential, ProbabilisticTensorDictModule),
+        ) or hasattr(self.actor_network, "get_dist"):
+            # assert tensordict['log_probs'].requires_grad
+            # assert tensordict['logits'].requires_grad
+            with self.actor_network_params.to_module(
+                self.actor_network
+            ) if self.functional else contextlib.nullcontext():
+                dist = self.actor_network.get_dist(tensordict)
 
-        # current log_prob of actions
-        if is_composite:
-            action = tensordict.select(
-                *(
-                    (self.tensor_keys.action,)
-                    if isinstance(self.tensor_keys.action, NestedKey)
-                    else self.tensor_keys.action
+            is_composite = isinstance(dist, CompositeDistribution)
+
+            if is_composite:
+                action = tensordict.select(
+                    *(
+                        (self.tensor_keys.action,)
+                        if isinstance(self.tensor_keys.action, NestedKey)
+                        else self.tensor_keys.action
+                    )
                 )
-            )
+            else:
+                action = _maybe_get_or_select(tensordict, self.tensor_keys.action)
+
+            if action.requires_grad:
+                raise RuntimeError(
+                    f"tensordict stored {self.tensor_keys.action} requires grad."
+                )
+            log_prob = dist.log_prob(action)
         else:
-            action = _maybe_get_or_select(tensordict, self.tensor_keys.action)
+            raise NotImplementedError(
+                "Only probabilistic modules from tensordict.nn are currently supported. "
+                "If you need to implement a custom logic to retrieve the log-probs (to compute "
+                "the PPO objective) or the distribution (for the PPO entropy), please augment "
+                f"the {type(self).__class__} by implementing your own logic in _get_cur_log_prob."
+            )
+            # with self.actor_network_params.to_module(
+            #     self.actor_network
+            # ) if self.functional else contextlib.nullcontext():
+            #     td = self.actor_network(tensordict)
+            #     log_prob = td.get(self.tensor_keys.sample_log_prob)
+            #     dist = torch.distributions.Categorical(td.get("logits"))
+            #     is_composite = False
+        return log_prob, dist, is_composite
+
+    def _log_weight(
+        self, tensordict: TensorDictBase, adv_shape: torch.Size
+    ) -> tuple[torch.Tensor, d.Distribution, torch.Tensor]:
 
         prev_log_prob = _maybe_get_or_select(
-            tensordict, self.tensor_keys.sample_log_prob
+            tensordict,
+            self.tensor_keys.sample_log_prob,
+            adv_shape,
         )
-
+        if prev_log_prob is None:
+            raise KeyError(
+                f"Couldn't find the log-prob {self.tensor_keys.sample_log_prob} in the input data."
+            )
         if prev_log_prob.requires_grad:
             raise RuntimeError(
                 f"tensordict stored {self.tensor_keys.sample_log_prob} requires grad."
             )
 
-        if action.requires_grad:
-            raise RuntimeError(
-                f"tensordict stored {self.tensor_keys.action} requires grad."
-            )
-        log_prob = dist.log_prob(action)
+        log_prob, dist, is_composite = self._get_cur_log_prob(tensordict)
+
         if is_composite:
             with set_composite_lp_aggregate(False):
+                if log_prob.batch_size != adv_shape:
+                    log_prob.batch_size = adv_shape
                 if not is_tensor_collection(prev_log_prob):
-                    # this isn't great, in general multihead actions should have a composite log-prob too
+                    # this isn't great: in general, multi-head actions should have a composite log-prob too
                     warnings.warn(
                         "You are using a composite distribution, yet your log-probability is a tensor. "
                         "Make sure you have called tensordict.nn.set_composite_lp_aggregate(False).set() at "
                         "the beginning of your script to get a proper composite log-prob.",
                         category=UserWarning,
                     )
-                if (
-                    is_composite
-                    and not is_tensor_collection(prev_log_prob)
-                    and is_tensor_collection(log_prob)
-                ):
-                    log_prob = _sum_td_features(log_prob)
-                    log_prob.view_as(prev_log_prob)
 
+                    if is_tensor_collection(log_prob):
+                        log_prob = _sum_td_features(log_prob)
+                        log_prob.view_as(prev_log_prob)
         log_weight = (log_prob - prev_log_prob).unsqueeze(-1)
+        if is_tensor_collection(log_weight):
+            log_weight = _sum_td_features(log_weight)
+            log_weight = log_weight.view(adv_shape).unsqueeze(-1)
+
         kl_approx = (prev_log_prob - log_prob).unsqueeze(-1)
         if is_tensor_collection(kl_approx):
             kl_approx = _sum_td_features(kl_approx)
@@ -639,7 +683,14 @@ class PPOLoss(LossModule):
                 self.loss_critic_type,
             )
 
-        if self.critic_coef is not None:
+        self._clear_weakrefs(
+            tensordict,
+            "actor_network_params",
+            "critic_network_params",
+            "target_actor_network_params",
+            "target_critic_network_params",
+        )
+        if self._has_critic:
             return self.critic_coef * loss_value, clip_fraction
         return loss_value, clip_fraction
 
@@ -673,22 +724,21 @@ class PPOLoss(LossModule):
                 )
             advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
 
-        log_weight, dist, kl_approx = self._log_weight(tensordict)
-        if is_tensor_collection(log_weight):
-            log_weight = _sum_td_features(log_weight)
-            log_weight = log_weight.view(advantage.shape)
+        log_weight, dist, kl_approx = self._log_weight(
+            tensordict, adv_shape=advantage.shape[:-1]
+        )
         neg_loss = log_weight.exp() * advantage
-        td_out = TensorDict({"loss_objective": -neg_loss}, batch_size=[])
+        td_out = TensorDict({"loss_objective": -neg_loss})
         td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
         if self.entropy_bonus:
-            entropy = self._get_entropy(dist)
+            entropy = self._get_entropy(dist, adv_shape=advantage.shape[:-1])
             if is_tensor_collection(entropy):
                 # Reports the entropy of each action head.
                 td_out.set("composite_entropy", entropy.detach())
                 entropy = _sum_td_features(entropy)
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
-        if self.critic_coef is not None:
+        if self._has_critic:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
             if value_clip_fraction is not None:
@@ -697,7 +747,14 @@ class PPOLoss(LossModule):
             lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
             if name.startswith("loss_")
             else value,
-            batch_size=[],
+        )
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            "actor_network_params",
+            "critic_network_params",
+            "target_actor_network_params",
+            "target_critic_network_params",
         )
         return td_out
 
@@ -869,10 +926,10 @@ class ClipPPOLoss(PPOLoss):
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
         entropy_coef: float = 0.01,
-        critic_coef: float = 1.0,
+        critic_coef: float | None = None,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
-        normalize_advantage_exclude_dims: Tuple[int] = (),
+        normalize_advantage_exclude_dims: tuple[int] = (),
         gamma: float = None,
         separate_losses: bool = False,
         reduction: str = None,
@@ -883,7 +940,7 @@ class ClipPPOLoss(PPOLoss):
         if isinstance(clip_value, bool):
             clip_value = clip_epsilon if clip_value else None
 
-        super(ClipPPOLoss, self).__init__(
+        super().__init__(
             actor_network,
             critic_network,
             entropy_bonus=entropy_bonus,
@@ -934,8 +991,14 @@ class ClipPPOLoss(PPOLoss):
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
-        advantage = tensordict.get(self.tensor_keys.advantage, None)
+        advantage = tensordict.get(
+            self.tensor_keys.advantage, None, as_padded_tensor=True
+        )
         if advantage is None:
+            if self.critic_network is None:
+                raise RuntimeError(
+                    "Critic network is not specified, cannot compute advantage within forward."
+                )
             self.value_estimator(
                 tensordict,
                 params=self._cached_critic_network_params_detached,
@@ -954,15 +1017,15 @@ class ClipPPOLoss(PPOLoss):
                 )
             advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
 
-        log_weight, dist, kl_approx = self._log_weight(tensordict)
+        log_weight, dist, kl_approx = self._log_weight(
+            tensordict, adv_shape=advantage.shape[:-1]
+        )
         # ESS for logging
         with torch.no_grad():
             # In theory, ESS should be computed on particles sampled from the same source. Here we sample according
             # to different, unrelated trajectories, which is not standard. Still, it can give an idea of the weights'
             # dispersion.
             lw = log_weight.squeeze()
-            if not isinstance(lw, torch.Tensor):
-                lw = _sum_td_features(lw)
             ess = (2 * lw.logsumexp(0) - (2 * lw).logsumexp(0)).exp()
             batch = log_weight.shape[0]
 
@@ -974,21 +1037,19 @@ class ClipPPOLoss(PPOLoss):
         gain2 = ratio * advantage
 
         gain = torch.stack([gain1, gain2], -1).min(dim=-1).values
-        if is_tensor_collection(gain):
-            gain = _sum_td_features(gain)
-        td_out = TensorDict({"loss_objective": -gain}, batch_size=[])
+        td_out = TensorDict({"loss_objective": -gain})
         td_out.set("clip_fraction", clip_fraction)
         td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
 
         if self.entropy_bonus:
-            entropy = self._get_entropy(dist)
+            entropy = self._get_entropy(dist, adv_shape=advantage.shape[:-1])
             if is_tensor_collection(entropy):
                 # Reports the entropy of each action head.
                 td_out.set("composite_entropy", entropy.detach())
                 entropy = _sum_td_features(entropy)
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
-        if self.critic_coef is not None:
+        if self._has_critic:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
             if value_clip_fraction is not None:
@@ -999,7 +1060,14 @@ class ClipPPOLoss(PPOLoss):
             lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
             if name.startswith("loss_")
             else value,
-            batch_size=[],
+        )
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            "actor_network_params",
+            "critic_network_params",
+            "target_actor_network_params",
+            "target_critic_network_params",
         )
         return td_out
 
@@ -1135,17 +1203,17 @@ class KLPENPPOLoss(PPOLoss):
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
         entropy_coef: float = 0.01,
-        critic_coef: float = 1.0,
+        critic_coef: float | None = None,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
-        normalize_advantage_exclude_dims: Tuple[int] = (),
+        normalize_advantage_exclude_dims: tuple[int] = (),
         gamma: float = None,
         separate_losses: bool = False,
         reduction: str = None,
         clip_value: float | None = None,
         **kwargs,
     ):
-        super(KLPENPPOLoss, self).__init__(
+        super().__init__(
             actor_network,
             critic_network,
             entropy_bonus=entropy_bonus,
@@ -1182,7 +1250,8 @@ class KLPENPPOLoss(PPOLoss):
         keys = []
         _maybe_add_or_extend_key(keys, self.actor_network.in_keys)
         _maybe_add_or_extend_key(keys, self.actor_network.in_keys, "next")
-        _maybe_add_or_extend_key(keys, self.critic_network.in_keys)
+        if self.critic_network is not None:
+            _maybe_add_or_extend_key(keys, self.critic_network.in_keys)
         _maybe_add_or_extend_key(keys, self.tensor_keys.action)
         _maybe_add_or_extend_key(keys, self.tensor_keys.sample_log_prob)
         _maybe_add_or_extend_key(keys, self.tensor_keys.reward, "next")
@@ -1198,7 +1267,7 @@ class KLPENPPOLoss(PPOLoss):
                     raise RuntimeError(
                         "Actors with one and only one distribution are currently supported "
                         f"in {type(self).__name__}. If you need to use more than one "
-                        f"distribtuion over the action space please submit an issue "
+                        f"distributions over the action space please submit an issue "
                         f"on github."
                     )
                 actor_dist_module = module
@@ -1254,10 +1323,10 @@ class KLPENPPOLoss(PPOLoss):
                 )
             advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
 
-        log_weight, dist, kl_approx = self._log_weight(tensordict_copy)
+        log_weight, dist, kl_approx = self._log_weight(
+            tensordict_copy, adv_shape=advantage.shape[:-1]
+        )
         neg_loss = log_weight.exp() * advantage
-        if is_tensor_collection(neg_loss):
-            neg_loss = _sum_td_features(neg_loss)
 
         with self.actor_network_params.to_module(
             self.actor_network
@@ -1274,6 +1343,13 @@ class KLPENPPOLoss(PPOLoss):
                 previous_log_prob = previous_dist.log_prob(x)
                 current_log_prob = current_dist.log_prob(x)
             if is_tensor_collection(previous_log_prob):
+                if previous_log_prob.batch_size != advantage.shape[:-1]:
+                    previous_log_prob.batch_size = (
+                        self.samples_mc_kl,
+                    ) + advantage.shape[:-1]
+                    current_log_prob.batch_size = (
+                        self.samples_mc_kl,
+                    ) + advantage.shape[:-1]
                 previous_log_prob = _sum_td_features(previous_log_prob)
                 # Both dists have presumably the same params
                 current_log_prob = _sum_td_features(current_log_prob)
@@ -1290,18 +1366,17 @@ class KLPENPPOLoss(PPOLoss):
                 "kl": kl.detach(),
                 "kl_approx": kl_approx.detach().mean(),
             },
-            batch_size=[],
         )
 
         if self.entropy_bonus:
-            entropy = self._get_entropy(dist)
+            entropy = self._get_entropy(dist, adv_shape=advantage.shape[:-1])
             if is_tensor_collection(entropy):
                 # Reports the entropy of each action head.
                 td_out.set("composite_entropy", entropy.detach())
                 entropy = _sum_td_features(entropy)
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coef * entropy)
-        if self.critic_coef is not None:
+        if self._has_critic:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict_copy)
             td_out.set("loss_critic", loss_critic)
             if value_clip_fraction is not None:
@@ -1310,9 +1385,15 @@ class KLPENPPOLoss(PPOLoss):
             lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
             if name.startswith("loss_")
             else value,
-            batch_size=[],
         )
-
+        self._clear_weakrefs(
+            tensordict,
+            td_out,
+            "actor_network_params",
+            "critic_network_params",
+            "target_actor_network_params",
+            "target_critic_network_params",
+        )
         return td_out
 
     def reset(self) -> None:

@@ -2,21 +2,21 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import argparse
 import importlib.util
 import os
-from typing import Tuple
 
 import pytest
 import torch
 import torch.nn.functional as F
 
 from tensordict import TensorDictBase
+from tensordict.nn import NormalParamExtractor
 from torch import autograd, nn
 from torch.utils._pytree import tree_map
 from torchrl.modules import (
-    NormalParamWrapper,
     OneHotCategorical,
     OneHotOrdinal,
     Ordinal,
@@ -310,14 +310,19 @@ def test_normal_mapping(batch_size, device, scale_mapping, action_dim=11, state_
     torch.manual_seed(0)
     for _ in range(100):
         module = nn.LazyLinear(2 * action_dim).to(device)
-        module = NormalParamWrapper(module, scale_mapping=scale_mapping).to(device)
         if scale_mapping != "raise_error":
+            module = nn.Sequential(
+                module, NormalParamExtractor(scale_mapping=scale_mapping)
+            ).to(device)
             loc, scale = module(torch.randn(*batch_size, state_dim, device=device))
             assert (scale > 0).all()
         else:
             with pytest.raises(
                 NotImplementedError, match="Unknown mapping " "raise_error"
             ):
+                module = nn.Sequential(
+                    module, NormalParamExtractor(scale_mapping=scale_mapping)
+                ).to(device)
                 loc, scale = module(torch.randn(*batch_size, state_dim, device=device))
 
 
@@ -482,6 +487,46 @@ class TestMaskedCategorical:
         samples = dist.sample([num_samples])
         sample_probs = torch.bincount(samples) / num_samples
         torch.testing.assert_close(sample_probs, ref_probs, rtol=1e-5, atol=1e-2)
+
+    @pytest.mark.parametrize("neg_inf", [-1e20, float("-inf")])
+    @pytest.mark.parametrize("sparse", [False, True])
+    @pytest.mark.parametrize("ndim", [2, 1, 3])
+    def test_crossentropy(self, sparse: bool, neg_inf: float, ndim: int):
+        torch.manual_seed(0)
+        logits = torch.randn(4).log_softmax(dim=-1)
+        # probs = logits.exp()
+        mask = torch.tensor([True, False, True, True])
+        indices = torch.tensor([0, 2, 3])
+
+        if ndim >= 2:
+            mask = mask.unsqueeze(0)
+            logits = logits.unsqueeze(0)
+            indices = indices.unsqueeze(0)
+        if ndim == 3:
+            mask = mask.unsqueeze(0)
+            logits = logits.unsqueeze(0)
+            indices = indices.unsqueeze(0)
+
+        dist_ce = MaskedCategorical(
+            logits=logits,
+            neg_inf=neg_inf,
+            mask=mask if not sparse else None,
+            indices=indices if sparse else None,
+            use_cross_entropy=True,
+        )
+        dist = MaskedCategorical(
+            logits=logits,
+            neg_inf=neg_inf,
+            mask=mask if not sparse else None,
+            indices=indices if sparse else None,
+            use_cross_entropy=False,
+        )
+        data = torch.tensor(0)
+        if ndim >= 2:
+            data = data.unsqueeze(0)
+        if ndim == 3:
+            data = data.unsqueeze(0)
+        torch.testing.assert_close(dist.log_prob(data), dist_ce.log_prob(data))
 
 
 class TestOneHotCategorical:
@@ -686,7 +731,7 @@ class TestOrdinal:
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("logit_shape", [(10,), (1, 1), (10, 10), (5, 10, 20)])
     def test_correct_sampling_shape(
-        self, logit_shape: Tuple[int, ...], dtype: torch.dtype, device: str
+        self, logit_shape: tuple[int, ...], dtype: torch.dtype, device: str
     ) -> None:
         logits = torch.testing.make_tensor(logit_shape, dtype=dtype, device=device)
 
@@ -754,7 +799,7 @@ class TestOneHotOrdinal:
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("logit_shape", [(10,), (10, 10), (5, 10, 20)])
     def test_correct_sampling_shape(
-        self, logit_shape: Tuple[int, ...], dtype: torch.dtype, device: str
+        self, logit_shape: tuple[int, ...], dtype: torch.dtype, device: str
     ) -> None:
         logits = torch.testing.make_tensor(logit_shape, dtype=dtype, device=device)
 

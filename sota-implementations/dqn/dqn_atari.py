@@ -18,7 +18,6 @@ import torch.optim
 import tqdm
 from tensordict.nn import CudaGraphModule, TensorDictSequential
 from torchrl._utils import timeit
-
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
 from torchrl.envs import ExplorationType, set_exploration_type
@@ -32,7 +31,7 @@ torch.set_float32_matmul_precision("high")
 
 
 @hydra.main(config_path="", config_name="config_atari", version_base="1.1")
-def main(cfg: "DictConfig"):  # noqa: F821
+def main(cfg: DictConfig):  # noqa: F821
 
     device = cfg.device
     if device in ("", None):
@@ -50,7 +49,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
     test_interval = cfg.logger.test_interval // frame_skip
 
     # Make the components
-    model = make_dqn_model(cfg.env.env_name, frame_skip, device=device)
+    model = make_dqn_model(
+        cfg.env.env_name,
+        gym_backend=cfg.env.backend,
+        frame_skip=frame_skip,
+        device=device,
+    )
     greedy_module = EGreedyModule(
         annealing_num_steps=cfg.collector.annealing_frames,
         eps_init=cfg.collector.eps_start,
@@ -115,7 +119,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
         )
 
     # Create the test environment
-    test_env = make_env(cfg.env.env_name, frame_skip, device, is_test=True)
+    test_env = make_env(
+        cfg.env.env_name,
+        frame_skip,
+        device,
+        gym_backend=cfg.env.backend,
+        is_test=True,
+    )
     if cfg.logger.video:
         test_env.insert_transform(
             0,
@@ -155,7 +165,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Create the collector
     collector = SyncDataCollector(
-        create_env_fn=make_env(cfg.env.env_name, frame_skip, device),
+        create_env_fn=make_env(
+            cfg.env.env_name, frame_skip, device, gym_backend=cfg.env.backend
+        ),
         policy=model_explore,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
@@ -166,7 +178,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         compile_policy={"mode": compile_mode, "fullgraph": True}
         if compile_mode is not None
         else False,
-        cudagraph_policy=cfg.compile.cudagraphs,
+        cudagraph_policy={"warmup": 10} if cfg.compile.cudagraphs else False,
     )
 
     # Main loop

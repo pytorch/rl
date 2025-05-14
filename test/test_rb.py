@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import argparse
 import contextlib
@@ -16,23 +17,6 @@ from unittest import mock
 import numpy as np
 import pytest
 import torch
-
-if os.getenv("PYTORCH_TEST_FBCODE"):
-    from pytorch.rl.test._utils_internal import (
-        capture_log_records,
-        CARTPOLE_VERSIONED,
-        get_default_devices,
-        make_tc,
-    )
-    from pytorch.rl.test.mocking_classes import CountingEnv
-else:
-    from _utils_internal import (
-        capture_log_records,
-        CARTPOLE_VERSIONED,
-        get_default_devices,
-        make_tc,
-    )
-    from mocking_classes import CountingEnv
 
 from packaging import version
 from packaging.version import parse
@@ -121,11 +105,29 @@ from torchrl.envs.transforms.transforms import (
 )
 
 
+if os.getenv("PYTORCH_TEST_FBCODE"):
+    from pytorch.rl.test._utils_internal import (
+        capture_log_records,
+        CARTPOLE_VERSIONED,
+        get_default_devices,
+        make_tc,
+    )
+    from pytorch.rl.test.mocking_classes import CountingEnv
+else:
+    from _utils_internal import (
+        capture_log_records,
+        CARTPOLE_VERSIONED,
+        get_default_devices,
+        make_tc,
+    )
+    from mocking_classes import CountingEnv
+
 OLD_TORCH = parse(torch.__version__) < parse("2.0.0")
 _has_tv = importlib.util.find_spec("torchvision") is not None
 _has_gym = importlib.util.find_spec("gym") is not None
 _has_snapshot = importlib.util.find_spec("torchsnapshot") is not None
 _os_is_windows = sys.platform == "win32"
+_has_transformers = importlib.util.find_spec("transformers") is not None
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 torch_2_3 = version.parse(
@@ -1117,6 +1119,9 @@ class TestStorages:
         assert (rb[:, 10:20] == 0).all()
         assert len(rb) == 100
 
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+    )
     @pytest.mark.parametrize("max_size", [1000, None])
     @pytest.mark.parametrize("stack_dim", [-1, 0])
     def test_lazy_stack_storage(self, max_size, stack_dim):
@@ -1626,7 +1631,6 @@ class TestBuffers:
             rb.extend(data)
         length = len(rb)
         for d in data[-length:]:
-            found_similar = False
             for b in rb._storage:
                 if isinstance(b, TensorDictBase):
                     keys = set(d.keys()).intersection(b.keys())
@@ -1657,7 +1661,6 @@ class TestBuffers:
             new_data = new_data[0]
 
         for d in new_data:
-            found_similar = False
             for b in data:
                 if isinstance(b, TensorDictBase):
                     keys = set(d.keys()).intersection(b.keys())
@@ -2871,7 +2874,7 @@ class TestSamplers:
             assert (samples["traj"] != 0).all(), samples["traj"].unique()
         else:
             assert (samples["traj"] == 0).any()
-            # Check that all samples of the first traj contain all elements (since it's too short to fullfill 10 elts)
+            # Check that all samples of the first traj contain all elements (since it's too short to fulfill 10 elts)
             sc = samples[samples["traj"] == 0]["step_count"]
             assert (sc == 1).sum() == (sc == 2).sum()
             assert (sc == 1).sum() == (sc == 4).sum()
@@ -2930,7 +2933,6 @@ class TestSamplers:
             index = rb.extend(data)
         rb.update_priority(index, data["priority"])
         found_traj_0 = False
-        found_traj_4_truncated_left = False
         found_traj_4_truncated_right = False
         for i, s in enumerate(rb):
             t = s["traj"].unique().tolist()
@@ -2942,7 +2944,7 @@ class TestSamplers:
                 if s["step_count"][0] > 10:
                     found_traj_4_truncated_right = True
                 if s["step_count"][0] == 0:
-                    found_traj_4_truncated_left = True
+                    pass
             if i == 1000:
                 break
         assert not rb._sampler.span[0]
@@ -3393,7 +3395,7 @@ class TestEnsemble:
         error_catcher = (
             pytest.raises(
                 ValueError,
-                match="Samplers with drop_last=True must work with a predictible batch-size",
+                match="Samplers with drop_last=True must work with a predictable batch-size",
             )
             if batch_size is None
             and issubclass(sampler_type, SamplerWithoutReplacement)
