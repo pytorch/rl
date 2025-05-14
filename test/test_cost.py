@@ -13797,8 +13797,6 @@ class TestValues:
         else:
             raise NotImplementedError
         recurrent_module.eval()
-        for p in recurrent_module.parameters():
-            p.data *= 1 + torch.randn_like(p.data) / 10
         mlp_value = MLP(num_cells=[64], out_features=1)
         value_net = Seq(
             recurrent_module,
@@ -13809,7 +13807,6 @@ class TestValues:
             recurrent_module,
             Mod(mlp_policy, in_keys=["intermediate"], out_keys=["action"]),
         )
-        # value_net.select_out_keys("state_value")
         env = env.append_transform(recurrent_module.make_tensordict_primer())
         vals = env.rollout(1000, policy_net, break_when_any_done=False)
         value_net(vals.copy())
@@ -13825,8 +13822,6 @@ class TestValues:
             r0 = gae_shifted(vals.copy())
         a0 = r0["advantage"]
 
-        # TODO: where to put this?
-        vals["next", "is_init"] = vals["is_init"]
         gae = GAE(
             gamma=0.9,
             lmbda=0.99,

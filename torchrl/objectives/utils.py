@@ -557,17 +557,15 @@ def _pseudo_vmap(
     func: Callable,
     in_dims: Any = 0,
     out_dims: Any = 0,
-    randomness: str = "error",
+    randomness: str | None = None,
     *,
     chunk_size=None,
 ):
-    # Test:
-    # import torch
-    # from tensordict import TensorDict
-    # a = torch.randn(3, 4)
-    # b = TensorDict(a=torch.randn(3, 4), batch_size=3)
-    # ds = (0, 0)
-    # v0, v1, v2 = zip(*tuple(tree_map(lambda d, x: x.unbind(d), (0, 0), (a, b))))
+    if randomness is not None and randomness not in ("different", "error"):
+        raise ValueError(
+            f"pseudo_vmap only supports 'different' or 'error' randomness modes, but got {randomness=}. If another mode is required, please "
+            "submit an issue in TorchRL."
+        )
     if isinstance(in_dims, int):
         in_dims = (in_dims,)
     if isinstance(out_dims, int):

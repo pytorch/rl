@@ -441,12 +441,14 @@ class ValueEstimatorBase(TensorDictModuleBase):
             value_net = self.value_network
         in_keys = value_net.in_keys
         if single_call:
-            # Reshape to -1 because we cannot guarantee that all dims have the same number of done states
-            for i, name in enumerate(data.names):
-                if name == "time":
-                    ndim = i + 1
-                    break
-            else:
+            # We are going to flatten the data, then interleave the last observation of each trajectory in between its
+            #  previous obs (from the root TD) and the first of the next trajectory. Eventually, each trajectory will
+            #  have T+1 elements (or, for a batch of N trajectories, we will have \Sum_{t=0}^{T-1} length_t + T
+            #  elements). Then, we can feed that to our RNN which will understand which trajectory is which, pad the data
+            #  accordingly and process each of them independently.
+            try:
+                ndim = list(data.names).index("time") + 1
+            except ValueError:
                 if RL_WARNINGS:
                     warnings.warn(
                         "Got a tensordict without a time-marked dimension, assuming time is along the last dimension. "
@@ -454,20 +456,24 @@ class ValueEstimatorBase(TensorDictModuleBase):
                     )
                 ndim = data.ndim
             data_copy = data.copy()
+            # we are going to modify the done so let's clone it
             done = data_copy["next", "done"].clone()
+
+            # Mark the last step of every sequence as done. We do this because flattening would cause the trajectories
+            #  of different batches to be merged.
             done[(slice(None),) * (ndim - 1) + (-1,)].fill_(True)
             data_copy["next", "done"] = done
+            # Reshape to -1 because we cannot guarantee that all dims have the same number of done states
             with data_copy.view(-1) as data_copy_view:
                 # Interleave next data when done
                 data_copy_select = data_copy_view.select(
                     *in_keys, value_key, strict=False
                 )
-                data_in = data_copy_select.new_zeros(
-                    (
-                        data_copy_view.shape[0]
-                        + data_copy_view["next", "done"].sum().item(),
-                    )
+                total_elts = (
+                    data_copy_view.shape[0]
+                    + data_copy_view["next", "done"].sum().item()
                 )
+                data_in = data_copy_select.new_zeros((total_elts,))
                 # we can get the indices of non-done data by adding the shifted done cumsum to an arange
                 #    traj = [0, 0, 0, 1, 1, 2, 2]
                 #  arange = [0, 1, 2, 3, 4, 5, 6]
@@ -503,6 +509,11 @@ class ValueEstimatorBase(TensorDictModuleBase):
         else:
             data_root = data.select(*in_keys, value_key, strict=False)
             data_next = data.get("next").select(*in_keys, value_key, strict=False)
+            if "is_init" in data_root.keys():
+                # We need to mark the first element of the "next" td as being an init step for RNNs
+                #  otherwise, consecutive elements in the sequence will be considered as part of the same
+                #  trajectory, even if they're not.
+                data_next["is_init"] = data_next["is_init"] | data_root["is_init"]
             data_in = torch.stack(
                 [data_root, data_next],
                 0,
@@ -1278,6 +1289,16 @@ class GAE(ValueEstimatorBase):
       in the input tensordict, the GAE module will ignore the calls to the value
       network (if any) and use the provided value instead.
 
+    .. note:: GAE can be used with value networks that rely on recurrent neural networks, provided that the
+        init markers (`"is_init"`) and terminated / truncated markers are properly set.
+        If `shifted=True`, the trajectory batch will be flattened and the last step of each trajectory will
+        be placed within the flat tensordict after the last step from the root, such that each trajectory has
+        `T+1` elements. If `shifted=False`, the root and `"next"` trajecotries will be stacked and the value
+        network will be called with `vmap` over the stack of trajectories. Because RNNs require fair amount of
+        control flow, they are currently not compatible with `torch.vmap` and, as such, the `deactivate_vmap` option
+        must be turned on in these cases.
+        Similarly, if `shifted=False`, the `"is_init"` entry of the root tensordict will be copied onto the
+        `"is_init"` of the `"next"` entry, such that trajectories are well separated both for root and `"next"` data.
     """
 
     def __init__(
