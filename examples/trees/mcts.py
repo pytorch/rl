@@ -72,7 +72,8 @@ def tree_format_fn(tree):
 
 def get_best_move(fen, mcts_steps, rollout_steps):
     root = env.reset(TensorDict({"fen": fen}))
-    tree = torchrl.modules.mcts.MCTS(forest, root, env, mcts_steps, rollout_steps)
+    mcts = torchrl.modules.mcts.MCTS(mcts_steps, rollout_steps)
+    tree = mcts(forest, root, env)
     moves = []
 
     for subtree in tree.subtree:
@@ -96,7 +97,7 @@ def get_best_move(fen, mcts_steps, rollout_steps):
     return moves[0][1]
 
 
-for idx in range(3):
+for idx in range(30):
     print("==========")
     print(idx)
     print("==========")
