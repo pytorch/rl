@@ -6,15 +6,13 @@
 import torch
 import torchrl
 from tensordict import TensorDict, TensorDictBase
-from tensordict.nn import TensorDictModuleBase
+from torch import nn
 
 from torchrl.data.map import MCTSForest, Tree
 from torchrl.envs import EnvBase
 
-C = 2.0**0.5
 
-
-class MCTS(TensorDictModuleBase):
+class MCTS(nn.Module):
     """Monte-Carlo tree search.
 
     Attributes:
@@ -129,6 +127,7 @@ class MCTS(TensorDictModuleBase):
 
         parent_visits = tree.visits
         reward_sum = reward_sum.squeeze(-1)
+        C = 2.0**0.5
         priority = (reward_sum + C * torch.sqrt(torch.log(parent_visits))) / visits
         priority[visits == 0] = float("inf")
         return priority
