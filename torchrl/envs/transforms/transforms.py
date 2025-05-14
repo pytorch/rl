@@ -7308,12 +7308,13 @@ class RewardSum(Transform):
         return reward_spec
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        time_dim = [i for i, name in enumerate(tensordict.names) if name == "time"]
-        if not time_dim:
+        try:
+            time_dim = list(tensordict.names).index("time")
+        except ValueError:
             raise ValueError(
                 "At least one dimension of the tensordict must be named 'time' in offline mode"
             )
-        time_dim = time_dim[0] - 1
+        time_dim = time_dim - 1
         for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
             reward = tensordict[in_key]
             cumsum = reward.cumsum(time_dim)
