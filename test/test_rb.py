@@ -870,7 +870,9 @@ class TestStorages:
             "`TensorStorage._rand_given_ndim` can be removed."
         )
 
-    @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
+    @pytest.mark.parametrize(
+        "storage_type", [partial(LazyTensorStorage, empty_lazy=True), LazyMemmapStorage]
+    )
     def test_extend_lazystack(self, storage_type):
 
         rb = ReplayBuffer(
@@ -881,7 +883,8 @@ class TestStorages:
         td2 = TensorDict(a=torch.rand(5, 3, 8), batch_size=5)
         ltd = LazyStackedTensorDict(td1, td2, stack_dim=1)
         rb.extend(ltd)
-        rb.sample(3)
+        s = rb.sample(3)
+        assert isinstance(s, LazyStackedTensorDict)
         assert len(rb) == 5
 
     @pytest.mark.parametrize("device_data", get_default_devices())
