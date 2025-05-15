@@ -130,6 +130,8 @@ class SACLoss(LossModule):
             valid, non-terminating next states. If ``True``, it is assumed that the done state can be broadcast to the
             shape of the data and that masking the data results in a valid data structure. Among other things, this may
             not be true in MARL settings or when using RNNs. Defaults to ``False``.
+        deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
+            Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -334,6 +336,7 @@ class SACLoss(LossModule):
         separate_losses: bool = False,
         reduction: str = None,
         skip_done_states: bool = False,
+        deactivate_vmap: bool = False,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -344,6 +347,7 @@ class SACLoss(LossModule):
 
         # Actor
         self.delay_actor = delay_actor
+        self.deactivate_vmap = deactivate_vmap
         self.convert_to_functional(
             actor_network,
             "actor_network",
@@ -445,11 +449,16 @@ class SACLoss(LossModule):
 
     def _make_vmap(self):
         self._vmap_qnetworkN0 = _vmap_func(
-            self.qvalue_network, (None, 0), randomness=self.vmap_randomness
+            self.qvalue_network,
+            (None, 0),
+            randomness=self.vmap_randomness,
+            pseudo_vmap=self.deterministic_vmap,
         )
         if self._version == 1:
             self._vmap_qnetwork00 = _vmap_func(
-                self.qvalue_network, randomness=self.vmap_randomness
+                self.qvalue_network,
+                randomness=self.vmap_randomness,
+                pseudo_vmap=self.deterministic_vmap,
             )
 
     @property
@@ -922,6 +931,8 @@ class DiscreteSACLoss(LossModule):
             valid, non-terminating next states. If ``True``, it is assumed that the done state can be broadcast to the
             shape of the data and that masking the data results in a valid data structure. Among other things, this may
             not be true in MARL settings or when using RNNs. Defaults to ``False``.
+        deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
+            Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -1098,6 +1109,7 @@ class DiscreteSACLoss(LossModule):
         separate_losses: bool = False,
         reduction: str = None,
         skip_done_states: bool = False,
+        deactivate_vmap: bool = False,
     ):
         if reduction is None:
             reduction = "mean"
@@ -1110,6 +1122,7 @@ class DiscreteSACLoss(LossModule):
             "actor_network",
             create_target_params=self.delay_actor,
         )
+        self.deactivate_vmap = deactivate_vmap
         if separate_losses:
             # we want to make sure there are no duplicates in the params: the
             # params of critic must be refs to actor if they're shared
@@ -1184,7 +1197,10 @@ class DiscreteSACLoss(LossModule):
 
     def _make_vmap(self):
         self._vmap_qnetworkN0 = _vmap_func(
-            self.qvalue_network, (None, 0), randomness=self.vmap_randomness
+            self.qvalue_network,
+            (None, 0),
+            randomness=self.vmap_randomness,
+            pseudo_vmap=self.deactivate_vmap,
         )
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
