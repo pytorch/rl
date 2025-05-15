@@ -452,13 +452,13 @@ class SACLoss(LossModule):
             self.qvalue_network,
             (None, 0),
             randomness=self.vmap_randomness,
-            pseudo_vmap=self.deterministic_vmap,
+            pseudo_vmap=self.deactivate_vmap,
         )
         if self._version == 1:
             self._vmap_qnetwork00 = _vmap_func(
                 self.qvalue_network,
                 randomness=self.vmap_randomness,
-                pseudo_vmap=self.deterministic_vmap,
+                pseudo_vmap=self.deactivate_vmap,
             )
 
     @property
