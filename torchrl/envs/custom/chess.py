@@ -93,6 +93,9 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
         The action space is structured as a categorical distribution over all possible SAN moves, with the legal moves
         being a subset of this space. The environment uses a mask to ensure only legal moves are selected.
 
+    .. note:: You can reset the env at a given state by passing `"fen_reset"` or `"pgn_reset"` to the TensorDict passed
+        to the reset method.
+
     Examples:
         >>> import torch
         >>> from torchrl.envs import ChessEnv
@@ -322,7 +325,7 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
         self.stateful = stateful
 
         # state_spec is loosely defined as such - it's not really an issue that extra keys
-        # can go missing but it allows us to reset the env using fen passed to the reset
+        # can go missing, but it allows us to reset the env using fen passed to the reset
         # method.
         self.full_state_spec = self.full_observation_spec.clone()
 
@@ -374,11 +377,11 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
         if tensordict is not None:
             dest = tensordict.empty()
             if self.include_fen:
-                fen = tensordict.get("fen", None)
+                fen = tensordict.get("fen_reset", None)
                 if fen is not None:
                     fen = fen.data
             elif self.include_pgn:
-                pgn = tensordict.get("pgn", None)
+                pgn = tensordict.get("pgn_reset", None)
                 if pgn is not None:
                     pgn = pgn.data
         else:

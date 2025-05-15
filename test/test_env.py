@@ -4083,7 +4083,7 @@ class TestChessEnv:
             stateful=stateful, include_pgn=include_pgn, include_fen=include_fen
         )
         fen = "5k2/4r3/8/8/8/1Q6/2K5/8 w - - 0 1"
-        td = env.reset(TensorDict({"fen": fen}))
+        td = env.reset(TensorDict({"fen_reset": fen}))
         if include_fen:
             assert td["fen"] == fen
             assert env.board.fen() == fen
@@ -4097,7 +4097,7 @@ class TestChessEnv:
             stateful=stateful, include_pgn=include_pgn, include_fen=include_fen
         )
         fen = "5k2/4r3/8/8/8/1Q6/2K5/8 b - - 0 1"
-        td = env.reset(TensorDict({"fen": fen}))
+        td = env.reset(TensorDict({"fen_reset": fen}))
         assert td["fen"] == fen
         assert env.board.fen() == fen
         assert td["turn"] == env.lib.BLACK
@@ -4111,7 +4111,7 @@ class TestChessEnv:
         )
         fen = "1R3k2/2R5/8/8/8/8/2K5/8 b - - 0 1"
         with pytest.raises(ValueError) as e_info:
-            env.reset(TensorDict({"fen": fen}))
+            env.reset(TensorDict({"fen_reset": fen}))
 
         assert "Cannot reset to a fen that is a gameover state" in str(e_info)
 
@@ -4181,7 +4181,7 @@ class TestChessEnv:
         if reset_without_fen:
             td = TensorDict({"fen": fen})
         else:
-            td = env.reset(TensorDict({"fen": fen}))
+            td = env.reset(TensorDict({"fen_reset": fen}))
             assert td["turn"] == expected_turn
 
         td["action"] = env._san_moves.index(move)
@@ -4230,16 +4230,18 @@ class TestChessEnv:
         ]
         for fen, num_legal_moves in cases:
             # Load the state by fen.
-            td = env.reset(TensorDict({"fen": fen}))
+            td = env.reset(TensorDict({"fen_reset": fen}))
             assert td["fen"] == fen
             assert td["action_mask"].sum() == num_legal_moves
+
             # Reset to initial state just to make sure that the next reset
             # actually changes the state.
             assert env.reset()["action_mask"].sum() == 20
+
             # Load the state by fen hash and make sure it gives the same output
             # as before.
             td_check = env.reset(td.select("fen_hash"))
-            assert (td_check == td).all()
+            assert assert_allclose_td(td_check, td, intersection=True)
 
     @pytest.mark.parametrize("include_fen", [False, True])
     @pytest.mark.parametrize("include_pgn", [False, True])

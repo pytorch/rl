@@ -1173,10 +1173,7 @@ but got an object of type {type(transform)}."""
     def _reset(self, tensordict: TensorDictBase | None = None, **kwargs):
         if tensordict is not None:
             # We must avoid modifying the original tensordict so a shallow copy is necessary.
-            # We just select the input data and reset signal, which is all we need.
-            tensordict = tensordict.select(
-                *self.reset_keys, *self.state_spec.keys(True, True), strict=False
-            )
+            tensordict = tensordict.copy()
         # We always call _reset_env_preprocess, even if tensordict is None - that way one can augment that
         # method to do any pre-reset operation.
         # By default, within _reset_env_preprocess we will skip the inv call when tensordict is None.
@@ -7225,6 +7222,7 @@ class RewardSum(Transform):
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
         """Resets episode rewards."""
+        print(f'{tensordict=}')
         for in_key, reset_key, out_key in _zip_strict(
             self.in_keys, self.reset_keys, self.out_keys
         ):

@@ -2782,9 +2782,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             # Therefore, maybe_reset tells reset to temporarily hide the non-reset keys.
             # To make step_and_maybe_reset handle custom reset states, some version of TensorDictPrimer should be used.
             tensordict_reset = self._reset(
-                tensordict.select(*self.reset_keys, strict=False), **kwargs
+                tensordict.exclude(*self.state_keys), **kwargs
             )
         else:
+            print('tensordict', tensordict)
             tensordict_reset = self._reset(tensordict, **kwargs)
         # We assume that this is done properly
         # if reset.device != self.device:
@@ -3634,7 +3635,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         """
         any_done = self.any_done(tensordict)
         if any_done:
-            tensordict = self.reset(tensordict, select_reset_only=True)
+            tensordict = self.reset(tensordict)
         return tensordict
 
     def empty_cache(self):
