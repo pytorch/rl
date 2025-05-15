@@ -579,6 +579,7 @@ def _pseudo_vmap(
         return (x for _ in range(1000))
 
     def _stack(d, x):
+        print('stacking on', d)
         if d is not None:
             return torch.stack(list(x), d)
         return x
