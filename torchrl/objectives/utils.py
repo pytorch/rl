@@ -574,7 +574,6 @@ def _pseudo_vmap(
 
     def _unbind(d, x):
         if d is not None and hasattr(x, "unbind"):
-            print('unbinding', x)
             return x.unbind(d)
         # Generator to reprod the value
         return (x for _ in range(1000))
