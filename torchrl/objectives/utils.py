@@ -574,6 +574,7 @@ def _pseudo_vmap(
 
     def _unbind(d, x):
         if d is not None and hasattr(x, "unbind"):
+            print('unbinding', x)
             return x.unbind(d)
         # Generator to reprod the value
         return (x for _ in range(1000))
@@ -584,7 +585,7 @@ def _pseudo_vmap(
         return x
 
     @functools.wraps(func)
-    def new_func(*args, **kwargs):
+    def new_func(*args, in_dims=in_dims, out_dims=out_dims, **kwargs):
         with _exclude_td_from_pytree():
             # Unbind inputs
             vs = zip(*tuple(tree_map(_unbind, in_dims, args)))
