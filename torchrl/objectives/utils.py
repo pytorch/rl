@@ -536,9 +536,11 @@ def _vmap_func(module, *args, func=None, pseudo_vmap: bool = False, **kwargs):
             module_args = module_args_params[:-1]
             with params.to_module(module):
                 if func is None:
-                    return module(*module_args)
+                    r = module(*module_args)
                 else:
-                    return getattr(module, func)(*module_args)
+                    r = getattr(module, func)(*module_args)
+                print(f'{id(r)=}')
+                return r
 
         if not pseudo_vmap:
             return vmap(decorated_module, *args, **kwargs)  # noqa: TOR101
@@ -579,8 +581,10 @@ def _pseudo_vmap(
         return (x for _ in range(1000))
 
     def _stack(d, x):
-        print('stacking on', d)
+        print('stacking on', d, x)
         if d is not None:
+            x = list(x)
+            assert x[0] is not x[1]
             return torch.stack(list(x), d)
         return x
 
