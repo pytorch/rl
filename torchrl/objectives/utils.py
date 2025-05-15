@@ -7,6 +7,7 @@ from __future__ import annotations
 import functools
 import re
 import warnings
+from copy import copy
 from enum import Enum
 from typing import Any, Callable, Iterable
 
@@ -539,7 +540,6 @@ def _vmap_func(module, *args, func=None, pseudo_vmap: bool = False, **kwargs):
                     r = module(*module_args)
                 else:
                     r = getattr(module, func)(*module_args)
-                print(f'{id(r)=}')
                 return r
 
         if not pseudo_vmap:
@@ -578,10 +578,9 @@ def _pseudo_vmap(
         if d is not None and hasattr(x, "unbind"):
             return x.unbind(d)
         # Generator to reprod the value
-        return (x for _ in range(1000))
+        return (copy(x) for _ in range(1000))
 
     def _stack(d, x):
-        print('stacking on', d, x)
         if d is not None:
             x = list(x)
             assert x[0] is not x[1]

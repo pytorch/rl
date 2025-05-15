@@ -273,7 +273,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         """
         raise NotImplementedError
 
-    def     convert_to_functional(
+    def convert_to_functional(
         self,
         module: TensorDictModule,
         module_name: str,
