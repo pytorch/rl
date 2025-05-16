@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.8.0+36f34da) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.8.0+60d8b1a) &#x25BC</span></a>
     </div>
     
 
@@ -506,6 +506,7 @@
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">_sort_keys</span><span class="p">,</span>
+    <span class="n">_terminated_or_truncated</span><span class="p">,</span>
     <span class="n">_update_during_reset</span><span class="p">,</span>
     <span class="n">make_composite_from_td</span><span class="p">,</span>
     <span class="n">step_mdp</span><span class="p">,</span>
@@ -11607,6 +11608,240 @@
 
 <div class="viewcode-block" id="Timer.forward"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.Timer.html#torchrl.envs.transforms.Timer.forward">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="n">FORWARD_NOT_IMPLEMENTED</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="ConditionalPolicySwitch"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.ConditionalPolicySwitch.html#torchrl.envs.transforms.ConditionalPolicySwitch">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">ConditionalPolicySwitch</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A transform that conditionally switches between policies based on a specified condition.</span>
+
+<span class="sd">    This transform evaluates a condition on the data returned by the environment&#39;s `step` method.</span>
+<span class="sd">    If the condition is met, it applies a specified policy to the data. Otherwise, the data is</span>
+<span class="sd">    returned unaltered. This is useful for scenarios where different policies need to be applied</span>
+<span class="sd">    based on certain criteria, such as alternating turns in a game.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        policy (Callable[[TensorDictBase], TensorDictBase]):</span>
+<span class="sd">            The policy to be applied when the condition is met. This should be a callable that</span>
+<span class="sd">            takes a `TensorDictBase` and returns a `TensorDictBase`.</span>
+<span class="sd">        condition (Callable[[TensorDictBase], bool]):</span>
+<span class="sd">            A callable that takes a `TensorDictBase` and returns a boolean or a tensor indicating</span>
+<span class="sd">            whether the policy should be applied.</span>
+
+<span class="sd">    .. warning:: This transform must have a parent environment.</span>
+
+<span class="sd">    .. note:: Ideally, it should be the last transform  in the stack. If the policy requires transformed</span>
+<span class="sd">        data (e.g., images), and this transform  is applied before those transformations, the policy will</span>
+<span class="sd">        not receive the transformed data.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; from tensordict.nn import TensorDictModule as Mod</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import GymEnv, ConditionalPolicySwitch, Compose, StepCounter</span>
+<span class="sd">        &gt;&gt;&gt; # Create a CartPole environment. We&#39;ll be looking at the obs: if the first element of the obs is greater than</span>
+<span class="sd">        &gt;&gt;&gt; # 0 (left position) we do a right action (action=0) using the switch policy. Otherwise, we use our main</span>
+<span class="sd">        &gt;&gt;&gt; # policy which does a left action.</span>
+<span class="sd">        &gt;&gt;&gt; base_env = GymEnv(&quot;CartPole-v1&quot;, categorical_action_encoding=True)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; policy = Mod(lambda: torch.ones((), dtype=torch.int64), in_keys=[], out_keys=[&quot;action&quot;])</span>
+<span class="sd">        &gt;&gt;&gt; policy_switch = Mod(lambda: torch.zeros((), dtype=torch.int64), in_keys=[], out_keys=[&quot;action&quot;])</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; cond = lambda td: td.get(&quot;observation&quot;)[..., 0] &gt;= 0</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; env = base_env.append_transform(</span>
+<span class="sd">        ...     Compose(</span>
+<span class="sd">        ...         # We use two step counters to show that one counts the global steps, whereas the other</span>
+<span class="sd">        ...         # only counts the steps where the main policy is executed</span>
+<span class="sd">        ...         StepCounter(step_count_key=&quot;step_count_total&quot;),</span>
+<span class="sd">        ...         ConditionalPolicySwitch(condition=cond, policy=policy_switch),</span>
+<span class="sd">        ...         StepCounter(step_count_key=&quot;step_count_main&quot;),</span>
+<span class="sd">        ...     )</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; env.set_seed(0)</span>
+<span class="sd">        &gt;&gt;&gt; torch.manual_seed(0)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; r = env.rollout(100, policy=policy)</span>
+<span class="sd">        &gt;&gt;&gt; print(&quot;action&quot;, r[&quot;action&quot;])</span>
+<span class="sd">        action tensor([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])</span>
+<span class="sd">        &gt;&gt;&gt; print(&quot;obs&quot;, r[&quot;observation&quot;])</span>
+<span class="sd">        obs tensor([[ 0.0322, -0.1540,  0.0111,  0.3190],</span>
+<span class="sd">                [ 0.0299, -0.1544,  0.0181,  0.3280],</span>
+<span class="sd">                [ 0.0276, -0.1550,  0.0255,  0.3414],</span>
+<span class="sd">                [ 0.0253, -0.1558,  0.0334,  0.3596],</span>
+<span class="sd">                [ 0.0230, -0.1569,  0.0422,  0.3828],</span>
+<span class="sd">                [ 0.0206, -0.1582,  0.0519,  0.4117],</span>
+<span class="sd">                [ 0.0181, -0.1598,  0.0629,  0.4469],</span>
+<span class="sd">                [ 0.0156, -0.1617,  0.0753,  0.4891],</span>
+<span class="sd">                [ 0.0130, -0.1639,  0.0895,  0.5394],</span>
+<span class="sd">                [ 0.0104, -0.1665,  0.1058,  0.5987],</span>
+<span class="sd">                [ 0.0076, -0.1696,  0.1246,  0.6685],</span>
+<span class="sd">                [ 0.0047, -0.1732,  0.1463,  0.7504],</span>
+<span class="sd">                [ 0.0016, -0.1774,  0.1715,  0.8459],</span>
+<span class="sd">                [-0.0020,  0.0150,  0.1884,  0.6117],</span>
+<span class="sd">                [-0.0017,  0.2071,  0.2006,  0.3838]])</span>
+<span class="sd">        &gt;&gt;&gt; print(&quot;obs&#39;&quot;, r[&quot;next&quot;, &quot;observation&quot;])</span>
+<span class="sd">        obs&#39; tensor([[ 0.0299, -0.1544,  0.0181,  0.3280],</span>
+<span class="sd">                [ 0.0276, -0.1550,  0.0255,  0.3414],</span>
+<span class="sd">                [ 0.0253, -0.1558,  0.0334,  0.3596],</span>
+<span class="sd">                [ 0.0230, -0.1569,  0.0422,  0.3828],</span>
+<span class="sd">                [ 0.0206, -0.1582,  0.0519,  0.4117],</span>
+<span class="sd">                [ 0.0181, -0.1598,  0.0629,  0.4469],</span>
+<span class="sd">                [ 0.0156, -0.1617,  0.0753,  0.4891],</span>
+<span class="sd">                [ 0.0130, -0.1639,  0.0895,  0.5394],</span>
+<span class="sd">                [ 0.0104, -0.1665,  0.1058,  0.5987],</span>
+<span class="sd">                [ 0.0076, -0.1696,  0.1246,  0.6685],</span>
+<span class="sd">                [ 0.0047, -0.1732,  0.1463,  0.7504],</span>
+<span class="sd">                [ 0.0016, -0.1774,  0.1715,  0.8459],</span>
+<span class="sd">                [-0.0020,  0.0150,  0.1884,  0.6117],</span>
+<span class="sd">                [-0.0017,  0.2071,  0.2006,  0.3838],</span>
+<span class="sd">                [ 0.0105,  0.2015,  0.2115,  0.5110]])</span>
+<span class="sd">        &gt;&gt;&gt; print(&quot;total step count&quot;, r[&quot;step_count_total&quot;].squeeze())</span>
+<span class="sd">        total step count tensor([ 1,  3,  5,  7,  9, 11, 13, 15, 17, 19, 21, 23, 25, 26, 27])</span>
+<span class="sd">        &gt;&gt;&gt; print(&quot;total step with main policy&quot;, r[&quot;step_count_main&quot;].squeeze())</span>
+<span class="sd">        total step with main policy tensor([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14])</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">policy</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">TensorDictBase</span><span class="p">],</span>
+        <span class="n">condition</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="nb">bool</span><span class="p">],</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">([],</span> <span class="p">[])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">&quot;policy&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">policy</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">condition</span> <span class="o">=</span> <span class="n">condition</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_step</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="n">cond</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">condition</span><span class="p">(</span><span class="n">next_tensordict</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cond</span><span class="p">,</span> <span class="p">(</span><span class="nb">bool</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Calling the condition function should return a boolean or a tensor.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cond</span><span class="p">,</span> <span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,)):</span>
+            <span class="k">if</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">cond</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">((</span><span class="mi">1</span><span class="p">,),</span> <span class="p">(),</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">shape</span><span class="p">)):</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;Tensor outputs must have the shape of the tensordict, or contain a single element.&quot;</span>
+                <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">cond</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">cond</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">tensordict</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">cond</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="n">step</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_step&quot;</span><span class="p">,</span> <span class="n">cond</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">step</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">cond</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+                <span class="n">step</span> <span class="o">=</span> <span class="n">step</span><span class="o">.</span><span class="n">view_as</span><span class="p">(</span><span class="n">cond</span><span class="p">)</span>
+            <span class="n">cond</span> <span class="o">=</span> <span class="n">cond</span> <span class="o">&amp;</span> <span class="n">step</span>
+
+            <span class="n">parent</span><span class="p">:</span> <span class="n">TransformedEnv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span>
+            <span class="n">any_done</span><span class="p">,</span> <span class="n">done</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_check_done</span><span class="p">(</span><span class="n">next_tensordict</span><span class="p">)</span>
+            <span class="n">next_td_save</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">any_done</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">or</span> <span class="n">done</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+                    <span class="k">return</span> <span class="n">next_tensordict</span>
+                <span class="k">if</span> <span class="n">parent</span><span class="o">.</span><span class="n">base_env</span><span class="o">.</span><span class="n">batch_locked</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                        <span class="s2">&quot;Cannot run partial steps in a batched locked environment. &quot;</span>
+                        <span class="s2">&quot;Hint: Parallel and Serial envs can be unlocked through a keyword argument in &quot;</span>
+                        <span class="s2">&quot;the constructor.&quot;</span>
+                    <span class="p">)</span>
+                <span class="n">done</span> <span class="o">=</span> <span class="n">done</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">next_tensordict</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+                <span class="n">cond</span> <span class="o">=</span> <span class="n">cond</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">done</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">cond</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">parent</span><span class="o">.</span><span class="n">base_env</span><span class="o">.</span><span class="n">batch_locked</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                        <span class="s2">&quot;Cannot run partial steps in a batched locked environment. &quot;</span>
+                        <span class="s2">&quot;Hint: Parallel and Serial envs can be unlocked through a keyword argument in &quot;</span>
+                        <span class="s2">&quot;the constructor.&quot;</span>
+                    <span class="p">)</span>
+                <span class="n">next_td_save</span> <span class="o">=</span> <span class="n">next_tensordict</span>
+                <span class="n">next_tensordict</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="p">[</span><span class="n">cond</span><span class="p">]</span>
+                <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="n">cond</span><span class="p">]</span>
+
+            <span class="c1"># policy may be expensive or raise an exception when executed with unadequate data so</span>
+            <span class="c1"># we index the td first</span>
+            <span class="n">td</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">(</span>
+                <span class="n">parent</span><span class="o">.</span><span class="n">step_mdp</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">))</span>
+            <span class="p">)</span>
+            <span class="c1"># Mark the partial steps if needed</span>
+            <span class="k">if</span> <span class="n">next_td_save</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">td_new</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">cond</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+                <span class="c1"># TODO: swap with masked_scatter when avail</span>
+                <span class="n">td_new</span><span class="p">[</span><span class="n">cond</span><span class="p">]</span> <span class="o">=</span> <span class="n">td</span>
+                <span class="n">td</span> <span class="o">=</span> <span class="n">td_new</span>
+                <span class="n">td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;_step&quot;</span><span class="p">,</span> <span class="n">cond</span><span class="p">)</span>
+            <span class="n">next_tensordict</span> <span class="o">=</span> <span class="n">parent</span><span class="o">.</span><span class="n">_step</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">next_td_save</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">cond</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">,</span> <span class="n">next_td_save</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">next_tensordict</span>
+        <span class="k">return</span> <span class="n">next_tensordict</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_done</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+        <span class="n">env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span>
+        <span class="k">if</span> <span class="n">env</span><span class="o">.</span><span class="n">_simple_done</span><span class="p">:</span>
+            <span class="n">done</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">_get_str</span><span class="p">(</span><span class="s2">&quot;done&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">done</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">any_done</span> <span class="o">=</span> <span class="n">done</span><span class="o">.</span><span class="n">any</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">any_done</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">any_done</span> <span class="o">=</span> <span class="n">_terminated_or_truncated</span><span class="p">(</span>
+                <span class="n">tensordict</span><span class="p">,</span>
+                <span class="n">full_done_spec</span><span class="o">=</span><span class="n">env</span><span class="o">.</span><span class="n">output_spec</span><span class="p">[</span><span class="s2">&quot;full_done_spec&quot;</span><span class="p">],</span>
+                <span class="n">key</span><span class="o">=</span><span class="s2">&quot;_reset&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">done</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;_reset&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">any_done</span><span class="p">,</span> <span class="n">done</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reset</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="n">cond</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">condition</span><span class="p">(</span><span class="n">tensordict_reset</span><span class="p">)</span>
+        <span class="c1"># TODO: move to validate</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cond</span><span class="p">,</span> <span class="p">(</span><span class="nb">bool</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Calling the condition function should return a boolean or a tensor.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cond</span><span class="p">,</span> <span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,)):</span>
+            <span class="k">if</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">cond</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">((</span><span class="mi">1</span><span class="p">,),</span> <span class="p">(),</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">shape</span><span class="p">)):</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;Tensor outputs must have the shape of the tensordict, or contain a single element.&quot;</span>
+                <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">cond</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">cond</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">tensordict</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">cond</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="n">reset</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_reset&quot;</span><span class="p">,</span> <span class="n">cond</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">reset</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">cond</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+                <span class="n">reset</span> <span class="o">=</span> <span class="n">reset</span><span class="o">.</span><span class="n">view_as</span><span class="p">(</span><span class="n">cond</span><span class="p">)</span>
+            <span class="n">cond</span> <span class="o">=</span> <span class="n">cond</span> <span class="o">&amp;</span> <span class="n">reset</span>
+
+            <span class="n">parent</span><span class="p">:</span> <span class="n">TransformedEnv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span>
+            <span class="n">reset_td_save</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">cond</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+                <span class="n">reset_td_save</span> <span class="o">=</span> <span class="n">tensordict_reset</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+                <span class="n">tensordict_reset</span> <span class="o">=</span> <span class="n">tensordict_reset</span><span class="p">[</span><span class="n">cond</span><span class="p">]</span>
+                <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="n">cond</span><span class="p">]</span>
+
+            <span class="n">td</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">(</span><span class="n">tensordict_reset</span><span class="p">)</span>
+            <span class="c1"># Mark the partial steps if needed</span>
+            <span class="k">if</span> <span class="n">reset_td_save</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">td_new</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">cond</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+                <span class="c1"># TODO: swap with masked_scatter when avail</span>
+                <span class="n">td_new</span><span class="p">[</span><span class="n">cond</span><span class="p">]</span> <span class="o">=</span> <span class="n">td</span>
+                <span class="n">td</span> <span class="o">=</span> <span class="n">td_new</span>
+                <span class="n">td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;_step&quot;</span><span class="p">,</span> <span class="n">cond</span><span class="p">)</span>
+            <span class="n">tensordict_reset</span> <span class="o">=</span> <span class="n">parent</span><span class="o">.</span><span class="n">_step</span><span class="p">(</span><span class="n">td</span><span class="p">)</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="o">*</span><span class="n">parent</span><span class="o">.</span><span class="n">reward_keys</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">reset_td_save</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">cond</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">,</span> <span class="n">reset_td_save</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">tensordict_reset</span>
+
+        <span class="k">return</span> <span class="n">tensordict_reset</span>
+
+<div class="viewcode-block" id="ConditionalPolicySwitch.forward"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.ConditionalPolicySwitch.html#torchrl.envs.transforms.ConditionalPolicySwitch.forward">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="s2">&quot;ConditionalPolicySwitch cannot be called independently, only its step and reset methods are functional.&quot;</span>
+        <span class="p">)</span></div></div>
 </pre></div>
 
              </article>
