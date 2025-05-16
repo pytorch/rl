@@ -852,7 +852,7 @@ On certain Windows machines (Windows 11), one should install the library locally
 For AArch64 machines, the binaries are not yet stored on PyPI so you will need to download them directly from
 the [release page](https://github.com/pytorch/rl/releases/) or install the library via
 ```
-pip3 install git+https://github.com/pytorch/rl@v0.8.0
+pip3 install git+https://github.com/pytorch/rl@v0.8.1
 ```
 
 The **nightly build** can be installed via
@@ -895,7 +895,7 @@ git clone https://github.com/pytorch/rl
 ```
 and don't forget to check out the branch or tag you want to use for the build:
 ```bash
-git checkout v0.8.0
+git checkout v0.8.1
 ```
 
 Go to the directory where you have cloned the torchrl repo and install it (after
