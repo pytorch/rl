@@ -433,12 +433,12 @@
 <dt class="sig sig-object py" id="torchrl.modules.GRUModule">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.modules.</span></span><span class="sig-name descname"><span class="pre">GRUModule</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/tensordict_module/rnn.html#GRUModule"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.GRUModule" title="Permalink to this definition">¶</a></dt>
 <dd><p>An embedder for an GRU module.</p>
-<p>This class adds the following functionality to <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.GRU.html#torch.nn.GRU" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.GRU</span></code></a>:</p>
+<p>This class adds the following functionality to <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.GRU.html#torch.nn.GRU" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.GRU</span></code></a>:</p>
 <ul class="simple">
 <li><p>Compatibility with TensorDict: the hidden states are reshaped to match
 the tensordict batch size.</p></li>
 <li><p>Optional multi-step execution: with torch.nn, one has to choose between
-<a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.GRUCell.html#torch.nn.GRUCell" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.GRUCell</span></code></a> and <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.GRU.html#torch.nn.GRU" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.GRU</span></code></a>, the former being
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.GRUCell.html#torch.nn.GRUCell" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.GRUCell</span></code></a> and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.GRU.html#torch.nn.GRU" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.GRU</span></code></a>, the former being
 compatible with single step inputs and the latter being compatible with
 multi-step. This class enables both usages.</p></li>
 </ul>
@@ -485,8 +485,8 @@ that the hidden values are passed from step to step during a rollout.
 </pre></div>
 </div>
 </p></li>
-<li><p><strong>device</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em> or </em><em>compatible</em>) – the device of the module.</p></li>
-<li><p><strong>gru</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.GRU.html#torch.nn.GRU" title="(in PyTorch v2.7)"><em>torch.nn.GRU</em></a><em>, </em><em>optional</em>) – a GRU instance to be wrapped.
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em> or </em><em>compatible</em>) – the device of the module.</p></li>
+<li><p><strong>gru</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.GRU.html#torch.nn.GRU" title="(in PyTorch v2.7)"><em>torch.nn.GRU</em></a><em>, </em><em>optional</em>) – a GRU instance to be wrapped.
 Exclusive with other nn.GRU arguments.</p></li>
 <li><p><strong>default_recurrent_mode</strong> (<em>bool</em><em>, </em><em>optional</em>) – if provided, the recurrent mode if it hasn’t been overridden
 by the <a class="reference internal" href="torchrl.modules.set_recurrent_mode.html#torchrl.modules.set_recurrent_mode" title="torchrl.modules.set_recurrent_mode"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_recurrent_mode</span></code></a> context manager / decorator.

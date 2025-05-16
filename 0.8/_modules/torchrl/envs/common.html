@@ -3242,12 +3242,25 @@
         <span class="c1"># we iterate over (reset_key, (done_key, truncated_key)) and check that all</span>
         <span class="c1"># values where reset was true now have a done set to False.</span>
         <span class="c1"># If no reset was present, all done and truncated must be False</span>
+
+        <span class="c1"># Once we checked a root, we don&#39;t check its leaves - so keep track of the roots. Fortunately, we sort the done</span>
+        <span class="c1">#  keys in the done_keys_group from root to leaf</span>
+        <span class="n">prefix_complete</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
         <span class="k">for</span> <span class="n">reset_key</span><span class="p">,</span> <span class="n">done_key_group</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reset_keys</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">done_keys_groups</span><span class="p">):</span>
+            <span class="n">skip</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reset_key</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
+                <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">reset_key</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">reset_key</span><span class="p">[:</span><span class="n">i</span><span class="p">]</span> <span class="ow">in</span> <span class="n">prefix_complete</span><span class="p">:</span>
+                        <span class="n">skip</span> <span class="o">=</span> <span class="kc">True</span>
+                        <span class="k">break</span>
+            <span class="k">if</span> <span class="n">skip</span><span class="p">:</span>
+                <span class="k">continue</span>
             <span class="n">reset_value</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">reset_key</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
                 <span class="k">if</span> <span class="n">tensordict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
                 <span class="k">else</span> <span class="kc">None</span>
             <span class="p">)</span>
+            <span class="n">prefix_complete</span><span class="o">.</span><span class="n">add</span><span class="p">(()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reset_key</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="n">reset_key</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
             <span class="k">if</span> <span class="n">reset_value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">for</span> <span class="n">done_key</span> <span class="ow">in</span> <span class="n">done_key_group</span><span class="p">:</span>
                     <span class="n">done_val</span> <span class="o">=</span> <span class="n">tensordict_reset</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">done_key</span><span class="p">)</span>
@@ -4001,11 +4014,8 @@
     <span class="nd">@_cache_value</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_simple_done</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">key_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">full_done_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
-        <span class="n">_simple_done</span> <span class="o">=</span> <span class="n">key_set</span> <span class="o">==</span> <span class="p">{</span>
-            <span class="s2">&quot;done&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;truncated&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;terminated&quot;</span><span class="p">,</span>
-        <span class="p">}</span> <span class="ow">or</span> <span class="n">key_set</span> <span class="o">==</span> <span class="p">{</span><span class="s2">&quot;done&quot;</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">}</span>
+
+        <span class="n">_simple_done</span> <span class="o">=</span> <span class="s2">&quot;done&quot;</span> <span class="ow">in</span> <span class="n">key_set</span> <span class="ow">and</span> <span class="s2">&quot;terminated&quot;</span> <span class="ow">in</span> <span class="n">key_set</span>
         <span class="k">return</span> <span class="n">_simple_done</span>
 
 <div class="viewcode-block" id="EnvBase.any_done"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.any_done">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">any_done</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>

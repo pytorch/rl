@@ -450,7 +450,12 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">RL_WARNINGS</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">step_mdp</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_maybe_get_or_select</span><span class="p">,</span> <span class="n">_vmap_func</span><span class="p">,</span> <span class="n">hold_out_net</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives.utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_maybe_get_or_select</span><span class="p">,</span>
+    <span class="n">_pseudo_vmap</span><span class="p">,</span>
+    <span class="n">_vmap_func</span><span class="p">,</span>
+    <span class="n">hold_out_net</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives.value.functional</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">generalized_advantage_estimate</span><span class="p">,</span>
     <span class="n">td0_return_estimate</span><span class="p">,</span>
@@ -570,6 +575,7 @@
     <span class="n">tensor_keys</span><span class="p">:</span> <span class="n">_AcceptedKeys</span>
     <span class="n">value_network</span><span class="p">:</span> <span class="n">TensorDictModule</span> <span class="o">|</span> <span class="n">Callable</span>
     <span class="n">_vmap_randomness</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">deactivate_vmap</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">advantage_key</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -856,62 +862,81 @@
             <span class="n">value_net</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">value_network</span>
         <span class="n">in_keys</span> <span class="o">=</span> <span class="n">value_net</span><span class="o">.</span><span class="n">in_keys</span>
         <span class="k">if</span> <span class="n">single_call</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">names</span><span class="p">):</span>
-                <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;time&quot;</span><span class="p">:</span>
-                    <span class="n">ndim</span> <span class="o">=</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span>
-                    <span class="k">break</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">ndim</span> <span class="o">=</span> <span class="kc">None</span>
-            <span class="k">if</span> <span class="n">ndim</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="c1"># get data at t and last of t+1</span>
-                <span class="n">idx0</span> <span class="o">=</span> <span class="p">(</span><span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">),)</span> <span class="o">*</span> <span class="p">(</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="nb">slice</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="kc">None</span><span class="p">),)</span>
-                <span class="n">idx</span> <span class="o">=</span> <span class="p">(</span><span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">),)</span> <span class="o">*</span> <span class="p">(</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),)</span>
-                <span class="n">idx_</span> <span class="o">=</span> <span class="p">(</span><span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">),)</span> <span class="o">*</span> <span class="p">(</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="nb">slice</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="kc">None</span><span class="p">),)</span>
-                <span class="n">data_in</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span>
-                    <span class="p">[</span>
-                        <span class="n">data</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">value_key</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
-                        <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">value_key</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)[</span>
-                            <span class="n">idx0</span>
-                        <span class="p">],</span>
-                    <span class="p">],</span>
-                    <span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span>
-                <span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># We are going to flatten the data, then interleave the last observation of each trajectory in between its</span>
+            <span class="c1">#  previous obs (from the root TD) and the first of the next trajectory. Eventually, each trajectory will</span>
+            <span class="c1">#  have T+1 elements (or, for a batch of N trajectories, we will have \Sum_{t=0}^{T-1} length_t + T</span>
+            <span class="c1">#  elements). Then, we can feed that to our RNN which will understand which trajectory is which, pad the data</span>
+            <span class="c1">#  accordingly and process each of them independently.</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">ndim</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">names</span><span class="p">)</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="s2">&quot;time&quot;</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+            <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">RL_WARNINGS</span><span class="p">:</span>
                     <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
                         <span class="s2">&quot;Got a tensordict without a time-marked dimension, assuming time is along the last dimension. &quot;</span>
                         <span class="s2">&quot;This warning can be turned off by setting the environment variable RL_WARNINGS to False.&quot;</span>
                     <span class="p">)</span>
                 <span class="n">ndim</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">ndim</span>
-                <span class="n">idx</span> <span class="o">=</span> <span class="p">(</span><span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">),)</span> <span class="o">*</span> <span class="p">(</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]),)</span>
-                <span class="n">idx_</span> <span class="o">=</span> <span class="p">(</span><span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">),)</span> <span class="o">*</span> <span class="p">(</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span>
-                    <span class="nb">slice</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">],</span> <span class="kc">None</span><span class="p">),</span>
-                <span class="p">)</span>
-                <span class="n">data_in</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span>
-                    <span class="p">[</span>
-                        <span class="n">data</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">value_key</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
-                        <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">value_key</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
-                    <span class="p">],</span>
-                    <span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span>
-                <span class="p">)</span>
+            <span class="n">data_copy</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+            <span class="c1"># we are going to modify the done so let&#39;s clone it</span>
+            <span class="n">done</span> <span class="o">=</span> <span class="n">data_copy</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
 
-            <span class="c1"># next_params should be None or be identical to params</span>
-            <span class="k">if</span> <span class="n">next_params</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">next_params</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">params</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="s2">&quot;the value at t and t+1 cannot be retrieved in a single call without recurring to vmap when both params and next params are passed.&quot;</span>
+            <span class="c1"># Mark the last step of every sequence as done. We do this because flattening would cause the trajectories</span>
+            <span class="c1">#  of different batches to be merged.</span>
+            <span class="n">done</span><span class="p">[(</span><span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">),)</span> <span class="o">*</span> <span class="p">(</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,)]</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">data_copy</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">done</span>
+            <span class="c1"># Reshape to -1 because we cannot guarantee that all dims have the same number of done states</span>
+            <span class="k">with</span> <span class="n">data_copy</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">as</span> <span class="n">data_copy_view</span><span class="p">:</span>
+                <span class="c1"># Interleave next data when done</span>
+                <span class="n">data_copy_select</span> <span class="o">=</span> <span class="n">data_copy_view</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
+                    <span class="o">*</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">value_key</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span>
                 <span class="p">)</span>
-            <span class="k">if</span> <span class="n">params</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">with</span> <span class="n">params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">value_net</span><span class="p">):</span>
+                <span class="n">total_elts</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">data_copy_view</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                    <span class="o">+</span> <span class="n">data_copy_view</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+                <span class="p">)</span>
+                <span class="n">data_in</span> <span class="o">=</span> <span class="n">data_copy_select</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">((</span><span class="n">total_elts</span><span class="p">,))</span>
+                <span class="c1"># we can get the indices of non-done data by adding the shifted done cumsum to an arange</span>
+                <span class="c1">#    traj = [0, 0, 0, 1, 1, 2, 2]</span>
+                <span class="c1">#  arange = [0, 1, 2, 3, 4, 5, 6]</span>
+                <span class="c1">#    done = [0, 0, 1, 0, 1, 0, 1]</span>
+                <span class="c1"># done_cs = [0, 0, 0, 1, 1, 2, 2]</span>
+                <span class="c1"># indices = [0, 1, 2, 4, 5, 7, 8]</span>
+                <span class="n">done_view</span> <span class="o">=</span> <span class="n">data_copy_view</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+                <span class="n">done_cs</span> <span class="o">=</span> <span class="n">done_view</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+                <span class="n">done_cs</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">done_cs</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">((</span><span class="mi">1</span><span class="p">,)),</span> <span class="n">done_cs</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+                <span class="n">indices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">done_cs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="n">done_cs</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+                <span class="n">indices</span> <span class="o">=</span> <span class="n">indices</span> <span class="o">+</span> <span class="n">done_cs</span>
+                <span class="n">data_in</span><span class="p">[</span><span class="n">indices</span><span class="p">]</span> <span class="o">=</span> <span class="n">data_copy_select</span>
+                <span class="c1"># To get the indices of the extra data, we can mask indices with done_view and add 1</span>
+                <span class="n">indices_interleaved</span> <span class="o">=</span> <span class="n">indices</span><span class="p">[</span><span class="n">done_view</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span>
+                <span class="c1"># assert not set(indices_interleaved.tolist()).intersection(indices.tolist())</span>
+                <span class="n">data_in</span><span class="p">[</span><span class="n">indices_interleaved</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">data_copy_view</span><span class="p">[</span><span class="n">done_view</span><span class="p">]</span>
+                    <span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">)</span>
+                    <span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">value_key</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="k">if</span> <span class="n">next_params</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">next_params</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">params</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="s2">&quot;the value at t and t+1 cannot be retrieved in a single call without recurring to vmap when both params and next params are passed.&quot;</span>
+                    <span class="p">)</span>
+                <span class="k">if</span> <span class="n">params</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">with</span> <span class="n">params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">value_net</span><span class="p">):</span>
+                        <span class="n">value_est</span> <span class="o">=</span> <span class="n">value_net</span><span class="p">(</span><span class="n">data_in</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">value_key</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
                     <span class="n">value_est</span> <span class="o">=</span> <span class="n">value_net</span><span class="p">(</span><span class="n">data_in</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">value_key</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">value_est</span> <span class="o">=</span> <span class="n">value_net</span><span class="p">(</span><span class="n">data_in</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">value_key</span><span class="p">)</span>
-            <span class="n">value</span><span class="p">,</span> <span class="n">value_</span> <span class="o">=</span> <span class="n">value_est</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="n">value_est</span><span class="p">[</span><span class="n">idx_</span><span class="p">]</span>
+                <span class="n">value</span><span class="p">,</span> <span class="n">value_</span> <span class="o">=</span> <span class="n">value_est</span><span class="p">[</span><span class="n">indices</span><span class="p">],</span> <span class="n">value_est</span><span class="p">[</span><span class="n">indices</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">view_as</span><span class="p">(</span><span class="n">done</span><span class="p">)</span>
+            <span class="n">value_</span> <span class="o">=</span> <span class="n">value_</span><span class="o">.</span><span class="n">view_as</span><span class="p">(</span><span class="n">done</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
+            <span class="n">data_root</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">value_key</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            <span class="n">data_next</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">value_key</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s2">&quot;is_init&quot;</span> <span class="ow">in</span> <span class="n">data_root</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                <span class="c1"># We need to mark the first element of the &quot;next&quot; td as being an init step for RNNs</span>
+                <span class="c1">#  otherwise, consecutive elements in the sequence will be considered as part of the same</span>
+                <span class="c1">#  trajectory, even if they&#39;re not.</span>
+                <span class="n">data_next</span><span class="p">[</span><span class="s2">&quot;is_init&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">data_next</span><span class="p">[</span><span class="s2">&quot;is_init&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="n">data_root</span><span class="p">[</span><span class="s2">&quot;is_init&quot;</span><span class="p">]</span>
             <span class="n">data_in</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
-                <span class="p">[</span>
-                    <span class="n">data</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">value_key</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
-                    <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">value_key</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
-                <span class="p">],</span>
+                <span class="p">[</span><span class="n">data_root</span><span class="p">,</span> <span class="n">data_next</span><span class="p">],</span>
                 <span class="mi">0</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="k">if</span> <span class="p">(</span><span class="n">params</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span> <span class="o">^</span> <span class="p">(</span><span class="n">next_params</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">):</span>
@@ -920,11 +945,18 @@
                 <span class="p">)</span>
             <span class="k">elif</span> <span class="n">params</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">params_stack</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">params</span><span class="p">,</span> <span class="n">next_params</span><span class="p">],</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
-                <span class="n">data_out</span> <span class="o">=</span> <span class="n">_vmap_func</span><span class="p">(</span><span class="n">value_net</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">randomness</span><span class="o">=</span><span class="n">vmap_randomness</span><span class="p">)(</span>
-                    <span class="n">data_in</span><span class="p">,</span> <span class="n">params_stack</span>
-                <span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
+                <span class="n">data_out</span> <span class="o">=</span> <span class="n">_vmap_func</span><span class="p">(</span>
+                    <span class="n">value_net</span><span class="p">,</span>
+                    <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+                    <span class="n">randomness</span><span class="o">=</span><span class="n">vmap_randomness</span><span class="p">,</span>
+                    <span class="n">pseudo_vmap</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">deactivate_vmap</span><span class="p">,</span>
+                <span class="p">)(</span><span class="n">data_in</span><span class="p">,</span> <span class="n">params_stack</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">deactivate_vmap</span><span class="p">:</span>
                 <span class="n">data_out</span> <span class="o">=</span> <span class="n">vmap</span><span class="p">(</span><span class="n">value_net</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,),</span> <span class="n">randomness</span><span class="o">=</span><span class="n">vmap_randomness</span><span class="p">)(</span><span class="n">data_in</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">data_out</span> <span class="o">=</span> <span class="n">_pseudo_vmap</span><span class="p">(</span><span class="n">value_net</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,),</span> <span class="n">randomness</span><span class="o">=</span><span class="n">vmap_randomness</span><span class="p">)(</span>
+                    <span class="n">data_in</span>
+                <span class="p">)</span>
             <span class="n">value_est</span> <span class="o">=</span> <span class="n">data_out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">value_key</span><span class="p">)</span>
             <span class="n">value</span><span class="p">,</span> <span class="n">value_</span> <span class="o">=</span> <span class="n">value_est</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">value_est</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
         <span class="n">data</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">value_key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
@@ -1663,6 +1695,8 @@
 <span class="sd">        auto_reset_env (bool, optional): if ``True``, the last ``&quot;next&quot;`` state</span>
 <span class="sd">            of the episode isn&#39;t valid, so the GAE calculation will use the ``value``</span>
 <span class="sd">            instead of ``next_value`` to bootstrap truncated episodes.</span>
+<span class="sd">        deactivate_vmap (bool, optional): if ``True``, no vmap call will be used, and</span>
+<span class="sd">            vectorized maps will be replaced with simple for loops. Defaults to ``False``.</span>
 
 <span class="sd">    GAE will return an :obj:`&quot;advantage&quot;` entry containing the advantage value. It will also</span>
 <span class="sd">    return a :obj:`&quot;value_target&quot;` entry with the return value that is to be used</span>
@@ -1676,6 +1710,16 @@
 <span class="sd">      in the input tensordict, the GAE module will ignore the calls to the value</span>
 <span class="sd">      network (if any) and use the provided value instead.</span>
 
+<span class="sd">    .. note:: GAE can be used with value networks that rely on recurrent neural networks, provided that the</span>
+<span class="sd">        init markers (`&quot;is_init&quot;`) and terminated / truncated markers are properly set.</span>
+<span class="sd">        If `shifted=True`, the trajectory batch will be flattened and the last step of each trajectory will</span>
+<span class="sd">        be placed within the flat tensordict after the last step from the root, such that each trajectory has</span>
+<span class="sd">        `T+1` elements. If `shifted=False`, the root and `&quot;next&quot;` trajecotries will be stacked and the value</span>
+<span class="sd">        network will be called with `vmap` over the stack of trajectories. Because RNNs require fair amount of</span>
+<span class="sd">        control flow, they are currently not compatible with `torch.vmap` and, as such, the `deactivate_vmap` option</span>
+<span class="sd">        must be turned on in these cases.</span>
+<span class="sd">        Similarly, if `shifted=False`, the `&quot;is_init&quot;` entry of the root tensordict will be copied onto the</span>
+<span class="sd">        `&quot;is_init&quot;` of the `&quot;next&quot;` entry, such that trajectories are well separated both for root and `&quot;next&quot;` data.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
@@ -1695,6 +1739,7 @@
         <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">time_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">auto_reset_env</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">deactivate_vmap</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
             <span class="n">shifted</span><span class="o">=</span><span class="n">shifted</span><span class="p">,</span>
@@ -1722,6 +1767,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">vectorized</span> <span class="o">=</span> <span class="n">vectorized</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">time_dim</span> <span class="o">=</span> <span class="n">time_dim</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">auto_reset_env</span> <span class="o">=</span> <span class="n">auto_reset_env</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">deactivate_vmap</span> <span class="o">=</span> <span class="n">deactivate_vmap</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">vectorized</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>

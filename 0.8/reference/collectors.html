@@ -425,7 +425,8 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="torchrl-collectors-package">
+  <p>from torchrl.collectors import SyncDataCollector.. currentmodule:: torchrl.collectors</p>
+<section id="torchrl-collectors-package">
 <h1>torchrl.collectors package<a class="headerlink" href="#torchrl-collectors-package" title="Permalink to this heading">¶</a></h1>
 <p id="ref-collectors">Data collectors are somewhat equivalent to pytorch dataloaders, except that (1) they
 collect data over non-static data sources and (2) the data is collected using a model
@@ -438,10 +439,10 @@ state, and/or after a predefined number of steps.</p>
 <p>Because data collection is a potentially compute heavy process, it is crucial to
 configure the execution hyperparameters appropriately.
 The first parameter to take into consideration is whether the data collection should
-occur serially with the optimization step or in parallel. The <a class="reference internal" href="generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector" title="torchrl.collectors.SyncDataCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SyncDataCollector</span></code></a>
-class will execute the data collection on the training worker. The <a class="reference internal" href="generated/torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector" title="torchrl.collectors.MultiSyncDataCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code></a>
+occur serially with the optimization step or in parallel. The <code class="xref py py-obj docutils literal notranslate"><span class="pre">SyncDataCollector</span></code>
+class will execute the data collection on the training worker. The <code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code>
 will split the workload across an number of workers and aggregate the results that
-will be delivered to the training worker. Finally, the <a class="reference internal" href="generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector" title="torchrl.collectors.MultiaSyncDataCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code></a> will
+will be delivered to the training worker. Finally, the <code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code> will
 execute the data collection on several workers and deliver the first batch of results
 that it can gather. This execution will occur continuously and concomitantly with
 the training of the networks: this implies that the weights of the policy that
@@ -449,7 +450,7 @@ is used for the data collection may slightly lag the configuration of the policy
 on the training worker. Therefore, although this class may be the fastest to collect
 data, it comes at the price of being suitable only in settings where it is acceptable
 to gather data asynchronously (e.g. off-policy RL or curriculum RL).
-For remotely executed rollouts (<a class="reference internal" href="generated/torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector" title="torchrl.collectors.MultiSyncDataCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code></a> or <a class="reference internal" href="generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector" title="torchrl.collectors.MultiaSyncDataCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code></a>)
+For remotely executed rollouts (<code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code> or <code class="xref py py-obj docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code>)
 it is necessary to synchronise the weights of the remote policy with the weights
 from the training worker using either the <cite>collector.update_policy_weights_()</cite> or
 by setting <cite>update_at_each_batch=True</cite> in the constructor.</p>
@@ -570,7 +571,7 @@ the policy or to remote inference workers, as well as formatting / gathering the
 Every collector – server or worker – should have a <cite>WeightUpdaterBase</cite> instance to handle the
 weight synchronization with the policy.
 Even the simplest collectors use a <a class="reference internal" href="generated/torchrl.collectors.VanillaWeightUpdater.html#torchrl.collectors.VanillaWeightUpdater" title="torchrl.collectors.VanillaWeightUpdater"><code class="xref py py-class docutils literal notranslate"><span class="pre">VanillaWeightUpdater</span></code></a> instance to update the policy
-state-dict (assuming it is a <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a> instance).</p>
+state-dict (assuming it is a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a> instance).</p>
 </section>
 <section id="extending-the-updater-class">
 <h3>Extending the Updater Class<a class="headerlink" href="#extending-the-updater-class" title="Permalink to this heading">¶</a></h3>
@@ -660,6 +661,36 @@ will work:</p>
 <p>Using replay buffers that sample trajectories with <a class="reference internal" href="generated/torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector" title="torchrl.collectors.MultiSyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncDataCollector</span></code></a>
 isn’t currently fully supported as the data batches can come from any worker and in most cases consecutive
 batches written in the buffer won’t come from the same source (thereby interrupting the trajectories).</p>
+</section>
+<section id="running-the-collector-asynchronously">
+<h2>Running the Collector Asynchronously<a class="headerlink" href="#running-the-collector-asynchronously" title="Permalink to this heading">¶</a></h2>
+<p>Passing replay buffers to a collector allows us to start the collection and get rid of the iterative nature of the
+collector.
+If you want to run a data collector in the background, simply run <code class="xref py py-meth docutils literal notranslate"><span class="pre">start()</span></code>:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span> <span class="o">=</span> <span class="n">SyncDataCollector</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">replay_buffer</span><span class="o">=</span><span class="n">rb</span><span class="p">)</span> <span class="c1"># pass your replay buffer</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># little pause</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Start training</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">optim_steps</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">data</span> <span class="o">=</span> <span class="n">rb</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>  <span class="c1"># Sampling from the replay buffer</span>
+<span class="gp">... </span>    <span class="c1"># rest of the training loop</span>
+</pre></div>
+</div>
+<p>Single-process collectors (<a class="reference internal" href="generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector" title="torchrl.collectors.SyncDataCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">SyncDataCollector</span></code></a>) will run the process using multithreading,
+so be mindful of Python’s GIL and related multithreading restrictions.</p>
+<p>Multiprocessed collectors will on the other hand let the child processes handle the filling of the buffer on their own,
+which truly decouples the data collection and training.</p>
+<p>Data collectors that have been started with <cite>start()</cite> should be shut down using
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">async_shutdown()</span></code>.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Running a collector asynchronously decouples the collection from training, which means that the training
+performance may be drastically different depending on the hardware, load and other factors (although it is generally
+expected to provide significant speed-ups). Make sure you understand how this may affect your algorithm and if it
+is a legitimate thing to do! (For example, on-policy algorithms such as PPO should not be run asynchronously
+unless properly benchmarked).</p>
+</div>
 </section>
 <section id="single-node-data-collectors">
 <h2>Single node data collectors<a class="headerlink" href="#single-node-data-collectors" title="Permalink to this heading">¶</a></h2>
@@ -807,6 +838,7 @@ see these warnings, they can be displayed by setting <code class="docutils liter
 </ul>
 </li>
 <li><a class="reference internal" href="#collectors-and-replay-buffers-interoperability">Collectors and replay buffers interoperability</a></li>
+<li><a class="reference internal" href="#running-the-collector-asynchronously">Running the Collector Asynchronously</a></li>
 <li><a class="reference internal" href="#single-node-data-collectors">Single node data collectors</a></li>
 <li><a class="reference internal" href="#distributed-data-collectors">Distributed data collectors</a></li>
 <li><a class="reference internal" href="#helper-functions">Helper functions</a></li>

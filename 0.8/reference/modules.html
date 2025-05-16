@@ -775,7 +775,7 @@ classes for RL usage.</p>
 <td><p>BatchRenorm Module (<a class="reference external" href="https://arxiv.org/abs/1702.03275">https://arxiv.org/abs/1702.03275</a>).</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.ConsistentDropout.html#torchrl.modules.ConsistentDropout" title="torchrl.modules.ConsistentDropout"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConsistentDropout</span></code></a>([p])</p></td>
-<td><p>Implements a <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Dropout.html#torch.nn.Dropout" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dropout</span></code></a> variant with consistent dropout.</p></td>
+<td><p>Implements a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Dropout.html#torch.nn.Dropout" title="(in PyTorch v2.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dropout</span></code></a> variant with consistent dropout.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.Conv3dNet.html#torchrl.modules.Conv3dNet" title="torchrl.modules.Conv3dNet"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Conv3dNet</span></code></a>(in_features, depth, num_cells, ...)</p></td>
 <td><p>A 3D-convolutional neural network.</p></td>
@@ -873,7 +873,7 @@ algorithms, such as DQN, DDPG or Dreamer.</p>
 <section id="multi-agent-specific-modules">
 <h3>Multi-agent-specific modules<a class="headerlink" href="#multi-agent-specific-modules" title="Permalink to this heading">¶</a></h3>
 <p>These networks implement models that can be used in multi-agent contexts.
-They use <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.7)"><code class="xref py py-func docutils literal notranslate"><span class="pre">vmap()</span></code></a> to execute multiple networks all at once on the
+They use <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.7)"><code class="xref py py-func docutils literal notranslate"><span class="pre">vmap()</span></code></a> to execute multiple networks all at once on the
 network inputs. Because the parameters are batched, initialization may differ
 from what is usually done with other PyTorch modules, see
 <a class="reference internal" href="generated/torchrl.modules.MultiAgentNetBase.html#torchrl.modules.MultiAgentNetBase.get_stateful_net" title="torchrl.modules.MultiAgentNetBase.get_stateful_net"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get_stateful_net()</span></code></a>

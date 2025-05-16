@@ -435,7 +435,7 @@
 <dd><p>A long short-term memory (LSTM) cell that performs the same operation as nn.LSTMCell but is fully coded in Python.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>This class is implemented without relying on CuDNN, which makes it compatible with <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.7)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.vmap()</span></code></a> and <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.7)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>.</p>
+<p>This class is implemented without relying on CuDNN, which makes it compatible with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.7)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.vmap()</span></code></a> and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.7)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>.</p>
 </div>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
@@ -503,9 +503,9 @@ h' = o \odot \tanh(c') \\
 <dl class="field-list simple">
 <dt class="field-odd">Variables<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>weight_ih</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><em>torch.Tensor</em></a>) – the learnable input-hidden weights, of shape
+<li><p><strong>weight_ih</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><em>torch.Tensor</em></a>) – the learnable input-hidden weights, of shape
 <cite>(4*hidden_size, input_size)</cite></p></li>
-<li><p><strong>weight_hh</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><em>torch.Tensor</em></a>) – the learnable hidden-hidden weights, of shape
+<li><p><strong>weight_hh</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><em>torch.Tensor</em></a>) – the learnable hidden-hidden weights, of shape
 <cite>(4*hidden_size, hidden_size)</cite></p></li>
 <li><p><strong>bias_ih</strong> – the learnable input-hidden bias, of shape <cite>(4*hidden_size)</cite></p></li>
 <li><p><strong>bias_hh</strong> – the learnable hidden-hidden bias, of shape <cite>(4*hidden_size)</cite></p></li>
@@ -517,7 +517,7 @@ h' = o \odot \tanh(c') \\
 <p>All the weights and biases are initialized from <span class="math notranslate nohighlight">\(\mathcal{U}(-\sqrt{k}, \sqrt{k})\)</span>
 where <span class="math notranslate nohighlight">\(k = \frac{1}{\text{hidden\_size}}\)</span></p>
 </div>
-<p>On certain ROCm devices, when using float16 inputs this module will use <a class="reference external" href="https://pytorch.org/docs/stable/notes/numerical_accuracy.html#fp16-on-mi200" title="(in PyTorch v2.7)"><span class="xref std std-ref">different precision</span></a> for backward.</p>
+<p>On certain ROCm devices, when using float16 inputs this module will use <a class="reference external" href="https://docs.pytorch.org/docs/stable/notes/numerical_accuracy.html#fp16-on-mi200" title="(in PyTorch v2.7)"><span class="xref std std-ref">different precision</span></a> for backward.</p>
 <p>Examples:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">rnn</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">LSTMCell</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">20</span><span class="p">)</span>  <span class="c1"># (input_size, hidden_size)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>  <span class="c1"># (time_steps, batch, input_size)</span>

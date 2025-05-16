@@ -731,8 +731,6 @@
       </ul></li>
       <li><a href="reference/generated/torchrl.objectives.CrossQLoss.html#torchrl.objectives.CrossQLoss.alpha_loss">alpha_loss() (torchrl.objectives.CrossQLoss method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool.any_done">any_done() (torchrl.envs.AsyncEnvPool method)</a>
 
       <ul>
@@ -757,6 +755,8 @@
         <li><a href="reference/generated/torchrl.envs.TicTacToeEnv.html#torchrl.envs.TicTacToeEnv.any_done">(torchrl.envs.TicTacToeEnv method)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.envs.transforms.Compose.html#torchrl.envs.transforms.Compose.append">append() (torchrl.envs.transforms.Compose method)</a>
 </li>
       <li><a href="reference/generated/torchrl.data.PrioritizedReplayBuffer.html#torchrl.data.PrioritizedReplayBuffer.append_transform">append_transform() (torchrl.data.PrioritizedReplayBuffer method)</a>
@@ -923,9 +923,23 @@
         <li><a href="reference/generated/torchrl.envs.ThreadingAsyncEnvPool.html#torchrl.envs.ThreadingAsyncEnvPool.async_reset_send">(torchrl.envs.ThreadingAsyncEnvPool method)</a>
 </li>
       </ul></li>
-      <li><a href="reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.async_shutdown">async_shutdown() (torchrl.collectors.distributed.RayCollector method)</a>
+      <li><a href="reference/generated/torchrl.collectors.aSyncDataCollector.html#torchrl.collectors.aSyncDataCollector.async_shutdown">async_shutdown() (torchrl.collectors.aSyncDataCollector method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase.async_shutdown">(torchrl.collectors.DataCollectorBase method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.distributed.DistributedDataCollector.html#torchrl.collectors.distributed.DistributedDataCollector.async_shutdown">(torchrl.collectors.distributed.DistributedDataCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.distributed.DistributedSyncDataCollector.html#torchrl.collectors.distributed.DistributedSyncDataCollector.async_shutdown">(torchrl.collectors.distributed.DistributedSyncDataCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.async_shutdown">(torchrl.collectors.distributed.RayCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.distributed.RPCDataCollector.html#torchrl.collectors.distributed.RPCDataCollector.async_shutdown">(torchrl.collectors.distributed.RPCDataCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector.async_shutdown">(torchrl.collectors.MultiaSyncDataCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector.async_shutdown">(torchrl.collectors.MultiSyncDataCollector method)</a>
+</li>
         <li><a href="reference/generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector.async_shutdown">(torchrl.collectors.SyncDataCollector method)</a>
 </li>
       </ul></li>
@@ -5433,6 +5447,26 @@
         <li><a href="reference/generated/torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform.parent">(torchrl.envs.transforms.Transform property)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.collectors.aSyncDataCollector.html#torchrl.collectors.aSyncDataCollector.pause">pause() (torchrl.collectors.aSyncDataCollector method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase.pause">(torchrl.collectors.DataCollectorBase method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.distributed.DistributedDataCollector.html#torchrl.collectors.distributed.DistributedDataCollector.pause">(torchrl.collectors.distributed.DistributedDataCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.distributed.DistributedSyncDataCollector.html#torchrl.collectors.distributed.DistributedSyncDataCollector.pause">(torchrl.collectors.distributed.DistributedSyncDataCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.pause">(torchrl.collectors.distributed.RayCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.distributed.RPCDataCollector.html#torchrl.collectors.distributed.RPCDataCollector.pause">(torchrl.collectors.distributed.RPCDataCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector.pause">(torchrl.collectors.MultiaSyncDataCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector.pause">(torchrl.collectors.MultiSyncDataCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector.pause">(torchrl.collectors.SyncDataCollector method)</a>
+</li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.envs.PendulumEnv.html#torchrl.envs.PendulumEnv">PendulumEnv (class in torchrl.envs)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.PermuteTransform.html#torchrl.envs.transforms.PermuteTransform">PermuteTransform (class in torchrl.envs.transforms)</a>
@@ -5453,6 +5487,8 @@
         <li><a href="reference/generated/torchrl.modules.MPPIPlanner.html#torchrl.modules.MPPIPlanner.planning">(torchrl.modules.MPPIPlanner method)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.data.Tree.html#torchrl.data.Tree.plot">plot() (torchrl.data.Tree method)</a>
 </li>
       <li><a href="reference/generated/torchrl.data.Composite.html#torchrl.data.Composite.pop">pop() (torchrl.data.Composite method)</a>
@@ -5465,8 +5501,6 @@
         <li><a href="reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite.pop">(torchrl.data.StackedComposite method)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.objectives.PPOLoss.html#torchrl.objectives.PPOLoss">PPOLoss (class in torchrl.objectives)</a>
 </li>
       <li><a href="reference/generated/torchrl.data.Tree.html#torchrl.data.Tree.prev_action">prev_action (torchrl.data.Tree property)</a>
@@ -7329,9 +7363,23 @@
       </ul></li>
       <li><a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#torchrl.envs.transforms.VecNormV2.standard_normal">standard_normal() (torchrl.envs.transforms.VecNormV2 method)</a>
 </li>
-      <li><a href="reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.start">start() (torchrl.collectors.distributed.RayCollector method)</a>
+      <li><a href="reference/generated/torchrl.collectors.aSyncDataCollector.html#torchrl.collectors.aSyncDataCollector.start">start() (torchrl.collectors.aSyncDataCollector method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase.start">(torchrl.collectors.DataCollectorBase method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.distributed.DistributedDataCollector.html#torchrl.collectors.distributed.DistributedDataCollector.start">(torchrl.collectors.distributed.DistributedDataCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.distributed.DistributedSyncDataCollector.html#torchrl.collectors.distributed.DistributedSyncDataCollector.start">(torchrl.collectors.distributed.DistributedSyncDataCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.start">(torchrl.collectors.distributed.RayCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.distributed.RPCDataCollector.html#torchrl.collectors.distributed.RPCDataCollector.start">(torchrl.collectors.distributed.RPCDataCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector.start">(torchrl.collectors.MultiaSyncDataCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector.start">(torchrl.collectors.MultiSyncDataCollector method)</a>
+</li>
         <li><a href="reference/generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector.start">(torchrl.collectors.SyncDataCollector method)</a>
 </li>
       </ul></li>
