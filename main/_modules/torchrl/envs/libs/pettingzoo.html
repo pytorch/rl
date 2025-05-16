@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.8.0+f61078d) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.8.0+d882ea2) &#x25BC</span></a>
     </div>
     
 
@@ -1005,6 +1005,10 @@
                             <span class="n">value</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
                         <span class="p">)</span>
 
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_state</span><span class="p">:</span>
+            <span class="n">state</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="p">(),</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="n">tensordict_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;state&quot;</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span>
+
         <span class="k">return</span> <span class="n">tensordict_out</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_reset_aec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
@@ -1123,6 +1127,11 @@
         <span class="n">tensordict_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;done&quot;</span><span class="p">,</span> <span class="n">done</span><span class="p">)</span>
         <span class="n">tensordict_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;terminated&quot;</span><span class="p">,</span> <span class="n">terminated</span><span class="p">)</span>
         <span class="n">tensordict_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;truncated&quot;</span><span class="p">,</span> <span class="n">truncated</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_state</span><span class="p">:</span>
+            <span class="n">state</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="p">(),</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="n">tensordict_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;state&quot;</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span>
+
         <span class="k">return</span> <span class="n">tensordict_out</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_aggregate_done</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict_out</span><span class="p">,</span> <span class="n">use_any</span><span class="p">):</span>
