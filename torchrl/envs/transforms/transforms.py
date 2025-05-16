@@ -11398,12 +11398,6 @@ class ConditionalPolicySwitch(Transform):
             parent: TransformedEnv = self.parent
             reset_td_save = None
             if not cond.all():
-                if parent.base_env.batch_locked:
-                    raise RuntimeError(
-                        "Cannot run partial steps in a batched locked environment. "
-                        "Hint: Parallel and Serial envs can be unlocked through a keyword argument in "
-                        "the constructor."
-                    )
                 reset_td_save = tensordict_reset.copy()
                 tensordict_reset = tensordict_reset[cond]
                 tensordict = tensordict[cond]

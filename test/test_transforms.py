@@ -14590,7 +14590,6 @@ class TestConditionalPolicySwitch(TransformBase):
         base_env = SerialEnv(
             3,
             [partial(CountingEnv, 6), partial(CountingEnv, 7), partial(CountingEnv, 8)],
-            batch_locked=False,
         )
         condition = lambda td: ((td.get("step_count") % 2) == 0).squeeze(-1)
         policy_odd = self._create_policy_odd(base_env)
@@ -14604,7 +14603,6 @@ class TestConditionalPolicySwitch(TransformBase):
         base_env = ParallelEnv(
             3,
             [partial(CountingEnv, 6), partial(CountingEnv, 7), partial(CountingEnv, 8)],
-            batch_locked=False,
             mp_start_method=mp_ctx,
         )
         condition = lambda td: ((td.get("step_count") % 2) == 0).squeeze(-1)
