@@ -2961,29 +2961,23 @@ class TestNestedSpecs:
 
         transformed_td = manual_rollout(transformed_env, 6)
 
+        # We expect env[0] to have been reset and executed 2 steps.
+        # We expect env[1] to have just been reset (0 steps).
+        assert parallel_env._counter() == [2, 0]
+        assert transformed_env._counter() == [2, 0]
         if done_at_root:
             assert parallel_env._simple_done
             assert transformed_env._simple_done
             # We expect each env to have reached a done state once.
             assert parallel_td["next", "done"].sum().item() == 2
-            # We expect env[0] to have been reset and executed 2 steps.
-            # We expect env[1] to have just been reset (0 steps).
-            assert parallel_env._counter() == [2, 0]
-            assert parallel_td["next", "done"].sum().item() == 2
-
-            # We expect each env to have reached a done state once.
             assert transformed_td["next", "done"].sum().item() == 2
             assert_allclose_td(transformed_td, parallel_td, intersection=True)
-            # We expect env[0] to have been reset and executed 2 steps.
-            # We expect env[1] to have just been reset (0 steps).
-            # We only expect env[0] to have reached a done state.
         else:
             assert not parallel_env._simple_done
             assert not transformed_env._simple_done
+
             assert ("next", "done") not in parallel_td
             assert ("next", "done") not in transformed_td
-            assert parallel_td["next", "agent_1", "done"].sum().item() == 2
-            assert parallel_env._counter() == [2, 0]
             assert parallel_td["next", "agent_1", "done"].sum().item() == 2
             assert transformed_td["next", "agent_1", "done"].sum().item() == 2
             assert_allclose_td(transformed_td, parallel_td, intersection=True)
