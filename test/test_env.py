@@ -65,6 +65,7 @@ from torchrl.envs.transforms import Compose, StepCounter, TransformedEnv
 from torchrl.envs.transforms.transforms import (
     AutoResetEnv,
     AutoResetTransform,
+    InitTracker,
     Tokenizer,
     Transform,
     UnsqueezeTransform,
@@ -143,6 +144,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         HistoryTransform,
         MockBatchedLockedEnv,
         MockBatchedUnLockedEnv,
+        MockNestedResetEnv,
         MockSerialEnv,
         MultiKeyCountingEnv,
         MultiKeyCountingEnvPolicy,
@@ -184,6 +186,7 @@ else:
         HistoryTransform,
         MockBatchedLockedEnv,
         MockBatchedUnLockedEnv,
+        MockNestedResetEnv,
         MockSerialEnv,
         MultiKeyCountingEnv,
         MultiKeyCountingEnvPolicy,
@@ -2924,6 +2927,69 @@ class TestNestedSpecs:
                     assert done_key[:-1] == reset_key[:-1]
         env.rollout(100)
         env.rollout(100, break_when_any_done=False)
+
+    @pytest.mark.parametrize("done_at_root", [True, False])
+    def test_nested_partial_resets(self, maybe_fork_ParallelEnv, done_at_root):
+        def make_env(num_steps):
+            return MockNestedResetEnv(num_steps, done_at_root)
+
+        def manual_rollout(env: EnvBase, num_steps: int):
+            steps = []
+            td = env.reset()
+            for _ in range(num_steps):
+                td, next_td = env.step_and_maybe_reset(td)
+                steps.append(td)
+                td = next_td
+            return TensorDict.stack(steps)
+
+        # NOTE: we expect the env[0] to reset after 4 steps, env[1] to reset after 6 steps.
+        parallel_env = maybe_fork_ParallelEnv(
+            2,
+            create_env_fn=make_env,
+            create_env_kwargs=[{"num_steps": i} for i in [4, 6]],
+        )
+        transformed_env = TransformedEnv(
+            env=maybe_fork_ParallelEnv(
+                2,
+                create_env_fn=make_env,
+                create_env_kwargs=[{"num_steps": i} for i in [4, 6]],
+            ),
+            transform=InitTracker(),
+        )
+
+        parallel_td = manual_rollout(parallel_env, 6)
+
+        transformed_td = manual_rollout(transformed_env, 6)
+
+        if done_at_root:
+            assert parallel_env._simple_done
+            assert transformed_env._simple_done
+            # We expect each env to have reached a done state once.
+            assert parallel_td["next", "done"].sum().item() == 2
+            # We expect env[0] to have been reset and executed 2 steps.
+            # We expect env[1] to have just been reset (0 steps).
+            assert parallel_env._counter() == [2, 0]
+            assert parallel_td["next", "done"].sum().item() == 2
+
+            # We expect each env to have reached a done state once.
+            assert transformed_td["next", "done"].sum().item() == 2
+            assert_allclose_td(transformed_td, parallel_td, intersection=True)
+            # We expect env[0] to have been reset and executed 2 steps.
+            # We expect env[1] to have just been reset (0 steps).
+            # We only expect env[0] to have reached a done state.
+        else:
+            assert not parallel_env._simple_done
+            assert not transformed_env._simple_done
+            assert ("next", "done") not in parallel_td
+            assert ("next", "done") not in transformed_td
+            assert parallel_td["next", "agent_1", "done"].sum().item() == 2
+            assert parallel_env._counter() == [2, 0]
+            assert parallel_td["next", "agent_1", "done"].sum().item() == 2
+
+            assert transformed_td["next", "agent_1", "done"].sum().item() == 2
+            assert_allclose_td(transformed_td, parallel_td, intersection=True)
+
+        assert transformed_env._counter() == [2, 0]
 
 
 class TestHeteroEnvs:
