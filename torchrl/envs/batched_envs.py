@@ -995,9 +995,12 @@ class SerialEnv(BatchedEnvBase):
             for elt in list_of_kwargs:
                 elt.update(kwargs)
         if tensordict is not None:
-            needs_resetting = _aggregate_end_of_traj(
-                tensordict, reset_keys=self.reset_keys
-            )
+            if "_reset" in tensordict.keys():
+                needs_resetting = tensordict["_reset"]
+            else:
+                needs_resetting = _aggregate_end_of_traj(
+                    tensordict, reset_keys=self.reset_keys
+                )
             if needs_resetting.ndim > 2:
                 needs_resetting = needs_resetting.flatten(1, needs_resetting.ndim - 1)
             if needs_resetting.ndim > 1:
@@ -2114,9 +2117,12 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 elt.update(kwargs)
 
         if tensordict is not None:
-            needs_resetting = _aggregate_end_of_traj(
-                tensordict, reset_keys=self.reset_keys
-            )
+            if "_reset" in tensordict.keys():
+                needs_resetting = tensordict["_reset"]
+            else:
+                needs_resetting = _aggregate_end_of_traj(
+                    tensordict, reset_keys=self.reset_keys
+                )
             if needs_resetting.ndim > 2:
                 needs_resetting = needs_resetting.flatten(1, needs_resetting.ndim - 1)
             if needs_resetting.ndim > 1:

@@ -2821,12 +2821,25 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         # we iterate over (reset_key, (done_key, truncated_key)) and check that all
         # values where reset was true now have a done set to False.
         # If no reset was present, all done and truncated must be False
+
+        # Once we checked a root, we don't check its leaves - so keep track of the roots. Fortunately, we sort the done
+        #  keys in the done_keys_group from root to leaf
+        prefix_complete = set()
         for reset_key, done_key_group in zip(self.reset_keys, self.done_keys_groups):
+            skip = False
+            if isinstance(reset_key, tuple):
+                for i in range(len(reset_key) - 1):
+                    if reset_key[:i] in prefix_complete:
+                        skip = True
+                        break
+            if skip:
+                continue
             reset_value = (
                 tensordict.get(reset_key, default=None)
                 if tensordict is not None
                 else None
             )
+            prefix_complete.add(() if isinstance(reset_key, str) else reset_key[:-1])
             if reset_value is not None:
                 for done_key in done_key_group:
                     done_val = tensordict_reset.get(done_key)
@@ -3580,11 +3593,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     @_cache_value
     def _simple_done(self):
         key_set = set(self.full_done_spec.keys())
-        _simple_done = key_set == {
-            "done",
-            "truncated",
-            "terminated",
-        } or key_set == {"done", "terminated"}
+
+        _simple_done = "done" in key_set and "terminated" in key_set
         return _simple_done
 
     def any_done(self, tensordict: TensorDictBase) -> bool:
