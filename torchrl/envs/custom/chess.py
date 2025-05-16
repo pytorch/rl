@@ -195,9 +195,7 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
             batch_size=torch.Size([96]),
             device=None,
             is_shared=False)
-
-
-    """
+    """  # noqa: D301
 
     _hash_table: dict[int, str] = {}
     _PGN_RESTART = """[Event "?"]
