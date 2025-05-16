@@ -2985,7 +2985,6 @@ class TestNestedSpecs:
             assert parallel_td["next", "agent_1", "done"].sum().item() == 2
             assert parallel_env._counter() == [2, 0]
             assert parallel_td["next", "agent_1", "done"].sum().item() == 2
-
             assert transformed_td["next", "agent_1", "done"].sum().item() == 2
             assert_allclose_td(transformed_td, parallel_td, intersection=True)
 
