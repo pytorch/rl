@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+d882ea2) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+8edc29c) &#x25BC</span></a>
     </div>
     
 
@@ -508,6 +508,8 @@ elements in the output, <code class="docutils literal notranslate"><span class="
 valid, non-terminating next states. If <code class="docutils literal notranslate"><span class="pre">True</span></code>, it is assumed that the done state can be broadcast to the
 shape of the data and that masking the data results in a valid data structure. Among other things, this may
 not be true in MARL settings or when using RNNs. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>deactivate_vmap</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to deactivate vmap calls and replace them with a plain for loop.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
 </dl>

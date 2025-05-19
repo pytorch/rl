@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.8.0+d882ea2) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.8.0+8edc29c) &#x25BC</span></a>
     </div>
     
 
@@ -507,6 +507,8 @@
 <span class="sd">            ``&quot;none&quot;`` | ``&quot;mean&quot;`` | ``&quot;sum&quot;``. ``&quot;none&quot;``: no reduction will be applied,</span>
 <span class="sd">            ``&quot;mean&quot;``: the sum of the output will be divided by the number of</span>
 <span class="sd">            elements in the output, ``&quot;sum&quot;``: the output will be summed. Default: ``&quot;mean&quot;``.</span>
+<span class="sd">        deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.</span>
+<span class="sd">            Defaults to ``False``.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; import torch</span>
@@ -701,6 +703,7 @@
         <span class="n">priority_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">separate_losses</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">reduction</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">deactivate_vmap</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="k">if</span> <span class="n">reduction</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">reduction</span> <span class="o">=</span> <span class="s2">&quot;mean&quot;</span>
@@ -716,6 +719,7 @@
 
         <span class="c1"># let&#39;s make sure that actor_network has `return_log_prob` set to True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">return_log_prob</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">deactivate_vmap</span> <span class="o">=</span> <span class="n">deactivate_vmap</span>
         <span class="k">if</span> <span class="n">separate_losses</span><span class="p">:</span>
             <span class="c1"># we want to make sure there are no duplicates in the params: the</span>
             <span class="c1"># params of critic must be refs to actor if they&#39;re shared</span>
@@ -772,10 +776,15 @@
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_make_vmap</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_vmap_qvalue_network00</span> <span class="o">=</span> <span class="n">_vmap_func</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">qvalue_network</span><span class="p">,</span> <span class="n">randomness</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">vmap_randomness</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">qvalue_network</span><span class="p">,</span>
+            <span class="n">randomness</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">vmap_randomness</span><span class="p">,</span>
+            <span class="n">pseudo_vmap</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">deactivate_vmap</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_vmap_getdist</span> <span class="o">=</span> <span class="n">_vmap_func</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="p">,</span> <span class="n">func</span><span class="o">=</span><span class="s2">&quot;get_dist_params&quot;</span><span class="p">,</span> <span class="n">randomness</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">vmap_randomness</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="p">,</span>
+            <span class="n">func</span><span class="o">=</span><span class="s2">&quot;get_dist_params&quot;</span><span class="p">,</span>
+            <span class="n">randomness</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">vmap_randomness</span><span class="p">,</span>
+            <span class="n">pseudo_vmap</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">deactivate_vmap</span><span class="p">,</span>
         <span class="p">)</span>
 
     <span class="nd">@property</span>

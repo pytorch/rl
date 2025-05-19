@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.8.0+d882ea2) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.8.0+8edc29c) &#x25BC</span></a>
     </div>
     
 
@@ -551,6 +551,8 @@
 <span class="sd">            valid, non-terminating next states. If ``True``, it is assumed that the done state can be broadcast to the</span>
 <span class="sd">            shape of the data and that masking the data results in a valid data structure. Among other things, this may</span>
 <span class="sd">            not be true in MARL settings or when using RNNs. Defaults to ``False``.</span>
+<span class="sd">        deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.</span>
+<span class="sd">            Defaults to ``False``.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; import torch</span>
@@ -755,6 +757,7 @@
         <span class="n">separate_losses</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">reduction</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">skip_done_states</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">deactivate_vmap</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_in_keys</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_out_keys</span> <span class="o">=</span> <span class="kc">None</span>
@@ -765,6 +768,7 @@
 
         <span class="c1"># Actor</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">delay_actor</span> <span class="o">=</span> <span class="n">delay_actor</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">deactivate_vmap</span> <span class="o">=</span> <span class="n">deactivate_vmap</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">convert_to_functional</span><span class="p">(</span>
             <span class="n">actor_network</span><span class="p">,</span>
             <span class="s2">&quot;actor_network&quot;</span><span class="p">,</span>
@@ -866,11 +870,16 @@
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_make_vmap</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_vmap_qnetworkN0</span> <span class="o">=</span> <span class="n">_vmap_func</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">qvalue_network</span><span class="p">,</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">randomness</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">vmap_randomness</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">qvalue_network</span><span class="p">,</span>
+            <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+            <span class="n">randomness</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">vmap_randomness</span><span class="p">,</span>
+            <span class="n">pseudo_vmap</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">deactivate_vmap</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_version</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_vmap_qnetwork00</span> <span class="o">=</span> <span class="n">_vmap_func</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">qvalue_network</span><span class="p">,</span> <span class="n">randomness</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">vmap_randomness</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">qvalue_network</span><span class="p">,</span>
+                <span class="n">randomness</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">vmap_randomness</span><span class="p">,</span>
+                <span class="n">pseudo_vmap</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">deactivate_vmap</span><span class="p">,</span>
             <span class="p">)</span>
 
     <span class="nd">@property</span>
@@ -948,11 +957,13 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_value_estimator</span> <span class="o">=</span> <span class="n">TD1Estimator</span><span class="p">(</span>
                 <span class="o">**</span><span class="n">hp</span><span class="p">,</span>
                 <span class="n">value_network</span><span class="o">=</span><span class="n">value_net</span><span class="p">,</span>
+                <span class="n">deactivate_vmap</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">deactivate_vmap</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">elif</span> <span class="n">value_type</span> <span class="ow">is</span> <span class="n">ValueEstimators</span><span class="o">.</span><span class="n">TD0</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_value_estimator</span> <span class="o">=</span> <span class="n">TD0Estimator</span><span class="p">(</span>
                 <span class="o">**</span><span class="n">hp</span><span class="p">,</span>
                 <span class="n">value_network</span><span class="o">=</span><span class="n">value_net</span><span class="p">,</span>
+                <span class="n">deactivate_vmap</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">deactivate_vmap</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">elif</span> <span class="n">value_type</span> <span class="ow">is</span> <span class="n">ValueEstimators</span><span class="o">.</span><span class="n">GAE</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
@@ -962,6 +973,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_value_estimator</span> <span class="o">=</span> <span class="n">TDLambdaEstimator</span><span class="p">(</span>
                 <span class="o">**</span><span class="n">hp</span><span class="p">,</span>
                 <span class="n">value_network</span><span class="o">=</span><span class="n">value_net</span><span class="p">,</span>
+                <span class="n">deactivate_vmap</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">deactivate_vmap</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown value type </span><span class="si">{</span><span class="n">value_type</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
@@ -1094,7 +1106,6 @@
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;Losses shape mismatch: </span><span class="si">{</span><span class="n">log_prob</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> and </span><span class="si">{</span><span class="n">min_q_logprob</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
-
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_alpha</span> <span class="o">*</span> <span class="n">log_prob</span> <span class="o">-</span> <span class="n">min_q_logprob</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;log_prob&quot;</span><span class="p">:</span> <span class="n">log_prob</span><span class="o">.</span><span class="n">detach</span><span class="p">()}</span>
 
     <span class="nd">@property</span>
@@ -1343,6 +1354,8 @@
 <span class="sd">            valid, non-terminating next states. If ``True``, it is assumed that the done state can be broadcast to the</span>
 <span class="sd">            shape of the data and that masking the data results in a valid data structure. Among other things, this may</span>
 <span class="sd">            not be true in MARL settings or when using RNNs. Defaults to ``False``.</span>
+<span class="sd">        deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.</span>
+<span class="sd">            Defaults to ``False``.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; import torch</span>
@@ -1519,6 +1532,7 @@
         <span class="n">separate_losses</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">reduction</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">skip_done_states</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">deactivate_vmap</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="k">if</span> <span class="n">reduction</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">reduction</span> <span class="o">=</span> <span class="s2">&quot;mean&quot;</span>
@@ -1531,6 +1545,7 @@
             <span class="s2">&quot;actor_network&quot;</span><span class="p">,</span>
             <span class="n">create_target_params</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">delay_actor</span><span class="p">,</span>
         <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">deactivate_vmap</span> <span class="o">=</span> <span class="n">deactivate_vmap</span>
         <span class="k">if</span> <span class="n">separate_losses</span><span class="p">:</span>
             <span class="c1"># we want to make sure there are no duplicates in the params: the</span>
             <span class="c1"># params of critic must be refs to actor if they&#39;re shared</span>
@@ -1605,7 +1620,10 @@
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_make_vmap</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_vmap_qnetworkN0</span> <span class="o">=</span> <span class="n">_vmap_func</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">qvalue_network</span><span class="p">,</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">randomness</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">vmap_randomness</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">qvalue_network</span><span class="p">,</span>
+            <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+            <span class="n">randomness</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">vmap_randomness</span><span class="p">,</span>
+            <span class="n">pseudo_vmap</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">deactivate_vmap</span><span class="p">,</span>
         <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_forward_value_estimator_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -1857,11 +1875,13 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_value_estimator</span> <span class="o">=</span> <span class="n">TD1Estimator</span><span class="p">(</span>
                 <span class="o">**</span><span class="n">hp</span><span class="p">,</span>
                 <span class="n">value_network</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                <span class="n">deactivate_vmap</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">deactivate_vmap</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">elif</span> <span class="n">value_type</span> <span class="ow">is</span> <span class="n">ValueEstimators</span><span class="o">.</span><span class="n">TD0</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_value_estimator</span> <span class="o">=</span> <span class="n">TD0Estimator</span><span class="p">(</span>
                 <span class="o">**</span><span class="n">hp</span><span class="p">,</span>
                 <span class="n">value_network</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                <span class="n">deactivate_vmap</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">deactivate_vmap</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">elif</span> <span class="n">value_type</span> <span class="ow">is</span> <span class="n">ValueEstimators</span><span class="o">.</span><span class="n">GAE</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
@@ -1871,6 +1891,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_value_estimator</span> <span class="o">=</span> <span class="n">TDLambdaEstimator</span><span class="p">(</span>
                 <span class="o">**</span><span class="n">hp</span><span class="p">,</span>
                 <span class="n">value_network</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                <span class="n">deactivate_vmap</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">deactivate_vmap</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown value type </span><span class="si">{</span><span class="n">value_type</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
