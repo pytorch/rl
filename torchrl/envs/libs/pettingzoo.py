@@ -584,6 +584,10 @@ class PettingZooWrapper(_EnvWrapper):
                             value, device=self.device
                         )
 
+        if self.return_state:
+            state = torch.as_tensor(self.state(), device=self.device)
+            tensordict_out.set("state", state)
+
         return tensordict_out
 
     def _reset_aec(self, **kwargs) -> tuple[dict, dict]:
@@ -702,6 +706,11 @@ class PettingZooWrapper(_EnvWrapper):
         tensordict_out.set("done", done)
         tensordict_out.set("terminated", terminated)
         tensordict_out.set("truncated", truncated)
+
+        if self.return_state:
+            state = torch.as_tensor(self.state(), device=self.device)
+            tensordict_out.set("state", state)
+
         return tensordict_out
 
     def _aggregate_done(self, tensordict_out, use_any):

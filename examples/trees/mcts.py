@@ -10,6 +10,8 @@ import torchrl
 import torchrl.envs
 import torchrl.modules.mcts
 from tensordict import TensorDict
+from torchrl.data import Composite, Unbounded
+from torchrl.envs import Transform
 
 pgn_or_fen = "fen"
 mask_actions = True
@@ -25,29 +27,47 @@ env = torchrl.envs.ChessEnv(
 )
 
 
-class TransformReward:
-    def __call__(self, td):
-        if "reward" not in td:
-            return td
+class TurnBasedChess(Transform):
+    def transform_observation_spec(self, obsspec):
+        obsspec["agent0", "turn"] = Unbounded(dtype=torch.bool, shape=())
+        obsspec["agent1", "turn"] = Unbounded(dtype=torch.bool, shape=())
+        return obsspec
 
-        reward = td["reward"]
+    def transform_reward_spec(self, reward_spec):
+        reward = reward_spec["reward"].clone()
+        del reward_spec["reward"]
+        return Composite(
+            agent0=Composite(reward=reward),
+            agent1=Composite(reward=reward),
+        )
+
+    def _reset(self, _td, td):
+        td["agent0", "turn"] = td["turn"]
+        td["agent1", "turn"] = ~td["turn"]
+        return td
+
+    def _step(self, td, td_next):
+        td_next["agent0", "turn"] = td_next["turn"]
+        td_next["agent1", "turn"] = ~td_next["turn"]
+
+        reward = td_next["reward"]
+        turn = td["turn"]
 
         if reward == 0.5:
             reward = 0
-        elif reward == 1 and td["turn"]:
-            reward = -reward
+        elif reward == 1:
+            if not turn:
+                reward = -reward
 
-        td["reward"] = reward
-        return td
+        td_next["agent0", "reward"] = reward
+        td_next["agent1", "reward"] = -reward
+        del td_next["reward"]
+
+        return td_next
 
 
-# ChessEnv sets the reward to 0.5 for a draw and 1 for a win for either player.
-# Need to transform the reward to be:
-#   white win = 1
-#   draw = 0
-#   black win = -1
-transform_reward = TransformReward()
-env = env.append_transform(transform_reward)
+env = env.append_transform(TurnBasedChess())
+env.rollout(3)
 
 forest = torchrl.data.MCTSForest()
 forest.reward_keys = env.reward_keys
@@ -55,9 +75,20 @@ forest.done_keys = env.done_keys
 forest.action_keys = env.action_keys
 
 if mask_actions:
-    forest.observation_keys = [f"{pgn_or_fen}_hash", "turn", "action_mask"]
+    forest.observation_keys = [
+        f"{pgn_or_fen}_hash",
+        "turn",
+        "action_mask",
+        ("agent0", "turn"),
+        ("agent1", "turn"),
+    ]
 else:
-    forest.observation_keys = [f"{pgn_or_fen}_hash", "turn"]
+    forest.observation_keys = [
+        f"{pgn_or_fen}_hash",
+        "turn",
+        ("agent0", "turn"),
+        ("agent1", "turn"),
+    ]
 
 
 def tree_format_fn(tree):
@@ -72,17 +103,20 @@ def tree_format_fn(tree):
 
 def get_best_move(fen, mcts_steps, rollout_steps):
     root = env.reset(TensorDict({"fen": fen}))
-    mcts = torchrl.modules.mcts.MCTS(mcts_steps, rollout_steps)
+    agent_keys = ["agent0", "agent1"]
+    mcts = torchrl.modules.mcts.MCTS(mcts_steps, rollout_steps, agent_keys=agent_keys)
     tree = mcts(forest, root, env)
     moves = []
 
     for subtree in tree.subtree:
-        san = subtree.rollout[0]["next", "san"]
-        reward_sum = subtree.wins
+        td = subtree.rollout[0]
+        san = td["next", "san"]
+        active_agent = agent_keys[
+            torch.stack([td[agent]["turn"] for agent in agent_keys]).nonzero()
+        ]
+        reward_sum = subtree.wins[active_agent, "reward"]
         visits = subtree.visits
         value_avg = (reward_sum / visits).item()
-        if not root["turn"]:
-            value_avg = -value_avg
         moves.append((value_avg, san))
 
     moves = sorted(moves, key=lambda x: -x[0])
@@ -97,7 +131,7 @@ def get_best_move(fen, mcts_steps, rollout_steps):
     return moves[0][1]
 
 
-for idx in range(30):
+for idx in range(3):
     print("==========")
     print(idx)
     print("==========")

@@ -87,6 +87,8 @@ class TD3BCLoss(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
+        deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
+            Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -252,6 +254,7 @@ class TD3BCLoss(LossModule):
         priority_key: str = None,
         separate_losses: bool = False,
         reduction: str = None,
+        deactivate_vmap: bool = False,
     ) -> None:
         if reduction is None:
             reduction = "mean"
@@ -261,6 +264,7 @@ class TD3BCLoss(LossModule):
 
         self.delay_actor = delay_actor
         self.delay_qvalue = delay_qvalue
+        self.deactivate_vmap = deactivate_vmap
 
         self.convert_to_functional(
             actor_network,
@@ -334,10 +338,14 @@ class TD3BCLoss(LossModule):
 
     def _make_vmap(self):
         self._vmap_qvalue_network00 = _vmap_func(
-            self.qvalue_network, randomness=self.vmap_randomness
+            self.qvalue_network,
+            randomness=self.vmap_randomness,
+            pseudo_vmap=self.deactivate_vmap,
         )
         self._vmap_actor_network00 = _vmap_func(
-            self.actor_network, randomness=self.vmap_randomness
+            self.actor_network,
+            randomness=self.vmap_randomness,
+            pseudo_vmap=self.deactivate_vmap,
         )
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:

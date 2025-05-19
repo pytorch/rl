@@ -1122,3 +1122,17 @@ def auto_unwrap_transformed_env(allow_none=False):
     elif _AUTO_UNWRAP is None:
         return _DEFAULT_AUTO_UNWRAP
     return strtobool(_AUTO_UNWRAP) if isinstance(_AUTO_UNWRAP, str) else _AUTO_UNWRAP
+
+
+def safe_is_current_stream_capturing():
+    """A safe proxy to torch.cuda.is_current_stream_capturing."""
+    if not torch.cuda.is_available():
+        return False
+    try:
+        return torch.cuda.is_current_stream_capturing()
+    except Exception as error:
+        warnings.warn(
+            f"torch.cuda.is_current_stream_capturing() exited unexpectedly with the error message {error=}. "
+            f"Returning False by default."
+        )
+        return False

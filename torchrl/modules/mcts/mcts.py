@@ -3,9 +3,12 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from typing import Sequence
+
 import torch
 import torchrl
 from tensordict import TensorDict, TensorDictBase
+from tensordict.utils import NestedKey
 from torch import nn
 
 from torchrl.data.map import MCTSForest, Tree
@@ -27,10 +30,14 @@ class MCTS(nn.Module):
         self,
         num_traversals: int,
         rollout_max_steps: int | None = None,
+        agent_keys: Sequence[NestedKey] = None,
+        turn_key: NestedKey = ("turn",),
     ):
         super().__init__()
         self.num_traversals = num_traversals
         self.rollout_max_steps = rollout_max_steps
+        self.agent_keys = agent_keys
+        self.turn_key = turn_key
 
     def forward(
         self,
@@ -52,9 +59,10 @@ class MCTS(nn.Module):
 
         tree = forest.get_tree(root)
 
-        tree.wins = torch.zeros_like(td["next", env.reward_key])
+        tree.wins = env.reward_spec.zero()
+
         for subtree in tree.subtree:
-            subtree.wins = torch.zeros_like(td["next", env.reward_key])
+            subtree.wins = env.reward_spec.zero()
 
         for _ in range(self.num_traversals):
             self._traverse_MCTS_one_step(forest, tree, env, self.rollout_max_steps)
@@ -79,7 +87,7 @@ class MCTS(nn.Module):
                             rollout=td.unsqueeze(0),
                             node_data=td["next"].select(*forest.node_map.in_keys),
                             count=torch.tensor(0),
-                            wins=torch.zeros_like(td["next", env.reward_key]),
+                            wins=env.reward_spec.zero(),
                         )
                         subtrees.append(new_node)
 
@@ -93,13 +101,13 @@ class MCTS(nn.Module):
                     rollout_state = td_tree
 
                 if rollout_state["done"]:
-                    rollout_reward = rollout_state[env.reward_key]
+                    rollout_reward = rollout_state.select(*env.reward_keys)
                 else:
                     rollout = env.rollout(
                         max_steps=rollout_max_steps,
                         tensordict=rollout_state,
                     )
-                    rollout_reward = rollout[-1]["next", env.reward_key]
+                    rollout_reward = rollout[-1]["next"].select(*env.reward_keys)
                 done = True
 
             else:
@@ -112,21 +120,23 @@ class MCTS(nn.Module):
             tree.visits += 1
             tree.wins += rollout_reward
 
+    def _get_active_agent(self, td: TensorDict) -> str:
+        turns = torch.stack([td[agent][self.turn_key] for agent in self.agent_keys])
+        if turns.sum() != 1:
+            raise ValueError(
+                "MCTS only supports environments in which it is only one agent's turn at a time."
+            )
+        return self.agent_keys[turns.nonzero()]
+
     # TODO: Allow user to specify different priority functions with PR #2358
     def _traversal_priority_UCB1(self, tree):
         subtree = tree.subtree
         visits = subtree.visits
         reward_sum = subtree.wins
-
-        # If it's black's turn, flip the reward, since black wants to optimize for
-        # the lowest reward, not highest.
-        # TODO: Need a more generic way to do this, since not all use cases of MCTS
-        # will be two player turn based games.
-        if not subtree.rollout[0, 0]["turn"]:
-            reward_sum = -reward_sum
-
         parent_visits = tree.visits
-        reward_sum = reward_sum.squeeze(-1)
+        active_agent = self._get_active_agent(subtree.rollout[0, 0])
+        reward_sum = reward_sum[active_agent, "reward"].squeeze(-1)
+
         C = 2.0**0.5
         priority = (reward_sum + C * torch.sqrt(torch.log(parent_visits))) / visits
         priority[visits == 0] = float("inf")

@@ -677,7 +677,7 @@ class PPOLoss(LossModule):
             loss_value, clip_fraction = _clip_value_loss(
                 old_state_value,
                 state_value,
-                self.clip_value.to(state_value.device),
+                self.clip_value,
                 target_return,
                 loss_value,
                 self.loss_critic_type,

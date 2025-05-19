@@ -29,7 +29,12 @@ from torch import Tensor
 
 from torchrl._utils import RL_WARNINGS
 from torchrl.envs.utils import step_mdp
-from torchrl.objectives.utils import _maybe_get_or_select, _vmap_func, hold_out_net
+from torchrl.objectives.utils import (
+    _maybe_get_or_select,
+    _pseudo_vmap,
+    _vmap_func,
+    hold_out_net,
+)
 from torchrl.objectives.value.functional import (
     generalized_advantage_estimate,
     td0_return_estimate,
@@ -149,6 +154,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
     tensor_keys: _AcceptedKeys
     value_network: TensorDictModule | Callable
     _vmap_randomness = None
+    deactivate_vmap: bool = False
 
     @property
     def advantage_key(self):
@@ -230,6 +236,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
         device: torch.device | None = None,
+        deactivate_vmap: bool = False,
     ):
         super().__init__()
         if device is None:
@@ -239,6 +246,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         self._device = device
         self._tensor_keys = None
         self.differentiable = differentiable
+        self.deactivate_vmap = deactivate_vmap
         self.skip_existing = skip_existing
         self.__dict__["value_network"] = value_network
         self.dep_keys = {}
@@ -435,62 +443,81 @@ class ValueEstimatorBase(TensorDictModuleBase):
             value_net = self.value_network
         in_keys = value_net.in_keys
         if single_call:
-            for i, name in enumerate(data.names):
-                if name == "time":
-                    ndim = i + 1
-                    break
-            else:
-                ndim = None
-            if ndim is not None:
-                # get data at t and last of t+1
-                idx0 = (slice(None),) * (ndim - 1) + (slice(-1, None),)
-                idx = (slice(None),) * (ndim - 1) + (slice(None, -1),)
-                idx_ = (slice(None),) * (ndim - 1) + (slice(1, None),)
-                data_in = torch.cat(
-                    [
-                        data.select(*in_keys, value_key, strict=False),
-                        data.get("next").select(*in_keys, value_key, strict=False)[
-                            idx0
-                        ],
-                    ],
-                    ndim - 1,
-                )
-            else:
+            # We are going to flatten the data, then interleave the last observation of each trajectory in between its
+            #  previous obs (from the root TD) and the first of the next trajectory. Eventually, each trajectory will
+            #  have T+1 elements (or, for a batch of N trajectories, we will have \Sum_{t=0}^{T-1} length_t + T
+            #  elements). Then, we can feed that to our RNN which will understand which trajectory is which, pad the data
+            #  accordingly and process each of them independently.
+            try:
+                ndim = list(data.names).index("time") + 1
+            except ValueError:
                 if RL_WARNINGS:
                     warnings.warn(
                         "Got a tensordict without a time-marked dimension, assuming time is along the last dimension. "
                         "This warning can be turned off by setting the environment variable RL_WARNINGS to False."
                     )
                 ndim = data.ndim
-                idx = (slice(None),) * (ndim - 1) + (slice(None, data.shape[ndim - 1]),)
-                idx_ = (slice(None),) * (ndim - 1) + (
-                    slice(data.shape[ndim - 1], None),
-                )
-                data_in = torch.cat(
-                    [
-                        data.select(*in_keys, value_key, strict=False),
-                        data.get("next").select(*in_keys, value_key, strict=False),
-                    ],
-                    ndim - 1,
-                )
+            data_copy = data.copy()
+            # we are going to modify the done so let's clone it
+            done = data_copy["next", "done"].clone()
 
-            # next_params should be None or be identical to params
-            if next_params is not None and next_params is not params:
-                raise ValueError(
-                    "the value at t and t+1 cannot be retrieved in a single call without recurring to vmap when both params and next params are passed."
+            # Mark the last step of every sequence as done. We do this because flattening would cause the trajectories
+            #  of different batches to be merged.
+            done[(slice(None),) * (ndim - 1) + (-1,)].fill_(True)
+            data_copy["next", "done"] = done
+            # Reshape to -1 because we cannot guarantee that all dims have the same number of done states
+            with data_copy.view(-1) as data_copy_view:
+                # Interleave next data when done
+                data_copy_select = data_copy_view.select(
+                    *in_keys, value_key, strict=False
                 )
-            if params is not None:
-                with params.to_module(value_net):
+                total_elts = (
+                    data_copy_view.shape[0]
+                    + data_copy_view["next", "done"].sum().item()
+                )
+                data_in = data_copy_select.new_zeros((total_elts,))
+                # we can get the indices of non-done data by adding the shifted done cumsum to an arange
+                #    traj = [0, 0, 0, 1, 1, 2, 2]
+                #  arange = [0, 1, 2, 3, 4, 5, 6]
+                #    done = [0, 0, 1, 0, 1, 0, 1]
+                # done_cs = [0, 0, 0, 1, 1, 2, 2]
+                # indices = [0, 1, 2, 4, 5, 7, 8]
+                done_view = data_copy_view["next", "done"].squeeze(-1)
+                done_cs = done_view.cumsum(0)
+                done_cs = torch.cat([done_cs.new_zeros((1,)), done_cs[:-1]], dim=0)
+                indices = torch.arange(done_cs.shape[0], device=done_cs.device)
+                indices = indices + done_cs
+                data_in[indices] = data_copy_select
+                # To get the indices of the extra data, we can mask indices with done_view and add 1
+                indices_interleaved = indices[done_view] + 1
+                # assert not set(indices_interleaved.tolist()).intersection(indices.tolist())
+                data_in[indices_interleaved] = (
+                    data_copy_view[done_view]
+                    .get("next")
+                    .select(*in_keys, value_key, strict=False)
+                )
+                if next_params is not None and next_params is not params:
+                    raise ValueError(
+                        "the value at t and t+1 cannot be retrieved in a single call without recurring to vmap when both params and next params are passed."
+                    )
+                if params is not None:
+                    with params.to_module(value_net):
+                        value_est = value_net(data_in).get(value_key)
+                else:
                     value_est = value_net(data_in).get(value_key)
-            else:
-                value_est = value_net(data_in).get(value_key)
-            value, value_ = value_est[idx], value_est[idx_]
+                value, value_ = value_est[indices], value_est[indices + 1]
+            value = value.view_as(done)
+            value_ = value_.view_as(done)
         else:
+            data_root = data.select(*in_keys, value_key, strict=False)
+            data_next = data.get("next").select(*in_keys, value_key, strict=False)
+            if "is_init" in data_root.keys():
+                # We need to mark the first element of the "next" td as being an init step for RNNs
+                #  otherwise, consecutive elements in the sequence will be considered as part of the same
+                #  trajectory, even if they're not.
+                data_next["is_init"] = data_next["is_init"] | data_root["is_init"]
             data_in = torch.stack(
-                [
-                    data.select(*in_keys, value_key, strict=False),
-                    data.get("next").select(*in_keys, value_key, strict=False),
-                ],
+                [data_root, data_next],
                 0,
             )
             if (params is not None) ^ (next_params is not None):
@@ -499,11 +526,18 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 )
             elif params is not None:
                 params_stack = torch.stack([params, next_params], 0).contiguous()
-                data_out = _vmap_func(value_net, (0, 0), randomness=vmap_randomness)(
-                    data_in, params_stack
-                )
-            else:
+                data_out = _vmap_func(
+                    value_net,
+                    (0, 0),
+                    randomness=vmap_randomness,
+                    pseudo_vmap=self.deactivate_vmap,
+                )(data_in, params_stack)
+            elif not self.deactivate_vmap:
                 data_out = vmap(value_net, (0,), randomness=vmap_randomness)(data_in)
+            else:
+                data_out = _pseudo_vmap(value_net, (0,), randomness=vmap_randomness)(
+                    data_in
+                )
             value_est = data_out.get(value_key)
             value, value_ = value_est[0], value_est[1]
         data.set(value_key, value)
@@ -551,6 +585,8 @@ class TD0Estimator(ValueEstimatorBase):
             read from the input tensordict.  Defaults to ``"state_value"``.
         device (torch.device, optional): the device where the buffers will be instantiated.
             Defaults to ``torch.get_default_device()``.
+        deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
+            Defaults to ``False``.
 
     """
 
@@ -567,6 +603,7 @@ class TD0Estimator(ValueEstimatorBase):
         value_key: NestedKey = None,
         skip_existing: bool | None = None,
         device: torch.device | None = None,
+        deactivate_vmap: bool = False,
     ):
         super().__init__(
             value_network=value_network,
@@ -577,6 +614,7 @@ class TD0Estimator(ValueEstimatorBase):
             value_key=value_key,
             skip_existing=skip_existing,
             device=device,
+            deactivate_vmap=deactivate_vmap,
         )
         self.register_buffer("gamma", torch.tensor(gamma, device=self._device))
         self.average_rewards = average_rewards
@@ -768,6 +806,8 @@ class TD1Estimator(ValueEstimatorBase):
             :meth:`~.value_estimate`.
             Negative dimensions are considered with respect to the input
             tensordict.
+        deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
+            Defaults to ``False``.
 
     """
 
@@ -785,6 +825,7 @@ class TD1Estimator(ValueEstimatorBase):
         shifted: bool = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
+        deactivate_vmap: bool = False,
     ):
         super().__init__(
             value_network=value_network,
@@ -795,6 +836,7 @@ class TD1Estimator(ValueEstimatorBase):
             shifted=shifted,
             skip_existing=skip_existing,
             device=device,
+            deactivate_vmap=deactivate_vmap,
         )
         self.register_buffer("gamma", torch.tensor(gamma, device=self._device))
         self.average_rewards = average_rewards
@@ -992,6 +1034,8 @@ class TDLambdaEstimator(ValueEstimatorBase):
             :meth:`~.value_estimate`.
             Negative dimensions are considered with respect to the input
             tensordict.
+        deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
+            Defaults to ``False``.
 
     """
 
@@ -1011,6 +1055,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
         shifted: bool = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
+        deactivate_vmap: bool = False,
     ):
         super().__init__(
             value_network=value_network,
@@ -1021,6 +1066,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
             skip_existing=skip_existing,
             shifted=shifted,
             device=device,
+            deactivate_vmap=deactivate_vmap,
         )
         self.register_buffer("gamma", torch.tensor(gamma, device=self._device))
         self.register_buffer("lmbda", torch.tensor(lmbda, device=self._device))
@@ -1242,6 +1288,8 @@ class GAE(ValueEstimatorBase):
         auto_reset_env (bool, optional): if ``True``, the last ``"next"`` state
             of the episode isn't valid, so the GAE calculation will use the ``value``
             instead of ``next_value`` to bootstrap truncated episodes.
+        deactivate_vmap (bool, optional): if ``True``, no vmap call will be used, and
+            vectorized maps will be replaced with simple for loops. Defaults to ``False``.
 
     GAE will return an :obj:`"advantage"` entry containing the advantage value. It will also
     return a :obj:`"value_target"` entry with the return value that is to be used
@@ -1255,6 +1303,16 @@ class GAE(ValueEstimatorBase):
       in the input tensordict, the GAE module will ignore the calls to the value
       network (if any) and use the provided value instead.
 
+    .. note:: GAE can be used with value networks that rely on recurrent neural networks, provided that the
+        init markers (`"is_init"`) and terminated / truncated markers are properly set.
+        If `shifted=True`, the trajectory batch will be flattened and the last step of each trajectory will
+        be placed within the flat tensordict after the last step from the root, such that each trajectory has
+        `T+1` elements. If `shifted=False`, the root and `"next"` trajecotries will be stacked and the value
+        network will be called with `vmap` over the stack of trajectories. Because RNNs require fair amount of
+        control flow, they are currently not compatible with `torch.vmap` and, as such, the `deactivate_vmap` option
+        must be turned on in these cases.
+        Similarly, if `shifted=False`, the `"is_init"` entry of the root tensordict will be copied onto the
+        `"is_init"` of the `"next"` entry, such that trajectories are well separated both for root and `"next"` data.
     """
 
     def __init__(
@@ -1274,6 +1332,7 @@ class GAE(ValueEstimatorBase):
         device: torch.device | None = None,
         time_dim: int | None = None,
         auto_reset_env: bool = False,
+        deactivate_vmap: bool = False,
     ):
         super().__init__(
             shifted=shifted,
@@ -1301,6 +1360,7 @@ class GAE(ValueEstimatorBase):
         self.vectorized = vectorized
         self.time_dim = time_dim
         self.auto_reset_env = auto_reset_env
+        self.deactivate_vmap = deactivate_vmap
 
     @property
     def vectorized(self):

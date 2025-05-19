@@ -86,6 +86,8 @@ class REDQLoss(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
+        deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
+            Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -280,6 +282,7 @@ class REDQLoss(LossModule):
         priority_key: str = None,
         separate_losses: bool = False,
         reduction: str = None,
+        deactivate_vmap: bool = False,
     ):
         if reduction is None:
             reduction = "mean"
@@ -295,6 +298,7 @@ class REDQLoss(LossModule):
 
         # let's make sure that actor_network has `return_log_prob` set to True
         self.actor_network.return_log_prob = True
+        self.deactivate_vmap = deactivate_vmap
         if separate_losses:
             # we want to make sure there are no duplicates in the params: the
             # params of critic must be refs to actor if they're shared
@@ -351,10 +355,15 @@ class REDQLoss(LossModule):
 
     def _make_vmap(self):
         self._vmap_qvalue_network00 = _vmap_func(
-            self.qvalue_network, randomness=self.vmap_randomness
+            self.qvalue_network,
+            randomness=self.vmap_randomness,
+            pseudo_vmap=self.deactivate_vmap,
         )
         self._vmap_getdist = _vmap_func(
-            self.actor_network, func="get_dist_params", randomness=self.vmap_randomness
+            self.actor_network,
+            func="get_dist_params",
+            randomness=self.vmap_randomness,
+            pseudo_vmap=self.deactivate_vmap,
         )
 
     @property
