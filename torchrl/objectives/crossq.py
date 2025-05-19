@@ -92,6 +92,8 @@ class CrossQLoss(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
+        deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
+            Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -267,6 +269,7 @@ class CrossQLoss(LossModule):
         priority_key: str = None,
         separate_losses: bool = False,
         reduction: str = None,
+        deactivate_vmap: bool = False,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -274,6 +277,8 @@ class CrossQLoss(LossModule):
             reduction = "mean"
         super().__init__()
         self._set_deprecated_ctor_keys(priority_key=priority_key)
+
+        self.deactivate_vmap = deactivate_vmap
 
         # Actor
         self.convert_to_functional(
@@ -344,7 +349,10 @@ class CrossQLoss(LossModule):
 
     def _make_vmap(self):
         self._vmap_qnetworkN0 = _vmap_func(
-            self.qvalue_network, (None, 0), randomness=self.vmap_randomness
+            self.qvalue_network,
+            (None, 0),
+            randomness=self.vmap_randomness,
+            pseudo_vmap=self.deactivate_vmap,
         )
 
     @property
