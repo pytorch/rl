@@ -350,6 +350,7 @@ class BatchedEnvBase(EnvBase):
 
         # if share_individual_td is None, we will assess later if the output can be stacked
         self.share_individual_td = share_individual_td
+        # self._batch_locked = batch_locked
         self._share_memory = shared_memory
         self._memmap = memmap
         self.allow_step_when_done = allow_step_when_done
@@ -626,8 +627,8 @@ class BatchedEnvBase(EnvBase):
                 self._env_tensordict.named_apply(
                     map_device, nested_keys=True, filter_empty=True
                 )
-
-            self._batch_locked = meta_data.batch_locked
+            # if self._batch_locked is None:
+            #     self._batch_locked = meta_data.batch_locked
         else:
             self._batch_size = torch.Size([self.num_workers, *meta_data[0].batch_size])
             devices = set()
@@ -668,7 +669,8 @@ class BatchedEnvBase(EnvBase):
                 self._env_tensordict = torch.stack(
                     [meta_data.tensordict for meta_data in meta_data], 0
                 )
-            self._batch_locked = meta_data[0].batch_locked
+            # if self._batch_locked is None:
+            #     self._batch_locked = meta_data[0].batch_locked
         self.has_lazy_inputs = contains_lazy_spec(self.input_spec)
 
     def state_dict(self) -> OrderedDict:
@@ -995,9 +997,12 @@ class SerialEnv(BatchedEnvBase):
             for elt in list_of_kwargs:
                 elt.update(kwargs)
         if tensordict is not None:
-            needs_resetting = _aggregate_end_of_traj(
-                tensordict, reset_keys=self.reset_keys
-            )
+            if "_reset" in tensordict.keys():
+                needs_resetting = tensordict["_reset"]
+            else:
+                needs_resetting = _aggregate_end_of_traj(
+                    tensordict, reset_keys=self.reset_keys
+                )
             if needs_resetting.ndim > 2:
                 needs_resetting = needs_resetting.flatten(1, needs_resetting.ndim - 1)
             if needs_resetting.ndim > 1:
@@ -2114,9 +2119,12 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 elt.update(kwargs)
 
         if tensordict is not None:
-            needs_resetting = _aggregate_end_of_traj(
-                tensordict, reset_keys=self.reset_keys
-            )
+            if "_reset" in tensordict.keys():
+                needs_resetting = tensordict["_reset"]
+            else:
+                needs_resetting = _aggregate_end_of_traj(
+                    tensordict, reset_keys=self.reset_keys
+                )
             if needs_resetting.ndim > 2:
                 needs_resetting = needs_resetting.flatten(1, needs_resetting.ndim - 1)
             if needs_resetting.ndim > 1:
