@@ -1112,6 +1112,7 @@ to be able to create this other composition:
     CenterCrop
     ClipTransform
     Compose
+    ConditionalPolicySwitch
     ConditionalSkip
     Crop
     DataLoadingPrimer
@@ -1417,6 +1418,7 @@ the following function will return ``1`` when queried:
     HabitatEnv
     IsaacGymEnv
     IsaacGymWrapper
+    IsaacLabWrapper
     JumanjiEnv
     JumanjiWrapper
     MeltingpotEnv

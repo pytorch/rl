@@ -128,9 +128,7 @@ def make_collector(cfg, train_env, actor_model_explore, compile_mode):
     device = cfg.collector.device
     if device in ("", None):
         if torch.cuda.is_available():
-            if torch.cuda.device_count() < 2:
-                raise RuntimeError("Requires >= 2 GPUs")
-            device = torch.device("cuda:1")
+            device = torch.device("cuda:0")
         else:
             device = torch.device("cpu")
     collector = SyncDataCollector(
@@ -158,7 +156,9 @@ def make_collector_async(
     device = cfg.collector.device
     if device in ("", None):
         if torch.cuda.is_available():
-            device = torch.device("cuda:0")
+            if torch.cuda.device_count() < 2:
+                raise RuntimeError("Requires >= 2 GPUs")
+            device = torch.device("cuda:1")
         else:
             device = torch.device("cpu")
 

@@ -92,6 +92,8 @@ class CQLLoss(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
+        deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
+            Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -290,6 +292,7 @@ class CQLLoss(LossModule):
         with_lagrange: bool = False,
         lagrange_thresh: float = 0.0,
         reduction: str = None,
+        deactivate_vmap: bool = False,
     ) -> None:
         self._out_keys = None
         if reduction is None:
@@ -303,6 +306,7 @@ class CQLLoss(LossModule):
             "actor_network",
             create_target_params=self.delay_actor,
         )
+        self.deactivate_vmap = deactivate_vmap
 
         # Q value
         self.delay_qvalue = delay_qvalue
@@ -376,10 +380,15 @@ class CQLLoss(LossModule):
 
     def _make_vmap(self):
         self._vmap_qvalue_networkN0 = _vmap_func(
-            self.qvalue_network, (None, 0), randomness=self.vmap_randomness
+            self.qvalue_network,
+            (None, 0),
+            randomness=self.vmap_randomness,
+            pseudo_vmap=self.deactivate_vmap,
         )
         self._vmap_qvalue_network00 = _vmap_func(
-            self.qvalue_network, randomness=self.vmap_randomness
+            self.qvalue_network,
+            randomness=self.vmap_randomness,
+            pseudo_vmap=self.deactivate_vmap,
         )
 
     @property

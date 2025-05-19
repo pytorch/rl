@@ -14,7 +14,7 @@ import os
 import re
 import warnings
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 import torch
 
@@ -687,7 +687,7 @@ def check_env_specs(
     check_dtype=True,
     seed: int | None = None,
     tensordict: TensorDictBase | None = None,
-    break_when_any_done: bool | str = None,
+    break_when_any_done: bool | Literal["both"] = None,
 ):
     """Tests an environment specs against the results of short rollout.
 
@@ -938,7 +938,7 @@ def make_composite_from_td(
     # of unbounded values.
     def make_shape(shape):
         if shape or not unsqueeze_null_shapes:
-            if dynamic_shape:
+            if dynamic_shape and shape:
                 return shape[:-1] + (-1,)
             else:
                 return shape
@@ -954,7 +954,8 @@ def make_composite_from_td(
             if is_tensor_collection(tensor) and not is_non_tensor(tensor)
             else NonTensor(
                 shape=tensor.shape,
-                example_data=tensor.data,
+                # Assume all the non-tensors have the same datatype
+                example_data=tensor.view(-1)[0].data,
                 device=tensor.device,
             )
             if is_non_tensor(tensor)

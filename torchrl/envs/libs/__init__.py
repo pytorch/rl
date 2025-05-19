@@ -16,6 +16,7 @@ from .gym import (
     set_gym_backend,
 )
 from .habitat import HabitatEnv
+from .isaac_lab import IsaacLabWrapper
 from .isaacgym import IsaacGymEnv, IsaacGymWrapper
 from .jumanji import JumanjiEnv, JumanjiWrapper
 from .meltingpot import MeltingpotEnv, MeltingpotWrapper
@@ -32,22 +33,20 @@ __all__ = [
     "BraxWrapper",
     "DMControlEnv",
     "DMControlWrapper",
-    "MultiThreadedEnv",
-    "MultiThreadedEnvWrapper",
-    "gym_backend",
     "GymEnv",
     "GymWrapper",
-    "MOGymEnv",
-    "MOGymWrapper",
-    "register_gym_spec_conversion",
-    "set_gym_backend",
     "HabitatEnv",
     "IsaacGymEnv",
     "IsaacGymWrapper",
+    "IsaacLabWrapper",
     "JumanjiEnv",
     "JumanjiWrapper",
+    "MOGymEnv",
+    "MOGymWrapper",
     "MeltingpotEnv",
     "MeltingpotWrapper",
+    "MultiThreadedEnv",
+    "MultiThreadedEnvWrapper",
     "OpenMLEnv",
     "OpenSpielEnv",
     "OpenSpielWrapper",
@@ -60,4 +59,7 @@ __all__ = [
     "UnityMLAgentsWrapper",
     "VmasEnv",
     "VmasWrapper",
+    "gym_backend",
+    "register_gym_spec_conversion",
+    "set_gym_backend",
 ]
