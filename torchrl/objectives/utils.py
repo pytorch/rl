@@ -568,10 +568,6 @@ def _pseudo_vmap(
             f"pseudo_vmap only supports 'different' or 'error' randomness modes, but got {randomness=}. If another mode is required, please "
             "submit an issue in TorchRL."
         )
-    if isinstance(in_dims, int):
-        in_dims = (in_dims,)
-    if isinstance(out_dims, int):
-        out_dims = (out_dims,)
     from tensordict.nn.functional_modules import _exclude_td_from_pytree
 
     def _unbind(d, x):
@@ -583,7 +579,6 @@ def _pseudo_vmap(
     def _stack(d, x):
         if d is not None:
             x = list(x)
-            assert x[0] is not x[1]
             return torch.stack(list(x), d)
         return x
 
@@ -591,6 +586,10 @@ def _pseudo_vmap(
     def new_func(*args, in_dims=in_dims, out_dims=out_dims, **kwargs):
         with _exclude_td_from_pytree():
             # Unbind inputs
+            if isinstance(in_dims, int):
+                in_dims = (in_dims,) * len(args)
+            if isinstance(out_dims, int):
+                out_dims = (out_dims,)
             vs = zip(*tuple(tree_map(_unbind, in_dims, args)))
             rs = []
             for v in vs:

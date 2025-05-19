@@ -13,7 +13,7 @@ import torch.nn as nn
 from tensordict import tensorclass, TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 from tensordict.utils import expand_right, NestedKey
-
+from torchrl._utils import logger as torchrl_logger
 from torchrl.data import (
     Binary,
     Bounded,
@@ -2533,3 +2533,58 @@ class DummyTensorDataLoader:
             else:
                 tokens = tensors
         return {"tokens": tokens, "attention_mask": tokens != 0}
+
+
+class MockNestedResetEnv(EnvBase):
+    """To test behaviour of envs with nested done states - where the root done prevails over others."""
+
+    def __init__(self, num_steps: int, done_at_root: bool) -> None:
+        super().__init__(device="cpu")
+        self._num_steps = num_steps
+        self._counter = 0
+        self.done_at_root = done_at_root
+        self.done_spec = Composite(
+            {
+                ("agent_1", "done"): Binary(1, dtype=torch.bool),
+                ("agent_2", "done"): Binary(1, dtype=torch.bool),
+            }
+        )
+        if done_at_root:
+            self.full_done_spec["done"] = Binary(1, dtype=torch.bool)
+
+    def _reset(self, tensordict: TensorDict) -> TensorDict:
+        torchrl_logger.info(f"Reset after {self._counter} steps!")
+        if tensordict is not None:
+            torchrl_logger.info(f"tensordict at reset {tensordict.to_dict()}")
+        self._counter = 0
+        result = TensorDict(
+            {
+                ("agent_1", "done"): torch.tensor([False], dtype=torch.bool),
+                ("agent_2", "done"): torch.tensor([False], dtype=torch.bool),
+            },
+        )
+        if self.done_at_root:
+            result["done"] = torch.tensor([False], dtype=torch.bool)
+        return result
+
+    def _step(self, tensordict: TensorDict) -> TensorDict:
+        self._counter += 1
+        done = torch.tensor([self._counter >= self._num_steps], dtype=torch.bool)
+        if self.done_at_root:
+            return TensorDict(
+                {
+                    "done": done,
+                    ("agent_1", "done"): torch.tensor([True], dtype=torch.bool),
+                    ("agent_2", "done"): torch.tensor([False], dtype=torch.bool),
+                },
+            )
+        else:
+            return TensorDict(
+                {
+                    ("agent_1", "done"): done,
+                    ("agent_2", "done"): torch.tensor([False], dtype=torch.bool),
+                },
+            )
+
+    def _set_seed(self):
+        pass

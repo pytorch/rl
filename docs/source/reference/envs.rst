@@ -1112,6 +1112,7 @@ to be able to create this other composition:
     CenterCrop
     ClipTransform
     Compose
+    ConditionalPolicySwitch
     ConditionalSkip
     Crop
     DataLoadingPrimer

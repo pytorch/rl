@@ -536,11 +536,13 @@ class SACLoss(LossModule):
             self._value_estimator = TD1Estimator(
                 **hp,
                 value_network=value_net,
+                deactivate_vmap=self.deactivate_vmap,
             )
         elif value_type is ValueEstimators.TD0:
             self._value_estimator = TD0Estimator(
                 **hp,
                 value_network=value_net,
+                deactivate_vmap=self.deactivate_vmap,
             )
         elif value_type is ValueEstimators.GAE:
             raise NotImplementedError(
@@ -550,6 +552,7 @@ class SACLoss(LossModule):
             self._value_estimator = TDLambdaEstimator(
                 **hp,
                 value_network=value_net,
+                deactivate_vmap=self.deactivate_vmap,
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
@@ -682,7 +685,6 @@ class SACLoss(LossModule):
             raise RuntimeError(
                 f"Losses shape mismatch: {log_prob.shape} and {min_q_logprob.shape}"
             )
-
         return self._alpha * log_prob - min_q_logprob, {"log_prob": log_prob.detach()}
 
     @property
@@ -1452,11 +1454,13 @@ class DiscreteSACLoss(LossModule):
             self._value_estimator = TD1Estimator(
                 **hp,
                 value_network=None,
+                deactivate_vmap=self.deactivate_vmap,
             )
         elif value_type is ValueEstimators.TD0:
             self._value_estimator = TD0Estimator(
                 **hp,
                 value_network=None,
+                deactivate_vmap=self.deactivate_vmap,
             )
         elif value_type is ValueEstimators.GAE:
             raise NotImplementedError(
@@ -1466,6 +1470,7 @@ class DiscreteSACLoss(LossModule):
             self._value_estimator = TDLambdaEstimator(
                 **hp,
                 value_network=None,
+                deactivate_vmap=self.deactivate_vmap,
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
