@@ -598,8 +598,6 @@ class PPOLoss(LossModule):
 
         if is_composite:
             with set_composite_lp_aggregate(False):
-                if log_prob.batch_size != adv_shape:
-                    log_prob.batch_size = adv_shape
                 if not is_tensor_collection(prev_log_prob):
                     # this isn't great: in general, multi-head actions should have a composite log-prob too
                     warnings.warn(
@@ -612,6 +610,8 @@ class PPOLoss(LossModule):
                     if is_tensor_collection(log_prob):
                         log_prob = _sum_td_features(log_prob)
                         log_prob.view_as(prev_log_prob)
+                if log_prob.batch_size != adv_shape:
+                    log_prob.batch_size = adv_shape
         log_weight = (log_prob - prev_log_prob).unsqueeze(-1)
         if is_tensor_collection(log_weight):
             log_weight = _sum_td_features(log_weight)
