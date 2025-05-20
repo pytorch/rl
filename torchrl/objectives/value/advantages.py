@@ -460,11 +460,14 @@ class ValueEstimatorBase(TensorDictModuleBase):
             data_copy = data.copy()
             # we are going to modify the done so let's clone it
             done = data_copy["next", "done"].clone()
-
             # Mark the last step of every sequence as done. We do this because flattening would cause the trajectories
             #  of different batches to be merged.
             done[(slice(None),) * (ndim - 1) + (-1,)].fill_(True)
+            truncated = data_copy.get(("next", "truncated"), done)
+            if truncated is not done:
+                truncated[(slice(None),) * (ndim - 1) + (-1,)].fill_(True)
             data_copy["next", "done"] = done
+            data_copy["next", "truncated"] = truncated
             # Reshape to -1 because we cannot guarantee that all dims have the same number of done states
             with data_copy.view(-1) as data_copy_view:
                 # Interleave next data when done
@@ -482,7 +485,11 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 #    done = [0, 0, 1, 0, 1, 0, 1]
                 # done_cs = [0, 0, 0, 1, 1, 2, 2]
                 # indices = [0, 1, 2, 4, 5, 7, 8]
-                done_view = data_copy_view["next", "done"].squeeze(-1)
+                done_view = data_copy_view["next", "done"]
+                if done_view.shape[-1] == 1:
+                    done_view = done_view.squeeze(-1)
+                else:
+                    done_view = done_view.any(-1)
                 done_cs = done_view.cumsum(0)
                 done_cs = torch.cat([done_cs.new_zeros((1,)), done_cs[:-1]], dim=0)
                 indices = torch.arange(done_cs.shape[0], device=done_cs.device)
