@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.8.0+f0cda31) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.8.0+50ecb15) &#x25BC</span></a>
     </div>
     
 
@@ -1019,8 +1019,6 @@
 
         <span class="k">if</span> <span class="n">is_composite</span><span class="p">:</span>
             <span class="k">with</span> <span class="n">set_composite_lp_aggregate</span><span class="p">(</span><span class="kc">False</span><span class="p">):</span>
-                <span class="k">if</span> <span class="n">log_prob</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">!=</span> <span class="n">adv_shape</span><span class="p">:</span>
-                    <span class="n">log_prob</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="n">adv_shape</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">prev_log_prob</span><span class="p">):</span>
                     <span class="c1"># this isn&#39;t great: in general, multi-head actions should have a composite log-prob too</span>
                     <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
@@ -1033,6 +1031,8 @@
                     <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">log_prob</span><span class="p">):</span>
                         <span class="n">log_prob</span> <span class="o">=</span> <span class="n">_sum_td_features</span><span class="p">(</span><span class="n">log_prob</span><span class="p">)</span>
                         <span class="n">log_prob</span><span class="o">.</span><span class="n">view_as</span><span class="p">(</span><span class="n">prev_log_prob</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">log_prob</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">!=</span> <span class="n">adv_shape</span><span class="p">:</span>
+                    <span class="n">log_prob</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="n">adv_shape</span>
         <span class="n">log_weight</span> <span class="o">=</span> <span class="p">(</span><span class="n">log_prob</span> <span class="o">-</span> <span class="n">prev_log_prob</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">log_weight</span><span class="p">):</span>
             <span class="n">log_weight</span> <span class="o">=</span> <span class="n">_sum_td_features</span><span class="p">(</span><span class="n">log_weight</span><span class="p">)</span>
