@@ -14247,6 +14247,46 @@ def test_updater(mode, value_network_update_interval, device, dtype):
 
 
 class TestValues:
+    def test_gae_multi_done(self):
+
+        # constants
+        batch_size = 10
+        seq_size = 5
+        n_dims = batch_size
+        gamma = 0.99
+        lmbda = 0.98
+
+        env = SerialEnv(
+            batch_size, [functools.partial(GymEnv, "CartPole-v1")] * batch_size
+        )
+        obs_size = env.full_observation_spec[env.observation_keys[0]].shape[-1]
+
+        td = env.rollout(seq_size, break_when_any_done=False)
+        # make the magic happen: swap dims and create an artificial ndim done state
+        done = td["next", "done"].transpose(0, -1)
+        terminated = td["next", "terminated"].transpose(0, -1)
+        reward = td["next", "reward"].transpose(0, -1)
+        td = td[:1]
+        td["next", "done"] = done
+        td["next", "terminated"] = terminated
+        td["next", "reward"] = reward
+
+        critic = TensorDictModule(
+            nn.Linear(obs_size, n_dims),
+            in_keys=[("observation",)],
+            out_keys=[("state_value",)],
+        )
+
+        gae_shifted = GAE(gamma=gamma, lmbda=lmbda, value_network=critic, shifted=True)
+        gae_no_shifted = GAE(
+            gamma=gamma, lmbda=lmbda, value_network=critic, shifted=False
+        )
+
+        torch.testing.assert_close(
+            gae_shifted(td.clone())["advantage"],
+            gae_no_shifted(td.clone())["advantage"],
+        )
+
     @pytest.mark.skipif(not _has_gym, reason="requires gym")
     @pytest.mark.parametrize("module", ["lstm", "gru"])
     def test_gae_recurrent(self, module):
