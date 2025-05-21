@@ -20,6 +20,7 @@ from contextlib import nullcontext
 from copy import copy
 from functools import wraps
 from importlib import import_module
+from textwrap import indent
 from typing import Any, Callable, cast, TypeVar
 
 import numpy as np
@@ -52,9 +53,8 @@ def strtobool(val: Any) -> bool:
 LOGGING_LEVEL = os.environ.get("RL_LOGGING_LEVEL", "INFO")
 logger = logging.getLogger("torchrl")
 logger.setLevel(getattr(logging, LOGGING_LEVEL))
-# Disable propagation to the root logger
 logger.propagate = False
-# Remove all attached handlers
+# Clear existing handlers
 while logger.hasHandlers():
     logger.removeHandler(logger.handlers[0])
 stream_handlers = {
@@ -62,15 +62,28 @@ stream_handlers = {
     "stderr": sys.stderr,
 }
 TORCHRL_CONSOLE_STREAM = os.getenv("TORCHRL_CONSOLE_STREAM")
-if TORCHRL_CONSOLE_STREAM:
-    stream_handler = stream_handlers[TORCHRL_CONSOLE_STREAM]
-else:
-    stream_handler = None
-console_handler = logging.StreamHandler(stream=stream_handler)
+stream_handler = stream_handlers.get(TORCHRL_CONSOLE_STREAM, sys.stdout)
 
-console_handler.setLevel(logging.INFO)
-formatter = logging.Formatter("%(asctime)s [%(name)s][%(levelname)s] %(message)s")
-console_handler.setFormatter(formatter)
+
+# Create colored handler
+class _CustomFormatter(logging.Formatter):
+    def format(self, record):
+        # Format the initial part in green
+        green_format = "\033[92m%(asctime)s [%(name)s][%(levelname)s]\033[0m"
+        # Format the message part
+        message_format = "%(message)s"
+        # End marker in green
+        end_marker = "\033[92m [END]\033[0m"
+        # Combine all parts
+        formatted_message = logging.Formatter(
+            green_format + indent(message_format, " " * 4) + end_marker
+        ).format(record)
+
+        return formatted_message
+
+
+console_handler = logging.StreamHandler(stream_handler)
+console_handler.setFormatter(_CustomFormatter())
 logger.addHandler(console_handler)
 
 VERBOSE = strtobool(os.environ.get("VERBOSE", str(logger.isEnabledFor(logging.DEBUG))))
