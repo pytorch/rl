@@ -12,7 +12,7 @@ from tensordict.utils import unravel_key
 from torch.utils._pytree import tree_map
 
 from torchrl._utils import implement_for
-from torchrl.data import Composite
+from torchrl.data.tensor_specs import Composite
 from torchrl.envs import step_mdp, TransformedEnv
 from torchrl.envs.libs.gym import _torchrl_to_gym_spec_transform, GYMNASIUM_1_ERROR
 

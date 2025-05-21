@@ -10,8 +10,8 @@ import importlib.util
 
 import pytest
 import torch
-
 from tensordict import set_list_to_stack
+
 from torchrl.data import History
 
 _has_transformers = importlib.util.find_spec("transformers")
