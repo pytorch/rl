@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+50ecb15) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+1b9d2c1) &#x25BC</span></a>
     </div>
     
 
@@ -441,6 +441,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">copy</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">wraps</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">importlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">import_module</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">textwrap</span><span class="w"> </span><span class="kn">import</span> <span class="n">indent</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">cast</span><span class="p">,</span> <span class="n">TypeVar</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
@@ -473,9 +474,8 @@
 <span class="n">LOGGING_LEVEL</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;RL_LOGGING_LEVEL&quot;</span><span class="p">,</span> <span class="s2">&quot;INFO&quot;</span><span class="p">)</span>
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">&quot;torchrl&quot;</span><span class="p">)</span>
 <span class="n">logger</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">logging</span><span class="p">,</span> <span class="n">LOGGING_LEVEL</span><span class="p">))</span>
-<span class="c1"># Disable propagation to the root logger</span>
 <span class="n">logger</span><span class="o">.</span><span class="n">propagate</span> <span class="o">=</span> <span class="kc">False</span>
-<span class="c1"># Remove all attached handlers</span>
+<span class="c1"># Clear existing handlers</span>
 <span class="k">while</span> <span class="n">logger</span><span class="o">.</span><span class="n">hasHandlers</span><span class="p">():</span>
     <span class="n">logger</span><span class="o">.</span><span class="n">removeHandler</span><span class="p">(</span><span class="n">logger</span><span class="o">.</span><span class="n">handlers</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
 <span class="n">stream_handlers</span> <span class="o">=</span> <span class="p">{</span>
@@ -483,15 +483,28 @@
     <span class="s2">&quot;stderr&quot;</span><span class="p">:</span> <span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">,</span>
 <span class="p">}</span>
 <span class="n">TORCHRL_CONSOLE_STREAM</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;TORCHRL_CONSOLE_STREAM&quot;</span><span class="p">)</span>
-<span class="k">if</span> <span class="n">TORCHRL_CONSOLE_STREAM</span><span class="p">:</span>
-    <span class="n">stream_handler</span> <span class="o">=</span> <span class="n">stream_handlers</span><span class="p">[</span><span class="n">TORCHRL_CONSOLE_STREAM</span><span class="p">]</span>
-<span class="k">else</span><span class="p">:</span>
-    <span class="n">stream_handler</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="n">console_handler</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">StreamHandler</span><span class="p">(</span><span class="n">stream</span><span class="o">=</span><span class="n">stream_handler</span><span class="p">)</span>
+<span class="n">stream_handler</span> <span class="o">=</span> <span class="n">stream_handlers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">TORCHRL_CONSOLE_STREAM</span><span class="p">,</span> <span class="n">sys</span><span class="o">.</span><span class="n">stdout</span><span class="p">)</span>
 
-<span class="n">console_handler</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
-<span class="n">formatter</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">Formatter</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">%(asctime)s</span><span class="s2"> [</span><span class="si">%(name)s</span><span class="s2">][</span><span class="si">%(levelname)s</span><span class="s2">] </span><span class="si">%(message)s</span><span class="s2">&quot;</span><span class="p">)</span>
-<span class="n">console_handler</span><span class="o">.</span><span class="n">setFormatter</span><span class="p">(</span><span class="n">formatter</span><span class="p">)</span>
+
+<span class="c1"># Create colored handler</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">_CustomFormatter</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">Formatter</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">format</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">record</span><span class="p">):</span>
+        <span class="c1"># Format the initial part in green</span>
+        <span class="n">green_format</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[92m</span><span class="si">%(asctime)s</span><span class="s2"> [</span><span class="si">%(name)s</span><span class="s2">][</span><span class="si">%(levelname)s</span><span class="s2">]</span><span class="se">\033</span><span class="s2">[0m&quot;</span>
+        <span class="c1"># Format the message part</span>
+        <span class="n">message_format</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="si">%(message)s</span><span class="s2">&quot;</span>
+        <span class="c1"># End marker in green</span>
+        <span class="n">end_marker</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\033</span><span class="s2">[92m [END]</span><span class="se">\033</span><span class="s2">[0m&quot;</span>
+        <span class="c1"># Combine all parts</span>
+        <span class="n">formatted_message</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">Formatter</span><span class="p">(</span>
+            <span class="n">green_format</span> <span class="o">+</span> <span class="n">indent</span><span class="p">(</span><span class="n">message_format</span><span class="p">,</span> <span class="s2">&quot; &quot;</span> <span class="o">*</span> <span class="mi">4</span><span class="p">)</span> <span class="o">+</span> <span class="n">end_marker</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">record</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">formatted_message</span>
+
+
+<span class="n">console_handler</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">StreamHandler</span><span class="p">(</span><span class="n">stream_handler</span><span class="p">)</span>
+<span class="n">console_handler</span><span class="o">.</span><span class="n">setFormatter</span><span class="p">(</span><span class="n">_CustomFormatter</span><span class="p">())</span>
 <span class="n">logger</span><span class="o">.</span><span class="n">addHandler</span><span class="p">(</span><span class="n">console_handler</span><span class="p">)</span>
 
 <span class="n">VERBOSE</span> <span class="o">=</span> <span class="n">strtobool</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;VERBOSE&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">logger</span><span class="o">.</span><span class="n">isEnabledFor</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">))))</span>
