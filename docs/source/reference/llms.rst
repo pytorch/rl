@@ -1,4 +1,4 @@
-.. currentmodule:: torchrl.trainers
+.. currentmodule:: torchrl
 
 LLM interface
 =============
