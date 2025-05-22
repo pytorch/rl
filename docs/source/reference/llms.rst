@@ -129,3 +129,21 @@ Utils
     make_vllm_worker
     stateless_init_process_group
     vLLMWorker
+
+Objectives
+----------
+
+LLM post training require some appropriate versions of the losses implemented in TorchRL.
+
+GRPO
+~~~~
+
+.. currentmodule:: torchrl.objectives.llm
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    GRPOLoss
+    GRPOLossOutput
+    MCAdvantage
