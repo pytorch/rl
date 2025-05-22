@@ -122,6 +122,10 @@ class PPOLoss(LossModule):
             The purpose of clipping is to limit the impact of extreme value predictions, helping stabilize training
             and preventing large updates. However, it will have no impact if the value estimate was done by the current
             version of the value estimator. Defaults to ``None``.
+        device (torch.device, optional): device of the buffers. Defaults to ``None``.
+
+            .. note:: Parameters and buffers from the policy / critic will not be cast to that device to ensure that
+                the storages match the ones that are passed to other components, such as data collectors.
 
     .. note::
       The advantage (typically GAE) can be computed by the loss function or
@@ -341,6 +345,7 @@ class PPOLoss(LossModule):
         critic: ProbabilisticTensorDictSequential = None,
         reduction: str = None,
         clip_value: float | None = None,
+        device: torch.device | None = None,
         **kwargs,
     ):
         if actor is not None:
@@ -395,10 +400,13 @@ class PPOLoss(LossModule):
         self.separate_losses = separate_losses
         self.reduction = reduction
 
-        try:
-            device = next(self.parameters()).device
-        except (AttributeError, StopIteration):
-            device = getattr(torch, "get_default_device", lambda: torch.device("cpu"))()
+        if device is None:
+            try:
+                device = next(self.parameters()).device
+            except (AttributeError, StopIteration):
+                device = getattr(
+                    torch, "get_default_device", lambda: torch.device("cpu")
+                )()
 
         self.register_buffer("entropy_coef", torch.tensor(entropy_coef, device=device))
         if critic_coef is not None:
@@ -422,7 +430,7 @@ class PPOLoss(LossModule):
 
         if clip_value is not None:
             if isinstance(clip_value, float):
-                clip_value = torch.tensor(clip_value)
+                clip_value = torch.tensor(clip_value, device=device)
             elif isinstance(clip_value, torch.Tensor):
                 if clip_value.numel() != 1:
                     raise ValueError(
@@ -866,6 +874,10 @@ class ClipPPOLoss(PPOLoss):
             estimate was done by the current version of the value estimator. If instead ``True`` is provided, the
             ``clip_epsilon`` parameter will be used as the clipping threshold. If not provided or ``False``, no
             clipping will be performed. Defaults to ``False``.
+        device (torch.device, optional): device of the buffers. Defaults to ``None``.
+
+            .. note:: Parameters and buffers from the policy / critic will not be cast to that device to ensure that
+                the storages match the ones that are passed to other components, such as data collectors.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -934,6 +946,7 @@ class ClipPPOLoss(PPOLoss):
         separate_losses: bool = False,
         reduction: str = None,
         clip_value: bool | float | None = None,
+        device: torch.device | None = None,
         **kwargs,
     ):
         # Define clipping of the value loss
@@ -954,13 +967,15 @@ class ClipPPOLoss(PPOLoss):
             separate_losses=separate_losses,
             reduction=reduction,
             clip_value=clip_value,
-            **kwargs,
+            device=device**kwargs,
         )
-        for p in self.parameters():
-            device = p.device
-            break
-        else:
-            device = None
+        if device is None:
+            try:
+                device = next(self.parameters()).device
+            except (AttributeError, StopIteration):
+                device = getattr(
+                    torch, "get_default_device", lambda: torch.device("cpu")
+                )()
         self.register_buffer("clip_epsilon", torch.tensor(clip_epsilon, device=device))
 
     @property
@@ -1139,6 +1154,10 @@ class KLPENPPOLoss(PPOLoss):
             The purpose of clipping is to limit the impact of extreme value predictions, helping stabilize training
             and preventing large updates. However, it will have no impact if the value estimate was done by the current
             version of the value estimator. Defaults to ``None``.
+        device (torch.device, optional): device of the buffers. Defaults to ``None``.
+
+            .. note:: Parameters and buffers from the policy / critic will not be cast to that device to ensure that
+                the storages match the ones that are passed to other components, such as data collectors.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -1211,6 +1230,7 @@ class KLPENPPOLoss(PPOLoss):
         separate_losses: bool = False,
         reduction: str = None,
         clip_value: float | None = None,
+        device: torch.device | None = None,
         **kwargs,
     ):
         super().__init__(
@@ -1227,12 +1247,21 @@ class KLPENPPOLoss(PPOLoss):
             separate_losses=separate_losses,
             reduction=reduction,
             clip_value=clip_value,
+            device=device,
             **kwargs,
         )
 
+        if device is None:
+            try:
+                device = next(self.parameters()).device
+            except (AttributeError, StopIteration):
+                device = getattr(
+                    torch, "get_default_device", lambda: torch.device("cpu")
+                )()
+
         self.dtarg = dtarg
         self._beta_init = beta
-        self.register_buffer("beta", torch.tensor(beta))
+        self.register_buffer("beta", torch.tensor(beta, device=device))
 
         if increment < 1.0:
             raise ValueError(

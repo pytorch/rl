@@ -76,6 +76,10 @@ class GRPOLoss(ClipPPOLoss):
             estimate was done by the current version of the value estimator. If instead ``True`` is provided, the
             ``clip_epsilon`` parameter will be used as the clipping threshold. If not provided or ``False``, no
             clipping will be performed. Defaults to ``False``.
+        device (torch.device, optional): device of the buffers. Defaults to ``None``.
+
+            .. note:: Parameters and buffers from the policy / critic will not be cast to that device to ensure that
+                the storages match the ones that are passed to other components, such as data collectors.
     """
 
     actor_network: TensorDictModule
@@ -99,6 +103,7 @@ class GRPOLoss(ClipPPOLoss):
         reduction: str = None,
         clip_value: bool | float | None = None,
         kl_to_ref_coeff: float | None = None,
+        device: torch.device = None,
         **kwargs,
     ):
         # Define clipping of the value loss
@@ -116,6 +121,7 @@ class GRPOLoss(ClipPPOLoss):
             reduction=reduction,
             clip_value=clip_value,
             functional=False,
+            device=device,
             **kwargs,
         )
         # We don't want to use the string action but the tokens
