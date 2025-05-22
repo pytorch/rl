@@ -9,9 +9,9 @@ import os
 
 import torch
 
-from smith import logger as smith_logger
+from torchrl import logger as torchrl_logger
 
-from smith.modules import TransformersWrapper, vLLMWrapper
+from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 
 from tensordict import TensorDict
 
@@ -28,7 +28,7 @@ def cuda_visible_devices(devices: list[int]):
 
 
 def get_train_model(args, train_devices):
-    smith_logger.info("Creating train model")
+    torchrl_logger.info("Creating train model")
 
     with torch.device(f"cuda:{train_devices[0]}"):
         train_model, train_tokenizer = get_hf_model(
@@ -47,9 +47,9 @@ def get_train_model(args, train_devices):
 
 
 def get_inference_model(args, vllm_devices):
-    from smith.modules.backends.vllm import make_vllm_worker
+    from torchrl.modules.llm.backends.vllm import make_vllm_worker
 
-    smith_logger.info(f"Creating inference model on devices {vllm_devices}")
+    torchrl_logger.info(f"Creating inference model on devices {vllm_devices}")
 
     model_name = args.model_name
 
@@ -75,7 +75,7 @@ def get_inference_model(args, vllm_devices):
 
 
 def get_ref_model(args, tokenizer, ref_device):
-    smith_logger.info("Creating ref model")
+    torchrl_logger.info("Creating ref model")
     with torch.device(f"cuda:{ref_device}"):
         model_name = args.model_name
         from transformers import AutoModelForCausalLM
@@ -125,7 +125,7 @@ def get_hf_model(
     # Configure model settings for bfloat16 precision
     # Setup flash_attention_2 for memory-efficient attention computation
     if torch_dtype == torch.bfloat16:
-        smith_logger.info("flash_attention_2 init")
+        torchrl_logger.info("flash_attention_2 init")
 
         model_configs = {
             "attn_implementation": "flash_attention_2",
@@ -138,7 +138,7 @@ def get_hf_model(
     # Configure training settings based on FSDP usage
     # Set up trainer configurations for FSDP or standard training
     if fsdp != "" and fsdp_config is not None:
-        smith_logger.info("Configurations for FSDP")
+        torchrl_logger.info("Configurations for FSDP")
 
         bnb_config_params = {"bnb_4bit_quant_storage": torch_dtype}
     else:
@@ -171,11 +171,11 @@ def get_hf_model(
         # )
 
         if gradient_checkpointing:
-            smith_logger.info("gradient_checkpointing enabled")
+            torchrl_logger.info("gradient_checkpointing enabled")
             model.gradient_checkpointing_enable()
     else:
         if gradient_checkpointing:
-            smith_logger.info("gradient_checkpointing enabled")
+            torchrl_logger.info("gradient_checkpointing enabled")
             model.gradient_checkpointing_enable(
                 gradient_checkpointing_kwargs={"use_reentrant": False}
             )
