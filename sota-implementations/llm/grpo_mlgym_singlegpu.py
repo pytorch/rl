@@ -60,7 +60,7 @@ if not os.getenv("VLLM_USE_V1", "0"):
 
 
 def make_env(transform: Transform | None = None) -> EnvBase:
-    env = make_mlgym()
+    env = make_mlgym(tasks=["prisonersDilemma"])
     if transform is not None:
         env = env.append_transform(transform)
     return env
