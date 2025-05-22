@@ -22,14 +22,12 @@ import torch
 
 import tqdm
 
-from grpo_utils import get_inference_model, get_ref_model, get_train_model
+from grpo_utils import get_train_model
 from torchrl import logger as torchrl_logger
 from torchrl.collectors.llm import LLMCollector
-from torchrl.collectors.llm.weight_update.vllm import vLLMReceiver, vLLMSender
 from torchrl.data import LazyStackStorage, ReplayBuffer, SamplerWithoutReplacement
-from torchrl.envs import AsyncEnvPool, EnvBase, ParallelEnv, Transform
+from torchrl.envs import AsyncEnvPool, EnvBase, Transform
 
-from torchrl.envs.llm import KLRewardTransform
 from torchrl.envs.llm.libs import make_mlgym
 
 from torchrl.objectives.llm.grpo import GRPOLoss, MCAdvantage
@@ -60,11 +58,13 @@ torch.set_default_device("cuda:0")
 if not os.getenv("VLLM_USE_V1", "0"):
     raise ValueError("VLLM_USE_V1=0 not set")
 
+
 def make_env(transform: Transform | None = None) -> EnvBase:
     env = make_mlgym()
     if transform is not None:
         env = env.append_transform(transform)
     return env
+
 
 if __name__ == "__main__":
     import ray

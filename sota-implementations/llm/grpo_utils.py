@@ -9,11 +9,11 @@ import os
 
 import torch
 
+from tensordict import TensorDict
+
 from torchrl import logger as torchrl_logger
 
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
-
-from tensordict import TensorDict
 
 
 @contextlib.contextmanager

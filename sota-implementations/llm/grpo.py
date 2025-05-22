@@ -15,8 +15,9 @@ $ python -m pip install datasets
 from __future__ import annotations
 
 import gc
-from argparse import ArgumentParser
 import os
+from argparse import ArgumentParser
+
 import torch
 
 import tqdm
