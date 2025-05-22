@@ -440,7 +440,7 @@ class PPOLoss(LossModule):
                 raise ValueError(
                     f"clip_value must be a float or a scalar tensor, got {clip_value}."
                 )
-        self.register_buffer("clip_value", clip_value)
+        self.register_buffer("clip_value", clip_value.to(device))
         try:
             log_prob_keys = self.actor_network.log_prob_keys
             action_keys = self.actor_network.dist_sample_keys
