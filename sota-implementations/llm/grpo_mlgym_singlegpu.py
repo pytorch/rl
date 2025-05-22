@@ -17,6 +17,7 @@ from __future__ import annotations
 import gc
 import os
 from argparse import ArgumentParser
+from functools import partial
 
 import torch
 
@@ -47,6 +48,7 @@ parser.add_argument("--compile", action="store_true")
 parser.add_argument("--clip_grad_norm", type=float, default=0.5)
 parser.add_argument("--lr", type=float, default=1e-5)
 parser.add_argument("--kl_coef", type=float, default=1e-2)
+parser.add_argument("--tasks", type=str, nargs="+", default=["prisonersDilemma"])
 
 
 parser.add_argument("--gpu_memory_utilization", type=float, default=0.5)
@@ -59,8 +61,8 @@ if not os.getenv("VLLM_USE_V1", "0"):
     raise ValueError("VLLM_USE_V1=0 not set")
 
 
-def make_env(transform: Transform | None = None) -> EnvBase:
-    env = make_mlgym(tasks=["prisonersDilemma"])
+def make_env(tasks: list[str], transform: Transform | None = None) -> EnvBase:
+    env = make_mlgym(tasks=tasks)
     if transform is not None:
         env = env.append_transform(transform)
     return env
@@ -86,7 +88,7 @@ if __name__ == "__main__":
     #         add_to_reward=False,
     #     )
 
-    env = AsyncEnvPool([make_mlgym] * args.num_envs, backend="multiprocessing")
+    env = AsyncEnvPool([partial(make_env, tasks=args.tasks)] * args.num_envs, backend="multiprocessing")
 
     # replay buffer
     rb = ReplayBuffer(
