@@ -4967,8 +4967,8 @@ class Composite(TensorSpec):
     def __init__(
         self,
         *args,
-        shape: torch.Size = None,
-        device: torch.device = None,
+        shape: torch.Size | None = None,
+        device: torch.device | None = None,
         data_cls: type | None = None,
         **kwargs,
     ):

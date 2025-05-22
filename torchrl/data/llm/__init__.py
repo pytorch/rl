@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from .chat import History
+from .common import LLMData
 from .dataset import (
     create_infinite_iterator,
     get_dataloader,
@@ -18,6 +19,7 @@ __all__ = [
     "AdaptiveKLController",
     "History",
     "ConstantKLController",
+    "LLMData",
     "PairwiseDataset",
     "PromptData",
     "PromptTensorDictTokenizer",
