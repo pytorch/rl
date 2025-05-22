@@ -967,7 +967,8 @@ class ClipPPOLoss(PPOLoss):
             separate_losses=separate_losses,
             reduction=reduction,
             clip_value=clip_value,
-            device=device**kwargs,
+            device=device,
+            **kwargs,
         )
         if device is None:
             try:
