@@ -7733,24 +7733,9 @@ class TestCQL(LossModuleTestBase):
 
     @pytest.mark.parametrize("delay_actor", (True,))
     @pytest.mark.parametrize("delay_qvalue", (True,))
-    @pytest.mark.parametrize(
-        "max_q_backup",
-        [
-            True,
-        ],
-    )
-    @pytest.mark.parametrize(
-        "deterministic_backup",
-        [
-            True,
-        ],
-    )
-    @pytest.mark.parametrize(
-        "with_lagrange",
-        [
-            True,
-        ],
-    )
+    @pytest.mark.parametrize("max_q_backup", [True])
+    @pytest.mark.parametrize("deterministic_backup", [True])
+    @pytest.mark.parametrize("with_lagrange", [True])
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("td_est", [None])
     def test_cql_qvalfromlist(
