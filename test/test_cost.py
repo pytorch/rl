@@ -8945,13 +8945,19 @@ class TestPPO(LossModuleTestBase):
             device=device, composite_action_dist=composite_action_dist
         )
         value = self._create_mock_value(device=device)
-        loss_fn = loss_class(actor, value, loss_critic_type="l2",
-                             device=device,
-                             )
+        loss_fn = loss_class(
+            actor,
+            value,
+            loss_critic_type="l2",
+            device=device,
+        )
         sd = loss_fn.state_dict()
-        loss_fn2 = loss_class(actor, value, loss_critic_type="l2",
-                              device=device,
-                              )
+        loss_fn2 = loss_class(
+            actor,
+            value,
+            loss_critic_type="l2",
+            device=device,
+        )
         loss_fn2.load_state_dict(sd)
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
@@ -9211,9 +9217,12 @@ class TestPPO(LossModuleTestBase):
         else:
             raise NotImplementedError
 
-        loss_fn = loss_class(actor, value, loss_critic_type="l2",
-                             device=device,
-                             )
+        loss_fn = loss_class(
+            actor,
+            value,
+            loss_critic_type="l2",
+            device=device,
+        )
 
         params = TensorDict.from_module(loss_fn, as_module=True)
 
