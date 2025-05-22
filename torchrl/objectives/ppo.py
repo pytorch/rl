@@ -8,6 +8,7 @@ import contextlib
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
+from typing import Mapping
 
 import torch
 from tensordict import (
@@ -122,10 +123,6 @@ class PPOLoss(LossModule):
             The purpose of clipping is to limit the impact of extreme value predictions, helping stabilize training
             and preventing large updates. However, it will have no impact if the value estimate was done by the current
             version of the value estimator. Defaults to ``None``.
-        device (torch.device, optional): device of the buffers. Defaults to ``None``.
-
-            .. note:: Parameters and buffers from the policy / critic will not be cast to that device to ensure that
-                the storages match the ones that are passed to other components, such as data collectors.
 
     .. note::
       The advantage (typically GAE) can be computed by the loss function or
@@ -330,7 +327,7 @@ class PPOLoss(LossModule):
         *,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
-        entropy_coef: float = 0.01,
+        entropy_coef: float | Mapping[str, float] = 0.01,
         critic_coef: float | None = None,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
@@ -345,7 +342,6 @@ class PPOLoss(LossModule):
         critic: ProbabilisticTensorDictSequential = None,
         reduction: str = None,
         clip_value: float | None = None,
-        device: torch.device | None = None,
         **kwargs,
     ):
         if actor is not None:
@@ -400,15 +396,28 @@ class PPOLoss(LossModule):
         self.separate_losses = separate_losses
         self.reduction = reduction
 
-        if device is None:
-            try:
-                device = next(self.parameters()).device
-            except (AttributeError, StopIteration):
-                device = getattr(
-                    torch, "get_default_device", lambda: torch.device("cpu")
-                )()
+        try:
+            device = next(self.parameters()).device
+        except (AttributeError, StopIteration):
+            device = getattr(torch, "get_default_device", lambda: torch.device("cpu"))()
 
-        self.register_buffer("entropy_coef", torch.tensor(entropy_coef, device=device))
+        if isinstance(entropy_coef, Mapping):
+            # Store the mapping for per-head coefficients
+            self._entropy_coef_map = {str(k): float(v) for k, v in entropy_coef.items()}
+            # Register an empty buffer for compatibility
+            self.register_buffer("entropy_coef", torch.tensor(0.0))
+        elif isinstance(entropy_coef, (float, int, torch.Tensor)):
+            # Register the scalar entropy coefficient
+            coef = (
+                float(entropy_coef)
+                if not torch.is_tensor(entropy_coef)
+                else float(entropy_coef.item())
+            )
+            self.register_buffer("entropy_coef", torch.tensor(coef))
+            self._entropy_coef_map = None
+        else:
+            raise TypeError("entropy_coef must be a float or a Mapping[str, float]")
+
         if critic_coef is not None:
             self.register_buffer(
                 "critic_coef", torch.tensor(critic_coef, device=device)
@@ -430,7 +439,7 @@ class PPOLoss(LossModule):
 
         if clip_value is not None:
             if isinstance(clip_value, float):
-                clip_value = torch.tensor(clip_value, device=device)
+                clip_value = torch.tensor(clip_value)
             elif isinstance(clip_value, torch.Tensor):
                 if clip_value.numel() != 1:
                     raise ValueError(
@@ -440,9 +449,7 @@ class PPOLoss(LossModule):
                 raise ValueError(
                     f"clip_value must be a float or a scalar tensor, got {clip_value}."
                 )
-            self.register_buffer("clip_value", clip_value.to(device))
-        else:
-            self.clip_value = None
+        self.register_buffer("clip_value", clip_value)
         try:
             log_prob_keys = self.actor_network.log_prob_keys
             action_keys = self.actor_network.dist_sample_keys
@@ -540,7 +547,6 @@ class PPOLoss(LossModule):
         return entropy.unsqueeze(-1)
 
     def _get_cur_log_prob(self, tensordict):
-
         if isinstance(
             self.actor_network,
             (ProbabilisticTensorDictSequential, ProbabilisticTensorDictModule),
@@ -589,7 +595,6 @@ class PPOLoss(LossModule):
     def _log_weight(
         self, tensordict: TensorDictBase, adv_shape: torch.Size
     ) -> tuple[torch.Tensor, d.Distribution, torch.Tensor]:
-
         prev_log_prob = _maybe_get_or_select(
             tensordict,
             self.tensor_keys.sample_log_prob,
@@ -608,6 +613,8 @@ class PPOLoss(LossModule):
 
         if is_composite:
             with set_composite_lp_aggregate(False):
+                if log_prob.batch_size != adv_shape:
+                    log_prob.batch_size = adv_shape
                 if not is_tensor_collection(prev_log_prob):
                     # this isn't great: in general, multi-head actions should have a composite log-prob too
                     warnings.warn(
@@ -620,8 +627,6 @@ class PPOLoss(LossModule):
                     if is_tensor_collection(log_prob):
                         log_prob = _sum_td_features(log_prob)
                         log_prob.view_as(prev_log_prob)
-                if log_prob.batch_size != adv_shape:
-                    log_prob.batch_size = adv_shape
         log_weight = (log_prob - prev_log_prob).unsqueeze(-1)
         if is_tensor_collection(log_weight):
             log_weight = _sum_td_features(log_weight)
@@ -745,9 +750,12 @@ class PPOLoss(LossModule):
             if is_tensor_collection(entropy):
                 # Reports the entropy of each action head.
                 td_out.set("composite_entropy", entropy.detach())
-                entropy = _sum_td_features(entropy)
-            td_out.set("entropy", entropy.detach().mean())  # for logging
-            td_out.set("loss_entropy", -self.entropy_coef * entropy)
+                td_out.set(
+                    "entropy", _sum_td_features(entropy).detach().mean()
+                )  # for logging
+            else:
+                td_out.set("entropy", entropy.detach().mean())  # for logging
+            td_out.set("loss_entropy", self._weighted_loss_entropy(entropy))
         if self._has_critic:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
@@ -814,6 +822,31 @@ class PPOLoss(LossModule):
         }
         self._value_estimator.set_keys(**tensor_keys)
 
+    def _weighted_loss_entropy(
+        self, entropy: torch.Tensor | TensorDictBase
+    ) -> torch.Tensor:
+        """Compute the weighted entropy loss.
+
+        If `self._entropy_coef_map` is provided, apply per-head entropy coefficients.
+        Otherwise, use the scalar `self.entropy_coef`.
+        """
+        if self._entropy_coef_map is None:
+            if is_tensor_collection(entropy):
+                entropy = _sum_td_features(entropy)
+            return -self.entropy_coef * entropy
+
+        loss_terms = []
+        for key, h in entropy.flatten_keys(separator=".").items():
+            name = key.split(".")[-1].removesuffix("_entropy")
+            try:
+                coeff = self._entropy_coef_map[name]
+            except KeyError as exc:
+                raise KeyError(f"Missing entropy coef for head '{name}'") from exc
+            coeff_t = torch.tensor(coeff, dtype=h.dtype, device=h.device)
+            loss_terms.append(coeff_t * h.mean())
+
+        return -torch.stack(loss_terms).sum()
+
 
 class ClipPPOLoss(PPOLoss):
     """Clipped PPO loss.
@@ -876,10 +909,6 @@ class ClipPPOLoss(PPOLoss):
             estimate was done by the current version of the value estimator. If instead ``True`` is provided, the
             ``clip_epsilon`` parameter will be used as the clipping threshold. If not provided or ``False``, no
             clipping will be performed. Defaults to ``False``.
-        device (torch.device, optional): device of the buffers. Defaults to ``None``.
-
-            .. note:: Parameters and buffers from the policy / critic will not be cast to that device to ensure that
-                the storages match the ones that are passed to other components, such as data collectors.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -939,7 +968,7 @@ class ClipPPOLoss(PPOLoss):
         clip_epsilon: float = 0.2,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
-        entropy_coef: float = 0.01,
+        entropy_coef: float | Mapping[str, float] = 0.01,
         critic_coef: float | None = None,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
@@ -948,7 +977,6 @@ class ClipPPOLoss(PPOLoss):
         separate_losses: bool = False,
         reduction: str = None,
         clip_value: bool | float | None = None,
-        device: torch.device | None = None,
         **kwargs,
     ):
         # Define clipping of the value loss
@@ -969,16 +997,13 @@ class ClipPPOLoss(PPOLoss):
             separate_losses=separate_losses,
             reduction=reduction,
             clip_value=clip_value,
-            device=device,
             **kwargs,
         )
-        if device is None:
-            try:
-                device = next(self.parameters()).device
-            except (AttributeError, StopIteration):
-                device = getattr(
-                    torch, "get_default_device", lambda: torch.device("cpu")
-                )()
+        for p in self.parameters():
+            device = p.device
+            break
+        else:
+            device = None
         self.register_buffer("clip_epsilon", torch.tensor(clip_epsilon, device=device))
 
     @property
@@ -1066,7 +1091,7 @@ class ClipPPOLoss(PPOLoss):
                 td_out.set("composite_entropy", entropy.detach())
                 entropy = _sum_td_features(entropy)
             td_out.set("entropy", entropy.detach().mean())  # for logging
-            td_out.set("loss_entropy", -self.entropy_coef * entropy)
+            td_out.set("loss_entropy", self._weighted_loss_entropy(entropy))
         if self._has_critic:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
@@ -1157,10 +1182,6 @@ class KLPENPPOLoss(PPOLoss):
             The purpose of clipping is to limit the impact of extreme value predictions, helping stabilize training
             and preventing large updates. However, it will have no impact if the value estimate was done by the current
             version of the value estimator. Defaults to ``None``.
-        device (torch.device, optional): device of the buffers. Defaults to ``None``.
-
-            .. note:: Parameters and buffers from the policy / critic will not be cast to that device to ensure that
-                the storages match the ones that are passed to other components, such as data collectors.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -1233,7 +1254,6 @@ class KLPENPPOLoss(PPOLoss):
         separate_losses: bool = False,
         reduction: str = None,
         clip_value: float | None = None,
-        device: torch.device | None = None,
         **kwargs,
     ):
         super().__init__(
@@ -1250,21 +1270,12 @@ class KLPENPPOLoss(PPOLoss):
             separate_losses=separate_losses,
             reduction=reduction,
             clip_value=clip_value,
-            device=device,
             **kwargs,
         )
 
-        if device is None:
-            try:
-                device = next(self.parameters()).device
-            except (AttributeError, StopIteration):
-                device = getattr(
-                    torch, "get_default_device", lambda: torch.device("cpu")
-                )()
-
         self.dtarg = dtarg
         self._beta_init = beta
-        self.register_buffer("beta", torch.tensor(beta, device=device))
+        self.register_buffer("beta", torch.tensor(beta))
 
         if increment < 1.0:
             raise ValueError(
