@@ -27,7 +27,7 @@ from torchrl import logger as torchrl_logger
 from torchrl.collectors.llm import LLMCollector
 from torchrl.collectors.llm.weight_update.vllm import vLLMReceiver, vLLMSender
 from torchrl.data import LazyStackStorage, ReplayBuffer, SamplerWithoutReplacement
-from torchrl.envs import ParallelEnv
+from torchrl.envs import AsyncEnvPool, EnvBase, ParallelEnv, Transform
 
 from torchrl.envs.llm import KLRewardTransform
 from torchrl.envs.llm.libs import make_mlgym
@@ -44,7 +44,7 @@ parser.add_argument("--num_envs", type=int, default=32)
 parser.add_argument("--steps_per_batch", type=int, default=64)
 parser.add_argument("--optim_batch_size", type=int, default=4)
 # parser.add_argument("--model_name", type=str, default="gpt2")
-parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-3B")
+parser.add_argument("--model_name", type=str, default="Qwen/Qwen2-7B-Instruct")
 parser.add_argument("--compile", action="store_true")
 parser.add_argument("--clip_grad_norm", type=float, default=0.5)
 parser.add_argument("--lr", type=float, default=1e-5)
@@ -60,18 +60,11 @@ torch.set_default_device("cuda:0")
 if not os.getenv("VLLM_USE_V1", "0"):
     raise ValueError("VLLM_USE_V1=0 not set")
 
-
-def make_device_splits():
-    # devices = list(range(torch.cuda.device_count()))
-    # train_devices = devices[1:-1]
-    # vllm_device = devices[0]
-    # ref_device = devices[-1]
-    devices = list(range(torch.cuda.device_count()))
-    train_devices = devices[0:-2]
-    vllm_devices = devices[-2:-1]
-    ref_device = devices[-1]
-    return train_devices, ref_device, vllm_devices
-
+def make_env(transform: Transform | None = None) -> EnvBase:
+    env = make_mlgym()
+    if transform is not None:
+        env = env.append_transform(transform)
+    return env
 
 if __name__ == "__main__":
     import ray
@@ -80,27 +73,20 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    train_devices, ref_device, vllm_devices = make_device_splits()
+    policy_training, train_tokenizer = get_train_model(args, [0])
 
-    policy_training, train_tokenizer = get_train_model(args, train_devices)
-
-    # vLLM
-    policy = get_inference_model(args, vllm_devices)
-
-    ref_model = get_ref_model(args, train_tokenizer, ref_device)
-
-    # Ref model
+    # Here we have only one policy
+    policy = policy_training
 
     # Env
-    env = ParallelEnv(args.num_envs, [make_mlgym] * args.num_envs)()
-    env = env.append_transform(
-        KLRewardTransform(
-            actor=ref_model,
-            coef=args.kl_coef,
-            device=ref_device,
-            add_to_reward=False,
-        )
-    )
+    # trsf =         KLRewardTransform(
+    #         actor=ref_model,
+    #         coef=args.kl_coef,
+    #         device=ref_device,
+    #         add_to_reward=False,
+    #     )
+
+    env = AsyncEnvPool([make_mlgym] * args.num_envs, backend="multiprocessing")
 
     # replay buffer
     rb = ReplayBuffer(
@@ -111,37 +97,18 @@ if __name__ == "__main__":
     rb.append_transform(MCAdvantage(grpo_size=args.repeats))
 
     # Collector
-    model_metadata = {
-        k: (v.dtype, v.shape)
-        for k, v in policy_training.model.merge_and_unload().state_dict().items()
-    }
-    sender = vLLMSender(
-        master_address=None,
-        master_port=None,
-        model_metadata=model_metadata,
-    )
-    # no-op
-    receiver = vLLMReceiver()
-
     collector = LLMCollector(
         env,
         policy=policy,
         dialog_turns_per_batch=args.steps_per_batch,
         total_dialog_turns=1_000_000,
-        # Sender sends the weights to vLLM workers
-        weight_update_sender=sender,
-        # Receiver is a no-op
-        weight_update_receiver=receiver,
+        async_envs=True,
+        replay_buffer=rb,
     )
-    sender.maybe_init_group()
-    receiver.maybe_init_group()
-
-    # Warmup
-    torchrl_logger.info("Init weights update...")
-    collector.update_policy_weights_(
-        policy_training.model.merge_and_unload().state_dict(), worker_ids=[0]
-    )
-    torchrl_logger.info("done\n")
+    for d in collector:
+        print(d)
+        print(rb[:])
+        break
 
     # Loss module
     loss_fn = GRPOLoss(actor_network=policy_training, kl_to_ref_coeff=args.kl_coef)
