@@ -159,6 +159,7 @@ export BATCHED_PIPE_TIMEOUT=60
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
   --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py \
   --ignore test/test_distributed.py \
+  --ignore test/llm \
   --timeout=120 --mp_fork_if_no_cuda
 
 coverage combine
