@@ -327,7 +327,7 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
                 #  unsqueezed the NonTensorData, we'd still have a NonTensorData with shape (1,)
                 #  This will give us an integer now, but we don't want to unsqueeze the full td because then
                 #  we'd have a td with shape (1, 1)
-                if tensordict.shape != (1, *self.env_batch_sizes[env_index]):
+                if tensordict.shape != (1, *self.env_batch_sizes[env_idx]):
                     tensordict = tensordict.unsqueeze(0)
                 env_idx = [env_idx]
         elif isinstance(env_index, int):
