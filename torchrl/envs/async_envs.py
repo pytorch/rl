@@ -473,7 +473,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         if not batch_sizes:
             for _env_idx in range(self.num_envs):
                 self.input_queue[_env_idx].put(("batch_size", None))
-                batch_sizes.append(self.input_queue[_env_idx].get())
+                batch_sizes.append(self.output_queue[_env_idx].get())
             self._env_batch_sizes = batch_sizes
         return batch_sizes
 
