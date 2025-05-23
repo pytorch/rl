@@ -862,5 +862,5 @@ def make_mlgym(
         env.append_transform(MLGymRewardAssignment())
         # We want the env to have a batch-size of (1,) because it will be easier to interact with
         #  LLMs
-        env.append_transform(BatchSizeTransform((1,)))
+        env.append_transform(BatchSizeTransform(batch_size=(1,)))
         return env
