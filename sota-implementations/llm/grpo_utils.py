@@ -66,7 +66,7 @@ def get_train_inference_model(args, train_devices):
         # train_model.eval(),
         tokenizer=train_tokenizer,
         from_text=True,
-        generate=False,
+        generate=True,
         return_log_probs=True,
     )
     return policy_training, policy_inference, train_tokenizer
