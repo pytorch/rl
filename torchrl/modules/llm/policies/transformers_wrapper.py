@@ -216,11 +216,14 @@ class TransformersWrapper(CategoricalSequential):
         if not tensordict.ndim:
             # unsqueeze - squeeze the input
             try:
-                return self(lazy_stack([tensordict]))[0]
+                return self(lazy_stack([tensordict])).squeeze(0)
             except Exception as e:
                 raise RuntimeError(
                     f"Unsqueeze/squeeze failed. Inputs to {type(self).__name__} should ideally be 1 dimensional."
                 ) from e
+        elif tensordict.ndim > 1:
+            return self(tensordict.reshape(-1)).view(tensordict.shape)
+
         _source_device = None
         if self._device:
             _source_device = tensordict.device
