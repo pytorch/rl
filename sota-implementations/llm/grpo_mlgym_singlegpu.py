@@ -107,7 +107,7 @@ if __name__ == "__main__":
     )
     for d in collector:
         print(d)
-        print(rb[:])
+        print('len rb', len(rb))
         break
 
     # Loss module
