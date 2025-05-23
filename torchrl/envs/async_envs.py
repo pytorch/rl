@@ -656,7 +656,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
             msg, data = msg_data
             if msg == "get_specs":
                 output_queue.put(env.specs)
-            if msg == "batch_size":
+            elif msg == "batch_size":
                 output_queue.put(env.batch_size)
             elif msg == "reset":
                 data = env.reset(data.copy())
