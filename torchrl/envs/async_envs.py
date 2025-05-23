@@ -15,7 +15,6 @@ from queue import Empty
 from typing import Callable, Literal, Sequence
 
 import torch
-from ray.tune.examples.pbt_dcgan_mnist.common import batch_size
 from tensordict import (
     lazy_stack,
     LazyStackedTensorDict,
