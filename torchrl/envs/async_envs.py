@@ -323,23 +323,28 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
             if isinstance(env_idx, torch.Tensor):
                 env_idx = env_idx.tolist()
             if isinstance(env_idx, int):
+                # If we squeezed a td with shape (1,) and got a NonTensorStack -> NonTensorData, then
+                #  unsqueezed the NonTensorData, we'd still have a NonTensorData with shape (1,)
+                #  This will give us an integer now, but we don't want to unsqueeze the full td because then
+                #  we'd have a td with shape (1, 1)
+                if tensordict.shape != (1, *self.env_batch_sizes[env_index]):
+                    tensordict = tensordict.unsqueeze(0)
                 env_idx = [env_idx]
-                tensordict = tensordict.unsqueeze(0)
         elif isinstance(env_index, int):
             if make_if_none:
                 if tensordict is None:
-                    tensordict = TensorDict(batch_size=(), device=self.device)
+                    tensordict = TensorDict(batch_size=self.env_batch_sizes[env_index], device=self.device)
                 if self.stack in ("lazy_stack", "maybe_dense"):
                     tensordict = tensordict.unsqueeze(0)
                 else:
-                    tensordict = LazyStackedTensorDict(tensordict)
+                    tensordict = lazy_stack([tensordict])
             tensordict[self._env_idx_key] = NonTensorStack(env_index)
             env_idx = [env_index]
         else:
             if make_if_none and tensordict is None:
                 if self.stack in ("lazy_stack", "maybe_dense"):
-                    tensordict = LazyStackedTensorDict(
-                        *[TensorDict(device=self.device) for _ in env_index]
+                    tensordict = lazy_stack(
+                        [TensorDict(device=self.device) for _ in env_index]
                     )
                 else:
                     tensordict = TensorDict(
