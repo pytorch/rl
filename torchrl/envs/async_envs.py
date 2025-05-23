@@ -15,6 +15,7 @@ from queue import Empty
 from typing import Callable, Literal, Sequence
 
 import torch
+from ray.tune.examples.pbt_dcgan_mnist.common import batch_size
 from tensordict import (
     lazy_stack,
     LazyStackedTensorDict,
@@ -226,6 +227,11 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         super().__init__(batch_size=[self.num_envs])
         self._busy = set()
 
+    @property
+    def env_batch_sizes(self) -> list[torch.Size]:
+        """Returns the batch-sizes of every env."""
+        raise NotImplementedError
+
     def _reset(
         self,
         tensordict: TensorDictBase | None = None,
@@ -236,10 +242,10 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         if tensordict is None:
             if self._stack_func in ("lazy_stack", "maybe_dense"):
                 tensordict = LazyStackedTensorDict(
-                    *[TensorDict() for _ in range(self.num_envs)]
+                    *[TensorDict(batch_size=self.env_batch_sizes[i]) for i in range(self.num_envs)]
                 )
             else:
-                tensordict = TensorDict(batch_size=self.num_envs)
+                tensordict = TensorDict(batch_size=(self.num_envs,)+self.env_batch_sizes[0])
         tensordict.set(self._env_idx_key, torch.arange(tensordict.shape[0]))
         self._async_private_reset_send(tensordict)
         tensordict = self._async_private_reset_recv(min_get=self.num_envs)
@@ -462,6 +468,16 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         input_spec = specs["input_spec"]
         return output_spec, input_spec
 
+    @property
+    def env_batch_sizes(self) -> list[torch.Size]:
+        batch_sizes = getattr(self, "_env_batch_sizes", [])
+        if not batch_sizes:
+            for _env_idx in range(self.num_envs):
+                self.input_queue[_env_idx].put(("batch_size", None))
+                batch_sizes.append(self.input_queue[_env_idx].get())
+            self._env_batch_sizes = batch_sizes
+        return batch_sizes
+
     def async_step_send(
         self, tensordict: TensorDictBase, env_index: int | list[int] | None = None
     ) -> None:
@@ -641,6 +657,8 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
             msg, data = msg_data
             if msg == "get_specs":
                 output_queue.put(env.specs)
+            if msg == "batch_size":
+                output_queue.put(env.batch_size)
             elif msg == "reset":
                 data = env.reset(data.copy())
                 data.set(cls._env_idx_key, NonTensorData(i))
@@ -710,6 +728,10 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
         # get specs
         specs = torch.stack([env.specs for env in self.envs])
         return specs["output_spec"].clone(), specs["input_spec"].clone()
+
+    @property
+    def env_batch_sizes(self) -> list[torch.Size]:
+        return [env.batch_sizes for env in self.envs]
 
     @classmethod
     def _get_specs(cls, env: EnvBase):
