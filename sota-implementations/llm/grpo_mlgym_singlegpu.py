@@ -23,7 +23,7 @@ import torch
 
 import tqdm
 
-from grpo_utils import get_train_model
+from grpo_utils import get_train_inference_model
 from torchrl import logger as torchrl_logger
 from torchrl.collectors.llm import LLMCollector
 from torchrl.data import LazyStackStorage, ReplayBuffer, SamplerWithoutReplacement
@@ -75,10 +75,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    policy_training, train_tokenizer = get_train_model(args, [0])
-
-    # Here we have only one policy
-    policy = policy_training
+    policy_training, policy, train_tokenizer = get_train_inference_model(args, [0])
 
     # Env
     # trsf =         KLRewardTransform(

@@ -45,6 +45,32 @@ def get_train_model(args, train_devices):
     )
     return policy_training, train_tokenizer
 
+def get_train_inference_model(args, train_devices):
+    torchrl_logger.info("Creating train model")
+
+    with torch.device(f"cuda:{train_devices[0]}"):
+        train_model, train_tokenizer = get_hf_model(
+            args.model_name, device_map=train_devices[0]
+        )
+    policy_training = TransformersWrapper(
+        train_model,
+        # train_model.eval(),
+        tokenizer=train_tokenizer,
+        # We have the tokens, let's just use them
+        from_text=False,
+        generate=False,
+        return_log_probs=True,
+    )
+    policy_inference = TransformersWrapper(
+        train_model,
+        # train_model.eval(),
+        tokenizer=train_tokenizer,
+        from_text=True,
+        generate=False,
+        return_log_probs=True,
+    )
+    return policy_training, policy_inference, train_tokenizer
+
 
 def get_inference_model(args, vllm_devices):
     from torchrl.modules.llm.backends.vllm import make_vllm_worker
