@@ -68,6 +68,7 @@ def get_train_inference_model(args, train_devices):
         from_text=True,
         generate=True,
         return_log_probs=True,
+        generate_kwargs={"max_new_tokens": 1024},
     )
     return policy_training, policy_inference, train_tokenizer
 
