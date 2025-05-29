@@ -48,9 +48,9 @@ def get_train_model(args, train_devices):
 def get_train_inference_model(args, train_devices):
     torchrl_logger.info("Creating train model")
 
-    with torch.device(f"cuda:{train_devices[0]}"):
+    with torch.device(f"cuda:{train_devices[0]}") if train_devices else contextlib.nullcontext():
         train_model, train_tokenizer = get_hf_model(
-            args.model_name, device_map=train_devices[0]
+            args.model_name, device_map=train_devices[0] if train_devices else [], lora=args.lora, gradient_checkpointing=args.gradient_checkpointing, quantize=args.quantize
         )
     policy_training = TransformersWrapper(
         train_model,
@@ -139,9 +139,9 @@ def get_hf_model(
     | int
     | torch.device
     | None = None,
+    lora: bool=True,
 ):
-    from peft import get_peft_model, LoraConfig
-    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+    from transformers import AutoModelForCausalLM, AutoTokenizer
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     # tokenizer.pad_token = tokenizer.eos_token
@@ -155,13 +155,17 @@ def get_hf_model(
         torchrl_logger.info("flash_attention_2 init")
 
         model_configs = {
-            "attn_implementation": "flash_attention_2",
             "torch_dtype": torch_dtype,
         }
+        if torch.cuda.is_available():
+            model_configs.update({
+                "attn_implementation": "flash_attention_2",
+            })
     else:
         model_configs = {}
 
-    model_configs["device_map"] = device_map
+    if device_map:
+        model_configs["device_map"] = device_map
     # Configure training settings based on FSDP usage
     # Set up trainer configurations for FSDP or standard training
     if fsdp != "" and fsdp_config is not None:
@@ -173,6 +177,7 @@ def get_hf_model(
 
     # Enable Quantization
     if quantize:
+        from transformers import BitsAndBytesConfig
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_use_double_quant=True,
@@ -207,19 +212,20 @@ def get_hf_model(
                 gradient_checkpointing_kwargs={"use_reentrant": False}
             )
 
-    config = LoraConfig(
-        r=lora_r,
-        lora_alpha=lora_alpha,
-        target_modules="all-linear",
-        lora_dropout=lora_dropout,
-        bias="none",
-        task_type="CAUSAL_LM",
-        inference_mode=False,
-    )
+    if lora:
+        from peft import get_peft_model, LoraConfig
+        config = LoraConfig(
+            r=lora_r,
+            lora_alpha=lora_alpha,
+            target_modules="all-linear",
+            lora_dropout=lora_dropout,
+            bias="none",
+            task_type="CAUSAL_LM",
+            inference_mode=False,
+        )
 
-    model = get_peft_model(model, config).eval()
+        model = get_peft_model(model, config).eval()
 
-    model.print_trainable_parameters()
     model.requires_grad_(True)
 
     return model, tokenizer
