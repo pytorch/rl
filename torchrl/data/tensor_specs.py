@@ -4305,17 +4305,21 @@ class Binary(Categorical):
     ):
         if n is None and shape is None:
             raise TypeError("Must provide either n or shape.")
-        if n is None:
-            n = shape[-1]
-        if shape is None or not len(shape):
-            shape = _size((n,))
+
+        # Either `shape` or `n` is not `None`.
+        shape = _size((n,)) if shape is None else _size(shape)
+
+        # Consistency checks between `shape` and `n`.
+        if len(shape) == 0:
+            if n is not None and n != 0:
+                raise ValueError("'n' must be zero for spec {self.__class__} when using an empty shape")
         else:
-            shape = _size(shape)
             if shape[-1] != n:
                 raise ValueError(
-                    f"The last value of the shape must match n for spec {self.__class__}. "
+                    f"The last value of the shape must match 'n' for spec {self.__class__}. "
                     f"Got n={n} and shape={shape}."
                 )
+
         super().__init__(n=2, shape=shape, device=device, dtype=dtype)
         self.encode = self._encode_eager
 
