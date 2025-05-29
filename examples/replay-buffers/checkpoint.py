@@ -9,14 +9,16 @@ To explore this feature, try replacing the H5StorageCheckpointer with a NestedSt
 FlatStorageCheckpointer instance!
 
 """
-import tempfile
+from __future__ import annotations
 
-import tensordict.utils
-import torch
+import tempfile
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import H5StorageCheckpointer, LazyMemmapStorage, ReplayBuffer
 from torchrl.envs import GymEnv, SerialEnv
+
+import tensordict.utils
+import torch
 
 with tempfile.TemporaryDirectory() as path_to_save_dir:
     env = SerialEnv(3, lambda: GymEnv("CartPole-v1", device=None))

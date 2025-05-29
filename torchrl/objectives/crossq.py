@@ -5,28 +5,30 @@
 from __future__ import annotations
 
 import math
+
 from dataclasses import dataclass
 from functools import wraps
-
-import torch
-from tensordict import TensorDict, TensorDictBase, TensorDictParams
-from tensordict.nn import dispatch, TensorDictModule
-from tensordict.utils import NestedKey
-from torch import Tensor
 
 from torchrl.data.tensor_specs import Composite
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import ProbabilisticActor
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
+    ValueEstimators,
     _cache_values,
     _reduce,
     _vmap_func,
     default_value_kwargs,
     distance_loss,
-    ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+
+import torch
+
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
+from tensordict.nn import TensorDictModule, dispatch
+from tensordict.utils import NestedKey
+from torch import Tensor
 
 
 def _delezify(func):
@@ -206,11 +208,12 @@ class CrossQLoss(LossModule):
         ...     next_observation=torch.zeros(*batch, n_obs),
         ...     next_reward=torch.randn(*batch, 1))
         >>> loss_actor.backward()
+
     """
 
     @dataclass
     class _AcceptedKeys:
-        """Maintains default values for all configurable tensordict keys.
+        """Maintain default values for all configurable tensordict keys.
 
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values.
@@ -232,6 +235,7 @@ class CrossQLoss(LossModule):
                 Defaults to ``"terminated"``.
             log_prob (NestedKey): The input tensordict key where the log probability is expected.
                 Defaults to ``"_log_prob"``.
+
         """
 
         action: NestedKey = "action"
@@ -576,6 +580,7 @@ class CrossQLoss(LossModule):
                 are required for this to be computed.
 
         Returns: a differentiable tensor with the alpha loss along with a metadata dictionary containing the detached `"log_prob"` of the sampled action.
+
         """
         tensordict = tensordict.copy()
         with set_exploration_type(
@@ -618,6 +623,7 @@ class CrossQLoss(LossModule):
 
         Returns: a differentiable tensor with the qvalue loss along with a metadata dictionary containing
             the detached `"td_error"` to be used for prioritized sampling.
+
         """
         tensordict = tensordict.copy()
         # # compute next action
@@ -681,6 +687,7 @@ class CrossQLoss(LossModule):
             log_prob (torch.Tensor): a log-probability as computed by the :meth:`~.actor_loss` and returned in the `metadata`.
 
         Returns: a differentiable tensor with the entropy loss.
+
         """
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter

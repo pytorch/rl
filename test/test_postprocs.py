@@ -8,13 +8,14 @@ import argparse
 import functools
 import os
 
-import pytest
-import torch
-from tensordict import assert_allclose_td, TensorDict
-
 from torchrl._utils import _ends_with
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.postprocs.postprocs import DensifyReward, MultiStep
+
+import pytest
+import torch
+
+from tensordict import TensorDict, assert_allclose_td
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import get_default_devices
@@ -209,9 +210,9 @@ class TestMultiStep:
                 "done": done[..., :-1, :] if not unsq_reward else done[..., :-1, :, :],
                 "next": {
                     "obs": obs[..., 1:, :] if not obs_dim else obs[..., 1:, :, :],
-                    "done": done[..., 1:, :]
-                    if not unsq_reward
-                    else done[..., 1:, :, :],
+                    "done": (
+                        done[..., 1:, :] if not unsq_reward else done[..., 1:, :, :]
+                    ),
                     "reward": reward,
                 },
             },
@@ -264,7 +265,7 @@ class TestDensifyReward:
 
 
 class TestSplits:
-    """Tests the splitting of collected tensordicts in trajectories."""
+    """Test the splitting of collected tensordicts in trajectories."""
 
     @staticmethod
     def create_fake_trajs(

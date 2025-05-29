@@ -1609,6 +1609,7 @@ def split_into_sentences(text):
 
     Returns:
       A list of strings where each string is a sentence.
+
     """
     text = " " + text + "  "
     text = text.replace("\n", " ")
@@ -1653,7 +1654,7 @@ def split_into_sentences(text):
 
 
 def count_words(text):
-    """Counts the number of words."""
+    """Count the number of words."""
     tokenizer = nltk.tokenize.RegexpTokenizer(r"\w+")
     tokens = tokenizer.tokenize(text)
     num_words = len(tokens)

@@ -5,6 +5,8 @@ This example shows how to save a video from a dataset.
 To run it, you will need to install the openx requirements as well as torchvision.
 """
 
+from __future__ import annotations
+
 from torchrl.data.datasets import OpenXExperienceReplay
 from torchrl.record import CSVLogger, VideoRecorder
 

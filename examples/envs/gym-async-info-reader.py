@@ -3,13 +3,14 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""
-A toy example of executing a Gym environment asynchronously and gathering the info properly.
-"""
+"""A toy example of executing a Gym environment asynchronously and gathering the info properly."""
+from __future__ import annotations
+
 import argparse
 
 import gymnasium as gym
 import numpy as np
+
 from gymnasium import spaces
 
 parser = argparse.ArgumentParser()
@@ -47,9 +48,10 @@ class CustomEnv(gym.Env):
 
 
 if __name__ == "__main__":
-    import torch
     from torchrl.data.tensor_specs import Unbounded
-    from torchrl.envs import check_env_specs, GymEnv, GymWrapper
+    from torchrl.envs import GymEnv, GymWrapper, check_env_specs
+
+    import torch
 
     args = parser.parse_args()
 

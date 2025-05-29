@@ -11,14 +11,11 @@ import os
 import pathlib
 import shutil
 import tempfile
+
 from collections import defaultdict
 from pathlib import Path
 from typing import Callable
 
-import numpy as np
-import torch
-from tensordict import PersistentTensorDict, TensorDict
-from torch import multiprocessing as mp
 from torchrl._utils import KeyDependentDefaultDict, logger as torchrl_logger
 from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 from torchrl.data.datasets.utils import _get_root_dir
@@ -27,6 +24,12 @@ from torchrl.data.replay_buffers.storages import TensorStorage
 from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter, Writer
 from torchrl.envs.transforms import Compose, Resize, ToTensorImage
 from torchrl.envs.utils import _classproperty
+
+import numpy as np
+import torch
+
+from tensordict import PersistentTensorDict, TensorDict
+from torch import multiprocessing as mp
 
 _has_tqdm = importlib.util.find_spec("tqdm", None) is not None
 _has_h5py = importlib.util.find_spec("h5py", None) is not None

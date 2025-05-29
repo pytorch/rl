@@ -8,13 +8,15 @@ from __future__ import annotations
 import math
 
 import torch
+
 from torch.optim import Optimizer
 
 
 class Lamb(Optimizer):
-    """Implements a pure pytorch variant of FuseLAMB (NvLamb variant) optimizer from apex.optimizers.FusedLAMB
+    """Implement a pure pytorch variant of FuseLAMB (NvLamb variant) optimizer from apex.optimizers.FusedLAMB
     reference: https://github.com/NVIDIA/DeepLearningExamples/blob/master/PyTorch/LanguageModeling/Transformer-XL/pytorch/lamb.py
     LAMB was proposed in `Large Batch Optimization for Deep Learning: Training BERT in 76 minutes`_.
+
     Arguments:
         params (iterable): iterable of parameters to optimize or dicts defining parameter groups.
         lr (:obj:`float`, optional): learning rate. (default: 1e-3)
@@ -33,6 +35,7 @@ class Lamb(Optimizer):
         https://arxiv.org/abs/1904.00962
     .. _On the Convergence of Adam and Beyond:
         https://openreview.net/forum?id=ryQu7f-RZ
+
     """
 
     def __init__(
@@ -63,10 +66,12 @@ class Lamb(Optimizer):
 
     @torch.no_grad()
     def step(self, closure=None):
-        """Performs a single optimization step.
+        """Perform a single optimization step.
+
         Arguments:
             closure (callable, optional): A closure that reevaluates the model
                 and returns the loss.
+
         """
         loss = None
         if closure is not None:

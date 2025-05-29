@@ -4,10 +4,11 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import torch
-from tensordict import tensorclass, TensorDict
-
 from torchrl.data.llm.dataset import TensorDictTokenizer, TokenizedDatasetLoader
+
+import torch
+
+from tensordict import TensorDict, tensorclass
 
 DEFAULT_DATASET = "CarperAI/openai_summarize_tldr"
 
@@ -48,7 +49,7 @@ class PromptData:
         from_disk=False,
         num_workers: int | None = None,
     ):
-        """Returns a :class:`PromptData` from a dataset name.
+        """Return a :class:`PromptData` from a dataset name.
 
         Args:
             split (str): ``"train"`` or ``"valid"`` depending on the data split needed.

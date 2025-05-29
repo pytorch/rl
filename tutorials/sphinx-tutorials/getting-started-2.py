@@ -65,6 +65,7 @@ Getting started with model optimization
 # To build the loss, we need both the actor and value networks.
 # If they are built according to DDPG's expectations, it is all
 # we need to get a trainable loss module:
+from __future__ import annotations
 
 from torchrl.envs import GymEnv
 

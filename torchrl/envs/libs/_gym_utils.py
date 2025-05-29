@@ -6,15 +6,15 @@ from __future__ import annotations
 
 import importlib.util
 
-import torch
-from tensordict.utils import unravel_key
-
-from torch.utils._pytree import tree_map
-
 from torchrl._utils import implement_for
 from torchrl.data.tensor_specs import Composite
-from torchrl.envs import step_mdp, TransformedEnv
-from torchrl.envs.libs.gym import _torchrl_to_gym_spec_transform, GYMNASIUM_1_ERROR
+from torchrl.envs import TransformedEnv, step_mdp
+from torchrl.envs.libs.gym import GYMNASIUM_1_ERROR, _torchrl_to_gym_spec_transform
+
+import torch
+
+from tensordict.utils import unravel_key
+from torch.utils._pytree import tree_map
 
 _has_gym = importlib.util.find_spec("gym", None) is not None
 _has_gymnasium = importlib.util.find_spec("gymnasium", None) is not None

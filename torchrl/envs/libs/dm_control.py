@@ -7,12 +7,10 @@ from __future__ import annotations
 import collections
 import importlib
 import os
+
 from typing import Any, Dict
 
-import numpy as np
-import torch
-
-from torchrl._utils import logger as torchrl_logger, VERBOSE
+from torchrl._utils import VERBOSE, logger as torchrl_logger
 from torchrl.data.tensor_specs import (
     Bounded,
     Categorical,
@@ -24,6 +22,9 @@ from torchrl.data.tensor_specs import (
 from torchrl.data.utils import DEVICE_TYPING, numpy_to_torch_dtype_dict
 from torchrl.envs.gym_like import GymLikeEnv
 from torchrl.envs.utils import _classproperty
+
+import numpy as np
+import torch
 
 if torch.cuda.device_count() > 1:
     n = torch.cuda.device_count() - 1

@@ -2,23 +2,25 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""
-Train the transformer model. Configurable via config/train.yaml, but any argument can
+"""Train the transformer model. Configurable via config/train.yaml, but any argument can
 also be overridden at the command line.
 
 To run on a single GPU, example:
 $ python train.py --batch_size=32 --compile=False
 """
+from __future__ import annotations
+
 import time
+
+from torchrl._utils import logger as torchrl_logger
+from torchrl.data.llm.dataset import get_dataloader
+from torchrl.data.llm.prompt import PromptData
 
 import hydra
 import torch
+
 from models.transformer import init_transformer
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from torchrl._utils import logger as torchrl_logger
-
-from torchrl.data.llm.dataset import get_dataloader
-from torchrl.data.llm.prompt import PromptData
 from utils import get_file_logger, resolve_name_or_path, setup
 
 

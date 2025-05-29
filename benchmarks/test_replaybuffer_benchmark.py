@@ -2,12 +2,10 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import argparse
 import functools
-
-import pytest
-import torch
-from tensordict import TensorDict
 
 from torchrl.data import (
     LazyMemmapStorage,
@@ -22,6 +20,11 @@ from torchrl.data.replay_buffers import (
     SamplerWithoutReplacement,
     SliceSampler,
 )
+
+import pytest
+import torch
+
+from tensordict import TensorDict
 
 _TensorDictPrioritizedReplayBuffer = functools.partial(
     TensorDictPrioritizedReplayBuffer, alpha=1, beta=0.9

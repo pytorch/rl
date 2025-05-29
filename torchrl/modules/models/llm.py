@@ -5,10 +5,12 @@
 from __future__ import annotations
 
 import importlib
+
 from pathlib import Path
 
 import torch
 import torch.nn.functional as F
+
 from torch import nn as nn
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
@@ -56,7 +58,7 @@ class GPT2RewardModel(nn.Module):
         self.pad_id = GPT2TokenizerFast.from_pretrained("gpt2").eos_token_id
 
     def forward(self, input_ids, attention_mask):
-        """Returns a tuple (rewards, end_scores) where `rewards` contains all rewards computed at each timestep, `end_scores` contains the reward computed at the last-non-padding token."""
+        """Return a tuple (rewards, end_scores) where `rewards` contains all rewards computed at each timestep, `end_scores` contains the reward computed at the last-non-padding token."""
         outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask)
         hidden_states = outputs[0]
         rewards = self.lm_head(hidden_states).squeeze(-1)
@@ -115,6 +117,7 @@ class GPT2RewardModel(nn.Module):
             ... )
             >>> assert isinstance(loss, torch.Tensor)
             >>> assert loss.shape == torch.Size([])
+
         """
         chosen_ids = chosen_batch.input_ids
         rejected_ids = rejected_batch.input_ids

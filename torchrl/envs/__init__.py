@@ -2,19 +2,19 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 from .async_envs import AsyncEnvPool, ProcessorAsyncEnvPool, ThreadingAsyncEnvPool
 from .batched_envs import ParallelEnv, SerialEnv
 from .common import EnvBase, EnvMetaData, make_tensordict
 from .custom import ChessEnv, LLMHashingEnv, PendulumEnv, TicTacToeEnv
-from .env_creator import env_creator, EnvCreator, get_env_metadata
-from .gym_like import default_info_dict_reader, GymLikeEnv
+from .env_creator import EnvCreator, env_creator, get_env_metadata
+from .gym_like import GymLikeEnv, default_info_dict_reader
 from .libs import (
     BraxEnv,
     BraxWrapper,
     DMControlEnv,
     DMControlWrapper,
-    gym_backend,
     GymEnv,
     GymWrapper,
     HabitatEnv,
@@ -34,15 +34,16 @@ from .libs import (
     OpenSpielWrapper,
     PettingZooEnv,
     PettingZooWrapper,
-    register_gym_spec_conversion,
     RoboHiveEnv,
-    set_gym_backend,
     SMACv2Env,
     SMACv2Wrapper,
     UnityMLAgentsEnv,
     UnityMLAgentsWrapper,
     VmasEnv,
     VmasWrapper,
+    gym_backend,
+    register_gym_spec_conversion,
+    set_gym_backend,
 )
 from .model_based import DreamerDecoder, DreamerEnv, ModelBasedEnvBase
 from .transforms import (
@@ -71,7 +72,6 @@ from .transforms import (
     FlattenObservation,
     FrameSkipTransform,
     GrayScale,
-    gSDENoise,
     Hash,
     InitTracker,
     KLRewardTransform,
@@ -114,16 +114,17 @@ from .transforms import (
     VecNormV2,
     VIPRewardTransform,
     VIPTransform,
+    gSDENoise,
 )
 from .utils import (
+    ExplorationType,
+    MarlGroupMapType,
+    RandomPolicy,
     check_env_specs,
     check_marl_grouping,
     exploration_type,
-    ExplorationType,
     get_available_libraries,
     make_composite_from_td,
-    MarlGroupMapType,
-    RandomPolicy,
     set_exploration_type,
     step_mdp,
     terminated_or_truncated,

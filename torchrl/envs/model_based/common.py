@@ -7,11 +7,13 @@ from __future__ import annotations
 import abc
 import warnings
 
-import torch
-from tensordict import TensorDict
-from tensordict.nn import TensorDictModule
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
+
+import torch
+
+from tensordict import TensorDict
+from tensordict.nn import TensorDictModule
 
 
 class ModelBasedEnvBase(EnvBase):
@@ -134,7 +136,7 @@ class ModelBasedEnvBase(EnvBase):
         )
 
     def set_specs_from_env(self, env: EnvBase):
-        """Sets the specs of the environment from the specs of the given environment."""
+        """Set the specs of the environment from the specs of the given environment."""
         device = self.device
         output_spec = env.output_spec.clone()
         input_spec = env.input_spec.clone()

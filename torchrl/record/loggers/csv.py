@@ -5,16 +5,17 @@
 from __future__ import annotations
 
 import os
+
 from collections import defaultdict
 from pathlib import Path
 from typing import Sequence
 
 import tensordict.utils
 import torch
-from tensordict import MemoryMappedTensor
-from torch import Tensor
 
 from .common import Logger
+from tensordict import MemoryMappedTensor
+from torch import Tensor
 
 
 class CSVExperiment:
@@ -50,7 +51,7 @@ class CSVExperiment:
         fd.flush()
 
     def add_video(self, tag, vid_tensor, global_step: int | None = None, **kwargs):
-        """Writes a video on a file on disk.
+        """Write a video on a file on disk.
 
         The video format can be one of
 
@@ -161,19 +162,20 @@ class CSVLogger(Logger):
         self._has_imported_moviepy = False
 
     def _create_experiment(self) -> CSVExperiment:
-        """Creates a CSV experiment."""
+        """Create a CSV experiment."""
         log_dir = str(os.path.join(self.log_dir, self.exp_name))
         return CSVExperiment(
             log_dir, video_format=self.video_format, video_fps=self.video_fps
         )
 
     def log_scalar(self, name: str, value: float, step: int = None) -> None:
-        """Logs a scalar value to the tensorboard.
+        """Log a scalar value to the tensorboard.
 
         Args:
             name (str): The name of the scalar.
             value (:obj:`float`): The value of the scalar.
             step (int, optional): The step at which the scalar is logged. Defaults to None.
+
         """
         self.experiment.add_scalar(name, value, global_step=step)
 
@@ -190,6 +192,7 @@ class CSVLogger(Logger):
             function.
             For more information on video logging with :class:`~torchrl.record.loggers.csv.CSVLogger`,
             see the :meth:`~torchrl.record.loggers.csv.CSVExperiment.add_video` documentation.
+
         """
         # check for correct format of the video tensor ((N), T, C, H, W)
         # check that the color channel (C) is either 1 or 3
@@ -205,10 +208,11 @@ class CSVLogger(Logger):
         )
 
     def log_hparams(self, cfg: DictConfig | dict) -> None:  # noqa: F821
-        """Logs the hyperparameters of the experiment.
+        """Log the hyperparameters of the experiment.
 
         Args:
             cfg (DictConfig or dict): The configuration of the experiment.
+
         """
         txt = "\n".join([f"{k}: {val}" for k, val in sorted(cfg.items())])
         self.experiment.add_text("hparams", txt)
@@ -220,5 +224,5 @@ class CSVLogger(Logger):
         raise NotImplementedError("Logging histograms in cvs is not permitted.")
 
     def print_log_dir(self):
-        """Prints the log directory content."""
+        """Print the log directory content."""
         tensordict.utils.print_directory_tree(self.log_dir)

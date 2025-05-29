@@ -4,8 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from tensordict import unravel_key
 from torchrl.envs import Transform
+
+from tensordict import unravel_key
 
 
 def swap_last(source, dest):
@@ -21,7 +22,7 @@ def swap_last(source, dest):
 
 
 class DoneTransform(Transform):
-    """Expands the 'done' entries (incl. terminated) to match the reward shape.
+    """Expand the 'done' entries (incl. terminated) to match the reward shape.
 
     Can be appended to a replay buffer or a collector.
     """

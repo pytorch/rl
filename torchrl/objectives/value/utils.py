@@ -11,7 +11,7 @@ from tensordict.utils import expand_right
 
 
 def _custom_conv1d(tensor: torch.Tensor, filter: torch.Tensor):
-    """Computes a conv1d filter over a value.
+    """Compute a conv1d filter over a value.
 
     This is usually used to compute a discounted return:
 
@@ -88,7 +88,7 @@ def _custom_conv1d(tensor: torch.Tensor, filter: torch.Tensor):
 
 
 def roll_by_gather(mat: torch.Tensor, dim: int, shifts: torch.LongTensor):
-    """Rolls a batched matrix along the last or last but one dimension.
+    """Roll a batched matrix along the last or last but one dimension.
 
     Args:
         mat (torch.Tensor): A batched matrix to roll
@@ -128,7 +128,7 @@ def roll_by_gather(mat: torch.Tensor, dim: int, shifts: torch.LongTensor):
 
 
 def _make_gammas_tensor(gamma: torch.Tensor, T: int, rolling_gamma: bool):
-    """Prepares a decay tensor for a matrix multiplication.
+    """Prepare a decay tensor for a matrix multiplication.
 
     Given a tensor gamma of size [*batch, T, D],
     it will return a new tensor with size [*batch, T, T+1, D].
@@ -334,6 +334,7 @@ def _inv_pad_sequence(
         >>> padded = _split_and_pad_sequence(rewards, num_per_traj)
         >>> reconstructed = _inv_pad_sequence(padded, num_per_traj)
         >>> assert (reconstructed==rewards).all()
+
     """
     if splits.numel() == 1:
         return tensor

@@ -5,23 +5,23 @@
 from __future__ import annotations
 
 from copy import copy
-
 from typing import Literal
-
-import torch
-from tensordict import (
-    lazy_stack,
-    LazyStackedTensorDict,
-    NestedKey,
-    set_list_to_stack,
-    TensorDict,
-    TensorDictBase,
-)
-from tensordict.utils import _zip_strict
-from torch.nn.utils.rnn import pad_sequence
 
 from torchrl.modules.llm.policies.common import CategoricalSequential
 from torchrl.modules.utils.utils import _unpad_tensors
+
+import torch
+
+from tensordict import (
+    LazyStackedTensorDict,
+    NestedKey,
+    TensorDict,
+    TensorDictBase,
+    lazy_stack,
+    set_list_to_stack,
+)
+from tensordict.utils import _zip_strict
+from torch.nn.utils.rnn import pad_sequence
 
 
 class TransformersWrapper(CategoricalSequential):
@@ -115,8 +115,9 @@ class TransformersWrapper(CategoricalSequential):
         # noqa
         *,
         return_log_probs: bool | None = None,
-        tokenizer: transformers.tokenization_utils.PreTrainedTokenizer  # noqa
-        | None = None,
+        tokenizer: (
+            transformers.tokenization_utils.PreTrainedTokenizer | None  # noqa
+        ) = None,
         # noqa
         from_text: bool = True,
         device: torch.device | None = None,

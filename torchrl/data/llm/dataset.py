@@ -6,12 +6,10 @@ from __future__ import annotations
 
 import importlib.util
 import os
+
 from pathlib import Path
 from typing import Sequence
 
-import torch
-from tensordict import TensorDict, TensorDictBase
-from tensordict.utils import NestedKey
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.replay_buffers import (
     SamplerWithoutReplacement,
@@ -19,12 +17,17 @@ from torchrl.data.replay_buffers import (
     TensorStorage,
 )
 
+import torch
+
+from tensordict import TensorDict, TensorDictBase
+from tensordict.utils import NestedKey
+
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_datasets = importlib.util.find_spec("datasets") is not None
 
 
 class TokenizedDatasetLoader:
-    """Loads a tokenizes dataset, and caches a memory-mapped copy of it.
+    """Load a tokenizes dataset, and caches a memory-mapped copy of it.
 
     Args:
         split (str): One of ``"train"`` or ``"valid"``.
@@ -127,7 +130,7 @@ class TokenizedDatasetLoader:
         self.tokenizer = tokenizer
 
     def load(self):
-        """Loads a pre-processed, memory-mapped dataset if it exists, and creates it otherwise."""
+        """Load a pre-processed, memory-mapped dataset if it exists, and creates it otherwise."""
         root_dir = self.root_dir
         max_length = self.max_length
         split = self.split
@@ -151,7 +154,7 @@ class TokenizedDatasetLoader:
         return result[prefix]
 
     def _load_dataset(self):
-        """Loads a text dataset from ``datasets``.
+        """Load a text dataset from ``datasets``.
 
         Returns: a dataset of type ``datasets.Dataset``.
         """
@@ -177,7 +180,7 @@ class TokenizedDatasetLoader:
         dataset,
         excluded_features: Sequence[str] | None = None,
     ):
-        """Preprocesses a text dataset from ``datasets``.
+        """Preprocesse a text dataset from ``datasets``.
 
         Args:
             dataset (datasets.Dataset): a dataset loaded using :meth:`load_dataset`.
@@ -185,6 +188,7 @@ class TokenizedDatasetLoader:
                 once tokenization is complete. Defaults to ``{"text", "prompt", "label", "valid_sample"}``.
 
         Returns: a dataset of type ``datasets.Dataset``.
+
         """
         if not _has_transformers:
             raise ImportError("The transformers library is missing.")
@@ -231,7 +235,7 @@ class TokenizedDatasetLoader:
         batch_dims=1,
         valid_mask_key=None,
     ):
-        """Converts a dataset to a memory-mapped TensorDict.
+        """Convert a dataset to a memory-mapped TensorDict.
 
         If the dataset is already a :class:`TensorDict` instance, it is simply converted
         to a memory-mapped TensorDict.
@@ -309,7 +313,7 @@ class TokenizedDatasetLoader:
 
 
 def create_infinite_iterator(iterator):
-    """Iterates indefinitely over an iterator."""
+    """Iterate indefinitely over an iterator."""
     while True:
         yield from iterator
 
@@ -327,7 +331,7 @@ def get_dataloader(
     from_disk: bool = False,
     num_workers: int | None = None,
 ):
-    """Creates a dataset and returns a dataloader from it.
+    """Create a dataset and returns a dataloader from it.
 
     Args:
         batch_size (int): the batch size of the dataloader samples.
@@ -385,6 +389,7 @@ def get_dataloader(
             batch_size=torch.Size([256]),
             device=cpu,
             is_shared=False)
+
     """
     data = tensorclass_type.from_dataset(
         split=split,

@@ -2,12 +2,13 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 from collections import OrderedDict
 
-import torch
 from packaging import version
 
+import torch
 
 if version.parse(torch.__version__) >= version.parse("1.12.0"):
     from torch.nn.parameter import _ParameterMeta

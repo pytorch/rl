@@ -7,14 +7,11 @@ from __future__ import annotations
 import importlib.util
 import warnings
 
-import torch
-from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
-
 from torchrl.data.tensor_specs import (
+    DEVICE_TYPING,
     Bounded,
     Categorical,
     Composite,
-    DEVICE_TYPING,
     MultiCategorical,
     MultiOneHot,
     OneHot,
@@ -23,14 +20,18 @@ from torchrl.data.tensor_specs import (
     Unbounded,
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict
-from torchrl.envs.common import _EnvWrapper, EnvBase
+from torchrl.envs.common import EnvBase, _EnvWrapper
 from torchrl.envs.libs.gym import gym_backend, set_gym_backend
 from torchrl.envs.utils import (
+    MarlGroupMapType,
     _classproperty,
     _selective_unsqueeze,
     check_marl_grouping,
-    MarlGroupMapType,
 )
+
+import torch
+
+from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 
 _has_vmas = importlib.util.find_spec("vmas") is not None
 
@@ -110,7 +111,7 @@ def _vmas_to_torchrl_spec_transform(
 
 
 class VmasWrapper(_EnvWrapper):
-    """Vmas environment wrapper.
+    """Vma environment wrapper.
 
     GitHub: https://github.com/proroklab/VectorizedMultiAgentSimulator
 
@@ -216,6 +217,7 @@ class VmasWrapper(_EnvWrapper):
             batch_size=torch.Size([32, 10]),
             device=cpu,
             is_shared=False)
+
     """
 
     git_url = "https://github.com/proroklab/VectorizedMultiAgentSimulator"
@@ -657,7 +659,7 @@ class VmasWrapper(_EnvWrapper):
 
 
 class VmasEnv(VmasWrapper):
-    """Vmas environment wrapper.
+    """Vma environment wrapper.
 
     GitHub: https://github.com/proroklab/VectorizedMultiAgentSimulator
 
@@ -769,6 +771,7 @@ class VmasEnv(VmasWrapper):
             batch_size=torch.Size([32, 10]),
             device=cpu,
             is_shared=False)
+
     """
 
     def __init__(
@@ -824,11 +827,13 @@ class VmasEnv(VmasWrapper):
             env=vmas.make_env(
                 scenario=scenario,
                 num_envs=num_envs,
-                device=self.device
-                if self.device is not None
-                else getattr(
-                    torch, "get_default_device", lambda: torch.device("cpu")
-                )(),
+                device=(
+                    self.device
+                    if self.device is not None
+                    else getattr(
+                        torch, "get_default_device", lambda: torch.device("cpu")
+                    )()
+                ),
                 continuous_actions=continuous_actions,
                 max_steps=max_steps,
                 seed=seed,

@@ -7,28 +7,30 @@ from __future__ import annotations
 import abc
 import json
 import warnings
+
 from pathlib import Path
 
-import numpy as np
-import torch
-from tensordict import (
-    is_tensor_collection,
-    NonTensorData,
-    PersistentTensorDict,
-    TensorDict,
-)
-from tensordict.memmap import MemoryMappedTensor
 from torchrl._utils import _STRDTYPE2DTYPE
-
 from torchrl.data.replay_buffers.utils import (
-    _save_pytree,
     Flat2TED,
     H5Combine,
     H5Split,
     Nested2TED,
     TED2Flat,
     TED2Nested,
+    _save_pytree,
 )
+
+import numpy as np
+import torch
+
+from tensordict import (
+    NonTensorData,
+    PersistentTensorDict,
+    TensorDict,
+    is_tensor_collection,
+)
+from tensordict.memmap import MemoryMappedTensor
 
 
 class StorageCheckpointerBase:
@@ -40,12 +42,10 @@ class StorageCheckpointerBase:
     """
 
     @abc.abstractmethod
-    def dumps(self, storage, path):
-        ...
+    def dumps(self, storage, path): ...
 
     @abc.abstractmethod
-    def loads(self, storage, path):
-        ...
+    def loads(self, storage, path): ...
 
 
 class ListStorageCheckpointer(StorageCheckpointerBase):
@@ -200,7 +200,7 @@ class TensorStorageCheckpointer(StorageCheckpointerBase):
 
 
 class FlatStorageCheckpointer(TensorStorageCheckpointer):
-    """Saves the storage in a compact form, saving space on the TED format.
+    """Save the storage in a compact form, saving space on the TED format.
 
     This class explicitly assumes and does NOT check that:
 
@@ -257,7 +257,7 @@ class FlatStorageCheckpointer(TensorStorageCheckpointer):
 
 
 class NestedStorageCheckpointer(FlatStorageCheckpointer):
-    """Saves the storage in a compact form, saving space on the TED format and using memory-mapped nested tensors.
+    """Save the storage in a compact form, saving space on the TED format and using memory-mapped nested tensors.
 
     This class explicitly assumes and does NOT check that:
 
@@ -280,7 +280,7 @@ class NestedStorageCheckpointer(FlatStorageCheckpointer):
 
 
 class H5StorageCheckpointer(NestedStorageCheckpointer):
-    """Saves the storage in a compact form, saving space on the TED format and using H5 format to save the data.
+    """Save the storage in a compact form, saving space on the TED format and using H5 format to save the data.
 
     This class explicitly assumes and does NOT check that:
 

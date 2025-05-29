@@ -6,16 +6,16 @@ from __future__ import annotations
 
 from typing import Any, Callable, Literal
 
-import torch
-import transformers
-from tensordict import lazy_stack, TensorDict, TensorDictBase
-from torch.utils.data import DataLoader
 from torchrl.data import Composite, NonTensor
-
 from torchrl.data.llm.chat import History
 from torchrl.envs import EnvBase, TransformedEnv
-
 from torchrl.envs.llm.transforms.dataloading import DataLoadingPrimer
+
+import torch
+import transformers
+
+from tensordict import TensorDict, TensorDictBase, lazy_stack
+from torch.utils.data import DataLoader
 
 
 class ChatEnv(EnvBase):

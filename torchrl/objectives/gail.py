@@ -6,15 +6,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import torch
-
-import torch.autograd as autograd
-from tensordict import TensorDict, TensorDictBase, TensorDictParams
-from tensordict.nn import dispatch, TensorDictModule
-from tensordict.utils import NestedKey
-
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import _reduce
+
+import torch
+import torch.autograd as autograd
+
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
+from tensordict.nn import TensorDictModule, dispatch
+from tensordict.utils import NestedKey
 
 
 class GAILLoss(LossModule):
@@ -32,11 +32,12 @@ class GAILLoss(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
+
     """
 
     @dataclass
     class _AcceptedKeys:
-        """Maintains default values for all configurable tensordict keys.
+        """Maintain default values for all configurable tensordict keys.
 
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values.
@@ -51,6 +52,7 @@ class GAILLoss(LossModule):
             collector_observation (NestedKey): The tensordict key where the collector observation is expected.
                 Defaults to ``"collector_observation"``.
             discriminator_pred (NestedKey): The tensordict key where the discriminator prediction is expected.
+
         """
 
         expert_action: NestedKey = "action"

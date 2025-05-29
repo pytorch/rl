@@ -13,31 +13,13 @@ import os.path
 import pickle
 import random
 import re
+
 from collections import defaultdict
 from functools import partial
 from sys import platform
 from typing import Any
 
-import numpy as np
-import pytest
-import torch
-import yaml
-
 from packaging import version
-from tensordict import (
-    assert_allclose_td,
-    dense_stack_tds,
-    LazyStackedTensorDict,
-    set_capture_non_tensor_stack,
-    set_list_to_stack,
-    TensorDict,
-    TensorDictBase,
-)
-from tensordict.nn import TensorDictModuleBase
-from tensordict.tensorclass import NonTensorStack, TensorClass
-from tensordict.utils import _unravel_key_to_tuple
-from torch import nn
-
 from torchrl import set_auto_unwrap_transformed_env
 from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
 from torchrl.data.tensor_specs import Categorical, Composite, NonTensor, Unbounded
@@ -54,13 +36,13 @@ from torchrl.envs import (
     ParallelEnv,
     PendulumEnv,
     SerialEnv,
-    set_gym_backend,
     TicTacToeEnv,
+    set_gym_backend,
 )
 from torchrl.envs.batched_envs import _stackable
 from torchrl.envs.gym_like import default_info_dict_reader
-from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
-from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv, GymWrapper
+from torchrl.envs.libs.dm_control import DMControlEnv, _has_dmc
+from torchrl.envs.libs.gym import GymEnv, GymWrapper, _has_gym, gym_backend
 from torchrl.envs.transforms import Compose, StepCounter, TransformedEnv
 from torchrl.envs.transforms.transforms import (
     AutoResetEnv,
@@ -71,17 +53,36 @@ from torchrl.envs.transforms.transforms import (
     UnsqueezeTransform,
 )
 from torchrl.envs.utils import (
+    MarlGroupMapType,
+    RandomPolicy,
     _StepMDP,
     _terminated_or_truncated,
     check_env_specs,
     check_marl_grouping,
     make_composite_from_td,
-    MarlGroupMapType,
-    RandomPolicy,
     step_mdp,
 )
-from torchrl.modules import Actor, ActorCriticOperator, MLP, SafeModule, ValueOperator
+from torchrl.modules import MLP, Actor, ActorCriticOperator, SafeModule, ValueOperator
 from torchrl.modules.tensordict_module import WorldModelWrapper
+
+import numpy as np
+import pytest
+import torch
+import yaml
+
+from tensordict import (
+    LazyStackedTensorDict,
+    TensorDict,
+    TensorDictBase,
+    assert_allclose_td,
+    dense_stack_tds,
+    set_capture_non_tensor_stack,
+    set_list_to_stack,
+)
+from tensordict.nn import TensorDictModuleBase
+from tensordict.tensorclass import NonTensorStack, TensorClass
+from tensordict.utils import _unravel_key_to_tuple
+from torch import nn
 
 pytestmark = [
     pytest.mark.filterwarnings("error"),
@@ -111,14 +112,14 @@ except FileNotFoundError:
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import (
-        _make_envs,
         CARTPOLE_VERSIONED,
-        check_rollout_consistency_multikey_env,
-        decorate_thread_sub_func,
-        get_default_devices,
         HALFCHEETAH_VERSIONED,
         PENDULUM_VERSIONED,
         PONG_VERSIONED,
+        _make_envs,
+        check_rollout_consistency_multikey_env,
+        decorate_thread_sub_func,
+        get_default_devices,
         rand_reset,
     )
     from pytorch.rl.test.mocking_classes import (
@@ -153,14 +154,14 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
     )
 else:
     from _utils_internal import (
-        _make_envs,
         CARTPOLE_VERSIONED,
-        check_rollout_consistency_multikey_env,
-        decorate_thread_sub_func,
-        get_default_devices,
         HALFCHEETAH_VERSIONED,
         PENDULUM_VERSIONED,
         PONG_VERSIONED,
+        _make_envs,
+        check_rollout_consistency_multikey_env,
+        decorate_thread_sub_func,
+        get_default_devices,
         rand_reset,
     )
     from mocking_classes import (
@@ -279,17 +280,14 @@ class TestEnvBase:
             self.observation_spec = Unbounded(())
             self.action_spec = Unbounded(())
 
-        def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
-            ...
+        def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase: ...
 
         def _step(
             self,
             tensordict: TensorDictBase,
-        ) -> TensorDictBase:
-            ...
+        ) -> TensorDictBase: ...
 
-        def _set_seed(self, seed: int | None) -> None:
-            ...
+        def _set_seed(self, seed: int | None) -> None: ...
 
     def test_env_lock(self):
 
@@ -371,8 +369,7 @@ class TestEnvBase:
             string: str
             some_object: Any
 
-        class Whatever:
-            ...
+        class Whatever: ...
 
         td = TensorDict(
             a=Scratch(
@@ -2201,8 +2198,8 @@ class TestStepMdp:
         ):
             assert nested_key[0] not in td_keys
         else:  # Nested key is present
-            assert not td[nested_key] is input_td["next", nested_key]
-            assert not td[nested_key] is input_td[nested_key]
+            assert td[nested_key] is not input_td["next", nested_key]
+            assert td[nested_key] is not input_td[nested_key]
             assert td[nested_key].batch_size == nested_batch_size
         # If we exclude everything we are left with just obs
         if exclude_done and exclude_reward and exclude_action and not keep_other:
@@ -3147,16 +3144,20 @@ class TestMultiKeyEnvs:
 def test_mocking_envs(envclass):
     with set_capture_non_tensor_stack(False):
         env = envclass()
-        with pytest.warns(UserWarning, match="model based") if isinstance(
-            env, DummyModelBasedEnvBase
-        ) else contextlib.nullcontext():
+        with (
+            pytest.warns(UserWarning, match="model based")
+            if isinstance(env, DummyModelBasedEnvBase)
+            else contextlib.nullcontext()
+        ):
             env.set_seed(100)
         reset = env.reset()
         _ = env.rand_step(reset)
         r = env.rollout(3)
-        with pytest.warns(UserWarning, match="model based") if isinstance(
-            env, DummyModelBasedEnvBase
-        ) else contextlib.nullcontext():
+        with (
+            pytest.warns(UserWarning, match="model based")
+            if isinstance(env, DummyModelBasedEnvBase)
+            else contextlib.nullcontext()
+        ):
             check_env_specs(env, seed=100, return_contiguous=False)
 
 
@@ -3857,7 +3858,7 @@ class TestNonTensorEnv:
     @pytest.mark.skipif(not _has_transformers, reason="transformers required")
     @set_auto_unwrap_transformed_env(False)
     def test_from_text_env_tokenizer_catframes(self):
-        """Tests that we can use Unsqueeze + CatFrames with tokenized strings of variable lengths."""
+        """Test that we can use Unsqueeze + CatFrames with tokenized strings of variable lengths."""
         env = Str2StrEnv()
         env.set_seed(0)
         env = env.append_transform(
@@ -3957,9 +3958,11 @@ class TestChessEnv:
     @pytest.mark.parametrize("include_hash", [False, True])
     @pytest.mark.parametrize("include_san", [False, True])
     def test_env(self, stateful, include_pgn, include_fen, include_hash, include_san):
-        with pytest.raises(
-            RuntimeError, match="At least one state representation"
-        ) if not stateful and not include_pgn and not include_fen else contextlib.nullcontext():
+        with (
+            pytest.raises(RuntimeError, match="At least one state representation")
+            if not stateful and not include_pgn and not include_fen
+            else contextlib.nullcontext()
+        ):
             env = ChessEnv(
                 stateful=stateful,
                 include_pgn=include_pgn,

@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import os
 import tempfile
+
 from argparse import Namespace
 from collections import OrderedDict
 from os import path, walk
@@ -14,11 +15,13 @@ from time import sleep
 
 import pytest
 import torch
+
 from torch import nn
 
 try:
-    from tensorboard.backend.event_processing import event_accumulator
     from torchrl.record.loggers.tensorboard import TensorboardLogger
+
+    from tensorboard.backend.event_processing import event_accumulator
 
     _has_tb = True
 except ImportError:
@@ -28,7 +31,6 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import PONG_VERSIONED
 else:
     from _utils_internal import PONG_VERSIONED
-from tensordict import TensorDict
 from torchrl.data import (
     LazyMemmapStorage,
     LazyTensorStorage,
@@ -40,19 +42,21 @@ from torchrl.envs.libs.gym import _has_gym
 from torchrl.trainers import LogValidationReward, Trainer
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.trainers import (
-    _has_tqdm,
-    _has_ts,
+    REWARD_KEY,
     BatchSubSampler,
     CountFramesLog,
     LogScalar,
-    mask_batch,
     OptimizerHook,
     ReplayBufferTrainer,
-    REWARD_KEY,
     RewardNormalizer,
     SelectKeys,
     UpdateWeights,
+    _has_tqdm,
+    _has_ts,
+    mask_batch,
 )
+
+from tensordict import TensorDict
 
 
 def _fun_checker(fun, checker):
@@ -888,7 +892,7 @@ class TestRecorder:
             for _ in range(N):
                 recorder(None)
 
-            for (_, _, filenames) in walk(folder):
+            for _, _, filenames in walk(folder):
                 filename = filenames[0]
                 break
 
@@ -924,7 +928,10 @@ class TestRecorder:
         LogValidationReward.state_dict, Recorder_state_dict = _fun_checker(
             LogValidationReward.state_dict, state_dict_has_been_called
         )
-        (LogValidationReward.load_state_dict, Recorder_load_state_dict,) = _fun_checker(
+        (
+            LogValidationReward.load_state_dict,
+            Recorder_load_state_dict,
+        ) = _fun_checker(
             LogValidationReward.load_state_dict, load_state_dict_has_been_called
         )
 

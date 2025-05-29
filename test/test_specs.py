@@ -9,23 +9,10 @@ import contextlib
 import os
 import warnings
 
-import numpy as np
-import pytest
-import torch
-
 import torchrl.data.tensor_specs
-from scipy.stats import chisquare
-from tensordict import (
-    LazyStackedTensorDict,
-    NonTensorData,
-    NonTensorStack,
-    TensorDict,
-    TensorDictBase,
-)
-from tensordict.utils import _unravel_key_to_tuple, set_capture_non_tensor_stack
+
 from torchrl._utils import _make_ordinal_device
 from torchrl.data.tensor_specs import (
-    _keys_to_empty_composite_spec,
     Binary,
     BinaryDiscreteTensorSpec,
     Bounded,
@@ -51,8 +38,23 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
     UnboundedDiscrete,
     UnboundedDiscreteTensorSpec,
+    _keys_to_empty_composite_spec,
 )
 from torchrl.data.utils import check_no_exclusive_keys, consolidate_spec
+
+import numpy as np
+import pytest
+import torch
+
+from scipy.stats import chisquare
+from tensordict import (
+    LazyStackedTensorDict,
+    NonTensorData,
+    NonTensorStack,
+    TensorDict,
+    TensorDictBase,
+)
+from tensordict.utils import _unravel_key_to_tuple, set_capture_non_tensor_stack
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import (
@@ -384,16 +386,18 @@ class TestComposite:
                 dtype=dtype,
                 device=device,
             ),
-            act=Unbounded(
-                (
-                    *shape,
-                    7,
-                ),
-                dtype=dtype,
-                device=device,
-            )
-            if is_complete
-            else None,
+            act=(
+                Unbounded(
+                    (
+                        *shape,
+                        7,
+                    ),
+                    dtype=dtype,
+                    device=device,
+                )
+                if is_complete
+                else None
+            ),
             shape=shape,
             device=device,
         )
@@ -912,7 +916,7 @@ def test_keys_to_empty_composite_spec():
 
 
 class TestEquality:
-    """Tests spec comparison."""
+    """Test spec comparison."""
 
     @staticmethod
     def _ts_make_all_fields_equal(ts_to, ts_from):
@@ -3744,13 +3748,19 @@ class TestSpecMasking:
         spec = (
             self._one_hot_spec(shape, device, n=n)
             if spectype == "one_hot"
-            else self._discrete_spec(shape, device, n=n)
-            if spectype == "categorical"
-            else self._mult_one_hot_spec(shape, device, n=n)
-            if spectype == "mult_one_hot"
-            else self._mult_discrete_spec(shape, device, n=n)
-            if spectype == "mult_discrete"
-            else None
+            else (
+                self._discrete_spec(shape, device, n=n)
+                if spectype == "categorical"
+                else (
+                    self._mult_one_hot_spec(shape, device, n=n)
+                    if spectype == "mult_one_hot"
+                    else (
+                        self._mult_discrete_spec(shape, device, n=n)
+                        if spectype == "mult_discrete"
+                        else None
+                    )
+                )
+            )
         )
         spec_clone = spec.clone()
         assert spec == spec_clone
@@ -3765,13 +3775,19 @@ class TestSpecMasking:
         spec = (
             self._one_hot_spec(shape, device, n=n)
             if spectype == "one_hot"
-            else self._discrete_spec(shape, device, n=n)
-            if spectype == "categorical"
-            else self._mult_one_hot_spec(shape, device, n=n)
-            if spectype == "mult_one_hot"
-            else self._mult_discrete_spec(shape, device, n=n)
-            if spectype == "mult_discrete"
-            else None
+            else (
+                self._discrete_spec(shape, device, n=n)
+                if spectype == "categorical"
+                else (
+                    self._mult_one_hot_spec(shape, device, n=n)
+                    if spectype == "mult_one_hot"
+                    else (
+                        self._mult_discrete_spec(shape, device, n=n)
+                        if spectype == "mult_discrete"
+                        else None
+                    )
+                )
+            )
         )
         s = spec.rand(rand_shape)
         assert spec.is_in(s)
@@ -3784,13 +3800,19 @@ class TestSpecMasking:
         spec = (
             self._one_hot_spec(shape, device, n=n)
             if spectype == "one_hot"
-            else self._discrete_spec(shape, device, n=n)
-            if spectype == "categorical"
-            else self._mult_one_hot_spec(shape, device, n=n)
-            if spectype == "mult_one_hot"
-            else self._mult_discrete_spec(shape, device, n=n)
-            if spectype == "mult_discrete"
-            else None
+            else (
+                self._discrete_spec(shape, device, n=n)
+                if spectype == "categorical"
+                else (
+                    self._mult_one_hot_spec(shape, device, n=n)
+                    if spectype == "mult_one_hot"
+                    else (
+                        self._mult_discrete_spec(shape, device, n=n)
+                        if spectype == "mult_discrete"
+                        else None
+                    )
+                )
+            )
         )
         s = spec.rand(rand_shape)
         assert (spec.project(s) == s).all()
@@ -4139,11 +4161,9 @@ class TestLegacy:
         assert not isinstance(bounded, MultiOneHot)
 
     def test_composite(self):
-        with (
-            pytest.warns(
-                DeprecationWarning,
-                match="The CompositeSpec has been deprecated and will be removed in v0.8. Please use Composite instead.",
-            )
+        with pytest.warns(
+            DeprecationWarning,
+            match="The CompositeSpec has been deprecated and will be removed in v0.8. Please use Composite instead.",
         ):
             composite = CompositeSpec()
         assert isinstance(composite, CompositeSpec)
@@ -4155,11 +4175,9 @@ class TestLegacy:
         assert not isinstance(composite, MultiOneHot)
 
     def test_non_tensor(self):
-        with (
-            pytest.warns(
-                DeprecationWarning,
-                match="The NonTensorSpec has been deprecated and will be removed in v0.8. Please use NonTensor instead.",
-            )
+        with pytest.warns(
+            DeprecationWarning,
+            match="The NonTensorSpec has been deprecated and will be removed in v0.8. Please use NonTensor instead.",
         ):
             non_tensor = NonTensorSpec()
         assert isinstance(non_tensor, NonTensorSpec)

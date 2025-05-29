@@ -6,20 +6,21 @@ from __future__ import annotations
 
 import warnings
 
+from torchrl.data.tensor_specs import Composite, TensorSpec
+from torchrl.envs.utils import ExplorationType, exploration_type
+from torchrl.modules.tensordict_module.common import _forward_hook_safe_action
+
 import numpy as np
 import torch
+
 from tensordict import TensorDictBase
 from tensordict.nn import (
     TensorDictModule,
     TensorDictModuleBase,
     TensorDictModuleWrapper,
 )
-from tensordict.utils import expand_as_right, expand_right, NestedKey
+from tensordict.utils import NestedKey, expand_as_right, expand_right
 from torch import nn
-
-from torchrl.data.tensor_specs import Composite, TensorSpec
-from torchrl.envs.utils import exploration_type, ExplorationType
-from torchrl.modules.tensordict_module.common import _forward_hook_safe_action
 
 __all__ = [
     "EGreedyWrapper",
@@ -491,6 +492,7 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
             batch_size=torch.Size([10]),
             device=None,
             is_shared=False)
+
     """
 
     def __init__(
@@ -566,7 +568,7 @@ class OrnsteinUhlenbeckProcessModule(TensorDictModuleBase):
         return self._spec
 
     def step(self, frames: int = 1) -> None:
-        """Updates the eps noise factor.
+        """Update the eps noise factor.
 
         Args:
             frames (int): number of frames of the current batch (corresponding to the number of updates to be made).

@@ -11,27 +11,12 @@ import importlib
 import os
 import pickle
 import sys
+
 from functools import partial
 from unittest import mock
 
-import numpy as np
-import pytest
-import torch
-
 from packaging import version
 from packaging.version import parse
-from tensordict import (
-    assert_allclose_td,
-    is_tensor_collection,
-    is_tensorclass,
-    LazyStackedTensorDict,
-    tensorclass,
-    TensorDict,
-    TensorDictBase,
-)
-from torch import multiprocessing as mp
-from torch.utils._pytree import tree_flatten, tree_map
-
 from torchrl._utils import _replace_last
 from torchrl.collectors import RandomPolicy, SyncDataCollector
 from torchrl.collectors.utils import split_trajectories
@@ -62,7 +47,6 @@ from torchrl.data.replay_buffers.scheduler import (
     SchedulerList,
     StepScheduler,
 )
-
 from torchrl.data.replay_buffers.storages import (
     LazyMemmapStorage,
     LazyStackStorage,
@@ -90,7 +74,6 @@ from torchrl.envs.transforms.transforms import (
     FiniteTensorDictCheck,
     FlattenObservation,
     GrayScale,
-    gSDENoise,
     ObservationNorm,
     PinMemoryTransform,
     RenameTransform,
@@ -102,21 +85,37 @@ from torchrl.envs.transforms.transforms import (
     ToTensorImage,
     UnsqueezeTransform,
     VecNorm,
+    gSDENoise,
 )
 
+import numpy as np
+import pytest
+import torch
+
+from tensordict import (
+    LazyStackedTensorDict,
+    TensorDict,
+    TensorDictBase,
+    assert_allclose_td,
+    is_tensor_collection,
+    is_tensorclass,
+    tensorclass,
+)
+from torch import multiprocessing as mp
+from torch.utils._pytree import tree_flatten, tree_map
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import (
-        capture_log_records,
         CARTPOLE_VERSIONED,
+        capture_log_records,
         get_default_devices,
         make_tc,
     )
     from pytorch.rl.test.mocking_classes import CountingEnv
 else:
     from _utils_internal import (
-        capture_log_records,
         CARTPOLE_VERSIONED,
+        capture_log_records,
         get_default_devices,
         make_tc,
     )
@@ -325,10 +324,14 @@ class TestComposableBuffers:
                 writer.extend(batch1)
             return
 
-        with pytest.warns(
-            UserWarning,
-            match="A cursor of length superior to the storage capacity was provided",
-        ) if cond else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="A cursor of length superior to the storage capacity was provided",
+            )
+            if cond
+            else contextlib.nullcontext()
+        ):
             writer.extend(batch1)
 
         # Added less data than storage max size
@@ -376,10 +379,14 @@ class TestComposableBuffers:
         length = min(rb._storage.max_size, len(rb) + data_shape)
         if writer is TensorDictMaxValueWriter:
             data["next", "reward"][-length:] = 1_000_000
-        with pytest.warns(
-            UserWarning,
-            match="A cursor of length superior to the storage capacity was provided",
-        ) if cond else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="A cursor of length superior to the storage capacity was provided",
+            )
+            if cond
+            else contextlib.nullcontext()
+        ):
             rb.extend(data)
         length = len(rb)
         if is_tensor_collection(data):
@@ -417,10 +424,14 @@ class TestComposableBuffers:
             and size < len(data2)
             and isinstance(rb._storage, TensorStorage)
         )
-        with pytest.warns(
-            UserWarning,
-            match="A cursor of length superior to the storage capacity was provided",
-        ) if cond else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="A cursor of length superior to the storage capacity was provided",
+            )
+            if cond
+            else contextlib.nullcontext()
+        ):
             rb.extend(data2)
 
     @pytest.mark.skipif(
@@ -523,10 +534,14 @@ class TestComposableBuffers:
             ):
                 rb.extend(data)
             return
-        with pytest.warns(
-            UserWarning,
-            match="A cursor of length superior to the storage capacity was provided",
-        ) if cond else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="A cursor of length superior to the storage capacity was provided",
+            )
+            if cond
+            else contextlib.nullcontext()
+        ):
             rb.extend(data)
         rb_sample = rb.sample()
         # if not isinstance(new_data, (torch.Tensor, TensorDictBase)):
@@ -593,10 +608,14 @@ class TestComposableBuffers:
             ):
                 rb.extend(data)
             return
-        with pytest.warns(
-            UserWarning,
-            match="A cursor of length superior to the storage capacity was provided",
-        ) if cond else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="A cursor of length superior to the storage capacity was provided",
+            )
+            if cond
+            else contextlib.nullcontext()
+        ):
             rb.extend(data)
         d1 = rb[2]
         d2 = rb._storage[2]
@@ -1566,10 +1585,14 @@ class TestBuffers:
         cond = (
             OLD_TORCH and size < len(batch1) and isinstance(rb._storage, TensorStorage)
         )
-        with pytest.warns(
-            UserWarning,
-            match="A cursor of length superior to the storage capacity was provided",
-        ) if cond else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="A cursor of length superior to the storage capacity was provided",
+            )
+            if cond
+            else contextlib.nullcontext()
+        ):
             rb.extend(batch1)
 
         # Added fewer data than storage max size
@@ -1624,10 +1647,14 @@ class TestBuffers:
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         data = self._get_data(rbtype, size=5)
         cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
-        with pytest.warns(
-            UserWarning,
-            match="A cursor of length superior to the storage capacity was provided",
-        ) if cond else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="A cursor of length superior to the storage capacity was provided",
+            )
+            if cond
+            else contextlib.nullcontext()
+        ):
             rb.extend(data)
         length = len(rb)
         for d in data[-length:]:
@@ -1651,10 +1678,14 @@ class TestBuffers:
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         data = self._get_data(rbtype, size=5)
         cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
-        with pytest.warns(
-            UserWarning,
-            match="A cursor of length superior to the storage capacity was provided",
-        ) if cond else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="A cursor of length superior to the storage capacity was provided",
+            )
+            if cond
+            else contextlib.nullcontext()
+        ):
             rb.extend(data)
         new_data = rb.sample()
         if not isinstance(new_data, (torch.Tensor, TensorDictBase)):
@@ -1681,10 +1712,14 @@ class TestBuffers:
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         data = self._get_data(rbtype, size=5)
         cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
-        with pytest.warns(
-            UserWarning,
-            match="A cursor of length superior to the storage capacity was provided",
-        ) if cond else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="A cursor of length superior to the storage capacity was provided",
+            )
+            if cond
+            else contextlib.nullcontext()
+        ):
             rb.extend(data)
         d1 = rb[2]
         d2 = rb._storage[2]
@@ -1705,7 +1740,7 @@ class TestBuffers:
 
 
 def test_multi_loops():
-    """Tests that one can iterate multiple times over a buffer without rep."""
+    """Test that one can iterate multiple times over a buffer without rep."""
     rb = ReplayBuffer(
         batch_size=5, storage=ListStorage(10), sampler=SamplerWithoutReplacement()
     )
@@ -1719,7 +1754,7 @@ def test_multi_loops():
 
 
 def test_batch_errors():
-    """Tests error messages related to batch-size"""
+    """Test error messages related to batch-size"""
     rb = ReplayBuffer(
         storage=ListStorage(10), sampler=SamplerWithoutReplacement(drop_last=False)
     )
@@ -3041,7 +3076,7 @@ class TestSamplers:
         assert rb.sampler._max_priority[1] == rb2.sampler._max_priority[1]
 
     def test_prb_ndim(self):
-        """This test lists all the possible ways of updating the priority of a PRB with RB, TRB and TPRB.
+        """Thi test lists all the possible ways of updating the priority of a PRB with RB, TRB and TPRB.
 
         All tests are done for 1d and 2d TDs.
 
@@ -3342,17 +3377,21 @@ def test_prioritized_parameter_scheduler(
     for i in range(total_steps):
         curr_alpha = rb.sampler.alpha
         torch.testing.assert_close(
-            curr_alpha
-            if torch.is_tensor(curr_alpha)
-            else torch.tensor(curr_alpha).float(),
+            (
+                curr_alpha
+                if torch.is_tensor(curr_alpha)
+                else torch.tensor(curr_alpha).float()
+            ),
             expected_alpha_vals[i],
             msg=f"expected {expected_alpha_vals[i]}, got {curr_alpha}",
         )
         curr_beta = rb.sampler.beta
         torch.testing.assert_close(
-            curr_beta
-            if torch.is_tensor(curr_beta)
-            else torch.tensor(curr_beta).float(),
+            (
+                curr_beta
+                if torch.is_tensor(curr_beta)
+                else torch.tensor(curr_beta).float()
+            ),
             expected_beta_vals[i],
             msg=f"expected {expected_beta_vals[i]}, got {curr_beta}",
         )

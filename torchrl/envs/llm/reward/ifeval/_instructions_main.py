@@ -38,7 +38,7 @@ def _test_instruction_following_strict(
     inp: _InputExample,
     response: str,
 ):
-    """Tests response to see if instructions are followed."""
+    """Test response to see if instructions are followed."""
     instruction_list = inp.instruction_id_list
     is_following_list = []
 
@@ -71,7 +71,7 @@ def _test_instruction_following_loose(
     inp,
     response,
 ):
-    """Tests response for an upper bound for following instructions."""
+    """Test response for an upper bound for following instructions."""
     r = response.split("\n")
     response_remove_first = "\n".join(r[1:]).strip()
     response_remove_last = "\n".join(r[:-1]).strip()

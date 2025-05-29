@@ -7,8 +7,21 @@ from __future__ import annotations
 import argparse
 import os
 import zipfile
+
 from copy import deepcopy
 from pathlib import Path
+
+from torchrl.data.llm import TensorDictTokenizer
+from torchrl.data.llm.dataset import (
+    TokenizedDatasetLoader,
+    _has_datasets,
+    _has_transformers,
+    get_dataloader,
+)
+from torchrl.data.llm.prompt import PromptData, PromptTensorDictTokenizer
+from torchrl.data.llm.reward import PairwiseDataset, pre_tokenization_hook
+from torchrl.data.llm.utils import RolloutFromModel
+from torchrl.modules.models.llm import GPT2RewardModel
 
 import numpy as np
 import pytest
@@ -16,23 +29,12 @@ import torch
 import torch.nn.functional as F
 
 from tensordict import (
-    is_tensor_collection,
     MemoryMappedTensor,
     TensorDict,
     TensorDictBase,
+    is_tensor_collection,
 )
 from tensordict.nn import TensorDictModule
-from torchrl.data.llm import TensorDictTokenizer
-from torchrl.data.llm.dataset import (
-    _has_datasets,
-    _has_transformers,
-    get_dataloader,
-    TokenizedDatasetLoader,
-)
-from torchrl.data.llm.prompt import PromptData, PromptTensorDictTokenizer
-from torchrl.data.llm.reward import PairwiseDataset, pre_tokenization_hook
-from torchrl.data.llm.utils import RolloutFromModel
-from torchrl.modules.models.llm import GPT2RewardModel
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import get_default_devices

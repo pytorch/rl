@@ -6,23 +6,24 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import torch
-from tensordict import TensorDict, TensorDictBase, TensorDictParams
-from tensordict.nn import dispatch, TensorDictModule
-from tensordict.utils import NestedKey
-
 from torchrl.data.tensor_specs import Bounded, Composite, TensorSpec
 from torchrl.envs.utils import step_mdp
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
+    ValueEstimators,
     _cache_values,
     _reduce,
     _vmap_func,
     default_value_kwargs,
     distance_loss,
-    ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+
+import torch
+
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
+from tensordict.nn import TensorDictModule, dispatch
+from tensordict.utils import NestedKey
 
 
 class TD3BCLoss(LossModule):
@@ -187,7 +188,7 @@ class TD3BCLoss(LossModule):
 
     @dataclass
     class _AcceptedKeys:
-        """Maintains default values for all configurable tensordict keys.
+        """Maintain default values for all configurable tensordict keys.
 
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values.
@@ -207,6 +208,7 @@ class TD3BCLoss(LossModule):
             terminated (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is terminated. Will be used for the underlying value estimator.
                 Defaults to ``"terminated"``.
+
         """
 
         action: NestedKey = "action"
@@ -403,6 +405,7 @@ class TD3BCLoss(LossModule):
         Returns: a differentiable tensor with the actor loss along with a metadata dictionary containing the detached `"bc_loss"`
                 used in the combined actor loss as well as the detached `"state_action_value_actor"` used to calculate the lambda
                 value, and the lambda value `"lmbd"` itself.
+
         """
         tensordict_actor_grad = tensordict.select(
             *self.actor_network.in_keys, strict=False
@@ -456,6 +459,7 @@ class TD3BCLoss(LossModule):
                 are required for this to be computed.
         Returns: a differentiable tensor with the qvalue loss along with a metadata dictionary containing
             the detached `"td_error"` to be used for prioritized sampling, the detached `"next_state_value"`, the detached `"pred_value"`, and the detached `"target_value"`.
+
         """
         tensordict = tensordict.clone(False)
 

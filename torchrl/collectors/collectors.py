@@ -16,7 +16,8 @@ import threading
 import time
 import typing
 import warnings
-from collections import defaultdict, OrderedDict
+
+from collections import OrderedDict, defaultdict
 from copy import deepcopy
 from multiprocessing import connection, queues
 from multiprocessing.managers import SyncManager
@@ -24,19 +25,9 @@ from queue import Empty
 from textwrap import indent
 from typing import Any, Callable, Iterator, Mapping, Sequence, TypeVar
 
-import numpy as np
-import torch
-import torch.nn as nn
-
-from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
-from tensordict.base import NO_DEFAULT
-from tensordict.nn import CudaGraphModule, TensorDictModule
-from tensordict.utils import _zip_strict, Buffer
-from torch import multiprocessing as mp
-from torch.nn import Parameter
-from torch.utils.data import IterableDataset
-
 from torchrl._utils import (
+    RL_WARNINGS,
+    VERBOSE,
     _check_for_faulty_process,
     _ends_with,
     _make_ordinal_device,
@@ -46,8 +37,6 @@ from torchrl._utils import (
     compile_with_warmup,
     logger as torchrl_logger,
     prod,
-    RL_WARNINGS,
-    VERBOSE,
 )
 from torchrl.collectors.utils import split_trajectories
 from torchrl.collectors.weight_update import (
@@ -57,17 +46,29 @@ from torchrl.collectors.weight_update import (
 )
 from torchrl.data import ReplayBuffer
 from torchrl.data.tensor_specs import TensorSpec
-from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
-from torchrl.envs.common import _do_nothing, EnvBase
+from torchrl.data.utils import DEVICE_TYPING, CloudpickleWrapper
+from torchrl.envs.common import EnvBase, _do_nothing
 from torchrl.envs.env_creator import EnvCreator
 from torchrl.envs.transforms import StepCounter, TransformedEnv
 from torchrl.envs.utils import (
-    _aggregate_end_of_traj,
-    _make_compatible_policy,
     ExplorationType,
     RandomPolicy,
+    _aggregate_end_of_traj,
+    _make_compatible_policy,
     set_exploration_type,
 )
+
+import numpy as np
+import torch
+import torch.nn as nn
+
+from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
+from tensordict.base import NO_DEFAULT
+from tensordict.nn import CudaGraphModule, TensorDictModule
+from tensordict.utils import Buffer, _zip_strict
+from torch import multiprocessing as mp
+from torch.nn import Parameter
+from torch.utils.data import IterableDataset
 
 try:
     from torch.compiler import cudagraph_mark_step_begin
@@ -130,14 +131,14 @@ _InterruptorManager.register("_Interruptor", _Interruptor)
 
 
 def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
-    """Maps the tensors to CPU through a nested dictionary."""
+    """Map the tensors to CPU through a nested dictionary."""
     return OrderedDict(
         **{
-            k: recursive_map_to_cpu(item)
-            if isinstance(item, OrderedDict)
-            else item.cpu()
-            if isinstance(item, torch.Tensor)
-            else item
+            k: (
+                recursive_map_to_cpu(item)
+                if isinstance(item, OrderedDict)
+                else item.cpu() if isinstance(item, torch.Tensor) else item
+            )
             for k, item in dictionary.items()
         }
     )
@@ -252,7 +253,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         return policy_new_device, get_original_weights
 
     def start(self):
-        """Starts the collector for asynchronous data collection.
+        """Start the collector for asynchronous data collection.
 
         This method initiates the background collection of data, allowing for decoupling of data collection and training.
 
@@ -266,6 +267,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
 
         Raises:
             NotImplementedError: If not implemented by a subclass.
+
         """
         raise NotImplementedError(
             f"Collector start() is not implemented for {type(self).__name__}."
@@ -281,7 +283,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     def async_shutdown(
         self, timeout: float | None = None, close_env: bool = True
     ) -> None:
-        """Shuts down the collector when started asynchronously with the `start` method.
+        """Shut down the collector when started asynchronously with the `start` method.
 
         Arg:
             timeout (float, optional): The maximum time to wait for the collector to shutdown.
@@ -299,7 +301,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
         **kwargs,
     ) -> None:
-        """Updates the policy weights for the data collector, accommodating both local and remote execution contexts.
+        """Update the policy weights for the data collector, accommodating both local and remote execution contexts.
 
         This method ensures that the policy weights used by the data collector are synchronized with the latest
         trained weights. It supports both local and remote weight updates, depending on the configuration of the
@@ -606,8 +608,9 @@ class SyncDataCollector(DataCollectorBase):
         create_env_fn: (
             EnvBase | EnvCreator | Sequence[Callable[[], EnvBase]]  # noqa: F821
         ),  # noqa: F821
-        policy: None
-        | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]) = None,
+        policy: None | (
+            TensorDictModule | Callable[[TensorDictBase], TensorDictBase]
+        ) = None,
         *,
         policy_factory: Callable[[], Callable] | None = None,
         frames_per_batch: int,
@@ -634,9 +637,9 @@ class SyncDataCollector(DataCollectorBase):
         compile_policy: bool | dict[str, Any] | None = None,
         cudagraph_policy: bool | dict[str, Any] | None = None,
         no_cuda_sync: bool = False,
-        weight_updater: WeightUpdaterBase
-        | Callable[[], WeightUpdaterBase]
-        | None = None,
+        weight_updater: (
+            WeightUpdaterBase | Callable[[], WeightUpdaterBase] | None
+        ) = None,
         **kwargs,
     ):
         from torchrl.envs.batched_envs import BatchedEnvBase
@@ -774,7 +777,10 @@ class SyncDataCollector(DataCollectorBase):
         self.reset_when_done = reset_when_done
         self.n_env = self.env.batch_size.numel()
 
-        (self.policy, self.get_weights_fn,) = self._get_policy_and_device(
+        (
+            self.policy,
+            self.get_weights_fn,
+        ) = self._get_policy_and_device(
             policy=policy,
             observation_spec=self.env.observation_spec,
         )
@@ -1124,7 +1130,7 @@ class SyncDataCollector(DataCollectorBase):
         )
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
-        """Sets the seeds of the environments stored in the DataCollector.
+        """Set the seeds of the environments stored in the DataCollector.
 
         Args:
             seed (int): integer representing the seed to be used for the environment.
@@ -1158,7 +1164,7 @@ class SyncDataCollector(DataCollectorBase):
         return completed
 
     def iterator(self) -> Iterator[TensorDictBase]:
-        """Iterates through the DataCollector.
+        """Iterate through the DataCollector.
 
         Yields: TensorDictBase objects containing (chunks of) trajectories
 
@@ -1240,7 +1246,7 @@ class SyncDataCollector(DataCollectorBase):
                     yield tensordict_out.clone()
 
     def start(self):
-        """Starts the collector in a separate thread for asynchronous data collection.
+        """Start the collector in a separate thread for asynchronous data collection.
 
         The collected data is stored in the provided replay buffer. This method is useful when you want to decouple data
         collection from training, allowing your training loop to run independently of the data collection process.
@@ -1305,6 +1311,7 @@ class SyncDataCollector(DataCollectorBase):
             ...
             ...     # Shut down the collector
             ...     collector.async_shutdown()
+
         """
         if self.replay_buffer is None:
             raise RuntimeError("Replay buffer must be defined for execution.")
@@ -1324,7 +1331,7 @@ class SyncDataCollector(DataCollectorBase):
     def async_shutdown(
         self, timeout: float | None = None, close_env: bool = True
     ) -> None:
-        """Finishes processes started by ray.init() during async execution."""
+        """Finishe processes started by ray.init() during async execution."""
         self._stop = True
         if hasattr(self, "_thread") and self._thread.is_alive():
             self._thread.join(timeout=timeout)
@@ -1374,7 +1381,7 @@ class SyncDataCollector(DataCollectorBase):
 
     @torch.no_grad()
     def rollout(self) -> TensorDictBase:
-        """Computes a rollout in the environment using the provided policy.
+        """Compute a rollout in the environment using the provided policy.
 
         Returns:
             TensorDictBase containing the computed rollout.
@@ -1402,11 +1409,11 @@ class SyncDataCollector(DataCollectorBase):
                     ):
                         # TODO: This may break with exclusive / ragged lazy stacks
                         self._shuttle.apply(
-                            lambda name, val: val.to(
-                                device=self.policy_device, non_blocking=True
-                            )
-                            if name in self._policy_output_keys
-                            else val,
+                            lambda name, val: (
+                                val.to(device=self.policy_device, non_blocking=True)
+                                if name in self._policy_output_keys
+                                else val
+                            ),
                             out=self._shuttle,
                             named=True,
                             nested_keys=True,
@@ -1561,7 +1568,7 @@ class SyncDataCollector(DataCollectorBase):
 
     @torch.no_grad()
     def reset(self, index=None, **kwargs) -> None:
-        """Resets the environments to a new initial state."""
+        """Reset the environments to a new initial state."""
         # metadata
         collector_metadata = self._shuttle.get("collector").clone()
         if index is not None:
@@ -1589,12 +1596,13 @@ class SyncDataCollector(DataCollectorBase):
         self._shuttle["collector"] = collector_metadata
 
     def shutdown(self, timeout: float | None = None, close_env: bool = True) -> None:
-        """Shuts down all workers and/or closes the local environment.
+        """Shut down all workers and/or closes the local environment.
 
         Args:
             timeout (float, optional): The timeout for closing pipes between workers.
                 No effect for this class.
             close_env (bool, optional): Whether to close the environment. Defaults to `True`.
+
         """
         if not self.closed:
             self.closed = True
@@ -1617,7 +1625,7 @@ class SyncDataCollector(DataCollectorBase):
             pass
 
     def state_dict(self) -> OrderedDict:
-        """Returns the local state_dict of the data collector (environment and policy).
+        """Return the local state_dict of the data collector (environment and policy).
 
         Returns:
             an ordered dictionary with fields :obj:`"policy_state_dict"` and
@@ -1647,7 +1655,7 @@ class SyncDataCollector(DataCollectorBase):
         return state_dict
 
     def load_state_dict(self, state_dict: OrderedDict, **kwargs) -> None:
-        """Loads a state_dict on the environment and policy.
+        """Load a state_dict on the environment and policy.
 
         Args:
             state_dict (OrderedDict): ordered dictionary containing the fields
@@ -1682,7 +1690,7 @@ class SyncDataCollector(DataCollectorBase):
 
 
 class _MultiDataCollector(DataCollectorBase):
-    """Runs a given number of DataCollectors on separate processes.
+    """Run a given number of DataCollectors on separate processes.
 
     Args:
         create_env_fn (List[Callabled]): list of Callables, each returning an
@@ -1872,12 +1880,13 @@ class _MultiDataCollector(DataCollectorBase):
     def __init__(
         self,
         create_env_fn: Sequence[Callable[[], EnvBase]],
-        policy: None
-        | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]) = None,
+        policy: None | (
+            TensorDictModule | Callable[[TensorDictBase], TensorDictBase]
+        ) = None,
         *,
-        policy_factory: Callable[[], Callable]
-        | list[Callable[[], Callable]]
-        | None = None,
+        policy_factory: (
+            Callable[[], Callable] | list[Callable[[], Callable]] | None
+        ) = None,
         frames_per_batch: int,
         total_frames: int | None = -1,
         device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
@@ -1907,9 +1916,9 @@ class _MultiDataCollector(DataCollectorBase):
         compile_policy: bool | dict[str, Any] | None = None,
         cudagraph_policy: bool | dict[str, Any] | None = None,
         no_cuda_sync: bool = False,
-        weight_updater: WeightUpdaterBase
-        | Callable[[], WeightUpdaterBase]
-        | None = None,
+        weight_updater: (
+            WeightUpdaterBase | Callable[[], WeightUpdaterBase] | None
+        ) = None,
     ):
         self.closed = True
         self.num_workers = len(create_env_fn)
@@ -1994,7 +2003,10 @@ class _MultiDataCollector(DataCollectorBase):
             for policy_device, env_maker, env_maker_kwargs in _zip_strict(
                 self.policy_device, self.create_env_fn, self.create_env_kwargs
             ):
-                (policy_new_device, get_weights_fn,) = self._get_policy_and_device(
+                (
+                    policy_new_device,
+                    get_weights_fn,
+                ) = self._get_policy_and_device(
                     policy=policy,
                     policy_device=policy_device,
                     env_maker=env_maker,
@@ -2251,17 +2263,19 @@ class _MultiDataCollector(DataCollectorBase):
                     "extend_buffer": self.extend_buffer,
                     "traj_pool": self._traj_pool,
                     "trust_policy": self.trust_policy,
-                    "compile_policy": self.compiled_policy_kwargs
-                    if self.compiled_policy
-                    else False,
-                    "cudagraph_policy": self.cudagraphed_policy_kwargs
-                    if self.cudagraphed_policy
-                    else False,
+                    "compile_policy": (
+                        self.compiled_policy_kwargs if self.compiled_policy else False
+                    ),
+                    "cudagraph_policy": (
+                        self.cudagraphed_policy_kwargs
+                        if self.cudagraphed_policy
+                        else False
+                    ),
                     "no_cuda_sync": self.no_cuda_sync,
                     "collector_class": self.collector_class,
-                    "postproc": self.postprocs
-                    if self.replay_buffer is not None
-                    else None,
+                    "postproc": (
+                        self.postprocs if self.replay_buffer is not None else None
+                    ),
                 }
                 proc = _ProcessNoWarn(
                     target=_main_async_collector,
@@ -2296,7 +2310,7 @@ also that the state dict is synchronised across processes if needed."""
     _running_free = False
 
     def start(self):
-        """Starts the collector(s) for asynchronous data collection.
+        """Start the collector(s) for asynchronous data collection.
 
         The collected data is stored in the provided replay buffer. This method initiates the background collection of
         data across multiple processes, allowing for decoupling of data collection and training.
@@ -2362,6 +2376,7 @@ also that the state dict is synchronised across processes if needed."""
             ...
             ...     # Shut down the collector
             ...     collector.async_shutdown()
+
         """
         if self.replay_buffer is None:
             raise RuntimeError("Replay buffer must be defined for execution.")
@@ -2404,11 +2419,12 @@ also that the state dict is synchronised across processes if needed."""
             pass
 
     def shutdown(self, timeout: float | None = None, close_env: bool = True) -> None:
-        """Shuts down all processes. This operation is irreversible.
+        """Shut down all processes. This operation is irreversible.
 
         Args:
             timeout (float, optional): The timeout for closing pipes between workers.
             close_env (bool, optional): Whether to close the environment. Defaults to `True`.
+
         """
         if not close_env:
             raise RuntimeError(
@@ -2476,7 +2492,7 @@ also that the state dict is synchronised across processes if needed."""
         return self.shutdown(timeout=timeout)
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
-        """Sets the seeds of the environments stored in the DataCollector.
+        """Set the seeds of the environments stored in the DataCollector.
 
         Args:
             seed: integer representing the seed to be used for the environment.
@@ -2512,7 +2528,7 @@ also that the state dict is synchronised across processes if needed."""
         return seed
 
     def reset(self, reset_idx: Sequence[bool] | None = None) -> None:
-        """Resets the environments to a new initial state.
+        """Reset the environments to a new initial state.
 
         Args:
             reset_idx: Optional. Sequence indicating which environments have
@@ -2533,7 +2549,7 @@ also that the state dict is synchronised across processes if needed."""
                     raise RuntimeError(f"Expected msg='reset', got {msg}")
 
     def state_dict(self) -> OrderedDict:
-        """Returns the state_dict of the data collector.
+        """Return the state_dict of the data collector.
 
         Each field represents a worker containing its own state_dict.
 
@@ -2551,7 +2567,7 @@ also that the state dict is synchronised across processes if needed."""
         return state_dict
 
     def load_state_dict(self, state_dict: OrderedDict) -> None:
-        """Loads the state_dict on the workers.
+        """Load the state_dict on the workers.
 
         Args:
             state_dict (OrderedDict): state_dict of the form
@@ -2570,7 +2586,7 @@ also that the state dict is synchronised across processes if needed."""
 
 @accept_remote_rref_udf_invocation
 class MultiSyncDataCollector(_MultiDataCollector):
-    """Runs a given number of DataCollectors on separate processes synchronously.
+    """Run a given number of DataCollectors on separate processes synchronously.
 
     .. aafig::
 
@@ -2943,7 +2959,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
 @accept_remote_rref_udf_invocation
 class MultiaSyncDataCollector(_MultiDataCollector):
-    """Runs a given number of DataCollectors on separate processes asynchronously.
+    """Run a given number of DataCollectors on separate processes asynchronously.
 
     .. aafig::
 
@@ -3209,7 +3225,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
 
 @accept_remote_rref_udf_invocation
 class aSyncDataCollector(MultiaSyncDataCollector):
-    """Runs a single DataCollector on a separate process.
+    """Run a single DataCollector on a separate process.
 
     This is mostly useful for offline RL paradigms where the policy being
     trained can differ from the policy used to collect data. In online
@@ -3353,8 +3369,9 @@ class aSyncDataCollector(MultiaSyncDataCollector):
     def __init__(
         self,
         create_env_fn: Callable[[], EnvBase],
-        policy: None
-        | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]) = None,
+        policy: None | (
+            TensorDictModule | Callable[[TensorDictBase], TensorDictBase]
+        ) = None,
         *,
         policy_factory: Callable[[], Callable] | None = None,
         frames_per_batch: int,
@@ -3383,9 +3400,9 @@ class aSyncDataCollector(MultiaSyncDataCollector):
             policy=policy,
             policy_factory=policy_factory,
             total_frames=total_frames,
-            create_env_kwargs=[create_env_kwargs]
-            if create_env_kwargs
-            else create_env_kwargs,
+            create_env_kwargs=(
+                [create_env_kwargs] if create_env_kwargs else create_env_kwargs
+            ),
             max_frames_per_traj=max_frames_per_traj,
             frames_per_batch=frames_per_batch,
             reset_at_each_iter=reset_at_each_iter,

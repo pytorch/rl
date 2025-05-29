@@ -2,15 +2,19 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import time
 
-import hydra
-import torch
-from models.reward import init_reward_model
-from torch.optim.lr_scheduler import CosineAnnealingLR
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.llm.dataset import get_dataloader
 from torchrl.data.llm.reward import PairwiseDataset
+
+import hydra
+import torch
+
+from models.reward import init_reward_model
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from utils import get_file_logger, resolve_name_or_path, setup
 
 

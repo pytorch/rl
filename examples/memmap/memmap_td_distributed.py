@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import os
 import time
@@ -9,6 +10,7 @@ import time
 import configargparse
 import torch
 import torch.distributed.rpc as rpc
+
 from tensordict import TensorDict
 from tensordict.memmap import set_transfer_ownership
 
@@ -21,7 +23,7 @@ parser.add_argument(
     "--master_addr",
     type=str,
     default="localhost",
-    help="""Address of master, will default to localhost if not provided.
+    help="""Addres of master, will default to localhost if not provided.
     Master must be able to accept network traffic on the address + port.""",
 )
 parser.add_argument(

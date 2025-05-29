@@ -7,12 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from warnings import warn
 
-import torch
-from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
-from torch import optim
-from torch.optim.lr_scheduler import CosineAnnealingLR
-
-from torchrl._utils import logger as torchrl_logger, VERBOSE
+from torchrl._utils import VERBOSE, logger as torchrl_logger
 from torchrl.collectors.collectors import DataCollectorBase
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.envs.common import EnvBase
@@ -33,6 +28,12 @@ from torchrl.trainers.trainers import (
     Trainer,
     UpdateWeights,
 )
+
+import torch
+
+from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
+from torch import optim
+from torch.optim.lr_scheduler import CosineAnnealingLR
 
 OPTIMIZERS = {
     "adam": optim.Adam,
@@ -87,7 +88,7 @@ def make_trainer(
     logger: Logger | None = None,
     cfg: DictConfig = None,  # noqa: F821
 ) -> Trainer:
-    """Creates a Trainer instance given its constituents.
+    """Create a Trainer instance given its constituents.
 
     Args:
         collector (DataCollectorBase): A data collector to be used to collect data.

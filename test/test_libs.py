@@ -20,32 +20,15 @@ if _has_isaac:
 import argparse
 import importlib
 import os
-
 import time
 import urllib
+
 from contextlib import nullcontext
 from pathlib import Path
 from sys import platform
 from unittest import mock
 
-import numpy as np
-import pytest
-import torch
-
 from packaging import version
-from tensordict import (
-    assert_allclose_td,
-    is_tensor_collection,
-    LazyStackedTensorDict,
-    TensorDict,
-)
-from tensordict.nn import (
-    ProbabilisticTensorDictModule,
-    TensorDictModule,
-    TensorDictSequential,
-)
-from torch import nn
-
 from torchrl._utils import implement_for, logger as torchrl_logger
 from torchrl.collectors.collectors import SyncDataCollector
 from torchrl.data import (
@@ -64,7 +47,6 @@ from torchrl.data import (
 )
 from torchrl.data.datasets.atari_dqn import AtariDQNExperienceReplay
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
-
 from torchrl.data.datasets.gen_dgrl import GenDGRLExperienceReplay
 from torchrl.data.datasets.minari_data import MinariExperienceReplay
 from torchrl.data.datasets.openml import OpenMLExperienceReplay
@@ -83,74 +65,90 @@ from torchrl.envs import (
     RenameTransform,
 )
 from torchrl.envs.batched_envs import SerialEnv
-from torchrl.envs.libs.brax import _has_brax, BraxEnv, BraxWrapper
-from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrapper
-from torchrl.envs.libs.envpool import _has_envpool, MultiThreadedEnvWrapper
+from torchrl.envs.libs.brax import BraxEnv, BraxWrapper, _has_brax
+from torchrl.envs.libs.dm_control import DMControlEnv, DMControlWrapper, _has_dmc
+from torchrl.envs.libs.envpool import MultiThreadedEnvWrapper, _has_envpool
 from torchrl.envs.libs.gym import (
+    GymEnv,
+    GymWrapper,
+    MOGymEnv,
+    MOGymWrapper,
     _gym_to_torchrl_spec_transform,
     _has_gym,
     _is_from_pixels,
     _torchrl_to_gym_spec_transform,
     gym_backend,
-    GymEnv,
-    GymWrapper,
-    MOGymEnv,
-    MOGymWrapper,
     register_gym_spec_conversion,
     set_gym_backend,
 )
-from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
-from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
+from torchrl.envs.libs.habitat import HabitatEnv, _has_habitat
+from torchrl.envs.libs.jumanji import JumanjiEnv, _has_jumanji
 from torchrl.envs.libs.meltingpot import MeltingpotEnv, MeltingpotWrapper
 from torchrl.envs.libs.openml import OpenMLEnv
-from torchrl.envs.libs.openspiel import _has_pyspiel, OpenSpielEnv, OpenSpielWrapper
-from torchrl.envs.libs.pettingzoo import _has_pettingzoo, PettingZooEnv
-from torchrl.envs.libs.robohive import _has_robohive, RoboHiveEnv
-from torchrl.envs.libs.smacv2 import _has_smacv2, SMACv2Env
+from torchrl.envs.libs.openspiel import OpenSpielEnv, OpenSpielWrapper, _has_pyspiel
+from torchrl.envs.libs.pettingzoo import PettingZooEnv, _has_pettingzoo
+from torchrl.envs.libs.robohive import RoboHiveEnv, _has_robohive
+from torchrl.envs.libs.smacv2 import SMACv2Env, _has_smacv2
 from torchrl.envs.libs.unity_mlagents import (
-    _has_unity_mlagents,
     UnityMLAgentsEnv,
     UnityMLAgentsWrapper,
+    _has_unity_mlagents,
 )
-from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
-
+from torchrl.envs.libs.vmas import VmasEnv, VmasWrapper, _has_vmas
 from torchrl.envs.transforms import ActionMask, TransformedEnv
 from torchrl.envs.utils import (
-    check_env_specs,
     ExplorationType,
     MarlGroupMapType,
     RandomPolicy,
+    check_env_specs,
 )
 from torchrl.modules import (
+    MLP,
     ActorCriticOperator,
     MaskedCategorical,
-    MLP,
     SafeModule,
     ValueOperator,
 )
 
+import numpy as np
+import pytest
+import torch
+
+from tensordict import (
+    LazyStackedTensorDict,
+    TensorDict,
+    assert_allclose_td,
+    is_tensor_collection,
+)
+from tensordict.nn import (
+    ProbabilisticTensorDictModule,
+    TensorDictModule,
+    TensorDictSequential,
+)
+from torch import nn
+
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import (
-        _make_multithreaded_env,
         CARTPOLE_VERSIONED,
-        get_available_devices,
-        get_default_devices,
         HALFCHEETAH_VERSIONED,
         PENDULUM_VERSIONED,
         PONG_VERSIONED,
+        _make_multithreaded_env,
+        get_available_devices,
+        get_default_devices,
         rand_reset,
         retry,
         rollout_consistency_assertion,
     )
 else:
     from _utils_internal import (
-        _make_multithreaded_env,
         CARTPOLE_VERSIONED,
-        get_available_devices,
-        get_default_devices,
         HALFCHEETAH_VERSIONED,
         PENDULUM_VERSIONED,
         PONG_VERSIONED,
+        _make_multithreaded_env,
+        get_available_devices,
+        get_default_devices,
         rand_reset,
         retry,
         rollout_consistency_assertion,
@@ -294,8 +292,7 @@ class TestGym:
                 batch_size=[],
             )
 
-        def _set_seed(self, seed: int | None) -> None:
-            ...
+        def _set_seed(self, seed: int | None) -> None: ...
 
     @implement_for("gym", None, "0.18")
     def _make_spec(self, batch_size, cat, cat_shape, multicat, multicat_shape):
@@ -380,13 +377,11 @@ class TestGym:
     def test_gym_new_spec_reg(self):
         Space = gym_backend("spaces").Space
 
-        class MySpaceParent(Space):
-            ...
+        class MySpaceParent(Space): ...
 
         s_parent = MySpaceParent()
 
-        class MySpaceChild(MySpaceParent):
-            ...
+        class MySpaceChild(MySpaceParent): ...
 
         # We intentionally register first the child then the parent
         @register_gym_spec_conversion(MySpaceChild)
@@ -401,8 +396,7 @@ class TestGym:
         assert _gym_to_torchrl_spec_transform(s_parent).example_data == "parent"
         assert _gym_to_torchrl_spec_transform(s_child).example_data == "child"
 
-        class NoConversionSpace(Space):
-            ...
+        class NoConversionSpace(Space): ...
 
         s_no_conv = NoConversionSpace()
         with pytest.raises(
@@ -722,6 +716,7 @@ class TestGym:
     @implement_for("gym", "0.26", None)
     def test_gym_dict_action_space(self):  # noqa: F811
         import gym
+
         from gym import Env
 
         class CompositeActionEnv(Env):
@@ -758,6 +753,7 @@ class TestGym:
     @implement_for("gymnasium")
     def test_gym_dict_action_space(self):  # noqa: F811
         import gymnasium as gym
+
         from gymnasium import Env
 
         class CompositeActionEnv(Env):
@@ -1458,6 +1454,7 @@ class TestGym:
 
     def counting_env(self):
         import gymnasium as gym
+
         from gymnasium import Env
 
         class CountingEnvRandomReset(Env):
@@ -2000,10 +1997,11 @@ class TestJumanji:
 
     @pytest.mark.parametrize("batch_size", [(), (5,), (5, 4)])
     def test_jumanji_consistency(self, envname, batch_size):
+        from torchrl.envs.libs.jax_utils import _tree_flatten
+
         import jax
         import jax.numpy as jnp
         import numpy as onp
-        from torchrl.envs.libs.jax_utils import _tree_flatten
 
         env = JumanjiEnv(envname, batch_size=batch_size, jit=True)
         obs_keys = list(env.observation_spec.keys(True))
@@ -2201,7 +2199,7 @@ class TestEnvPool:
             N=N,
         )
         if env_name == "CheetahRun-v1":
-            in_keys = [("velocity")]
+            in_keys = ["velocity"]
             dtype = torch.float64
         else:
             in_keys = ["observation"]
@@ -2477,13 +2475,14 @@ class TestBrax:
         ],
     )
     def test_brax_consistency(self, envname, batch_size, requires_grad, device):
-        import jax
-        import jax.numpy as jnp
         from torchrl.envs.libs.jax_utils import (
             _ndarray_to_tensor,
             _tensor_to_ndarray,
             _tree_flatten,
         )
+
+        import jax
+        import jax.numpy as jnp
 
         env = BraxEnv(
             envname, batch_size=batch_size, requires_grad=requires_grad, device=device
@@ -3090,9 +3089,11 @@ class TestD4RL:
         root2 = tmpdir / "2"
         root3 = tmpdir / "3"
 
-        with pytest.warns(
-            UserWarning, match="Using use_truncated_as_done=True"
-        ) if use_truncated_as_done else nullcontext():
+        with (
+            pytest.warns(UserWarning, match="Using use_truncated_as_done=True")
+            if use_truncated_as_done
+            else nullcontext()
+        ):
             data_true = D4RLExperienceReplay(
                 task,
                 split_trajs=split_trajs,
@@ -3546,12 +3547,14 @@ class TestOpenX:
         cm = (
             pytest.raises(RuntimeError, match="shuffle=False")
             if not streaming and not shuffle and replacement
-            else pytest.raises(
-                RuntimeError,
-                match="replacement=True is not available with streamed datasets",
+            else (
+                pytest.raises(
+                    RuntimeError,
+                    match="replacement=True is not available with streamed datasets",
+                )
+                if streaming and replacement
+                else nullcontext()
             )
-            if streaming and replacement
-            else nullcontext()
         )
         dataset = None
         with cm:
@@ -3615,9 +3618,11 @@ class TestOpenX:
             if padding is None and (batch_size > 1000):
                 with pytest.raises(
                     RuntimeError,
-                    match="Did not find a single trajectory with sufficient length"
-                    if not streaming
-                    else "The trajectory length (.*) is shorter than the slice length",
+                    match=(
+                        "Did not find a single trajectory with sufficient length"
+                        if not streaming
+                        else "The trajectory length (.*) is shorter than the slice length"
+                    ),
                 ):
                     sample = dataset.sample()
                 return
@@ -4575,10 +4580,12 @@ class TestIsaacLab:
         AppLauncher(args_cli)
 
         # Imports and env
+        from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
+
         import gymnasium as gym
         import isaaclab_tasks  # noqa: F401
+
         from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
-        from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
 
         torchrl_logger.info("Making IsaacLab env...")
         env = gym.make("Isaac-Ant-v0", cfg=AntEnvCfg())

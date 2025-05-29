@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from .common import CategoricalSequential
 from .transformers_wrapper import TransformersWrapper
-
 from .vllm_wrapper import vLLMWrapper
 
 __all__ = ["TransformersWrapper", "vLLMWrapper", "CategoricalSequential"]

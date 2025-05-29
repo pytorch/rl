@@ -2,9 +2,13 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import torch
-from tensordict.nn import TensorDictModule
+from __future__ import annotations
+
 from torchrl._utils import logger as torchrl_logger
+
+import torch
+
+from tensordict.nn import TensorDictModule
 from transformers import GPT2LMHeadModel
 
 

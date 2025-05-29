@@ -10,16 +10,18 @@ from __future__ import annotations
 
 import warnings
 
-import hydra
-import numpy as np
-import torch
-import tqdm
-from tensordict.nn import CudaGraphModule
 from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.envs.libs.gym import set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.tensordict_module import DecisionTransformerInferenceWrapper
 from torchrl.record import VideoRecorder
+
+import hydra
+import numpy as np
+import torch
+import tqdm
+
+from tensordict.nn import CudaGraphModule
 from utils import (
     dump_video,
     log_metrics,

@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import textwrap
 import warnings
+
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from copy import copy, deepcopy
@@ -14,16 +15,17 @@ from multiprocessing.context import get_spawning_popen
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-import torch
-from tensordict import MemoryMappedTensor, TensorDict
-from tensordict.utils import NestedKey
-
-from torch.utils._pytree import tree_map
 from torchrl._extension import EXTENSION_WARNING
 from torchrl._utils import _replace_last, logger
 from torchrl.data.replay_buffers.storages import Storage, StorageEnsemble, TensorStorage
 from torchrl.data.replay_buffers.utils import _auto_device, _is_int, unravel_index
+
+import numpy as np
+import torch
+
+from tensordict import MemoryMappedTensor, TensorDict
+from tensordict.utils import NestedKey
+from torch.utils._pytree import tree_map
 
 try:
     from torchrl._torchrl import (
@@ -49,8 +51,7 @@ class Sampler(ABC):
     _rng: torch.Generator | None = None
 
     @abstractmethod
-    def sample(self, storage: Storage, batch_size: int) -> tuple[Any, dict]:
-        ...
+    def sample(self, storage: Storage, batch_size: int) -> tuple[Any, dict]: ...
 
     def add(self, index: int) -> None:
         return
@@ -80,12 +81,10 @@ class Sampler(ABC):
         return 1.0
 
     @abstractmethod
-    def state_dict(self) -> dict[str, Any]:
-        ...
+    def state_dict(self) -> dict[str, Any]: ...
 
     @abstractmethod
-    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
-        ...
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None: ...
 
     @property
     def ran_out(self) -> bool:
@@ -93,16 +92,13 @@ class Sampler(ABC):
         return False
 
     @abstractmethod
-    def _empty(self):
-        ...
+    def _empty(self): ...
 
     @abstractmethod
-    def dumps(self, path):
-        ...
+    def dumps(self, path): ...
 
     @abstractmethod
-    def loads(self, path):
-        ...
+    def loads(self, path): ...
 
     def __repr__(self):
         return f"{self.__class__.__name__}()"
@@ -544,7 +540,7 @@ class PrioritizedSampler(Sampler):
         *,
         storage: TensorStorage | None = None,
     ) -> None:  # noqa: D417
-        """Updates the priority of the data pointed by the index.
+        """Update the priority of the data pointed by the index.
 
         Args:
             index (int or torch.Tensor): indexes of the priorities to be
@@ -725,7 +721,7 @@ class PrioritizedSampler(Sampler):
 
 
 class SliceSampler(Sampler):
-    """Samples slices of data along the first dimension, given start and stop signals.
+    """Sample slices of data along the first dimension, given start and stop signals.
 
     This class samples sub-trajectories with replacement. For a version without
     replacement, see :class:`~torchrl.data.replay_buffers.samplers.SliceSamplerWithoutReplacement`.
@@ -1012,9 +1008,11 @@ class SliceSampler(Sampler):
         self._gpu_device = (
             None
             if not self.use_gpu
-            else torch.device(use_gpu)
-            if not isinstance(use_gpu, bool)
-            else _auto_device()
+            else (
+                torch.device(use_gpu)
+                if not isinstance(use_gpu, bool)
+                else _auto_device()
+            )
         )
 
         if isinstance(span, (bool, int)):
@@ -1562,12 +1560,11 @@ class SliceSampler(Sampler):
     def state_dict(self) -> dict[str, Any]:
         return {}
 
-    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
-        ...
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None: ...
 
 
 class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
-    """Samples slices of data along the first dimension, given start and stop signals, without replacement.
+    """Sample slices of data along the first dimension, given start and stop signals, without replacement.
 
     In this context, ``without replacement`` means that the same element (NOT trajectory) will not be sampled twice
     before the counter is automatically reset. Within a single sample, however, only one slice of a given trajectory
@@ -1839,7 +1836,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
 
 
 class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
-    """Samples slices of data along the first dimension, given start and stop signals, using prioritized sampling.
+    """Sample slices of data along the first dimension, given start and stop signals, using prioritized sampling.
 
     This class samples sub-trajectories with replacement following a priority weighting presented in "Schaul, T.; Quan, J.; Antonoglou, I.; and Silver, D. 2015.
         Prioritized experience replay."
@@ -1968,6 +1965,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         steps [1, 2, 0, 1, 0, 1]
         >>> print("weight", info["_weight"].tolist())
         weight [9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06]
+
     """
 
     def __init__(
@@ -2374,9 +2372,11 @@ class SamplerEnsemble(Sampler):
         )
         infos = torch.stack(
             [
-                TensorDict.from_dict(info, batch_dims=samples.ndim - 1)
-                if info
-                else TensorDict()
+                (
+                    TensorDict.from_dict(info, batch_dims=samples.ndim - 1)
+                    if info
+                    else TensorDict()
+                )
                 for info in infos
             ]
         )

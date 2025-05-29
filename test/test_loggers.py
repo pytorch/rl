@@ -10,19 +10,21 @@ import os
 import os.path
 import pathlib
 import tempfile
+
 from time import sleep
+
+from packaging import version
+from torchrl.envs import GymEnv, ParallelEnv, check_env_specs
+from torchrl.record.loggers.csv import CSVLogger
+from torchrl.record.loggers.mlflow import MLFlowLogger, _has_mlflow, _has_tv
+from torchrl.record.loggers.tensorboard import TensorboardLogger, _has_tb
+from torchrl.record.loggers.wandb import WandbLogger, _has_wandb
+from torchrl.record.recorder import PixelRenderTransform, VideoRecorder
 
 import pytest
 import torch
-from packaging import version
-from tensordict import MemoryMappedTensor
 
-from torchrl.envs import check_env_specs, GymEnv, ParallelEnv
-from torchrl.record.loggers.csv import CSVLogger
-from torchrl.record.loggers.mlflow import _has_mlflow, _has_tv, MLFlowLogger
-from torchrl.record.loggers.tensorboard import _has_tb, TensorboardLogger
-from torchrl.record.loggers.wandb import _has_wandb, WandbLogger
-from torchrl.record.recorder import PixelRenderTransform, VideoRecorder
+from tensordict import MemoryMappedTensor
 
 if _has_tv:
     import torchvision
@@ -201,9 +203,7 @@ class TestCSVLogger:
         extension = (
             ".pt"
             if video_format == "pt"
-            else ".memmap"
-            if video_format == "memmap"
-            else ".mp4"
+            else ".memmap" if video_format == "memmap" else ".mp4"
         )
         video_file_name = "foo_" + ("0" if not steps else str(steps[0])) + extension
         path = os.path.join(tmpdir, exp_name, "videos", video_file_name)

@@ -36,6 +36,7 @@ TorchRL envs
 # With gym, it means that building an environment is as easy as:
 
 # sphinx_gallery_start_ignore
+from __future__ import annotations
 import warnings
 
 from tensordict.nn import TensorDictModule

@@ -35,6 +35,7 @@ Get started with your own first training loop
 # transform. If you need a refresher, check our these features are presented in
 # :ref:`the environment tutorial <gs_env_ted>`.
 #
+from __future__ import annotations
 
 import torch
 

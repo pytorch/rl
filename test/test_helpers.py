@@ -9,10 +9,8 @@ import dataclasses
 import os
 import pathlib
 import sys
-from time import sleep
 
-import pytest
-import torch
+from time import sleep
 
 from packaging import version
 from torchrl._utils import timeit
@@ -20,9 +18,9 @@ from torchrl.data import Bounded, Composite
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import ObservationNorm
 from torchrl.envs.transforms.transforms import (
-    _has_tv,
     FlattenObservation,
     TransformedEnv,
+    _has_tv,
 )
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.helpers.envs import (
@@ -35,6 +33,9 @@ from torchrl.trainers.helpers.models import (
     DreamerConfig,
     make_dqn_actor,
 )
+
+import pytest
+import torch
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import generate_seeds, get_default_devices

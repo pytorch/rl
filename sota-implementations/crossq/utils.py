@@ -4,10 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import torch
-from tensordict.nn import InteractionType, TensorDictModule
-from tensordict.nn.distributions import NormalParamExtractor
-from torch import nn, optim
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
@@ -25,9 +21,14 @@ from torchrl.envs.transforms import InitTracker, RewardSum, StepCounter
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import MLP, ProbabilisticActor, ValueOperator
 from torchrl.modules.distributions import TanhNormal
-
 from torchrl.modules.models.batchrenorm import BatchRenorm1d
 from torchrl.objectives import CrossQLoss
+
+import torch
+
+from tensordict.nn import InteractionType, TensorDictModule
+from tensordict.nn.distributions import NormalParamExtractor
+from torch import nn, optim
 
 # ====================================================================
 # Environment utils

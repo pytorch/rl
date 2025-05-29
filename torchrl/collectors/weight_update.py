@@ -6,13 +6,16 @@ from __future__ import annotations
 
 import abc
 import weakref
+
 from abc import abstractmethod
 from typing import Any, Callable, TypeVar
 
+from torchrl._utils import logger as torchrl_logger
+
 import torch
+
 from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
-from torchrl._utils import logger as torchrl_logger
 
 Policy = TypeVar("Policy", bound=TensorDictModuleBase)
 
@@ -101,7 +104,7 @@ class WeightUpdaterBase(metaclass=abc.ABCMeta):
         return server_weights
 
     def all_worker_ids(self) -> list[int] | list[torch.device] | None:
-        """Returns a list of all worker identifiers or `None` if there are no workers associated."""
+        """Return a list of all worker identifiers or `None` if there are no workers associated."""
         return
 
     def _skip_update(self, worker_id: int | torch.device) -> bool:
@@ -122,7 +125,7 @@ class WeightUpdaterBase(metaclass=abc.ABCMeta):
         weights: Any | None = None,
         worker_ids: torch.device | int | list[int] | list[torch.device] | None = None,
     ):
-        """Updates the weights of the policy, or on specified / all remote workers.
+        """Update the weights of the policy, or on specified / all remote workers.
 
         Args:
             weights (Any): The source weights to push to the policy / workers.
@@ -175,6 +178,7 @@ class VanillaWeightUpdater(WeightUpdaterBase):
             If not provided, the weights must be passed to :meth:`~.update_weights` directly.
         policy_weights (TensorDictBase): a TensorDictBase containing the policy weights to be updated
             in-place.
+
     """
 
     def __init__(

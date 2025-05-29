@@ -5,13 +5,8 @@
 from __future__ import annotations
 
 import warnings
-from dataclasses import dataclass
 
-import torch
-from tensordict import TensorDict, TensorDictBase, TensorDictParams
-from tensordict.nn import dispatch, TensorDictModule
-from tensordict.utils import NestedKey
-from torch import Tensor
+from dataclasses import dataclass
 
 from torchrl.data.tensor_specs import TensorSpec
 from torchrl.data.utils import _find_action_space
@@ -19,14 +14,21 @@ from torchrl.modules import ProbabilisticActor
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
+    ValueEstimators,
     _pseudo_vmap,
     _reduce,
     _vmap_func,
     default_value_kwargs,
     distance_loss,
-    ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+
+import torch
+
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
+from tensordict.nn import TensorDictModule, dispatch
+from tensordict.utils import NestedKey
+from torch import Tensor
 
 
 class IQLLoss(LossModule):
@@ -195,11 +197,12 @@ class IQLLoss(LossModule):
         ...     next_observation=torch.zeros(*batch, n_obs),
         ...     next_reward=torch.randn(*batch, 1))
         >>> loss_actor.backward()
+
     """
 
     @dataclass
     class _AcceptedKeys:
-        """Maintains default values for all configurable tensordict keys.
+        """Maintain default values for all configurable tensordict keys.
 
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values
@@ -224,6 +227,7 @@ class IQLLoss(LossModule):
             terminated (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is terminated. Will be used for the underlying value estimator.
                 Defaults to ``"terminated"``.
+
         """
 
         value: NestedKey = "state_value"
@@ -366,7 +370,7 @@ class IQLLoss(LossModule):
 
     @staticmethod
     def loss_value_diff(diff, expectile=0.8):
-        """Loss function for iql expectile value difference."""
+        """Los function for iql expectile value difference."""
         weight = torch.where(diff > 0, expectile, (1 - expectile))
         return weight * (diff**2)
 
@@ -713,11 +717,12 @@ class DiscreteIQLLoss(IQLLoss):
         ...     next_observation=torch.zeros(*batch, n_obs),
         ...     next_reward=torch.randn(*batch, 1))
         >>> loss_actor.backward()
+
     """
 
     @dataclass
     class _AcceptedKeys:
-        """Maintains default values for all configurable tensordict keys.
+        """Maintain default values for all configurable tensordict keys.
 
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values
@@ -742,6 +747,7 @@ class DiscreteIQLLoss(IQLLoss):
             terminated (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is terminated. Will be used for the underlying value estimator.
                 Defaults to ``"terminated"``.
+
         """
 
         value: NestedKey = "state_value"

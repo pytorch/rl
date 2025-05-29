@@ -10,12 +10,9 @@ import shutil
 import tempfile
 import urllib
 import warnings
+
 from pathlib import Path
 from typing import Callable
-
-import numpy as np
-import torch
-from tensordict import make_tensordict, PersistentTensorDict, TensorDict
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors.utils import split_trajectories
@@ -25,6 +22,11 @@ from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers.samplers import Sampler
 from torchrl.data.replay_buffers.storages import TensorStorage
 from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter, Writer
+
+import numpy as np
+import torch
+
+from tensordict import PersistentTensorDict, TensorDict, make_tensordict
 
 
 class D4RLExperienceReplay(BaseDatasetExperienceReplay):
@@ -339,17 +341,17 @@ class D4RLExperienceReplay(BaseDatasetExperienceReplay):
         return dataset
 
     def _get_dataset_from_env(self, name, env_kwargs):
-        """Creates an environment and retrieves the dataset using env.get_dataset().
+        """Create an environment and retrieves the dataset using env.get_dataset().
 
         This method does not accept extra arguments.
 
         """
         if env_kwargs:
             raise RuntimeError("env_kwargs cannot be passed with using from_env=True")
-        import gym
-
         # we do a local import to avoid circular import issues
         from torchrl.envs.libs.gym import GymWrapper
+
+        import gym
 
         with tempfile.TemporaryDirectory() as tmpdir:
             os.environ["D4RL_DATASET_DIR"] = tmpdir

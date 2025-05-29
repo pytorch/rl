@@ -6,13 +6,13 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-import torch
-from tensordict import TensorClass, TensorDict
 from torchrl.envs import StepCounter
-
 from torchrl.envs.llm.chat import DatasetChatEnv
-
 from torchrl.envs.llm.reward.ifeval import IfEvalScorer
+
+import torch
+
+from tensordict import TensorClass, TensorDict
 
 
 class IFEvalData(TensorClass["nocast"]):

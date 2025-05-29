@@ -7,20 +7,20 @@ from __future__ import annotations
 import math
 import uuid
 import warnings
-from copy import copy
 
+from copy import copy
 from typing import Any, OrderedDict, Sequence
 
+from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
+from torchrl.envs.common import EnvBase
+from torchrl.envs.transforms.transforms import Compose, ObservationNorm, Transform
+from torchrl.envs.transforms.utils import _set_missing_tolerance
+
 import torch
+
 from tensordict import NestedKey, TensorDict, TensorDictBase, unravel_key
 from tensordict.utils import _zip_strict
 from torch import multiprocessing as mp
-from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
-
-from torchrl.envs.common import EnvBase
-from torchrl.envs.transforms.transforms import Compose, ObservationNorm, Transform
-
-from torchrl.envs.transforms.utils import _set_missing_tolerance
 
 
 class VecNormV2(Transform):
@@ -303,7 +303,7 @@ class VecNormV2(Transform):
                 self._make_prefix(parent.output_spec)
 
     def freeze(self) -> VecNormV2:
-        """Freezes the VecNorm, avoiding the stats to be updated when called.
+        """Freeze the VecNorm, avoiding the stats to be updated when called.
 
         See :meth:`~.unfreeze`.
         """
@@ -311,7 +311,7 @@ class VecNormV2(Transform):
         return self
 
     def unfreeze(self) -> VecNormV2:
-        """Unfreezes the VecNorm.
+        """Unfreeze the VecNorm.
 
         See :meth:`~.freeze`.
         """
@@ -319,7 +319,7 @@ class VecNormV2(Transform):
         return self
 
     def frozen_copy(self):
-        """Returns a copy of the Transform that keeps track of the stats but does not update them."""
+        """Return a copy of the Transform that keeps track of the stats but does not update them."""
         if not self.stateful:
             raise RuntimeError("Cannot create a frozen copy of a statelss VecNorm.")
         if self._loc is None:
@@ -789,7 +789,7 @@ class VecNormV2(Transform):
 
     @property
     def loc(self):
-        """Returns a TensorDict with the loc to be used for an affine transform."""
+        """Return a TensorDict with the loc to be used for an affine transform."""
         if not self.stateful:
             raise RuntimeError("loc cannot be computed with stateless vecnorm.")
         # We can't cache that value bc the summary stats could be updated by a different process
@@ -798,7 +798,7 @@ class VecNormV2(Transform):
 
     @property
     def scale(self):
-        """Returns a TensorDict with the scale to be used for an affine transform."""
+        """Return a TensorDict with the scale to be used for an affine transform."""
         if not self.stateful:
             raise RuntimeError("scale cannot be computed with stateless vecnorm.")
         # We can't cache that value bc the summary stats could be updated by a different process

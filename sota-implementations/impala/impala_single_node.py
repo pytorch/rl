@@ -3,14 +3,14 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""
-This script reproduces the IMPALA Algorithm
+"""Thi script reproduces the IMPALA Algorithm
 results from Espeholt et al. 2018 for the on Atari Environments.
 """
 from __future__ import annotations
 
-import hydra
 from torchrl._utils import logger as torchrl_logger
+
+import hydra
 
 
 @hydra.main(config_path="", config_name="config_single_node", version_base="1.1")
@@ -18,10 +18,6 @@ def main(cfg: DictConfig):  # noqa: F821
 
     import time
 
-    import torch.optim
-    import tqdm
-
-    from tensordict import TensorDict
     from torchrl.collectors import MultiaSyncDataCollector
     from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
@@ -29,6 +25,11 @@ def main(cfg: DictConfig):  # noqa: F821
     from torchrl.objectives import A2CLoss
     from torchrl.objectives.value import VTrace
     from torchrl.record.loggers import generate_exp_name, get_logger
+
+    import torch.optim
+    import tqdm
+
+    from tensordict import TensorDict
     from utils import eval_model, make_env, make_ppo_models
 
     device = cfg.device

@@ -6,12 +6,15 @@ from __future__ import annotations
 
 import inspect
 import warnings
+
 from typing import Callable, Sequence
 
-import torch
-from torch import nn
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.modules.models.exploration import NoisyLazyLinear, NoisyLinear
+
+import torch
+
+from torch import nn
 
 LazyMapping = {
     nn.Linear: nn.LazyLinear,
@@ -98,6 +101,7 @@ def _find_depth(depth: int | None, *list_or_ints: Sequence):
         *list_or_ints (lists of int or int): if depth is None, at least one of
             these inputs must be a list of ints of the length of the desired
             network.
+
     """
     if depth is None:
         for item in list_or_ints:

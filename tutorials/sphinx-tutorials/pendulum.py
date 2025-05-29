@@ -77,6 +77,7 @@ Key learnings:
 #
 
 # sphinx_gallery_start_ignore
+from __future__ import annotations
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -98,7 +99,6 @@ except RuntimeError:
 # sphinx_gallery_end_ignore
 
 from collections import defaultdict
-from typing import Optional
 
 import numpy as np
 import torch
@@ -447,9 +447,13 @@ def make_composite_from_td(td):
     # of unbounded values.
     composite = Composite(
         {
-            key: make_composite_from_td(tensor)
-            if isinstance(tensor, TensorDictBase)
-            else Unbounded(dtype=tensor.dtype, device=tensor.device, shape=tensor.shape)
+            key: (
+                make_composite_from_td(tensor)
+                if isinstance(tensor, TensorDictBase)
+                else Unbounded(
+                    dtype=tensor.dtype, device=tensor.device, shape=tensor.shape
+                )
+            )
             for key, tensor in td.items()
         },
         shape=td.shape,
@@ -470,7 +474,7 @@ def make_composite_from_td(td):
 #
 
 
-def _set_seed(self, seed: Optional[int]) -> None:
+def _set_seed(self, seed: int | None) -> None:
     rng = torch.manual_seed(seed)
     self.rng = rng
 
@@ -490,7 +494,7 @@ def _set_seed(self, seed: Optional[int]) -> None:
 
 
 def gen_params(g=10.0, batch_size=None) -> TensorDictBase:
-    """Returns a ``tensordict`` containing the physical parameters such as gravitational force and torque or speed limits."""
+    """Return a ``tensordict`` containing the physical parameters such as gravitational force and torque or speed limits."""
     if batch_size is None:
         batch_size = []
     td = TensorDict(

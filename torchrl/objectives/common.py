@@ -8,22 +8,24 @@ from __future__ import annotations
 import abc
 import functools
 import warnings
+
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Iterator
-
-import torch
-from tensordict import is_tensor_collection, TensorDict, TensorDictBase
-from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictParams
-from tensordict.utils import Buffer
-from torch import nn
-from torch.nn import Parameter
 
 from torchrl._utils import RL_WARNINGS
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.tensordict_module.rnn import set_recurrent_mode
 from torchrl.objectives.utils import ValueEstimators
 from torchrl.objectives.value import ValueEstimatorBase
+
+import torch
+
+from tensordict import TensorDict, TensorDictBase, is_tensor_collection
+from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictParams
+from tensordict.utils import Buffer
+from torch import nn
+from torch.nn import Parameter
 
 try:
     from torch.compiler import is_compiling
@@ -119,7 +121,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
 
     @dataclass
     class _AcceptedKeys:
-        """Maintains default values for all configurable tensordict keys.
+        """Maintain default values for all configurable tensordict keys.
 
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values.
@@ -167,7 +169,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         return True
 
     def get_stateful_net(self, network_name: str, copy: bool | None = None):
-        """Returns a stateful version of the network.
+        """Return a stateful version of the network.
 
         This can be used to initialize parameters.
 
@@ -180,6 +182,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                 Defaults to ``True``.
 
                 .. note:: if the module is not functional, no copy is made.
+
         """
         net = getattr(self, network_name)
         if not self.functional:
@@ -194,7 +197,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         return net
 
     def from_stateful_net(self, network_name: str, stateful_net: nn.Module):
-        """Populates the parameters of a model given a stateful version of the network.
+        """Populate the parameters of a model given a stateful version of the network.
 
         See :meth:`~.get_stateful_net` for details on how to gather a stateful version of the network.
 
@@ -235,6 +238,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
             >>> actor = torch.nn.Linear(3, 4)
             >>> dqn_loss = DQNLoss(actor, action_space="one-hot")
             >>> dqn_loss.set_keys(priority_key="td_error", action_value_key="action_value")
+
         """
         for key, value in kwargs.items():
             if key not in self._AcceptedKeys.__dataclass_fields__:
@@ -282,7 +286,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         compare_against: list[Parameter] | None = None,
         **kwargs,
     ) -> None:
-        """Converts a module to functional to be used in the loss.
+        """Convert a module to functional to be used in the loss.
 
         Args:
             module (TensorDictModule or compatible): a stateful tensordict module.
@@ -669,7 +673,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         return pd
 
     def _make_vmap(self):
-        """Caches thevmap callers to reduce the overhead at runtime."""
+        """Cache thevmap callers to reduce the overhead at runtime."""
         raise NotImplementedError(
             f"_make_vmap has been called but is not implemented for loss of type {type(self).__name__}."
         )
@@ -687,7 +691,7 @@ class _make_target_param:
 
 
 def add_random_module(module):
-    """Adds a random module to the list of modules that will be detected by :meth:`~torchrl.objectives.LossModule.vmap_randomness` as random."""
+    """Add a random module to the list of modules that will be detected by :meth:`~torchrl.objectives.LossModule.vmap_randomness` as random."""
     import torchrl.objectives.utils
 
     torchrl.objectives.utils.RANDOM_MODULE_LIST = (

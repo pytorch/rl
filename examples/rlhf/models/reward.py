@@ -2,13 +2,16 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import warnings
 
-import torch
-from tensordict.nn import TensorDictModule
 from torchrl._utils import logger as torchrl_logger
-
 from torchrl.modules.models.llm import GPT2RewardModel
+
+import torch
+
+from tensordict.nn import TensorDictModule
 
 
 def init_reward_model(

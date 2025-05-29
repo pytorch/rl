@@ -10,17 +10,19 @@ import shutil
 import tarfile
 import tempfile
 import typing as tp
+
 from pathlib import Path
 
-import numpy as np
-import torch
-
-from tensordict import TensorDict
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers.storages import TensorStorage
 from torchrl.envs.utils import _classproperty
+
+import numpy as np
+import torch
+
+from tensordict import TensorDict
 
 _has_tqdm = importlib.util.find_spec("tqdm", None) is not None
 _has_requests = importlib.util.find_spec("requests", None) is not None

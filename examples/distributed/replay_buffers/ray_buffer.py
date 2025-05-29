@@ -3,8 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""
-Demonstrates how to use torchrl's RayReplayBuffer to store and sample data across nodes, specifically in the context of Large Language Models (LLMs).
+"""Demonstrate how to use torchrl's RayReplayBuffer to store and sample data across nodes, specifically in the context of Large Language Models (LLMs).
 
 This script showcases a simple producer-consumer setup where one node generates trajectories
 from a dialogue dataset and stores them in a shared replay buffer, while another node samples
@@ -19,16 +18,19 @@ tensorclasses). Getting the strings returns a list, whereas getting the tensors 
 format is specified (see examples).
 
 """
+from __future__ import annotations
 
 import time
-from functools import partial
 
-import ray
-import torch
-from tensordict import lazy_stack, TensorClass
+from functools import partial
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data import LazyStackStorage, RayReplayBuffer
+
+import ray
+import torch
+
+from tensordict import TensorClass, lazy_stack
 
 
 class Trajectory(TensorClass["nocast"]):

@@ -8,13 +8,12 @@ import argparse
 
 from functools import partial
 
-import pytest
-
 from torchrl import logger as torchrl_logger
 from torchrl.envs import SerialEnv
-
 from torchrl.envs.llm import make_mlgym
 from torchrl.modules.llm import TransformersWrapper
+
+import pytest
 
 
 class TestMLGYM:

@@ -1,5 +1,90 @@
 [tool.usort]
 first_party_detection = false
+categories = ["future", "standard_library", "first_party", "third_party", "local"]
 
 [build-system]
 requires = ["setuptools", "wheel", "torch", "ninja"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py38"
+
+[tool.ruff.lint]
+# Enable all rules equivalent to current setup
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "D",   # pydocstyle
+    "T20", # flake8-print
+    "I",   # isort
+]
+
+# Match current pydocstyle config
+ignore = [
+    "D100", # Missing docstring in public module
+    "D101", # Missing docstring in public class
+    "D102", # Missing docstring in public method
+    "D103", # Missing docstring in public function
+    "D104", # Missing docstring in public package
+    "D105", # Missing docstring in magic method
+    "D107", # Missing docstring in __init__
+]
+
+# Exclude the same patterns as current setup
+exclude = [
+    ".git",
+    ".ruff_cache",
+    "__pycache__",
+    "build",
+    "dist",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]  # Ignore unused imports in __init__.py files
+"test_*.py" = ["T201"]    # Ignore print statements in test files
+"tests/*" = ["T201"]      # Ignore print statements in test directory
+"tutorials/*" = [
+    "T201",    # Ignore print statements in tutorials
+    "E402",    # Ignore imports not at top in tutorials
+    "I001",    # Ignore unsorted imports in tutorials
+    "B018",    # Ignore useless boolean operations in tutorials
+    "B028",    # Ignore missing stacklevel in warnings
+    "D202",    # Ignore no blank lines after function docstring
+    "D205",    # Ignore blank line after summary
+    "D212",    # Ignore multi-line docstring summary at first line
+    "D400",    # Ignore first line period
+    "D401",    # Ignore imperative mood
+    "D415",    # Ignore period/question/exclamation
+    "F811",    # Ignore redefinition of unused name
+]  # Ignore formatting rules in tutorials
+"examples/*" = ["T201"]   # Ignore print statements in examples
+"**/*.py" = [
+    "B028",    # Ignore missing stacklevel in warnings
+    "E501",  # Ignore line too long in all files,
+    "D401",  # Ignore imperative mood in all files,
+    "B904",  # Ignore no-else-return in all files,
+]
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+include = '\.pyi?$'
+
+[tool.ruff.lint.isort]
+# Match usort configuration
+required-imports = ["from __future__ import annotations"]
+section-order = ["future", "standard-library", "first-party", "third-party", "local"]
+combine-as-imports = true
+split-on-trailing-comma = true
+lines-between-types = 1
+
+[tool.ruff.lint.isort.sections]
+future = ["__future__"]
+standard-library = ["std", "std.*"]
+first-party = ["torchrl"]
+third-party = ["THIRDPARTY"]
+local = ["LOCAL"]

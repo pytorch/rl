@@ -5,19 +5,21 @@
 from __future__ import annotations
 
 import typing
-from typing import Any
 
-import torch
-import torch.nn.functional as F
-from tensordict import TensorDictBase, unravel_key_list
-from tensordict.base import NO_DEFAULT
-from tensordict.nn import dispatch, TensorDictModuleBase as ModuleBase
-from tensordict.utils import expand_as_right, prod, set_lazy_legacy
-from torch import nn, Tensor
-from torch.nn.modules.rnn import RNNCellBase
+from typing import Any
 
 from torchrl._utils import _ContextManager, _DecoratorContextManager
 from torchrl.data.tensor_specs import Unbounded
+
+import torch
+import torch.nn.functional as F
+
+from tensordict import TensorDictBase, unravel_key_list
+from tensordict.base import NO_DEFAULT
+from tensordict.nn import TensorDictModuleBase as ModuleBase, dispatch
+from tensordict.utils import expand_as_right, prod, set_lazy_legacy
+from torch import Tensor, nn
+from torch.nn.modules.rnn import RNNCellBase
 
 
 class LSTMCell(RNNCellBase):
@@ -53,6 +55,7 @@ class LSTMCell(RNNCellBase):
         >>> c0 = torch.zeros(V, B, 20, device=device)
         >>> with torch.no_grad():
         ...     (h1, c1) = batched_call(x, h0, c0)
+
     """
 
     __doc__ += nn.LSTMCell.__doc__
@@ -174,6 +177,7 @@ class LSTM(LSTMBase):
         >>> c0 = torch.zeros(V, N_LAYERS, B, N_OUT, device=device)
         >>> with torch.no_grad():
         ...     h1, c1 = batched_call(x, h0, c0)
+
     """
 
     __doc__ += nn.LSTM.__doc__
@@ -525,7 +529,7 @@ class LSTMModule(ModuleBase):
         self._recurrent_mode = default_recurrent_mode
 
     def make_python_based(self) -> LSTMModule:
-        """Transforms the LSTM layer in its python-based version.
+        """Transform the LSTM layer in its python-based version.
 
         Returns:
             self
@@ -551,7 +555,7 @@ class LSTMModule(ModuleBase):
         return self
 
     def make_cudnn_based(self) -> LSTMModule:
-        """Transforms the LSTM layer in its CuDNN-based version.
+        """Transform the LSTM layer in its CuDNN-based version.
 
         Returns:
             self
@@ -577,7 +581,7 @@ class LSTMModule(ModuleBase):
         return self
 
     def make_tensordict_primer(self):
-        """Makes a tensordict primer for the environment.
+        """Make a tensordict primer for the environment.
 
         A :class:`~torchrl.envs.TensorDictPrimer` object will ensure that the policy is aware of the supplementary
         inputs and outputs (recurrent states) during rollout execution. That way, the data can be shared across
@@ -840,6 +844,7 @@ class GRUCell(RNNCellBase):
         >>> h0 = torch.zeros(V, B, 20, device=device)
         >>> with torch.no_grad():
         ...     h1 = batched_call(x, h0)
+
     """
 
     __doc__ += nn.GRUCell.__doc__
@@ -954,6 +959,7 @@ class GRU(GRUBase):
         >>> h0 = torch.zeros(V, N_LAYERS, B, N_OUT, device=device)
         >>> with torch.no_grad():
         ...     h1 = batched_call(x, h0)
+
     """
 
     __doc__ += nn.GRU.__doc__
@@ -1322,7 +1328,7 @@ class GRUModule(ModuleBase):
         self._recurrent_mode = default_recurrent_mode
 
     def make_python_based(self) -> GRUModule:
-        """Transforms the GRU layer in its python-based version.
+        """Transform the GRU layer in its python-based version.
 
         Returns:
             self
@@ -1347,7 +1353,7 @@ class GRUModule(ModuleBase):
         return self
 
     def make_cudnn_based(self) -> GRUModule:
-        """Transforms the GRU layer in its CuDNN-based version.
+        """Transform the GRU layer in its CuDNN-based version.
 
         Returns:
             self
@@ -1372,7 +1378,7 @@ class GRUModule(ModuleBase):
         return self
 
     def make_tensordict_primer(self):
-        """Makes a tensordict primer for the environment.
+        """Make a tensordict primer for the environment.
 
         A :class:`~torchrl.envs.TensorDictPrimer` object will ensure that the policy is aware of the supplementary
         inputs and outputs (recurrent states) during rollout execution. That way, the data can be shared across
@@ -1584,7 +1590,7 @@ recurrent_mode_state_manager = _ContextManager()
 
 
 def recurrent_mode() -> bool | None:
-    """Returns the current sampling type."""
+    """Return the current sampling type."""
     return recurrent_mode_state_manager.get_mode()
 
 

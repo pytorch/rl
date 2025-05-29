@@ -4,8 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import torch
 from torchrl.envs.libs.gym import GymWrapper
+
+import torch
 
 
 class IsaacLabWrapper(GymWrapper):

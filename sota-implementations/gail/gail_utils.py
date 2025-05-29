@@ -4,13 +4,13 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import torch.nn as nn
-import torch.optim
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.envs import DoubleToFloat
 from torchrl.modules import SafeModule
 
+import torch.nn as nn
+import torch.optim
 
 # ====================================================================
 # Offline Replay buffer
@@ -34,7 +34,6 @@ def make_offline_replay_buffer(rb_cfg):
 
 def make_gail_discriminator(cfg, train_env, device="cpu"):
     """Make GAIL discriminator."""
-
     state_dim = train_env.observation_spec["observation"].shape[0]
     action_dim = train_env.action_spec.shape[0]
 

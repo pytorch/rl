@@ -7,10 +7,11 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, Callable
 
-import numpy as np
-import torch
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import Sampler
+
+import numpy as np
+import torch
 
 
 class ParameterScheduler(ABC):
@@ -57,7 +58,7 @@ class ParameterScheduler(ABC):
         self._step_cnt = 0
 
     def state_dict(self):
-        """Returns the state of the scheduler as a :class:`dict`.
+        """Return the state of the scheduler as a :class:`dict`.
 
         It contains an entry for every variable in ``self.__dict__`` which
         is not the sampler.
@@ -72,6 +73,7 @@ class ParameterScheduler(ABC):
         Args:
             state_dict (dict): scheduler state. Should be an object returned
                 from a call to :meth:`state_dict`.
+
         """
         self.__dict__.update(state_dict)
 
@@ -85,12 +87,11 @@ class ParameterScheduler(ABC):
         setattr(self.sampler, self.param_name, new_value_clipped)
 
     @abstractmethod
-    def _step(self):
-        ...
+    def _step(self): ...
 
 
 class LambdaScheduler(ParameterScheduler):
-    """Sets a parameter to its initial value times a given function.
+    """Set a parameter to its initial value times a given function.
 
     Similar to :class:`~torch.optim.LambdaLR`.
 
@@ -148,6 +149,7 @@ class LinearScheduler(ParameterScheduler):
         >>>     train(...)
         >>>     validate(...)
         >>>     scheduler.step()
+
     """
 
     def __init__(
@@ -209,6 +211,7 @@ class StepScheduler(ParameterScheduler):
         >>>     train(...)
         >>>     validate(...)
         >>>     scheduler.step()
+
     """
 
     def __init__(
@@ -237,7 +240,7 @@ class StepScheduler(ParameterScheduler):
         self.operator = operator
 
     def _step(self):
-        """Applies the scheduling logic to alter the parameter value every `n_steps`."""
+        """Applie the scheduling logic to alter the parameter value every `n_steps`."""
         # Check if the current step count is a multiple of n_steps
         current_val = getattr(self.sampler, self.param_name)
         # Nit: we should use torch.where instead than if/else here to make the scheduler compatible with compile

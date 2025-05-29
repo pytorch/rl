@@ -2,23 +2,11 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import argparse
 
-import pytest
-import torch
 from packaging import version
-
-from tensordict import TensorDict
-from tensordict.nn import (
-    composite_lp_aggregate,
-    InteractionType,
-    NormalParamExtractor,
-    ProbabilisticTensorDictModule as ProbMod,
-    ProbabilisticTensorDictSequential as ProbSeq,
-    TensorDictModule as Mod,
-    TensorDictSequential as Seq,
-)
-from torch.nn import functional as F
 from torchrl.data.tensor_specs import Bounded, Unbounded
 from torchrl.modules import MLP, QValueActor, TanhNormal
 from torchrl.objectives import (
@@ -44,6 +32,21 @@ from torchrl.objectives.value.functional import (
     vec_td1_return_estimate,
     vec_td_lambda_return_estimate,
 )
+
+import pytest
+import torch
+
+from tensordict import TensorDict
+from tensordict.nn import (
+    InteractionType,
+    NormalParamExtractor,
+    ProbabilisticTensorDictModule as ProbMod,
+    ProbabilisticTensorDictSequential as ProbSeq,
+    TensorDictModule as Mod,
+    TensorDictSequential as Seq,
+    composite_lp_aggregate,
+)
+from torch.nn import functional as F
 
 TORCH_VERSION = torch.__version__
 FULLGRAPH = version.parse(".".join(TORCH_VERSION.split(".")[:3])) >= version.parse(

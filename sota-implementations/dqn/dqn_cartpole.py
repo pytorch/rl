@@ -7,11 +7,6 @@ from __future__ import annotations
 
 import warnings
 
-import hydra
-import torch.nn
-import torch.optim
-import tqdm
-from tensordict.nn import CudaGraphModule, TensorDictSequential
 from torchrl._utils import timeit
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
@@ -20,6 +15,13 @@ from torchrl.modules import EGreedyModule
 from torchrl.objectives import DQNLoss, HardUpdate
 from torchrl.record import VideoRecorder
 from torchrl.record.loggers import generate_exp_name, get_logger
+
+import hydra
+import torch.nn
+import torch.optim
+import tqdm
+
+from tensordict.nn import CudaGraphModule, TensorDictSequential
 from utils_cartpole import eval_model, make_dqn_model, make_env
 
 torch.set_float32_matmul_precision("high")
@@ -133,9 +135,11 @@ def main(cfg: DictConfig):  # noqa: F821
         storing_device="cpu",
         max_frames_per_traj=-1,
         init_random_frames=cfg.collector.init_random_frames,
-        compile_policy={"mode": compile_mode, "fullgraph": True}
-        if compile_mode is not None
-        else False,
+        compile_policy=(
+            {"mode": compile_mode, "fullgraph": True}
+            if compile_mode is not None
+            else False
+        ),
         cudagraph_policy={"warmup": 10} if cfg.compile.cudagraphs else False,
     )
 

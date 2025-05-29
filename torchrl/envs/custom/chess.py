@@ -8,8 +8,6 @@ import importlib.util
 import io
 import pathlib
 
-import torch
-from tensordict import TensorDict, TensorDictBase
 from torchrl.data.tensor_specs import (
     Binary,
     Bounded,
@@ -21,6 +19,10 @@ from torchrl.data.tensor_specs import (
 from torchrl.envs import EnvBase
 from torchrl.envs.common import _EnvPostInit
 from torchrl.envs.utils import _classproperty
+
+import torch
+
+from tensordict import TensorDict, TensorDictBase
 
 
 class _ChessMeta(_EnvPostInit):
@@ -195,6 +197,7 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
             batch_size=torch.Size([96]),
             device=None,
             is_shared=False)
+
     """  # noqa: D301
 
     _hash_table: dict[int, str] = {}
@@ -610,8 +613,7 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
             dest.set("pixels", self._get_tensor_image(board=self.board))
         return dest
 
-    def _set_seed(self, *args, **kwargs) -> None:
-        ...
+    def _set_seed(self, *args, **kwargs) -> None: ...
 
     def cardinality(self, tensordict: TensorDictBase | None = None) -> int:
         self._set_action_space(tensordict)

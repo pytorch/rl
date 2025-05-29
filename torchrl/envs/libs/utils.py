@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import collections
 import copy
+
 from collections.abc import MutableMapping
 
 import numpy as np
@@ -50,6 +51,7 @@ class GymPixelObservationWrapper(ObservationWrapper):
             arrays.
         ValueError: If :obj:`env`'s observation already contains any of the
             specified :obj:`pixel_keys`.
+
     """
 
     def __init__(

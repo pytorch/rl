@@ -7,22 +7,24 @@ from __future__ import annotations
 import importlib
 import os
 import warnings
+
 from copy import copy
 from pathlib import Path
-
-import numpy as np
-import torch
-from tensordict import TensorDict
 
 from torchrl.data.tensor_specs import Unbounded
 from torchrl.envs.common import _maybe_unlock
 from torchrl.envs.libs.gym import (
+    GymEnv,
     _gym_to_torchrl_spec_transform,
     _GymAsyncMeta,
     gym_backend,
-    GymEnv,
 )
 from torchrl.envs.utils import _classproperty, make_composite_from_td
+
+import numpy as np
+import torch
+
+from tensordict import TensorDict
 
 _has_gym = (
     importlib.util.find_spec("gym") is not None
@@ -35,10 +37,11 @@ if _has_robohive:
 
 
 class set_directory:
-    """Sets the cwd within the context.
+    """Set the cwd within the context.
 
     Args:
         path (Path): The path to the cwd
+
     """
 
     def __init__(self, path: Path):
@@ -329,7 +332,7 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
         return reset_data
 
     def set_from_pixels(self, from_pixels: bool) -> None:
-        """Sets the from_pixels attribute to an existing environment.
+        """Set the from_pixels attribute to an existing environment.
 
         Args:
             from_pixels (bool): new value for the from_pixels attribute

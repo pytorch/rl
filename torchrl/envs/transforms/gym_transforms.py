@@ -9,16 +9,17 @@ from __future__ import annotations
 
 import warnings
 
-import torch
-from tensordict import TensorDictBase
-from tensordict.utils import expand_as_right, NestedKey
 from torchrl.data.tensor_specs import Unbounded
-
 from torchrl.envs.transforms.transforms import FORWARD_NOT_IMPLEMENTED, Transform
+
+import torch
+
+from tensordict import TensorDictBase
+from tensordict.utils import NestedKey, expand_as_right
 
 
 class EndOfLifeTransform(Transform):
-    """Registers the end-of-life signal from a Gym env with a `lives` method.
+    """Register the end-of-life signal from a Gym env with a `lives` method.
 
     Proposed by DeepMind for the DQN and co. It helps value estimation.
 
@@ -99,6 +100,7 @@ class EndOfLifeTransform(Transform):
         >>> loss.set_keys(done="end-of-life", terminated="end-of-life")
         >>> # equivalently
         >>> eol_transform.register_keys(loss)
+
     """
 
     NO_PARENT_ERR = "The {} transform is being executed without a parent env. This is currently not supported."
@@ -191,7 +193,7 @@ class EndOfLifeTransform(Transform):
     def register_keys(
         self, loss_or_advantage: torchrl.objectives.common.LossModule  # noqa
     ):
-        """Registers the end-of-life key at appropriate places within the loss.
+        """Register the end-of-life key at appropriate places within the loss.
 
         Args:
             loss_or_advantage (torchrl.objectives.LossModule or torchrl.objectives.value.ValueEstimatorBase): a module to instruct what the end-of-life key is.

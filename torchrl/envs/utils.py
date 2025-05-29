@@ -7,46 +7,46 @@ from __future__ import annotations
 import abc
 import contextlib
 import functools
-
 import importlib.util
 import inspect
 import os
 import re
 import warnings
+
 from enum import Enum
 from typing import Any, Literal
+
+from torchrl._utils import _replace_last, _rng_decorator, logger as torchrl_logger
+from torchrl.data.tensor_specs import (
+    NO_DEFAULT_RL as NO_DEFAULT,
+    Composite,
+    NonTensor,
+    TensorSpec,
+    Unbounded,
+)
+from torchrl.data.utils import CloudpickleWrapper, check_no_exclusive_keys
 
 import torch
 
 from tensordict import (
-    is_tensor_collection,
     LazyStackedTensorDict,
     NonTensorData,
     NonTensorStack,
     TensorDict,
     TensorDictBase,
+    is_tensor_collection,
     unravel_key,
 )
 from tensordict.base import _default_is_leaf, _is_leaf_nontensor
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.nn.probabilistic import (  # noqa
-    interaction_type as exploration_type,
     InteractionType as ExplorationType,
+    interaction_type as exploration_type,
     set_interaction_type as set_exploration_type,
 )
-from tensordict.utils import is_non_tensor, NestedKey
+from tensordict.utils import NestedKey, is_non_tensor
 from torch import nn as nn
 from torch.utils._pytree import tree_map
-from torchrl._utils import _replace_last, _rng_decorator, logger as torchrl_logger
-
-from torchrl.data.tensor_specs import (
-    Composite,
-    NO_DEFAULT_RL as NO_DEFAULT,
-    NonTensor,
-    TensorSpec,
-    Unbounded,
-)
-from torchrl.data.utils import check_no_exclusive_keys, CloudpickleWrapper
 
 __all__ = [
     "exploration_type",
@@ -197,7 +197,7 @@ class _StepMDP:
 
     @staticmethod
     def _repr_key_list_as_tree(key_list):
-        """Represents the keys as a tree to facilitate iteration."""
+        """Represent the keys as a tree to facilitate iteration."""
         if not key_list:
             return {}
         key_dict = {key: torch.zeros((0,)) for key in key_list}
@@ -254,7 +254,7 @@ class _StepMDP:
     def _exclude(
         cls, nested_key_dict: dict, data_in: TensorDictBase, out: TensorDictBase | None
     ) -> None:
-        """Copies the entries if they're not part of the list of keys to exclude."""
+        """Copie the entries if they're not part of the list of keys to exclude."""
         if isinstance(data_in, LazyStackedTensorDict):
             if out is None:
                 out = data_in.empty()
@@ -333,7 +333,7 @@ def step_mdp(
     done_keys: NestedKey | list[NestedKey] = "done",
     action_keys: NestedKey | list[NestedKey] = "action",
 ) -> TensorDictBase:
-    """Creates a new tensordict that reflects a step in time of the input tensordict.
+    """Create a new tensordict that reflects a step in time of the input tensordict.
 
     Given a tensordict retrieved after a step, returns the :obj:`"next"` indexed-tensordict.
     The arguments allow for precise control over what should be kept and what
@@ -588,34 +588,34 @@ def _set(source, dest, key, total_key, excluded):
 
 
 def get_available_libraries():
-    """Returns all the supported libraries."""
+    """Return all the supported libraries."""
     return SUPPORTED_LIBRARIES
 
 
 def _check_gym():
-    """Returns True if the gym library is installed."""
+    """Return True if the gym library is installed."""
     return importlib.util.find_spec("gym") is not None
 
 
 def _check_gym_atari():
-    """Returns True if the gym library is installed and atari envs can be found."""
+    """Return True if the gym library is installed and atari envs can be found."""
     if not _check_gym():
         return False
     return importlib.util.find_spec("atari-py") is not None
 
 
 def _check_mario():
-    """Returns True if the "gym-super-mario-bros" library is installed."""
+    """Return True if the "gym-super-mario-bros" library is installed."""
     return importlib.util.find_spec("gym-super-mario-bros") is not None
 
 
 def _check_dmcontrol():
-    """Returns True if the "dm-control" library is installed."""
+    """Return True if the "dm-control" library is installed."""
     return importlib.util.find_spec("dm_control") is not None
 
 
 def _check_dmlab():
-    """Returns True if the "deepmind-lab" library is installed."""
+    """Return True if the "deepmind-lab" library is installed."""
     return importlib.util.find_spec("deepmind_lab") is not None
 
 
@@ -649,7 +649,7 @@ SUPPORTED_LIBRARIES = {
 
 
 def _per_level_env_check(data0, data1, check_dtype):
-    """Checks shape and dtype of two tensordicts, accounting for lazy stacks."""
+    """Check shape and dtype of two tensordicts, accounting for lazy stacks."""
     if isinstance(data0, LazyStackedTensorDict):
         for _data0, _data1 in zip(data0.tensordicts, data1.unbind(data0.stack_dim)):
             _per_level_env_check(_data0, _data1, check_dtype=check_dtype)
@@ -689,7 +689,7 @@ def check_env_specs(
     tensordict: TensorDictBase | None = None,
     break_when_any_done: bool | Literal["both"] = None,
 ):
-    """Tests an environment specs against the results of short rollout.
+    """Test an environment specs against the results of short rollout.
 
     This test function should be used as a sanity check for an env wrapped with
     torchrl's EnvBase subclasses: any discrepancy between the expected data and
@@ -902,7 +902,7 @@ def _sort_keys(element):
 def make_composite_from_td(
     data, *, unsqueeze_null_shapes: bool = True, dynamic_shape: bool = False
 ):
-    """Creates a Composite instance from a tensordict, assuming all values are unbounded.
+    """Create a Composite instance from a tensordict, assuming all values are unbounded.
 
     Args:
         data (tensordict.TensorDict): a tensordict to be mapped onto a Composite.
@@ -933,7 +933,9 @@ def make_composite_from_td(
                 reward: UnboundedContinuous(
                      shape=torch.Size([1]), space=ContinuousBox(low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True), high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)), device=cpu, dtype=torch.float32, domain=continuous), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
         >>> assert (spec.zero() == data.zero_()).all()
+
     """
+
     # custom function to convert a tensordict in a similar spec structure
     # of unbounded values.
     def make_shape(shape):
@@ -946,21 +948,27 @@ def make_composite_from_td(
 
     composite = Composite(
         {
-            key: make_composite_from_td(
-                tensor,
-                unsqueeze_null_shapes=unsqueeze_null_shapes,
-                dynamic_shape=dynamic_shape,
-            )
-            if is_tensor_collection(tensor) and not is_non_tensor(tensor)
-            else NonTensor(
-                shape=tensor.shape,
-                # Assume all the non-tensors have the same datatype
-                example_data=tensor.view(-1)[0].data,
-                device=tensor.device,
-            )
-            if is_non_tensor(tensor)
-            else Unbounded(
-                dtype=tensor.dtype, device=tensor.device, shape=make_shape(tensor.shape)
+            key: (
+                make_composite_from_td(
+                    tensor,
+                    unsqueeze_null_shapes=unsqueeze_null_shapes,
+                    dynamic_shape=dynamic_shape,
+                )
+                if is_tensor_collection(tensor) and not is_non_tensor(tensor)
+                else (
+                    NonTensor(
+                        shape=tensor.shape,
+                        # Assume all the non-tensors have the same datatype
+                        example_data=tensor.view(-1)[0].data,
+                        device=tensor.device,
+                    )
+                    if is_non_tensor(tensor)
+                    else Unbounded(
+                        dtype=tensor.dtype,
+                        device=tensor.device,
+                        shape=make_shape(tensor.shape),
+                    )
+                )
             )
             for key, tensor in data.items()
         },
@@ -972,7 +980,7 @@ def make_composite_from_td(
 
 @contextlib.contextmanager
 def clear_mpi_env_vars():
-    """Clears the MPI of environment variables.
+    """Clear the MPI of environment variables.
 
     `from mpi4py import MPI` will call `MPI_Init` by default.
     If the child process has MPI environment variables, MPI will think that the child process
@@ -983,6 +991,7 @@ def clear_mpi_env_vars():
 
     Yields:
         Yields for the context manager
+
     """
     removed_environment = {}
     for k, v in list(os.environ.items()):
@@ -1096,7 +1105,7 @@ def check_marl_grouping(group_map: dict[str, list[str]], agent_names: list[str])
         raise ValueError(
             f"Number of groups {len(group_map.keys())} greater than number of agents {n_agents}"
         )
-    found_agents = {agent_name: False for agent_name in agent_names}
+    found_agents = dict.fromkeys(agent_names, False)
     for group_name, group in group_map.items():
         if not len(group):
             raise ValueError(f"Group {group_name} is empty")
@@ -1118,7 +1127,7 @@ def _terminated_or_truncated(
     key: str | None = "_reset",
     write_full_false: bool = False,
 ) -> bool:
-    """Reads the done / terminated / truncated keys within a tensordict, and writes a new tensor where the values of both signals are aggregated.
+    """Read the done / terminated / truncated keys within a tensordict, and writes a new tensor where the values of both signals are aggregated.
 
     The modification occurs in-place within the TensorDict instance provided.
     This function can be used to compute the `"_reset"` signals in batched
@@ -1166,6 +1175,7 @@ def _terminated_or_truncated(
         tensor(True)
         >>> print(data["nested", "_reset"])
         tensor(True)
+
     """
     list_of_keys = []
 
@@ -1243,7 +1253,7 @@ def terminated_or_truncated(
     key: str = "_reset",
     write_full_false: bool = False,
 ) -> bool:
-    """Reads the done / terminated / truncated keys within a tensordict, and writes a new tensor where the values of both signals are aggregated.
+    """Read the done / terminated / truncated keys within a tensordict, and writes a new tensor where the values of both signals are aggregated.
 
     The modification occurs in-place within the TensorDict instance provided.
     This function can be used to compute the `"_reset"` signals in batched
@@ -1291,6 +1301,7 @@ def terminated_or_truncated(
         tensor(True)
         >>> print(data["nested", "_reset"])
         tensor(True)
+
     """
     list_of_keys = []
 
@@ -1417,7 +1428,7 @@ def _update_during_reset(
     tensordict: TensorDictBase,
     reset_keys: list[NestedKey],
 ):
-    """Updates the input tensordict with the reset data, based on the reset keys."""
+    """Update the input tensordict with the reset data, based on the reset keys."""
     if not reset_keys:
         return tensordict.update(tensordict_reset)
     roots = set()
@@ -1601,7 +1612,7 @@ def _make_compatible_policy(
             policy = TensorDictModule(policy, in_keys=in_keys, out_keys=out_keys)
         else:
             raise TypeError(
-                f"""This error is raised because TorchRL tried to automatically wrap your policy in
+                f"""Thi error is raised because TorchRL tried to automatically wrap your policy in
     a TensorDictModule. If you're confident the policy can directly process environment outputs, set
     the `trust_policy` argument to `True` in the constructor.
 
@@ -1679,6 +1690,7 @@ class RandomPolicy:
         >>> action_spec = Bounded(-torch.ones(3), torch.ones(3))
         >>> actor = RandomPolicy(action_spec=action_spec)
         >>> td = actor(TensorDict()) # selects a random action in the cube [-1; 1]
+
     """
 
     def __init__(self, action_spec: TensorSpec, action_key: NestedKey = "action"):

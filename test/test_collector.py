@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import argparse
-
 import contextlib
 import functools
 import gc
@@ -13,27 +12,10 @@ import os
 import subprocess
 import sys
 import time
+
 from unittest.mock import patch
 
-import numpy as np
-import pytest
-import torch
 from packaging import version
-from tensordict import (
-    assert_allclose_td,
-    LazyStackedTensorDict,
-    NonTensorData,
-    TensorDict,
-    TensorDictBase,
-)
-from tensordict.nn import (
-    CudaGraphModule,
-    TensorDictModule,
-    TensorDictModuleBase,
-    TensorDictSequential,
-)
-from torch import nn
-
 from torchrl._utils import (
     _make_ordinal_device,
     _replace_last,
@@ -41,13 +23,12 @@ from torchrl._utils import (
     prod,
     seed_generator,
 )
-from torchrl.collectors import aSyncDataCollector, SyncDataCollector, WeightUpdaterBase
+from torchrl.collectors import SyncDataCollector, WeightUpdaterBase, aSyncDataCollector
 from torchrl.collectors.collectors import (
-    _Interruptor,
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
+    _Interruptor,
 )
-
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
     Composite,
@@ -68,28 +49,47 @@ from torchrl.envs import (
     StepCounter,
     Transform,
 )
-from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv, set_gym_backend
+from torchrl.envs.libs.gym import GymEnv, _has_gym, gym_backend, set_gym_backend
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.envs.utils import (
-    _aggregate_end_of_traj,
-    check_env_specs,
     PARTIAL_MISSING_ERR,
     RandomPolicy,
+    _aggregate_end_of_traj,
+    check_env_specs,
 )
 from torchrl.modules import Actor, OrnsteinUhlenbeckProcessModule, SafeModule
+
+import numpy as np
+import pytest
+import torch
+
+from tensordict import (
+    LazyStackedTensorDict,
+    NonTensorData,
+    TensorDict,
+    TensorDictBase,
+    assert_allclose_td,
+)
+from tensordict.nn import (
+    CudaGraphModule,
+    TensorDictModule,
+    TensorDictModuleBase,
+    TensorDictSequential,
+)
+from torch import nn
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True
     from pytorch.rl.test._utils_internal import (
         CARTPOLE_VERSIONED,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        LSTMNet,
         check_rollout_consistency_multikey_env,
         decorate_thread_sub_func,
         generate_seeds,
         get_available_devices,
         get_default_devices,
-        LSTMNet,
-        PENDULUM_VERSIONED,
-        PONG_VERSIONED,
         retry,
     )
     from pytorch.rl.test.mocking_classes import (
@@ -114,14 +114,14 @@ else:
     IS_FB = False
     from _utils_internal import (
         CARTPOLE_VERSIONED,
+        PENDULUM_VERSIONED,
+        PONG_VERSIONED,
+        LSTMNet,
         check_rollout_consistency_multikey_env,
         decorate_thread_sub_func,
         generate_seeds,
         get_available_devices,
         get_default_devices,
-        LSTMNet,
-        PENDULUM_VERSIONED,
-        PONG_VERSIONED,
         retry,
     )
     from mocking_classes import (
@@ -249,7 +249,7 @@ class TestCollectorGeneric:
     def test_collector_batch_size(
         self, num_env, env_name, seed=100, num_workers=2, frames_per_batch=20
     ):
-        """Tests that there are 'frames_per_batch' frames in each batch of a collection."""
+        """Test that there are 'frames_per_batch' frames in each batch of a collection."""
         if num_env == 3 and IS_WINDOWS:
             pytest.skip(
                 "Test timeout (> 10 min) on CI pipeline Windows machine with GPU"
@@ -319,7 +319,7 @@ class TestCollectorGeneric:
     @pytest.mark.parametrize("num_env", [1, 2])
     @pytest.mark.parametrize("env_name", ["conv", "vec"])
     def test_collector_consistency(self, num_env, env_name, seed=100):
-        """Tests that a rollout gathered with env.rollout matches one gathered with the collector."""
+        """Test that a rollout gathered with env.rollout matches one gathered with the collector."""
         if num_env == 1:
 
             def env_fn(seed):
@@ -631,8 +631,7 @@ class TestCollectorGeneric:
     @pytest.mark.skipif(not _has_gym, reason="test designed with GymEnv")
     @pytest.mark.parametrize("static_seed", [True, False])
     def test_collector_vecnorm_envcreator(self, static_seed):
-        """
-        High level test of the following pipeline:
+        """High level test of the following pipeline:
          (1) Design a function that creates an environment with VecNorm
          (2) Wrap that function in an EnvCreator to instantiate the shared tensordict
          (3) Create a ParallelEnv that dispatches this env across workers
@@ -947,7 +946,7 @@ if __name__ == "__main__":
             policy,
             copier,
             OrnsteinUhlenbeckProcessModule(
-                spec=Composite({key: None for key in policy.out_keys})
+                spec=Composite(dict.fromkeys(policy.out_keys))
             ),
         )
 
@@ -1385,8 +1384,7 @@ if __name__ == "__main__":
         "env_name", ["vec"]
     )  # 1226: removing "conv" for efficiency
     def test_traj_len_consistency(self, num_env, env_name, collector_class, seed=100):
-        """Tests that various frames_per_batch lead to the same results."""
-
+        """Test that various frames_per_batch lead to the same results."""
         if num_env == 1:
 
             def env_fn(seed):
@@ -1599,8 +1597,7 @@ class TestCollectorDevices:
                     device=None,
                 )
 
-        def _set_seed(self, seed: int | None = None) -> None:
-            ...
+        def _set_seed(self, seed: int | None = None) -> None: ...
 
     class EnvWithDevice(EnvBase):
         def __init__(self, default_device):
@@ -1656,8 +1653,7 @@ class TestCollectorDevices:
                     device=self.default_device,
                 )
 
-        def _set_seed(self, seed: int | None = None) -> None:
-            ...
+        def _set_seed(self, seed: int | None = None) -> None: ...
 
     class DeviceLessPolicy(TensorDictModuleBase):
         in_keys = ["observation"]
@@ -1822,22 +1818,25 @@ class TestCollectorDevices:
         def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
             return self.full_done_specs.zeros().update(self.observation_spec.zeros())
 
-        def _set_seed(self, seed: int | None) -> None:
-            ...
+        def _set_seed(self, seed: int | None) -> None: ...
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
     @pytest.mark.parametrize("env_device", ["cuda:0", "cpu"])
     @pytest.mark.parametrize("storing_device", [None, "cuda:0", "cpu"])
     @pytest.mark.parametrize("no_cuda_sync", [True, False])
     def test_no_synchronize(self, env_device, storing_device, no_cuda_sync):
-        """Tests that no_cuda_sync avoids any call to torch.cuda.synchronize() and that the data is not corrupted."""
+        """Test that no_cuda_sync avoids any call to torch.cuda.synchronize() and that the data is not corrupted."""
         should_raise = not no_cuda_sync
         should_raise = should_raise & (
             (env_device == "cpu") or (storing_device == "cpu")
         )
-        with patch("torch.cuda.synchronize") as mock_synchronize, pytest.raises(
-            AssertionError, match="Expected 'synchronize' to not have been called."
-        ) if should_raise else contextlib.nullcontext():
+        with patch("torch.cuda.synchronize") as mock_synchronize, (
+            pytest.raises(
+                AssertionError, match="Expected 'synchronize' to not have been called."
+            )
+            if should_raise
+            else contextlib.nullcontext()
+        ):
             collector = SyncDataCollector(
                 create_env_fn=functools.partial(
                     self.GoesThroughEnv, n_obs=1000, device=None
@@ -2648,8 +2647,7 @@ class TestUpdateParams:
                 {"state": self.state.clone()}, self.batch_size, device=self.device
             )
 
-        def _set_seed(self, seed: int | None) -> None:
-            ...
+        def _set_seed(self, seed: int | None) -> None: ...
 
     class Policy(TensorDictModuleBase):
         def __init__(self):
@@ -3146,9 +3144,11 @@ class TestCompile:
     @pytest.mark.parametrize(
         "collector_cls",
         # Clearing compiled policies causes segfault on machines with cuda
-        [SyncDataCollector, MultiaSyncDataCollector, MultiSyncDataCollector]
-        if not torch.cuda.is_available()
-        else [SyncDataCollector],
+        (
+            [SyncDataCollector, MultiaSyncDataCollector, MultiSyncDataCollector]
+            if not torch.cuda.is_available()
+            else [SyncDataCollector]
+        ),
     )
     @pytest.mark.parametrize("compile_policy", [True, {}, {"mode": "default"}])
     @pytest.mark.parametrize(
@@ -3229,9 +3229,9 @@ class TestCompile:
 class TestCollectorsNonTensor:
     class AddNontTensorData(Transform):
         def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
-            next_tensordict[
-                "nt"
-            ] = f"a string! - {next_tensordict.get('step_count').item()}"
+            next_tensordict["nt"] = (
+                f"a string! - {next_tensordict.get('step_count').item()}"
+            )
             return next_tensordict
 
         def _reset(

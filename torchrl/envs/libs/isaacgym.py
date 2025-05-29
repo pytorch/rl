@@ -7,14 +7,17 @@ from __future__ import annotations
 import importlib.util
 import itertools
 import warnings
+
 from typing import Any
 
-import numpy as np
-import torch
-from tensordict import TensorDictBase
 from torchrl.data.tensor_specs import Composite
 from torchrl.envs.libs.gym import GymWrapper
 from torchrl.envs.utils import _classproperty, make_composite_from_td
+
+import numpy as np
+import torch
+
+from tensordict import TensorDictBase
 
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
 
@@ -116,7 +119,7 @@ class IsaacGymWrapper(GymWrapper):
         ...
 
     def read_action(self, action):
-        """Reads the action obtained from the input TensorDict and transforms it in the format expected by the contained environment.
+        """Read the action obtained from the input TensorDict and transforms it in the format expected by the contained environment.
 
         Args:
             action (Tensor or TensorDict): an action to be taken in the environment
@@ -146,7 +149,7 @@ class IsaacGymWrapper(GymWrapper):
     def read_obs(
         self, observations: dict[str, Any] | torch.Tensor | np.ndarray
     ) -> dict[str, Any]:
-        """Reads an observation from the environment and returns an observation compatible with the output TensorDict.
+        """Read an observation from the environment and returns an observation compatible with the output TensorDict.
 
         Args:
             observations (observation under a format dictated by the inner env): observation to be read.

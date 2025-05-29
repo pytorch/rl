@@ -8,7 +8,7 @@ from __future__ import annotations
 import subprocess
 import time
 
-from torchrl._utils import logger as torchrl_logger, VERBOSE
+from torchrl._utils import VERBOSE, logger as torchrl_logger
 from torchrl.collectors.distributed.default_configs import (
     DEFAULT_SLURM_CONF,
     DEFAULT_SLURM_CONF_MAIN,
@@ -72,6 +72,7 @@ class submitit_delayed_launcher:
         >>> if __name__ == "__main__":
         ...     main()
         ...
+
     """
 
     _VERBOSE = VERBOSE  # for debugging

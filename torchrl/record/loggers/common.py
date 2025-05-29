@@ -5,10 +5,10 @@
 from __future__ import annotations
 
 import abc
+
 from typing import Sequence
 
 from torch import Tensor
-
 
 __all__ = ["Logger"]
 
@@ -26,21 +26,19 @@ class Logger:
         ...
 
     @abc.abstractmethod
-    def log_scalar(self, name: str, value: float, step: int = None) -> None:
-        ...
+    def log_scalar(self, name: str, value: float, step: int = None) -> None: ...
 
     @abc.abstractmethod
-    def log_video(self, name: str, video: Tensor, step: int = None, **kwargs) -> None:
-        ...
+    def log_video(
+        self, name: str, video: Tensor, step: int = None, **kwargs
+    ) -> None: ...
 
     @abc.abstractmethod
     def log_hparams(self, cfg: DictConfig | dict) -> None:  # noqa: F821
         ...
 
     @abc.abstractmethod
-    def __repr__(self) -> str:
-        ...
+    def __repr__(self) -> str: ...
 
     @abc.abstractmethod
-    def log_histogram(self, name: str, data: Sequence, **kwargs):
-        ...
+    def log_histogram(self, name: str, data: Sequence, **kwargs): ...

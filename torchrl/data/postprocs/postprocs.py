@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import torch
+
 from tensordict import NestedKey, TensorDictBase, unravel_key
 from tensordict.nn import TensorDictModuleBase
 from tensordict.utils import expand_right
@@ -18,7 +19,7 @@ def _get_reward(
     done: torch.Tensor,
     max_steps: int,
 ):
-    """Sums the rewards up to max_steps in the future with a gamma decay.
+    """Sum the rewards up to max_steps in the future with a gamma decay.
 
     Supports multiple consecutive trajectories.
 
@@ -164,7 +165,7 @@ class MultiStep(nn.Module):
         self.mask_key = ("collector", "mask")
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Re-writes a tensordict following the multi-step transform.
+        """Re-write a tensordict following the multi-step transform.
 
         Args:
             tensordict: :class:`tensordict.TensorDictBase` instance with

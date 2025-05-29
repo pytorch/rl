@@ -5,29 +5,29 @@
 from __future__ import annotations
 
 import abc
-
 import multiprocessing
-from concurrent.futures import as_completed, ThreadPoolExecutor
+
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # import queue
 from multiprocessing import Queue
 from queue import Empty
 from typing import Callable, Literal, Sequence
 
+from torchrl.data.tensor_specs import NonTensor
+from torchrl.envs.common import EnvBase, _EnvPostInit
+
 import torch
+
 from tensordict import (
-    lazy_stack,
     LazyStackedTensorDict,
-    maybe_dense_stack,
     TensorDict,
     TensorDictBase,
+    lazy_stack,
+    maybe_dense_stack,
 )
-
 from tensordict.tensorclass import NonTensorData, NonTensorStack
 from tensordict.utils import _zip_strict
-
-from torchrl.data.tensor_specs import NonTensor
-from torchrl.envs.common import _EnvPostInit, EnvBase
 
 
 class _AsyncEnvMeta(_EnvPostInit):
@@ -192,10 +192,12 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
 
     def __init__(
         self,
-        env_makers: Callable[[], EnvBase]
-        | EnvBase
-        | list[EnvBase]
-        | list[Callable[[], EnvBase]],
+        env_makers: (
+            Callable[[], EnvBase]
+            | EnvBase
+            | list[EnvBase]
+            | list[Callable[[], EnvBase]]
+        ),
         *,
         backend: Literal["threading", "multiprocessing", "asyncio"] = "threading",
         stack: Literal["dense", "maybe_dense", "lazy"] = "dense",
@@ -420,6 +422,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         async_reset_send(tensordict): Sends a reset command to the environments.
         async_reset_recv(min_get): Receives the results of the reset command.
         shutdown(): Shuts down all environment processes.
+
     """
 
     def _setup(self) -> None:

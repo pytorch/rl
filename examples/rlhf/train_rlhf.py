@@ -2,17 +2,18 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
+from torchrl.data.llm.utils import AdaptiveKLController, RolloutFromModel
+from torchrl.record.loggers import get_logger
 
 import hydra
 import torch
+
 from models.actor_critic import init_actor_critic
-from torchrl.data.llm.utils import AdaptiveKLController, RolloutFromModel
-
-from torchrl.record.loggers import get_logger
-
 from tqdm import tqdm
-
 from utils import (
+    TrainLogger,
     flatten_td,
     freeze_layers,
     get_prompt_loaders,
@@ -25,7 +26,6 @@ from utils import (
     make_sub_replay_buffer,
     resolve_name_or_path,
     setup,
-    TrainLogger,
 )
 
 

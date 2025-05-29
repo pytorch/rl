@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import os
 import shutil
+
 from pathlib import Path
 from typing import List
 
@@ -33,13 +36,14 @@ def _get_file_content(name: str) -> List[str]:
 
 
 def generate_knowledge_base_references(knowledge_base_path: str) -> None:
-    """Creates a reference file per knowledge base entry.
+    """Create a reference file per knowledge base entry.
 
     Sphinx natively doesn't support adding files from outside its root directory. To include the knowledge base in
     our docs (https://pytorch.org/rl/) each entry is linked using an auto-generated file that references the original.
 
     Args:
         knowledge_base_path (str): path to the knowledge base.
+
     """
     # Create target dir
     target_path = os.path.join(FILE_DIR, KNOWLEDGE_GEN_DIR)
@@ -60,13 +64,14 @@ def generate_knowledge_base_references(knowledge_base_path: str) -> None:
 
 
 def generate_tutorial_references(tutorial_path: str, file_type: str) -> None:
-    """Creates a python file per tutorial script.
+    """Create a python file per tutorial script.
 
     Sphinx natively doesn't support adding files from outside its root directory. To include the tutorials in
     our docs (https://pytorch.org/rl/) each entry is locally copied.
 
     Args:
         tutorial_path (str): path to the tutorial scripts.
+
     """
     # Create target dir
     if file_type == "tutorial":

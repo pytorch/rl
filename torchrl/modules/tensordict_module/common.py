@@ -9,17 +9,19 @@ import importlib.util
 import inspect
 import re
 import warnings
-from typing import Iterable
 
-import torch
-from tensordict import TensorDictBase, unravel_key_list
-from tensordict.nn import dispatch, TensorDictModule, TensorDictModuleBase
-from tensordict.utils import NestedKey
-from torch import nn
-from torch.nn import functional as F
+from typing import Iterable
 
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.data.utils import DEVICE_TYPING
+
+import torch
+
+from tensordict import TensorDictBase, unravel_key_list
+from tensordict.nn import TensorDictModule, TensorDictModuleBase, dispatch
+from tensordict.utils import NestedKey
+from torch import nn
+from torch.nn import functional as F
 
 _has_functorch = importlib.util.find_spec("functorch") is not None
 if _has_functorch:
@@ -266,7 +268,7 @@ class SafeModule(TensorDictModule):
         self._spec = spec
 
     def random(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Samples a random element in the target space, irrespective of any input.
+        """Sample a random element in the target space, irrespective of any input.
 
         If multiple output keys are present, only the first will be written in the input :obj:`tensordict`.
 
@@ -293,7 +295,7 @@ class SafeModule(TensorDictModule):
 
 
 def is_tensordict_compatible(module: TensorDictModule | nn.Module):
-    """Returns `True` if a module can be used as a TensorDictModule, and False if it can't.
+    """Return `True` if a module can be used as a TensorDictModule, and False if it can't.
 
     If the signature is misleading an error is raised.
 
@@ -328,6 +330,7 @@ def is_tensordict_compatible(module: TensorDictModule | nn.Module):
         ... except TypeError:
         ...     print("passing")
         passing
+
     """
     sig = inspect.signature(module.forward)
 
@@ -368,11 +371,11 @@ def ensure_tensordict_compatible(
     wrapper_type: type | None = TensorDictModule,
     **kwargs,
 ):
-    """Ensures module is compatible with TensorDictModule and, if not, it wraps it."""
+    """Ensure module is compatible with TensorDictModule and, if not, it wraps it."""
     in_keys = unravel_key_list(in_keys) if in_keys else in_keys
     out_keys = unravel_key_list(out_keys) if out_keys else out_keys
 
-    """Checks and ensures an object with forward method is TensorDict compatible."""
+    """Check and ensures an object with forward method is TensorDict compatible."""
     if is_tensordict_compatible(module):
         if in_keys is not None and set(in_keys) != set(module.in_keys):
             raise TypeError(
@@ -438,6 +441,7 @@ class VmapModule(TensorDictModuleBase):
         >>> vm = VmapModule(lam, 0)
         >>> vm(sample_in_td)
         >>> assert (sample_in_td["x"][:, 0] == sample_in_td["y"]).all()
+
     """
 
     def __init__(self, module: TensorDictModuleBase, vmap_dim=None, mock: bool = False):

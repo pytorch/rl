@@ -4,12 +4,13 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import torch
-from tensordict import TensorDict, TensorDictBase
-from torch import nn
-
 from torchrl.envs.common import EnvBase
 from torchrl.modules.planners.common import MPCPlannerBase
+
+import torch
+
+from tensordict import TensorDict, TensorDictBase
+from torch import nn
 
 
 class MPPIPlanner(MPCPlannerBase):
@@ -126,6 +127,7 @@ class MPPIPlanner(MPCPlannerBase):
             batch_size=torch.Size([5]),
             device=cpu,
             is_shared=False)
+
     """
 
     def __init__(

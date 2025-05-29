@@ -5,11 +5,10 @@
 from __future__ import annotations
 
 import os
+
 from pathlib import Path
 from typing import Callable
 
-import numpy as np
-from tensordict import TensorDict
 from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers import (
@@ -18,6 +17,10 @@ from torchrl.data.replay_buffers import (
     TensorStorage,
     Writer,
 )
+
+import numpy as np
+
+from tensordict import TensorDict
 
 
 class OpenMLExperienceReplay(BaseDatasetExperienceReplay):
@@ -108,6 +111,7 @@ class OpenMLExperienceReplay(BaseDatasetExperienceReplay):
     def _get_data(cls, dataset_name):
         try:
             import pandas  # noqa: F401
+
             from sklearn.datasets import fetch_openml
             from sklearn.preprocessing import (
                 LabelEncoder,

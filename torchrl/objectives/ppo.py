@@ -6,41 +6,23 @@ from __future__ import annotations
 
 import contextlib
 import warnings
+
 from copy import deepcopy
 from dataclasses import dataclass
-
-import torch
-from tensordict import (
-    is_tensor_collection,
-    TensorDict,
-    TensorDictBase,
-    TensorDictParams,
-)
-from tensordict.nn import (
-    composite_lp_aggregate,
-    CompositeDistribution,
-    dispatch,
-    ProbabilisticTensorDictModule,
-    ProbabilisticTensorDictSequential,
-    set_composite_lp_aggregate,
-    TensorDictModule,
-)
-from tensordict.utils import NestedKey
-from torch import distributions as d
 
 from torchrl._utils import _standardize
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
+    _GAMMA_LMBDA_DEPREC_ERROR,
+    ValueEstimators,
     _cache_values,
     _clip_value_loss,
-    _GAMMA_LMBDA_DEPREC_ERROR,
     _maybe_add_or_extend_key,
     _maybe_get_or_select,
     _reduce,
     _sum_td_features,
     default_value_kwargs,
     distance_loss,
-    ValueEstimators,
 )
 from torchrl.objectives.value import (
     GAE,
@@ -49,6 +31,26 @@ from torchrl.objectives.value import (
     TDLambdaEstimator,
     VTrace,
 )
+
+import torch
+
+from tensordict import (
+    TensorDict,
+    TensorDictBase,
+    TensorDictParams,
+    is_tensor_collection,
+)
+from tensordict.nn import (
+    CompositeDistribution,
+    ProbabilisticTensorDictModule,
+    ProbabilisticTensorDictSequential,
+    TensorDictModule,
+    composite_lp_aggregate,
+    dispatch,
+    set_composite_lp_aggregate,
+)
+from tensordict.utils import NestedKey
+from torch import distributions as d
 
 
 class PPOLoss(LossModule):
@@ -264,11 +266,12 @@ class PPOLoss(LossModule):
       this class must be used with tensordicts and cannot function as a tensordict-independent module.
       This is because composite action spaces inherently rely on the structured representation of data provided by
       tensordicts to handle their actions.
+
     """
 
     @dataclass
     class _AcceptedKeys:
-        """Maintains default values for all configurable tensordict keys.
+        """Maintain default values for all configurable tensordict keys.
 
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values
@@ -294,6 +297,7 @@ class PPOLoss(LossModule):
             terminated (NestedKey or list of nested keys): The key in the input TensorDict that indicates
                 whether a trajectory is terminated. Will be used for the underlying value estimator.
                 Defaults to ``"terminated"``.
+
         """
 
         advantage: NestedKey = "advantage"
@@ -524,9 +528,11 @@ class PPOLoss(LossModule):
                 x = dist.rsample((self.samples_mc_entropy,))
             else:
                 x = dist.sample((self.samples_mc_entropy,))
-            with set_composite_lp_aggregate(False) if isinstance(
-                dist, CompositeDistribution
-            ) else contextlib.nullcontext():
+            with (
+                set_composite_lp_aggregate(False)
+                if isinstance(dist, CompositeDistribution)
+                else contextlib.nullcontext()
+            ):
                 log_prob = dist.log_prob(x)
                 if is_tensor_collection(log_prob):
                     if isinstance(self.tensor_keys.sample_log_prob, NestedKey):
@@ -547,9 +553,11 @@ class PPOLoss(LossModule):
         ) or hasattr(self.actor_network, "get_dist"):
             # assert tensordict['log_probs'].requires_grad
             # assert tensordict['logits'].requires_grad
-            with self.actor_network_params.to_module(
-                self.actor_network
-            ) if self.functional else contextlib.nullcontext():
+            with (
+                self.actor_network_params.to_module(self.actor_network)
+                if self.functional
+                else contextlib.nullcontext()
+            ):
                 dist = self.actor_network.get_dist(tensordict)
 
             is_composite = isinstance(dist, CompositeDistribution)
@@ -634,7 +642,7 @@ class PPOLoss(LossModule):
         return log_weight, dist, kl_approx
 
     def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
-        """Returns the critic loss multiplied by ``critic_coef``, if it is not ``None``."""
+        """Return the critic loss multiplied by ``critic_coef``, if it is not ``None``."""
         # TODO: if the advantage is gathered by forward, this introduces an
         # overhead that we could easily reduce.
         if self.separate_losses:
@@ -662,9 +670,11 @@ class PPOLoss(LossModule):
                     f"Make sure that the value_key passed to PPO exists in the input tensordict."
                 )
 
-        with self.critic_network_params.to_module(
-            self.critic_network
-        ) if self.functional else contextlib.nullcontext():
+        with (
+            self.critic_network_params.to_module(self.critic_network)
+            if self.functional
+            else contextlib.nullcontext()
+        ):
             state_value_td = self.critic_network(tensordict)
 
         state_value = state_value_td.get(
@@ -754,9 +764,11 @@ class PPOLoss(LossModule):
             if value_clip_fraction is not None:
                 td_out.set("value_clip_fraction", value_clip_fraction)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
-            if name.startswith("loss_")
-            else value,
+            lambda name, value: (
+                _reduce(value, reduction=self.reduction).squeeze(-1)
+                if name.startswith("loss_")
+                else value
+            ),
         )
         self._clear_weakrefs(
             tensordict,
@@ -1075,9 +1087,11 @@ class ClipPPOLoss(PPOLoss):
 
         td_out.set("ESS", _reduce(ess, self.reduction) / batch)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
-            if name.startswith("loss_")
-            else value,
+            lambda name, value: (
+                _reduce(value, reduction=self.reduction).squeeze(-1)
+                if name.startswith("loss_")
+                else value
+            ),
         )
         self._clear_weakrefs(
             tensordict,
@@ -1360,18 +1374,22 @@ class KLPENPPOLoss(PPOLoss):
         )
         neg_loss = log_weight.exp() * advantage
 
-        with self.actor_network_params.to_module(
-            self.actor_network
-        ) if self.functional else contextlib.nullcontext():
+        with (
+            self.actor_network_params.to_module(self.actor_network)
+            if self.functional
+            else contextlib.nullcontext()
+        ):
             current_dist = self.actor_network.get_dist(tensordict_copy)
         is_composite = isinstance(current_dist, CompositeDistribution)
         try:
             kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
         except NotImplementedError:
             x = previous_dist.sample((self.samples_mc_kl,))
-            with set_composite_lp_aggregate(
-                False
-            ) if is_composite else contextlib.nullcontext():
+            with (
+                set_composite_lp_aggregate(False)
+                if is_composite
+                else contextlib.nullcontext()
+            ):
                 previous_log_prob = previous_dist.log_prob(x)
                 current_log_prob = current_dist.log_prob(x)
             if is_tensor_collection(previous_log_prob):
@@ -1414,9 +1432,11 @@ class KLPENPPOLoss(PPOLoss):
             if value_clip_fraction is not None:
                 td_out.set("value_clip_fraction", value_clip_fraction)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
-            if name.startswith("loss_")
-            else value,
+            lambda name, value: (
+                _reduce(value, reduction=self.reduction).squeeze(-1)
+                if name.startswith("loss_")
+                else value
+            ),
         )
         self._clear_weakrefs(
             tensordict,

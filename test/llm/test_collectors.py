@@ -6,12 +6,8 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
-
 import time
 
-import pytest
-import torch
-from mocking_classes import DummyStrDataLoader
 from torchrl import logger as torchrl_logger
 from torchrl.collectors.llm import LLMCollector
 from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
@@ -19,8 +15,12 @@ from torchrl.data import LazyStackStorage, ReplayBuffer
 from torchrl.envs import AsyncEnvPool, StepCounter
 from torchrl.envs.llm import LLMEnv
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
-
 from torchrl.modules.llm.backends.vllm import make_vllm_worker
+
+import pytest
+import torch
+
+from mocking_classes import DummyStrDataLoader
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_vllm = importlib.util.find_spec("vllm") is not None
@@ -423,6 +423,7 @@ class TestUpdate:
         ray.init()
 
         from torchrl.envs.llm import GSM8KEnv
+
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
         model_name = "Qwen/Qwen2.5-3B"

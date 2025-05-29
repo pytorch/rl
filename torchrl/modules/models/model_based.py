@@ -6,8 +6,12 @@ from __future__ import annotations
 
 import warnings
 
-import torch
 from packaging import version
+from torchrl._utils import timeit
+from torchrl.modules.models.models import MLP
+
+import torch
+
 from tensordict.nn import (
     NormalParamExtractor,
     TensorDictModule,
@@ -18,9 +22,6 @@ from torch import nn
 
 # from torchrl.modules.tensordict_module.rnn import GRUCell
 from torch.nn import GRUCell
-from torchrl._utils import timeit
-
-from torchrl.modules.models.models import MLP
 
 UNSQUEEZE_RNN_INPUT = version.parse(torch.__version__) < version.parse("1.11")
 
@@ -47,6 +48,7 @@ class DreamerActor(nn.Module):
             Defaults to 5.0.
         std_min_val (:obj:`float`, optional): Minimum value of the standard deviation.
             Defaults to 1e-4.
+
     """
 
     def __init__(
@@ -88,6 +90,7 @@ class ObsEncoder(nn.Module):
         channels (int, optional): Number of hidden units in the first layer.
             Defaults to 32.
         num_layers (int, optional): Depth of the network. Defaults to 4.
+
     """
 
     def __init__(self, channels=32, num_layers=4, depth=None):
@@ -140,6 +143,7 @@ class ObsDecoder(nn.Module):
         num_layers (int, optional): Depth of the network. Defaults to 4.
         kernel_sizes (int or list of int, optional): the kernel_size of each layer.
             Defaults to ``[5, 5, 6, 6]`` if num_layers if 4, else ``[5] * num_layers``.
+
     """
 
     def __init__(self, channels=32, num_layers=4, kernel_sizes=None, depth=None):
@@ -225,7 +229,7 @@ class RSSMRollout(TensorDictModuleBase):
         self.rssm_posterior = rssm_posterior
 
     def forward(self, tensordict):
-        """Runs a rollout of simulated transitions in the latent space given a sequence of actions and environment observations.
+        """Run a rollout of simulated transitions in the latent space given a sequence of actions and environment observations.
 
         The rollout requires a belief and posterior state primer.
 

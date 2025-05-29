@@ -7,14 +7,16 @@ from __future__ import annotations
 import functools
 import re
 import warnings
+
 from copy import copy
 from enum import Enum
 from typing import Any, Callable, Iterable
 
 import torch
+
 from tensordict import NestedKey, TensorDict, TensorDictBase, unravel_key
 from tensordict.nn import TensorDictModule
-from torch import nn, Tensor
+from torch import Tensor, nn
 from torch.nn import functional as F
 from torch.nn.modules import dropout
 from torch.utils._pytree import tree_map
@@ -107,7 +109,7 @@ def distance_loss(
     loss_function: str,
     strict_shape: bool = True,
 ) -> torch.Tensor:
-    """Computes a distance loss between two tensors.
+    """Compute a distance loss between two tensors.
 
     Args:
         v1 (Tensor): a tensor with a shape compatible with v2
@@ -318,6 +320,7 @@ class SoftUpdate(TargetNetUpdater):
 
             Exclusive with ``tau``.
         tau (scalar): Polyak tau. It is equal to ``1-eps``, and exclusive with it.
+
     """
 
     def __init__(
@@ -373,6 +376,7 @@ class HardUpdate(TargetNetUpdater):
     Keyword Args:
         value_network_update_interval (scalar): how often the target network should be updated.
             default: 1000
+
     """
 
     def __init__(
@@ -449,7 +453,7 @@ def next_state_value(
     pred_next_val: Tensor | None = None,
     **kwargs,
 ) -> torch.Tensor:
-    """Computes the next state value (without gradient) to compute a target value.
+    """Compute the next state value (without gradient) to compute a target value.
 
     The target value is usually used to compute a distance loss (e.g. MSE):
         L = Sum[ (q_value - target_value)^2 ]
@@ -498,7 +502,7 @@ def next_state_value(
 
 
 def _cache_values(func):
-    """Caches the tensordict returned by a property."""
+    """Cache the tensordict returned by a property."""
     name = func.__name__
 
     @functools.wraps(func)
@@ -607,7 +611,7 @@ def _pseudo_vmap(
 
 
 def _reduce(tensor: torch.Tensor, reduction: str) -> float | torch.Tensor:
-    """Reduces a tensor given the reduction method."""
+    """Reduce a tensor given the reduction method."""
     if reduction == "none":
         result = tensor
     elif reduction == "mean":
@@ -656,7 +660,7 @@ def _get_default_device(net):
 
 
 def group_optimizers(*optimizers: torch.optim.Optimizer) -> torch.optim.Optimizer:
-    """Groups multiple optimizers into a single one.
+    """Group multiple optimizers into a single one.
 
     All optimizers are expected to have the same type.
     """

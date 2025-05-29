@@ -1,5 +1,4 @@
-"""
-Example use of an ever-running, fully async, distributed collector
+"""Example use of an ever-running, fully async, distributed collector
 ==================================================================
 
 This example demonstrates how to set up and use a distributed collector
@@ -28,13 +27,17 @@ multiple environments in parallel, leveraging Ray's distributed computing
 capabilities to scale efficiently.
 
 """
+
+from __future__ import annotations
+
 import asyncio
 
-from tensordict.nn import TensorDictModule
-from torch import nn
 from torchrl.collectors.distributed.ray import RayCollector
 from torchrl.data.replay_buffers.ray_buffer import RayReplayBuffer
 from torchrl.envs.libs.gym import GymEnv
+
+from tensordict.nn import TensorDictModule
+from torch import nn
 
 
 async def main():

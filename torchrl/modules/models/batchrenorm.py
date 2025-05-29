@@ -38,6 +38,7 @@ class BatchRenorm1d(nn.Module):
             batch-norm (when ``iter=0``) to batch-renorm (when ``iter=warmup_steps``).
             Otherwise, the behavior will transition from batch-norm to batch-renorm when
             ``iter=warmup_steps``. Defaults to ``False``.
+
     """
 
     def __init__(

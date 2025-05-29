@@ -9,26 +9,11 @@ import logging
 import os
 import textwrap
 import warnings
+
 from collections import OrderedDict
 from copy import copy
 from multiprocessing.context import get_spawning_popen
 from typing import Any, Sequence
-
-import numpy as np
-import tensordict
-import torch
-from tensordict import (
-    is_tensor_collection,
-    lazy_stack,
-    LazyStackedTensorDict,
-    TensorDict,
-    TensorDictBase,
-)
-from tensordict.base import _NESTED_TENSORS_AS_LISTS
-from tensordict.memmap import MemoryMappedTensor
-from tensordict.utils import _zip_strict
-from torch import multiprocessing as mp
-from torch.utils._pytree import tree_flatten, tree_map, tree_unflatten
 
 from torchrl._utils import _make_ordinal_device, implement_for, logger as torchrl_logger
 from torchrl.data.replay_buffers.checkpointers import (
@@ -38,11 +23,28 @@ from torchrl.data.replay_buffers.checkpointers import (
     TensorStorageCheckpointer,
 )
 from torchrl.data.replay_buffers.utils import (
+    INT_CLASSES,
     _init_pytree,
     _is_int,
-    INT_CLASSES,
     tree_iter,
 )
+
+import numpy as np
+import tensordict
+import torch
+
+from tensordict import (
+    LazyStackedTensorDict,
+    TensorDict,
+    TensorDictBase,
+    is_tensor_collection,
+    lazy_stack,
+)
+from tensordict.base import _NESTED_TENSORS_AS_LISTS
+from tensordict.memmap import MemoryMappedTensor
+from tensordict.utils import _zip_strict
+from torch import multiprocessing as mp
+from torch.utils._pytree import tree_flatten, tree_map, tree_unflatten
 
 
 class Storage:
@@ -100,12 +102,10 @@ class Storage:
         return self._attached_entities
 
     @abc.abstractmethod
-    def set(self, cursor: int, data: Any, *, set_cursor: bool = True):
-        ...
+    def set(self, cursor: int, data: Any, *, set_cursor: bool = True): ...
 
     @abc.abstractmethod
-    def get(self, index: int) -> Any:
-        ...
+    def get(self, index: int) -> Any: ...
 
     def dumps(self, path):
         self.checkpointer.dumps(self, path)
@@ -114,7 +114,7 @@ class Storage:
         self.checkpointer.loads(self, path)
 
     def attach(self, buffer: Any) -> None:
-        """This function attaches a sampler to this storage.
+        """Thi function attaches a sampler to this storage.
 
         Buffers that read from this storage must be included as an attached
         entity by calling this method. This guarantees that when data
@@ -123,6 +123,7 @@ class Storage:
 
         Args:
             buffer: the object that reads from this storage.
+
         """
         if buffer not in self._attached_entities:
             self._attached_entities.append(buffer)
@@ -131,7 +132,7 @@ class Storage:
         return self.get(item)
 
     def __setitem__(self, index, value):
-        """Sets values in the storage without updating the cursor or length."""
+        """Set values in the storage without updating the cursor or length."""
         return self.set(index, value, set_cursor=False)
 
     def __iter__(self):
@@ -139,20 +140,16 @@ class Storage:
             yield self[i]
 
     @abc.abstractmethod
-    def __len__(self):
-        ...
+    def __len__(self): ...
 
     @abc.abstractmethod
-    def state_dict(self) -> dict[str, Any]:
-        ...
+    def state_dict(self) -> dict[str, Any]: ...
 
     @abc.abstractmethod
-    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
-        ...
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None: ...
 
     @abc.abstractmethod
-    def _empty(self):
-        ...
+    def _empty(self): ...
 
     def _rand_given_ndim(self, batch_size):
         # a method to return random indices given the storage ndim
@@ -195,15 +192,15 @@ class Storage:
         )
 
     def save(self, *args, **kwargs):
-        """Alias for :meth:`dumps`."""
+        """Alia for :meth:`dumps`."""
         return self.dumps(*args, **kwargs)
 
     def dump(self, *args, **kwargs):
-        """Alias for :meth:`dumps`."""
+        """Alia for :meth:`dumps`."""
         return self.dumps(*args, **kwargs)
 
     def load(self, *args, **kwargs):
-        """Alias for :meth:`loads`."""
+        """Alia for :meth:`loads`."""
         return self.loads(*args, **kwargs)
 
     def __getstate__(self):
@@ -215,8 +212,7 @@ class Storage:
         return self.contains(item)
 
     @abc.abstractmethod
-    def contains(self, item):
-        ...
+    def contains(self, item): ...
 
 
 class ListStorage(Storage):
@@ -413,6 +409,7 @@ class LazyStackStorage(ListStorage):
             device=None,
             is_shared=False,
             stack_dim=0)
+
     """
 
     def __init__(
@@ -541,9 +538,7 @@ class TensorStorage(Storage):
         self.device = (
             _make_ordinal_device(torch.device(device))
             if device != "auto"
-            else storage.device
-            if storage is not None
-            else "auto"
+            else storage.device if storage is not None else "auto"
         )
         self._storage = storage
         self._last_cursor = None
@@ -1134,7 +1129,8 @@ class LazyMemmapStorage(LazyTensorStorage):
     .. note:: When checkpointing a ``LazyMemmapStorage``, one can provide a path identical to where the storage is
         already stored to avoid executing long copies of data that is already stored on disk.
         This will only work if the default :class:`~torchrl.data.TensorStorageCheckpointer` checkpointer is used.
-        Example:
+
+    Example:
             >>> from tensordict import TensorDict
             >>> from torchrl.data import TensorStorage, LazyMemmapStorage, ReplayBuffer
             >>> import tempfile
@@ -1255,9 +1251,11 @@ class LazyMemmapStorage(LazyTensorStorage):
             elif self._storage is None:
                 self._storage = _make_memmap(
                     _storage,
-                    path=self.scratch_dir + "/tensor.memmap"
-                    if self.scratch_dir is not None
-                    else None,
+                    path=(
+                        self.scratch_dir + "/tensor.memmap"
+                        if self.scratch_dir is not None
+                        else None
+                    ),
                 )
             else:
                 raise RuntimeError(
@@ -1392,14 +1390,16 @@ class StorageEnsemble(Storage):
         buffer_ids = item.get("buffer_ids")
         index = item.get("index")
         results = []
-        for (buffer_id, sample) in zip(buffer_ids, index):
+        for buffer_id, sample in zip(buffer_ids, index):
             buffer_id = self._convert_id(buffer_id)
             results.append((buffer_id, self._get_storage(buffer_id).get(sample)))
         if self._transforms is not None:
             results = [
-                (buffer_id, self._transforms[buffer_id](result))
-                if self._transforms[buffer_id] is not None
-                else (buffer_id, result)
+                (
+                    (buffer_id, self._transforms[buffer_id](result))
+                    if self._transforms[buffer_id] is not None
+                    else (buffer_id, result)
+                )
                 for buffer_id, result in results
             ]
         return results

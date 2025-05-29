@@ -10,7 +10,7 @@ from tensordict import TensorClass
 
 
 class LLMData(TensorClass["nocast"]):
-    """Represents the input or output of a Large Language Model (LLM).
+    """Represent the input or output of a Large Language Model (LLM).
 
     Other algorithm-specific attributes such as `reward`, `advantages` or done states are handled automatically by the
     envs and, therefore, are not included in this class.

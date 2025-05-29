@@ -2,20 +2,22 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import time
+
 from argparse import ArgumentParser
 
-import gym
-
-import torch
-import tqdm
 from torchrl._utils import logger as torchrl_logger
-
 from torchrl.collectors.collectors import MultiSyncDataCollector, SyncDataCollector
 from torchrl.collectors.distributed import RPCDataCollector
 from torchrl.envs import EnvCreator
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.utils import RandomPolicy
+
+import gym
+import torch
+import tqdm
 
 parser = ArgumentParser()
 parser.add_argument(
@@ -92,9 +94,9 @@ if __name__ == "__main__":
         num_workers_per_collector=num_workers,
         frames_per_batch=frames_per_batch,
         total_frames=args.total_frames,
-        collector_class=SyncDataCollector
-        if num_workers == 1
-        else MultiSyncDataCollector,
+        collector_class=(
+            SyncDataCollector if num_workers == 1 else MultiSyncDataCollector
+        ),
         collector_kwargs=collector_kwargs,
         slurm_kwargs=slurm_conf,
         sync=args.sync,

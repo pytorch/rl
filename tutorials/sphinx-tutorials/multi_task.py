@@ -3,12 +3,14 @@ Task-specific policy in multi-task environments
 ================================================
 This tutorial details how multi-task policies and batched environments can be used.
 """
+
 ##############################################################################
 # At the end of this tutorial, you will be capable of writing policies that
 # can compute actions in diverse settings using a distinct set of weights.
 # You will also be able to execute diverse environments in parallel.
 
 # sphinx_gallery_start_ignore
+from __future__ import annotations
 import warnings
 
 warnings.filterwarnings("ignore")

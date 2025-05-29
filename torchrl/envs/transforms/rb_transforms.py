@@ -4,10 +4,12 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import torch
-from tensordict import NestedKey, TensorDictBase
 from torchrl.data.postprocs.postprocs import _multi_step_func
 from torchrl.envs.transforms.transforms import Transform
+
+import torch
+
+from tensordict import NestedKey, TensorDictBase
 
 
 class MultiStepTransform(Transform):

@@ -8,11 +8,12 @@ from __future__ import annotations
 import argparse
 import importlib.util
 
+from torchrl.data import History
+
 import pytest
 import torch
-from tensordict import set_list_to_stack
 
-from torchrl.data import History
+from tensordict import set_list_to_stack
 
 _has_transformers = importlib.util.find_spec("transformers")
 _has_vllm = importlib.util.find_spec("vllm")

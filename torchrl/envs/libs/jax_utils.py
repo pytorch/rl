@@ -7,15 +7,17 @@ from __future__ import annotations
 import dataclasses
 import importlib.util
 
+from torchrl.data.tensor_specs import Composite, TensorSpec, Unbounded
+from torchrl.data.utils import numpy_to_torch_dtype_dict
+
 # import jax
 import numpy as np
 import torch
 
+
 # from jax import dlpack as jax_dlpack, numpy as jnp
-from tensordict import make_tensordict, TensorDictBase
+from tensordict import TensorDictBase, make_tensordict
 from torch.utils import dlpack as torch_dlpack
-from torchrl.data.tensor_specs import Composite, TensorSpec, Unbounded
-from torchrl.data.utils import numpy_to_torch_dtype_dict
 
 _has_jax = importlib.util.find_spec("jax") is not None
 
@@ -65,7 +67,7 @@ def _tensor_to_ndarray(value: torch.Tensor) -> jnp.ndarray:  # noqa: F821
 
 
 def _get_object_fields(obj) -> dict:
-    """Converts an object (named tuple or dataclass or dict) to a dict."""
+    """Convert an object (named tuple or dataclass or dict) to a dict."""
     if isinstance(obj, tuple) and hasattr(obj, "_fields"):  # named tuple
         return dict(zip(obj._fields, obj))
     elif dataclasses.is_dataclass(obj):
@@ -81,7 +83,7 @@ def _get_object_fields(obj) -> dict:
 
 
 def _object_to_tensordict(obj, device, batch_size) -> TensorDictBase:
-    """Converts a namedtuple or a dataclass to a TensorDict."""
+    """Convert a namedtuple or a dataclass to a TensorDict."""
     from jax import numpy as jnp
 
     t = {}
@@ -102,7 +104,7 @@ def _object_to_tensordict(obj, device, batch_size) -> TensorDictBase:
 
 
 def _tensordict_to_object(tensordict: TensorDictBase, object_example, batch_size=None):
-    """Converts a TensorDict to a namedtuple or a dataclass."""
+    """Convert a TensorDict to a namedtuple or a dataclass."""
     from jax import dlpack as jax_dlpack, numpy as jnp
 
     if batch_size is None:

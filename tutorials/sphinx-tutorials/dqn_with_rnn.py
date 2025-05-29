@@ -20,6 +20,8 @@ Recurrent DQN: Training recurrent policies
       * tqdm
 """
 
+from __future__ import annotations
+
 import tempfile
 
 #########################################################################

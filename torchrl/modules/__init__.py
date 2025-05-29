@@ -2,12 +2,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 from torchrl.modules.tensordict_module.common import DistributionalDQNnet
 
 from .distributions import (
     Delta,
-    distributions_maps,
     IndependentNormal,
     MaskedCategorical,
     MaskedOneHotCategorical,
@@ -20,8 +20,10 @@ from .distributions import (
     TanhDelta,
     TanhNormal,
     TruncatedNormal,
+    distributions_maps,
 )
 from .models import (
+    MLP,
     BatchRenorm1d,
     ConsistentDropout,
     ConsistentDropoutModule,
@@ -35,7 +37,6 @@ from .models import (
     DreamerActor,
     DTActor,
     DuelingCnnDQNet,
-    MLP,
     MultiAgentConvNet,
     MultiAgentMLP,
     MultiAgentNetBase,
@@ -45,15 +46,18 @@ from .models import (
     ObsEncoder,
     OnlineDTActor,
     QMixer,
-    reset_noise,
     RSSMPosterior,
     RSSMPrior,
     RSSMRollout,
     Squeeze2dLayer,
     SqueezeLayer,
     VDNMixer,
+    reset_noise,
 )
+from .planners import CEMPlanner, MPCPlannerBase, MPPIPlanner  # usort:skip
 from .tensordict_module import (
+    GRU,
+    LSTM,
     Actor,
     ActorCriticOperator,
     ActorCriticWrapper,
@@ -66,11 +70,9 @@ from .tensordict_module import (
     DistributionalQValueModule,
     EGreedyModule,
     EGreedyWrapper,
-    GRU,
     GRUCell,
     GRUModule,
     LMHeadActorValueOperator,
-    LSTM,
     LSTMCell,
     LSTMModule,
     MultiStepActorWrapper,
@@ -80,19 +82,18 @@ from .tensordict_module import (
     QValueActor,
     QValueHook,
     QValueModule,
-    recurrent_mode,
     SafeModule,
     SafeProbabilisticModule,
     SafeProbabilisticTensorDictSequential,
     SafeSequential,
-    set_recurrent_mode,
     TanhModule,
     ValueOperator,
     VmapModule,
     WorldModelWrapper,
+    recurrent_mode,
+    set_recurrent_mode,
 )
 from .utils import get_primers_from_module
-from .planners import CEMPlanner, MPCPlannerBase, MPPIPlanner  # usort:skip
 
 __all__ = [
     "Actor",

@@ -5,13 +5,8 @@
 from __future__ import annotations
 
 import os
+
 from pathlib import Path
-
-import torch.nn
-
-import torch.optim
-from lamb import Lamb
-from tensordict.nn import TensorDictModule
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import (
@@ -50,11 +45,16 @@ from torchrl.modules import (
     TanhDelta,
     TanhNormal,
 )
-
 from torchrl.objectives import DTLoss, OnlineDTLoss
 from torchrl.record import VideoRecorder
 from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.trainers.helpers.envs import LIBS
+
+import torch.nn
+import torch.optim
+
+from lamb import Lamb
+from tensordict.nn import TensorDictModule
 
 # ====================================================================
 # Environment utils

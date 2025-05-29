@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 from torchrl.modules.tensordict_module.actors import (
     Actor,
@@ -36,9 +37,9 @@ from torchrl.modules.tensordict_module.probabilistic import (
 )
 from torchrl.modules.tensordict_module.rnn import (
     GRU,
+    LSTM,
     GRUCell,
     GRUModule,
-    LSTM,
     LSTMCell,
     LSTMModule,
     recurrent_mode,

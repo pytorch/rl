@@ -7,6 +7,16 @@ from __future__ import annotations
 import contextlib
 import time
 
+from torchrl._utils import logger as torchrl_logger, timeit
+from torchrl.envs.utils import ExplorationType, set_exploration_type
+from torchrl.modules import RSSMRollout
+from torchrl.objectives.dreamer import (
+    DreamerActorLoss,
+    DreamerModelLoss,
+    DreamerValueLoss,
+)
+from torchrl.record.loggers import generate_exp_name, get_logger
+
 import hydra
 import torch
 import torch.cuda
@@ -25,15 +35,6 @@ from dreamer_utils import (
 # mixed precision training
 from torch.amp import GradScaler
 from torch.nn.utils import clip_grad_norm_
-from torchrl._utils import logger as torchrl_logger, timeit
-from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import RSSMRollout
-from torchrl.objectives.dreamer import (
-    DreamerActorLoss,
-    DreamerModelLoss,
-    DreamerValueLoss,
-)
-from torchrl.record.loggers import generate_exp_name, get_logger
 
 
 @hydra.main(version_base="1.1", config_path="", config_name="config")
@@ -187,10 +188,14 @@ def main(cfg: DictConfig):  # noqa: F821
 
                 t_loss_model_init = time.time()
                 # update world model
-                with torch.autocast(
-                    device_type=device.type,
-                    dtype=torch.bfloat16,
-                ) if use_autocast else contextlib.nullcontext():
+                with (
+                    torch.autocast(
+                        device_type=device.type,
+                        dtype=torch.bfloat16,
+                    )
+                    if use_autocast
+                    else contextlib.nullcontext()
+                ):
                     model_loss_td, sampled_tensordict = world_model_loss(
                         sampled_tensordict
                     )
@@ -216,9 +221,11 @@ def main(cfg: DictConfig):  # noqa: F821
 
                 # update actor network
                 t_loss_actor_init = time.time()
-                with torch.autocast(
-                    device_type=device.type, dtype=torch.bfloat16
-                ) if use_autocast else contextlib.nullcontext():
+                with (
+                    torch.autocast(device_type=device.type, dtype=torch.bfloat16)
+                    if use_autocast
+                    else contextlib.nullcontext()
+                ):
                     actor_loss_td, sampled_tensordict = actor_loss(
                         sampled_tensordict.reshape(-1)
                     )
@@ -239,9 +246,11 @@ def main(cfg: DictConfig):  # noqa: F821
 
                 # update value network
                 t_loss_critic_init = time.time()
-                with torch.autocast(
-                    device_type=device.type, dtype=torch.bfloat16
-                ) if use_autocast else contextlib.nullcontext():
+                with (
+                    torch.autocast(device_type=device.type, dtype=torch.bfloat16)
+                    if use_autocast
+                    else contextlib.nullcontext()
+                ):
                     value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
 
                 value_opt.zero_grad()

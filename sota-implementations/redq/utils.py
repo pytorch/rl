@@ -7,18 +7,7 @@ from __future__ import annotations
 from copy import copy
 from typing import Callable, Sequence
 
-import torch
-from omegaconf import OmegaConf
-from tensordict.nn import (
-    InteractionType,
-    ProbabilisticTensorDictSequential,
-    TensorDictModule,
-    TensorDictModuleWrapper,
-)
-from torch import distributions as d, nn, optim
-from torch.optim.lr_scheduler import CosineAnnealingLR
-
-from torchrl._utils import logger as torchrl_logger, VERBOSE
+from torchrl._utils import VERBOSE, logger as torchrl_logger
 from torchrl.collectors.collectors import DataCollectorBase
 from torchrl.data import (
     LazyMemmapStorage,
@@ -36,12 +25,10 @@ from torchrl.envs import (
     Compose,
     DMControlEnv,
     DoubleToFloat,
-    env_creator,
     EnvBase,
     EnvCreator,
     FlattenObservation,
     GrayScale,
-    gSDENoise,
     GymEnv,
     InitTracker,
     NoopResetEnv,
@@ -53,14 +40,16 @@ from torchrl.envs import (
     ToTensorImage,
     TransformedEnv,
     VecNorm,
+    env_creator,
+    gSDENoise,
 )
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
+    MLP,
     ActorCriticOperator,
     ActorValueOperator,
     DdpgCnnActor,
     DdpgCnnQNet,
-    MLP,
     NoisyLinear,
     NormalParamExtractor,
     ProbabilisticActor,
@@ -87,6 +76,18 @@ from torchrl.trainers.trainers import (
     Trainer,
     UpdateWeights,
 )
+
+import torch
+
+from omegaconf import OmegaConf
+from tensordict.nn import (
+    InteractionType,
+    ProbabilisticTensorDictSequential,
+    TensorDictModule,
+    TensorDictModuleWrapper,
+)
+from torch import distributions as d, nn, optim
+from torch.optim.lr_scheduler import CosineAnnealingLR
 
 LIBS = {
     "gym": GymEnv,
@@ -173,7 +174,7 @@ def make_trainer(
     logger: Logger | None,
     cfg: DictConfig,  # noqa: F821
 ) -> Trainer:
-    """Creates a Trainer instance given its constituents.
+    """Create a Trainer instance given its constituents.
 
     Args:
         collector (DataCollectorBase): A data collector to be used to collect data.
@@ -223,7 +224,6 @@ def make_trainer(
         >>> torchrl_logger.info(trainer)
 
     """
-
     optimizer = OPTIMIZERS[cfg.optim.optimizer](
         loss_module.parameters(),
         lr=cfg.optim.lr,
@@ -568,7 +568,7 @@ def transformed_env_constructor(
     batch_dims: int | None = 0,
     obs_norm_state_dict: dict | None = None,
 ) -> Callable | EnvCreator:
-    """Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.
+    """Return an environment creator from an argparse.Namespace built with the appropriate parser constructor.
 
     Args:
         cfg (DictConfig): a DictConfig containing the arguments of the script.
@@ -598,6 +598,7 @@ def transformed_env_constructor(
             it should be set to 1 (or the number of dims of the batch).
         obs_norm_state_dict (dict, optional): the state_dict of the ObservationNorm transform to be loaded into the
             environment
+
     """
 
     def make_transformed_env(**kwargs) -> TransformedEnv:
@@ -674,7 +675,7 @@ def transformed_env_constructor(
 
 
 def get_norm_state_dict(env):
-    """Gets the normalization loc and scale from the env state_dict."""
+    """Get the normalization loc and scale from the env state_dict."""
     sd = env.state_dict()
     sd = {
         key: val
@@ -689,7 +690,7 @@ def initialize_observation_norm_transforms(
     num_iter: int = 1000,
     key: str | tuple[str, ...] = None,
 ):
-    """Calls :obj:`ObservationNorm.init_stats` on all uninitialized :obj:`ObservationNorm` instances of a :obj:`TransformedEnv`.
+    """Call :obj:`ObservationNorm.init_stats` on all uninitialized :obj:`ObservationNorm` instances of a :obj:`TransformedEnv`.
 
     If an :obj:`ObservationNorm` already has non-null :obj:`loc` or :obj:`scale`, a call to :obj:`initialize_observation_norm_transforms` will be a no-op.
     Similarly, if the transformed environment does not contain any :obj:`ObservationNorm`, a call to this function will have no effect.
@@ -730,11 +731,12 @@ def initialize_observation_norm_transforms(
 def parallel_env_constructor(
     cfg: DictConfig, **kwargs  # noqa: F821
 ) -> ParallelEnv | EnvCreator:
-    """Returns a parallel environment from an argparse.Namespace built with the appropriate parser constructor.
+    """Return a parallel environment from an argparse.Namespace built with the appropriate parser constructor.
 
     Args:
         cfg (DictConfig): config containing user-defined arguments
         kwargs: keyword arguments for the `transformed_env_constructor` method.
+
     """
     batch_transform = cfg.env.batch_transform
     if not batch_transform:
@@ -772,7 +774,7 @@ def parallel_env_constructor(
 
 
 def retrieve_observation_norms_state_dict(proof_environment: TransformedEnv):
-    """Traverses the transforms of the environment and retrieves the :obj:`ObservationNorm` state dicts.
+    """Traverse the transforms of the environment and retrieves the :obj:`ObservationNorm` state dicts.
 
     Returns a list of tuple (idx, state_dict) for each :obj:`ObservationNorm` transform in proof_environment
     If the environment transforms do not contain any :obj:`ObservationNorm`, returns an empty list
@@ -780,6 +782,7 @@ def retrieve_observation_norms_state_dict(proof_environment: TransformedEnv):
     Args:
         proof_environment (EnvBase instance, optional): the :obj:``TransformedEnv` to retrieve the :obj:`ObservationNorm`
             state dict from
+
     """
     obs_norm_state_dicts = []
 
@@ -808,7 +811,7 @@ def make_env_transforms(
     batch_dims=0,
     obs_norm_state_dict=None,
 ):
-    """Creates the typical transforms for and env."""
+    """Create the typical transforms for and env."""
     env = TransformedEnv(env)
 
     from_pixels = cfg.env.from_pixels
@@ -916,7 +919,7 @@ def make_env_transforms(
 
 
 def make_redq_loss(model, cfg) -> tuple[REDQLoss_deprecated, TargetNetUpdater | None]:
-    """Builds the REDQ loss module."""
+    """Build the REDQ loss module."""
     loss_kwargs = {}
     loss_kwargs.update({"loss_function": cfg.loss.loss_function})
     loss_kwargs.update({"delay_qvalue": cfg.loss.type == "double"})
@@ -949,7 +952,7 @@ def make_redq_loss(model, cfg) -> tuple[REDQLoss_deprecated, TargetNetUpdater | 
 def make_target_updater(
     cfg: DictConfig, loss_module: LossModule  # noqa: F821
 ) -> TargetNetUpdater | None:
-    """Builds a target network weight update object."""
+    """Build a target network weight update object."""
     if cfg.loss.type == "double":
         if not cfg.loss.hard_update:
             target_net_updater = SoftUpdate(
@@ -976,7 +979,7 @@ def make_collector_offpolicy(
     cfg: DictConfig,  # noqa: F821
     make_env_kwargs: dict | None = None,
 ) -> DataCollectorBase:
-    """Returns a data collector for off-policy sota-implementations.
+    """Return a data collector for off-policy sota-implementations.
 
     Args:
         make_env (Callable): environment creator
@@ -1036,7 +1039,7 @@ def make_collector_offpolicy(
 def make_replay_buffer(
     device: DEVICE_TYPING, cfg: DictConfig  # noqa: F821
 ) -> ReplayBuffer:  # noqa: F821
-    """Builds a replay buffer using the config built from ReplayArgsConfig."""
+    """Build a replay buffer using the config built from ReplayArgsConfig."""
     device = torch.device(device)
     if not cfg.buffer.prb:
         sampler = RandomSampler()

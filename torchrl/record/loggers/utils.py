@@ -7,13 +7,14 @@ from __future__ import annotations
 import os
 import pathlib
 import uuid
+
 from datetime import datetime
 
 from torchrl.record.loggers.common import Logger
 
 
 def generate_exp_name(model_name: str, experiment_name: str) -> str:
-    """Generates an ID (str) for the described experiment using UUID and current date."""
+    """Generate an ID (str) for the described experiment using UUID and current date."""
     exp_name = "_".join(
         (
             model_name,
@@ -36,6 +37,7 @@ def get_logger(
         logger_name (str): Name to be used as a log_dir
         experiment_name (str): Name of the experiment
         kwargs (dict[str]): might contain either `wandb_kwargs` or `mlflow_kwargs`
+
     """
     if logger_type == "tensorboard":
         from torchrl.record.loggers.tensorboard import TensorboardLogger

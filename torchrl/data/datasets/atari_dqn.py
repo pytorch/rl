@@ -12,14 +12,11 @@ import os
 import shutil
 import subprocess
 import tempfile
+
 from collections import defaultdict
 from pathlib import Path
 from typing import Callable
 
-import numpy as np
-import torch
-from tensordict import MemoryMappedTensor, TensorDict, TensorDictBase
-from torch import multiprocessing as mp
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 from torchrl.data.replay_buffers.samplers import (
@@ -31,6 +28,12 @@ from torchrl.data.replay_buffers.storages import Storage, TensorStorage
 from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs.utils import _classproperty
+
+import numpy as np
+import torch
+
+from tensordict import MemoryMappedTensor, TensorDict, TensorDictBase
+from torch import multiprocessing as mp
 
 
 class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):

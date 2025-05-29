@@ -14,7 +14,6 @@ import torch.nn.functional as F
 
 from torch.distributions.utils import lazy_property, logits_to_probs, probs_to_logits
 
-
 __all__ = ["OneHotCategorical", "MaskedCategorical", "Ordinal", "OneHotOrdinal"]
 
 
@@ -128,8 +127,9 @@ class OneHotCategorical(D.Categorical):
         return -p_log_p.sum(-1)
 
     @_one_hot_wrapper(D.Categorical)
-    def sample(self, sample_shape: torch.Size | Sequence | None = None) -> torch.Tensor:
-        ...
+    def sample(
+        self, sample_shape: torch.Size | Sequence | None = None
+    ) -> torch.Tensor: ...
 
     def rsample(self, sample_shape: torch.Size | Sequence = None) -> torch.Tensor:
         if sample_shape is None:
@@ -208,6 +208,7 @@ class MaskedCategorical(D.Categorical):
         >>> print(dist.log_prob(torch.arange(10)))
         tensor([   -inf, -2.1972, -2.1972, -2.1972, -2.1972, -2.1972, -2.1972, -2.1972,
                 -2.1972, -2.1972])
+
     """
 
     @lazy_property
@@ -411,6 +412,7 @@ class MaskedOneHotCategorical(MaskedCategorical):
         >>> print(dist.log_prob(s))
         tensor([   -inf, -2.1972, -2.1972, -2.1972, -2.1972, -2.1972, -2.1972, -2.1972,
                 -2.1972, -2.1972])
+
     """
 
     @lazy_property
@@ -444,8 +446,7 @@ class MaskedOneHotCategorical(MaskedCategorical):
     @_one_hot_wrapper(MaskedCategorical)
     def sample(
         self, sample_shape: torch.Size | Sequence[int] | None = None
-    ) -> torch.Tensor:
-        ...
+    ) -> torch.Tensor: ...
 
     @property
     def deterministic_sample(self):
@@ -570,6 +571,7 @@ class Ordinal(D.Categorical):
         torch.return_types.histogram(
             hist=tensor([ 24., 158., 478., 228., 112.]),
             bin_edges=tensor([0.0000, 0.8000, 1.6000, 2.4000, 3.2000, 4.0000]))
+
     """
 
     def __init__(self, scores: torch.Tensor):
@@ -583,6 +585,7 @@ class OneHotOrdinal(OneHotCategorical):
     Args:
         scores (torch.Tensor): a tensor of shape [..., N] where N is the size of the set which supports the distributions.
             Typically, the output of a neural network parametrising the distribution.
+
     """
 
     def __init__(self, scores: torch.Tensor):
@@ -591,7 +594,7 @@ class OneHotOrdinal(OneHotCategorical):
 
 
 def _generate_ordinal_logits(scores: torch.Tensor) -> torch.Tensor:
-    """Implements Eq. 4 of `Tang & Agrawal, 2020<https://arxiv.org/pdf/1901.10500.pdf>`__."""
+    """Implement Eq. 4 of `Tang & Agrawal, 2020<https://arxiv.org/pdf/1901.10500.pdf>`__."""
     # Assigns Bernoulli-like probabilities for each class in the set
     log_probs = F.logsigmoid(scores)
     complementary_log_probs = F.logsigmoid(-scores)

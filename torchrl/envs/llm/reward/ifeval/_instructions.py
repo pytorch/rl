@@ -36,20 +36,21 @@ import json
 import random
 import re
 import string
+
 from typing import Any, Dict, Literal, Optional, Sequence, Union
 
-import langdetect
 from torchrl._utils import logger as torchrl_logger
 
+import langdetect
+
 from ._instructions_util import (
+    LANGUAGE_CODES,
     count_sentences,
     count_words,
     generate_keywords,
-    LANGUAGE_CODES,
     nltk,
     split_into_sentences,
 )
-
 
 _InstructionArgsDtype = Optional[Dict[str, Union[int, str, Sequence[str]]]]
 
@@ -164,6 +165,7 @@ class ResponseLanguageChecker(Instruction):
 
         Returns:
           A string representing the instruction description.
+
         """
         self._language = language
         if self._language is None:
@@ -176,11 +178,11 @@ class ResponseLanguageChecker(Instruction):
         return self._description_pattern.format(language=_LANGUAGES[self._language])
 
     def get_instruction_args(self) -> dict[str, Any] | None:
-        """Returns the keyword args of `build_description`."""
+        """Return the keyword args of `build_description`."""
         return {"language": self._language}
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return ["language"]
 
     def check_following(self, value: str) -> bool:
@@ -191,6 +193,7 @@ class ResponseLanguageChecker(Instruction):
 
         Returns:
             `True` if the language of `value` follows instruction; otherwise False.
+
         """
         try:
             return langdetect.detect(value) == self._language
@@ -249,14 +252,14 @@ class NumberOfSentences(Instruction):
         )
 
     def get_instruction_args(self) -> dict[str, Any] | None:
-        """Returns the keyword args of `build_description`."""
+        """Return the keyword args of `build_description`."""
         return {
             "num_sentences": self._num_sentences_threshold,
             "relation": self._comparison_relation,
         }
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return ["num_sentences", "relation"]
 
     def check_following(self, value: str) -> bool:
@@ -271,6 +274,7 @@ class NumberOfSentences(Instruction):
         Raise:
             ValueError if the string in `instruction_args` is not in
                 `["less_than", "at_least"]`.
+
         """
         num_sentences = count_sentences(value)
         if self._comparison_relation == _COMPARISON_RELATION[0]:
@@ -295,6 +299,7 @@ class PlaceholderChecker(Instruction):
 
         Returns:
             A string representing the instruction description.
+
         """
         self._num_placeholders = num_placeholders
         if self._num_placeholders is None or self._num_placeholders < 0:
@@ -306,11 +311,11 @@ class PlaceholderChecker(Instruction):
         return self._description_pattern.format(num_placeholders=self._num_placeholders)
 
     def get_instruction_args(self) -> dict[str, Any] | None:
-        """Returns the keyword args of `build_description`."""
+        """Return the keyword args of `build_description`."""
         return {"num_placeholders": self._num_placeholders}
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return ["num_placeholders"]
 
     def check_following(self, value: str) -> bool:
@@ -322,6 +327,7 @@ class PlaceholderChecker(Instruction):
         Returns:
             `True` if the actual number of placeholders in the response is greater than
                 or equal to `num_placeholders`; otherwise, `False`.
+
         """
         placeholders = re.findall(r"\[.*?\]", value)
         num_placeholders = len(placeholders)
@@ -329,7 +335,7 @@ class PlaceholderChecker(Instruction):
 
 
 class BulletListChecker(Instruction):
-    """Checks the bullet list in the prompt."""
+    """Check the bullet list in the prompt."""
 
     def build_description(self, *, num_bullets: int = None):
         """Build the instruction description.
@@ -342,6 +348,7 @@ class BulletListChecker(Instruction):
 
         Returns:
           A string representing the instruction description.
+
         """
         self._num_bullets = num_bullets
         if self._num_bullets is None or self._num_bullets < 0:
@@ -355,11 +362,11 @@ class BulletListChecker(Instruction):
         return self._description_pattern.format(num_bullets=self._num_bullets)
 
     def get_instruction_args(self) -> dict[str, Any] | None:
-        """Returns the keyword args of `build_description`."""
+        """Return the keyword args of `build_description`."""
         return {"num_bullets": self._num_bullets}
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return ["num_bullets"]
 
     def check_following(self, value: str) -> bool:
@@ -372,6 +379,7 @@ class BulletListChecker(Instruction):
         Returns:
             True if the actual number of bullet lists in the response meets the
                 requirement.
+
         """
         bullet_lists = re.findall(r"^\s*\*[^\*].*$", value, flags=re.MULTILINE)
         bullet_lists_2 = re.findall(r"^\s*-.*$", value, flags=re.MULTILINE)
@@ -380,7 +388,7 @@ class BulletListChecker(Instruction):
 
 
 class ConstrainedResponseChecker(Instruction):
-    """Checks the constrained response."""
+    """Check the constrained response."""
 
     def build_description(self) -> str:
         """Build the instruction description."""
@@ -394,15 +402,15 @@ class ConstrainedResponseChecker(Instruction):
         )
 
     def get_instruction_args(self) -> dict[str, Any] | None:
-        """Returns the keyword args of `build_description`."""
+        """Return the keyword args of `build_description`."""
         return None
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return []
 
     def check_following(self, value: str) -> bool:
-        """Checks if the response matches the constrained options.
+        """Check if the response matches the constrained options.
 
         Args:
             value (str): A string representing the response.
@@ -410,6 +418,7 @@ class ConstrainedResponseChecker(Instruction):
         Returns:
             True if the actual response contains one of the options in the constrained
                 responses; otherwise False.
+
         """
         value = value.strip()
         for constrained_response in self._constrained_responses:
@@ -419,7 +428,7 @@ class ConstrainedResponseChecker(Instruction):
 
 
 class ConstrainedStartChecker(Instruction):
-    """Checks the response start."""
+    """Check the response start."""
 
     def build_description(self, *, starter=None):
         """Build the instruction description.
@@ -430,6 +439,7 @@ class ConstrainedStartChecker(Instruction):
 
         Returns:
           A string representing the instruction description.
+
         """
         self._starter = starter.strip() if isinstance(starter, str) else starter
         if self._starter is None:
@@ -441,15 +451,15 @@ class ConstrainedStartChecker(Instruction):
         return self._description_pattern.format(starter=self._starter)
 
     def get_instruction_args(self) -> dict[str, str]:
-        """Returns the keyword args of `build_description`."""
+        """Return the keyword args of `build_description`."""
         return {"starter": self._starter}
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return ["starter"]
 
     def check_following(self, value: str) -> bool:
-        """Checks if the response starts with the constrained keyword or phrase.
+        """Check if the response starts with the constrained keyword or phrase.
 
         Args:
             value (str): A string representing the response.
@@ -457,6 +467,7 @@ class ConstrainedStartChecker(Instruction):
         Returns:
             `True` if the response starts with the given phrase or keyword that is
                 contained in `instruction_args`; otherwise, `False`.
+
         """
         response_pattern = r"^\s*" + self._starter + r".*$"
         response_with_constrained_start = re.search(
@@ -466,7 +477,7 @@ class ConstrainedStartChecker(Instruction):
 
 
 class HighlightSectionChecker(Instruction):
-    """Checks the highlighted section."""
+    """Check the highlighted section."""
 
     def build_description(self, *, num_highlights: int | None = None) -> str:
         """Build the instruction description.
@@ -478,6 +489,7 @@ class HighlightSectionChecker(Instruction):
 
         Returns:
             A string representing the instruction description.
+
         """
         self._num_highlights = num_highlights
         if self._num_highlights is None or self._num_highlights < 0:
@@ -491,15 +503,15 @@ class HighlightSectionChecker(Instruction):
         return self._description_pattern.format(num_highlights=self._num_highlights)
 
     def get_instruction_args(self) -> dict[str, int]:
-        """Returns the keyword args of `build_description`."""
+        """Return the keyword args of `build_description`."""
         return {"num_highlights": self._num_highlights}
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return ["num_highlights"]
 
     def check_following(self, value: str) -> bool:
-        """Checks if the number of highlighted sections meets the requirement.
+        """Check if the number of highlighted sections meets the requirement.
 
         Args:
             value (str): A string representing the response. The response is expected to
@@ -508,6 +520,7 @@ class HighlightSectionChecker(Instruction):
         Returns:
             True if the actual number of highlighted sections in the format of
                 *highlighed sections* meets the minimum requirement; otherwise False.
+
         """
         num_highlights = 0
         highlights = re.findall(r"\*[^\n\*]*\*", value)
@@ -523,7 +536,7 @@ class HighlightSectionChecker(Instruction):
 
 
 class SectionChecker(Instruction):
-    """Checks the sections."""
+    """Check the sections."""
 
     def build_description(self, *, section_spliter=None, num_sections=None):
         """Build the instruction description.
@@ -535,6 +548,7 @@ class SectionChecker(Instruction):
 
         Returns:
           A string representing the instruction description.
+
         """
         self._section_spliter = (
             section_spliter.strip()
@@ -562,18 +576,18 @@ class SectionChecker(Instruction):
         )
 
     def get_instruction_args(self) -> dict[str, Any]:
-        """Returns the keyword args of `build_description`."""
+        """Return the keyword args of `build_description`."""
         return {
             "section_spliter": self._section_spliter,
             "num_sections": self._num_sections,
         }
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return ["section_spliter", "num_sections"]
 
     def check_following(self, value: str) -> bool:
-        """Checks the response contains multiple sections.
+        """Check the response contains multiple sections.
 
         Args:
             value (str): A string representing the response. The response is expected
@@ -584,6 +598,7 @@ class SectionChecker(Instruction):
         Returns:
             `True` if the number of sections in the response is greater than or equal to
                 the minimum number of sections; otherwise, `False`.
+
         """
         section_splitter_patten = r"\s?" + self._section_spliter + r"\s?\d+\s?"
         sections = re.split(section_splitter_patten, value)
@@ -592,7 +607,7 @@ class SectionChecker(Instruction):
 
 
 class ParagraphChecker(Instruction):
-    """Checks the paragraphs."""
+    """Check the paragraphs."""
 
     def build_description(self, *, num_paragraphs: int | None = None) -> str:
         """Build the instruction description.
@@ -604,6 +619,7 @@ class ParagraphChecker(Instruction):
 
         Returns:
             A string representing the instruction description.
+
         """
         self._num_paragraphs = num_paragraphs
         if self._num_paragraphs is None or self._num_paragraphs < 0:
@@ -617,15 +633,15 @@ class ParagraphChecker(Instruction):
         return self._description_pattern.format(num_paragraphs=self._num_paragraphs)
 
     def get_instruction_args(self) -> dict[str, Any]:
-        """Returns the keyword args of `build_description`."""
+        """Return the keyword args of `build_description`."""
         return {"num_paragraphs": self._num_paragraphs}
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return ["num_paragraphs"]
 
     def check_following(self, value: str) -> bool:
-        """Checks the response contains required number of paragraphs.
+        """Check the response contains required number of paragraphs.
 
         Args:
             value (str): A string representing the response. The response may contain
@@ -634,6 +650,7 @@ class ParagraphChecker(Instruction):
         Returns:
             `True` if the actual number of paragraphs is the same as required;
                 otherwise, `False`.
+
         """
         paragraphs = re.split(r"\s?\*\*\*\s?", value)
         num_paragraphs = len(paragraphs)
@@ -649,7 +666,7 @@ class ParagraphChecker(Instruction):
 
 
 class PostscriptChecker(Instruction):
-    """Checks the postscript."""
+    """Check the postscript."""
 
     def build_description(self, *, postscript_marker: str | None = None):
         """Build the instruction description.
@@ -661,6 +678,7 @@ class PostscriptChecker(Instruction):
 
         Returns:
             A string representing the instruction description.
+
         """
         self._postscript_marker = (
             postscript_marker.strip()
@@ -678,15 +696,15 @@ class PostscriptChecker(Instruction):
         return self._description_pattern.format(postscript=self._postscript_marker)
 
     def get_instruction_args(self) -> dict[str, Any]:
-        """Returns the keyword args of `build_description`."""
+        """Return the keyword args of `build_description`."""
         return {"postscript_marker": self._postscript_marker}
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return ["postscript_marker"]
 
     def check_following(self, value: str) -> bool:
-        """Checks if the response follows the postscript format.
+        """Check if the response follows the postscript format.
 
         Args:
             value (str): A string representing the response. The response is expected to
@@ -695,6 +713,7 @@ class PostscriptChecker(Instruction):
         Returns:
           True if the response contains a postscript section starting with
           the keyword containing in the `instruction_args`; otherwise False.
+
         """
         value = value.lower()
         if self._postscript_marker == "P.P.S":
@@ -708,7 +727,7 @@ class PostscriptChecker(Instruction):
 
 
 class RephraseChecker(Instruction):
-    """Checks the repharse."""
+    """Check the repharse."""
 
     def build_description(self, *, original_message: str):
         """Build the instruction description.
@@ -721,6 +740,7 @@ class RephraseChecker(Instruction):
 
         Returns:
           A string representing the instruction description.
+
         """
         if not self.is_change(original_message):
             raise ValueError(
@@ -737,15 +757,15 @@ class RephraseChecker(Instruction):
         return self._description
 
     def get_instruction_args(self) -> dict[str, Any]:
-        """Returns the keyword args of `build_description`."""
+        """Return the keyword args of `build_description`."""
         return {"original_message": self._reference_without_change}
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return ["original_message"]
 
     def check_following(self, value: str) -> bool:
-        r"""Checks if the rephrasing follows the instruction.
+        r"""Check if the rephrasing follows the instruction.
 
         Args:
             value (str): A string representing the response, which is expected to rephras
@@ -754,6 +774,7 @@ class RephraseChecker(Instruction):
         Returns:
             `True` if `value` and `instruction_args` only differ by the words/sentences
                 in between two asterisks such as *change me*; otherwise, `False`.
+
         """
         if not self.is_change(value):
             raise ValueError(
@@ -770,7 +791,7 @@ class RephraseChecker(Instruction):
         return re.search(r"\*.*\*", response)
 
     def strip_changes(self, response: str):
-        """Strips off the changes."""
+        """Strip off the changes."""
         return re.sub(r"\*.*\*", "", response)
 
 
@@ -787,6 +808,7 @@ class KeywordChecker(Instruction):
 
         Returns:
             A string representing the instruction description.
+
         """
         if not keywords:
             self._keywords = generate_keywords(num_keywords=_NUM_KEYWORDS)
@@ -799,11 +821,11 @@ class KeywordChecker(Instruction):
         return self._description_pattern.format(keywords=self._keywords)
 
     def get_instruction_args(self) -> dict[str, Any]:
-        """Returns the keyword args of `build_description`."""
+        """Return the keyword args of `build_description`."""
         return {"keywords": self._keywords}
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return ["keywords"]
 
     def check_following(self, value: str) -> bool:
@@ -838,6 +860,7 @@ class KeywordFrequencyChecker(Instruction):
 
         Returns:
           A string representing the instruction description.
+
         """
         if not keyword:
             self._keyword = generate_keywords(num_keywords=1)[0]
@@ -870,7 +893,7 @@ class KeywordFrequencyChecker(Instruction):
         )
 
     def get_instruction_args(self) -> dict[str, Any]:
-        """Returns the keyword args of `build_description`."""
+        """Return the keyword args of `build_description`."""
         return {
             "keyword": self._keyword,
             "frequency": self._frequency,
@@ -878,11 +901,11 @@ class KeywordFrequencyChecker(Instruction):
         }
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return ["keyword", "frequency", "relation"]
 
     def check_following(self, value: str) -> bool:
-        """Checks if the response contain the keyword with required frequency."""
+        """Check if the response contain the keyword with required frequency."""
         actual_occurrences = len(re.findall(self._keyword, value, flags=re.IGNORECASE))
 
         if self._comparison_relation == _COMPARISON_RELATION[0]:
@@ -894,7 +917,7 @@ class KeywordFrequencyChecker(Instruction):
 
 
 class NumberOfWords(Instruction):
-    """Checks the number of words."""
+    """Check the number of words."""
 
     def build_description(
         self,
@@ -915,6 +938,7 @@ class NumberOfWords(Instruction):
 
         Returns:
           A string representing the instruction description.
+
         """
         self._num_words = num_words
         if self._num_words is None or self._num_words < 0:
@@ -939,15 +963,15 @@ class NumberOfWords(Instruction):
         )
 
     def get_instruction_args(self) -> dict[str, Any]:
-        """Returns the keyword args of `build_description`."""
+        """Return the keyword args of `build_description`."""
         return {"num_words": self._num_words, "relation": self._comparison_relation}
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return ["num_words", "relation"]
 
     def check_following(self, value: str) -> bool:
-        """Checks if the response contains the expected number of words."""
+        """Check if the response contains the expected number of words."""
         num_words = count_words(value)
 
         if self._comparison_relation == _COMPARISON_RELATION[0]:
@@ -967,11 +991,11 @@ class JsonFormat(Instruction):
         return self._description_pattern
 
     def get_instruction_args(self) -> None:
-        """Returns the keyword args of `build_description`."""
+        """Return the keyword args of `build_description`."""
         return None
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return []
 
     def check_following(self, value: str) -> bool:
@@ -1012,6 +1036,7 @@ class ParagraphFirstWordCheck(Instruction):
 
         Returns:
             A string representing the instruction description.
+
         """
         self._num_paragraphs = num_paragraphs
         if self._num_paragraphs is None or self._num_paragraphs < 0:
@@ -1044,7 +1069,7 @@ class ParagraphFirstWordCheck(Instruction):
         )
 
     def get_instruction_args(self) -> dict[str, Any]:
-        """Returns the keyword args of `build_description`."""
+        """Return the keyword args of `build_description`."""
         return {
             "num_paragraphs": self._num_paragraphs,
             "nth_paragraph": self._nth_paragraph,
@@ -1052,11 +1077,11 @@ class ParagraphFirstWordCheck(Instruction):
         }
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return ["num_paragraphs", "nth_paragraph", "first_word"]
 
     def check_following(self, value: str) -> bool:
-        """Checks for required number of paragraphs and correct first word.
+        """Check for required number of paragraphs and correct first word.
 
         Args:
             value (str): A string representing the response. The response may contain
@@ -1066,6 +1091,7 @@ class ParagraphFirstWordCheck(Instruction):
         Returns:
             `True` if the number of paragraphs is the same as required and the first
                 word of the specified paragraph is the same as required. Otherwise, `False`.
+
         """
         paragraphs = re.split(r"\n\n", value)
         num_paragraphs = len(paragraphs)
@@ -1118,6 +1144,7 @@ class KeySentenceChecker(Instruction):
 
         Returns:
             A string representing the instruction description.
+
         """
         if not key_sentences:
             # TODO(jeffrey) make a generate sentences function? wonderwords package
@@ -1139,18 +1166,18 @@ class KeySentenceChecker(Instruction):
         )
 
     def get_instruction_args(self) -> dict[str, Any]:
-        """Returns the keyword args of `build_description`."""
+        """Return the keyword args of `build_description`."""
         return {
             "num_sentences": self._num_sentences,
             "key_sentences": list(self._key_sentences),
         }
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return ["num_sentences", "key_sentences"]
 
     def check_following(self, value: str) -> bool:
-        """Checks if the response contains the expected key sentences."""
+        """Check if the response contains the expected key sentences."""
         count = 0
         sentences = split_into_sentences(value)
         for sentence in self._key_sentences:
@@ -1161,7 +1188,7 @@ class KeySentenceChecker(Instruction):
 
 
 class ForbiddenWords(Instruction):
-    """Checks that specified words are not used in response."""
+    """Check that specified words are not used in response."""
 
     def build_description(self, forbidden_words: Sequence[str] | None = None):
         """Build the instruction description.
@@ -1172,6 +1199,7 @@ class ForbiddenWords(Instruction):
 
         Returns:
           A string representing the instruction description.
+
         """
         if not forbidden_words:
             self._forbidden_words = generate_keywords(num_keywords=_NUM_KEYWORDS)
@@ -1185,11 +1213,11 @@ class ForbiddenWords(Instruction):
         return self._description_pattern.format(forbidden_words=self._forbidden_words)
 
     def get_instruction_args(self) -> dict[str, Any]:
-        """Returns the keyword args of `build_description`."""
+        """Return the keyword args of `build_description`."""
         return {"forbidden_words": self._forbidden_words}
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return ["forbidden_words"]
 
     def check_following(self, value: str) -> bool:
@@ -1201,10 +1229,10 @@ class ForbiddenWords(Instruction):
 
 
 class RephraseParagraph(Instruction):
-    """Checks that the paragraph is rephrased."""
+    """Check that the paragraph is rephrased."""
 
     def build_description(self, *, original_paragraph: str, low: int, high: int) -> str:
-        """Builds the instruction description.
+        """Build the instruction description.
 
         Args:
             original_paragraph (str): A string presenting the original paragraph. The
@@ -1214,6 +1242,7 @@ class RephraseParagraph(Instruction):
 
         Returns:
             A string representing the instruction description.
+
         """
         # TODO(jeffrey) make more encompassing
         self._original_paragraph = original_paragraph
@@ -1235,7 +1264,7 @@ class RephraseParagraph(Instruction):
         )
 
     def get_instruction_args(self) -> dict[str, Any]:
-        """Returns the keyword args of `build_description`."""
+        """Return the keyword args of `build_description`."""
         return {
             "original_paragraph": self._original_paragraph,
             "low": self._low,
@@ -1243,7 +1272,7 @@ class RephraseParagraph(Instruction):
         }
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return ["original_paragraph", "low", "high"]
 
     def check_following(self, value: str) -> bool:
@@ -1272,21 +1301,22 @@ class TwoResponsesChecker(Instruction):
         return self._description_pattern
 
     def get_instruction_args(self) -> dict[str, Any] | None:
-        """Returns the keyword args of `build_description`."""
+        """Return the keyword args of `build_description`."""
         return None
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return []
 
     def check_following(self, value: str) -> bool:
-        """Checks if the response has two different answers.
+        """Check if the response has two different answers.
 
         Args:
             value (str): A string representing the response.
 
         Returns:
             `True` if two responses are detected and false otherwise.
+
         """
         valid_responses = []
         responses = value.split("******")
@@ -1303,7 +1333,7 @@ class TwoResponsesChecker(Instruction):
 
 
 class RepeatPromptThenAnswer(Instruction):
-    """Checks that Prompt is first repeated then answered."""
+    """Check that Prompt is first repeated then answered."""
 
     def build_description(self, *, prompt_to_repeat: str | None = None) -> str:
         """Build the instruction description.
@@ -1313,6 +1343,7 @@ class RepeatPromptThenAnswer(Instruction):
 
         Returns:
           A string representing the instruction description.
+
         """
         if not prompt_to_repeat:
             raise ValueError("prompt_to_repeat must be set.")
@@ -1330,7 +1361,7 @@ class RepeatPromptThenAnswer(Instruction):
         return {"prompt_to_repeat": self._prompt_to_repeat}
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return ["prompt_to_repeat"]
 
     def check_following(self, value: str) -> bool:
@@ -1340,7 +1371,7 @@ class RepeatPromptThenAnswer(Instruction):
 
 
 class EndChecker(Instruction):
-    """Checks that the prompt ends with a given phrase."""
+    """Check that the prompt ends with a given phrase."""
 
     def build_description(self, *, end_phrase: str | None = None):
         """Build the instruction description.
@@ -1350,6 +1381,7 @@ class EndChecker(Instruction):
 
         Returns:
             A string representing the instruction description.
+
         """
         self._end_phrase = (
             end_phrase.strip() if isinstance(end_phrase, str) else end_phrase
@@ -1366,18 +1398,18 @@ class EndChecker(Instruction):
         return {"end_phrase": self._end_phrase}
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return ["end_phrase"]
 
     def check_following(self, value: str) -> bool:
-        """Checks if the response ends with the expected phrase."""
+        """Check if the response ends with the expected phrase."""
         value = value.strip().strip('"').lower()
         self._end_phrase = self._end_phrase.strip().lower()
         return value.endswith(self._end_phrase)
 
 
 class TitleChecker(Instruction):
-    """Checks the response for a title."""
+    """Check the response for a title."""
 
     def build_description(self) -> str:
         """Build the instruction description."""
@@ -1391,11 +1423,11 @@ class TitleChecker(Instruction):
         return None
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return []
 
     def check_following(self, value: str) -> bool:
-        """Checks if the response contains a title."""
+        """Check if the response contains a title."""
         pattern = r"<<[^\n]+>>"
         re_pattern = re.compile(pattern)
         titles = re.findall(re_pattern, value)
@@ -1407,7 +1439,7 @@ class TitleChecker(Instruction):
 
 
 class LetterFrequencyChecker(Instruction):
-    """Checks letter frequency."""
+    """Check letter frequency."""
 
     def build_description(
         self,
@@ -1430,6 +1462,7 @@ class LetterFrequencyChecker(Instruction):
 
         Returns:
             A string representing the instruction description.
+
         """
         if (
             not letter
@@ -1468,7 +1501,7 @@ class LetterFrequencyChecker(Instruction):
         )
 
     def get_instruction_args(self) -> dict[str, Any]:
-        """Returns the keyword args of build description."""
+        """Return the keyword args of build description."""
         return {
             "letter": self._letter,
             "let_frequency": self._frequency,
@@ -1476,11 +1509,11 @@ class LetterFrequencyChecker(Instruction):
         }
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return ["letter", "let_frequency", "let_relation"]
 
     def check_following(self, value: str) -> bool:
-        """Checks that the response contains the letter at the right frequency."""
+        """Check that the response contains the letter at the right frequency."""
         value = value.lower()
         letters = collections.Counter(value)
 
@@ -1491,7 +1524,7 @@ class LetterFrequencyChecker(Instruction):
 
 
 class CapitalLettersEnglishChecker(Instruction):
-    """Checks that the response is in english and is in all capital letters."""
+    """Check that the response is in english and is in all capital letters."""
 
     def build_description(self) -> str:
         """Build the instruction description."""
@@ -1504,11 +1537,11 @@ class CapitalLettersEnglishChecker(Instruction):
         return None
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return []
 
     def check_following(self, value: str) -> bool:
-        """Checks that the response is in English and in all capital letters."""
+        """Check that the response is in English and in all capital letters."""
         try:
             return value.isupper() and langdetect.detect(value) == "en"
         except langdetect.LangDetectException as e:
@@ -1520,7 +1553,7 @@ class CapitalLettersEnglishChecker(Instruction):
 
 
 class LowercaseLettersEnglishChecker(Instruction):
-    """Checks that the response is in english and is in all lowercase letters."""
+    """Check that the response is in english and is in all lowercase letters."""
 
     def build_description(self) -> str:
         """Build the instruction description."""
@@ -1534,11 +1567,11 @@ class LowercaseLettersEnglishChecker(Instruction):
         return None
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return []
 
     def check_following(self, value: str) -> bool:
-        """Checks that the response is in English and in all lowercase letters."""
+        """Check that the response is in English and in all lowercase letters."""
         try:
             return value.islower() and langdetect.detect(value) == "en"
         except langdetect.LangDetectException as e:
@@ -1550,7 +1583,7 @@ class LowercaseLettersEnglishChecker(Instruction):
 
 
 class CommaChecker(Instruction):
-    """Checks the response for no commas."""
+    """Check the response for no commas."""
 
     def build_description(self) -> str:
         """Build the instruction description."""
@@ -1563,16 +1596,16 @@ class CommaChecker(Instruction):
         return None
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return []
 
     def check_following(self, value: str) -> bool:
-        """Checks that the response does not contain commas."""
+        """Check that the response does not contain commas."""
         return not re.search(r"\,", value)
 
 
 class CapitalWordFrequencyChecker(Instruction):
-    """Checks frequency of words with all capital letters."""
+    """Check frequency of words with all capital letters."""
 
     def build_description(
         self,
@@ -1589,6 +1622,7 @@ class CapitalWordFrequencyChecker(Instruction):
 
         Returns:
           A string representing the instruction description.
+
         """
         self._frequency = capital_frequency
         if self._frequency is None:
@@ -1613,18 +1647,18 @@ class CapitalWordFrequencyChecker(Instruction):
         )
 
     def get_instruction_args(self) -> dict[str, Any]:
-        """Returns the keyword args of build description."""
+        """Return the keyword args of build description."""
         return {
             "capital_frequency": self._frequency,
             "capital_relation": self._comparison_relation,
         }
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return ["capital_frequency", "capital_relation"]
 
     def check_following(self, value: str) -> bool:
-        """Checks the frequency of words with all capital letters."""
+        """Check the frequency of words with all capital letters."""
         # Hyphenated words will count as one word
         words = nltk.word_tokenize(value)
         capital_words = [word for word in words if word.isupper()]
@@ -1638,7 +1672,7 @@ class CapitalWordFrequencyChecker(Instruction):
 
 
 class QuotationChecker(Instruction):
-    """Checks response is wrapped with double quotation marks."""
+    """Check response is wrapped with double quotation marks."""
 
     def build_description(self) -> str:
         """Build the instruction description."""
@@ -1648,14 +1682,14 @@ class QuotationChecker(Instruction):
         return self._description_pattern
 
     def get_instruction_args(self) -> dict[str, Any] | None:
-        """Returns the keyword args of build description."""
+        """Return the keyword args of build description."""
         return None
 
     def get_instruction_args_keys(self) -> list[str]:
-        """Returns the args keys of `build_description`."""
+        """Return the args keys of `build_description`."""
         return []
 
     def check_following(self, value: str) -> bool:
-        """Checks if the response is wrapped with double quotation marks."""
+        """Check if the response is wrapped with double quotation marks."""
         value = value.strip()
         return len(value) > 1 and value[0] == '"' and value[-1] == '"'

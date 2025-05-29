@@ -8,21 +8,6 @@ import warnings
 
 from typing import Any, Callable, Literal
 
-import torch
-
-from tensordict import (
-    is_leaf_nontensor,
-    LazyStackedTensorDict,
-    NestedKey,
-    set_list_to_stack,
-    TensorDict,
-    TensorDictBase,
-    unravel_key,
-)
-from tensordict.tensorclass import NonTensorData, NonTensorStack
-from tensordict.utils import _zip_strict
-from torch.utils.data import DataLoader
-
 from torchrl._utils import _replace_last
 from torchrl.data.map.hash import SipHash
 from torchrl.data.tensor_specs import (
@@ -35,6 +20,21 @@ from torchrl.data.tensor_specs import (
 from torchrl.envs import EnvBase
 from torchrl.envs.utils import _StepMDP
 from torchrl.modules.utils.utils import _unpad_tensors
+
+import torch
+
+from tensordict import (
+    LazyStackedTensorDict,
+    NestedKey,
+    TensorDict,
+    TensorDictBase,
+    is_leaf_nontensor,
+    set_list_to_stack,
+    unravel_key,
+)
+from tensordict.tensorclass import NonTensorData, NonTensorStack
+from tensordict.utils import _zip_strict
+from torch.utils.data import DataLoader
 
 
 class LLMEnv(EnvBase):
@@ -275,13 +275,14 @@ class LLMEnv(EnvBase):
         assign_done: bool = False,
         primers: Composite | None = None,
         example_data: Any = None,
-        stack_method: Callable[[Any], Any]
-        | Literal["as_nested_tensor", "as_padded_tensor"] = None,
+        stack_method: (
+            Callable[[Any], Any] | Literal["as_nested_tensor", "as_padded_tensor"]
+        ) = None,
         repeats: int | None = None,
         group_repeats: bool = True,
         eos_token_id: int | None = None,
     ) -> LLMEnv:
-        """Creates an LLMEnv instance from a dataloader.
+        """Create an LLMEnv instance from a dataloader.
 
         This method creates an LLMEnv instance and appends a DataLoadingPrimer to it, which populates ``data_keys`` (by default ``observation_key``) with data from the provided dataloader when the environment is reset.
 
@@ -345,6 +346,7 @@ class LLMEnv(EnvBase):
 
         Returns:
             LLMEnv: The created LLMEnv instance.
+
         """
         from torchrl.envs.llm import DataLoadingPrimer, Tokenizer
 
@@ -679,7 +681,7 @@ class LLMHashingEnv(EnvBase):
 
     @set_list_to_stack(True)
     def make_tensordict(self, input: str | list[str]) -> TensorDict:
-        """Converts a string or list of strings in a TensorDict with appropriate shape and device."""
+        """Convert a string or list of strings in a TensorDict with appropriate shape and device."""
         list_len = len(input) if isinstance(input, list) else 0
         tensordict = TensorDict(
             {self.observation_key: self._tokenizer(input)}, device=self.device
@@ -689,7 +691,7 @@ class LLMHashingEnv(EnvBase):
         return self.reset(tensordict)
 
     def _reset(self, tensordict: TensorDictBase):
-        """Initializes the environment with a given observation.
+        """Initialize the environment with a given observation.
 
         Args:
             tensordict (TensorDictBase): A TensorDict containing the initial observation.
@@ -728,13 +730,14 @@ class LLMHashingEnv(EnvBase):
         return out
 
     def _step(self, tensordict):
-        """Takes an action (i.e., the next token to generate) and returns the next observation and reward.
+        """Take an action (i.e., the next token to generate) and returns the next observation and reward.
 
         Args:
             tensordict: A TensorDict containing the current observation and action.
 
         Returns:
             A TensorDict containing the next observation, its hash, and other relevant information.
+
         """
         out = tensordict.empty()
         action = tensordict.get("action")
@@ -767,7 +770,7 @@ class LLMHashingEnv(EnvBase):
         return out.update(kwargs)
 
     def _set_seed(self, *args):
-        """Sets the seed for the environment's randomness.
+        """Set the seed for the environment's randomness.
 
         .. note:: This environment has no randomness, so this method does nothing.
         """

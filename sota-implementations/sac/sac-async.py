@@ -18,9 +18,14 @@ The helper functions are coded in the utils.py associated with this script.
 from __future__ import annotations
 
 import time
-
 import warnings
+
 from functools import partial
+
+from torchrl._utils import compile_with_warmup, logger as torchrl_logger, timeit
+from torchrl.envs.utils import ExplorationType, set_exploration_type
+from torchrl.objectives import group_optimizers
+from torchrl.record.loggers import generate_exp_name, get_logger
 
 import hydra
 import numpy as np
@@ -28,12 +33,9 @@ import tensordict
 import torch
 import torch.cuda
 import tqdm
+
 from tensordict import TensorDict
 from tensordict.nn import CudaGraphModule
-from torchrl._utils import compile_with_warmup, logger as torchrl_logger, timeit
-from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.objectives import group_optimizers
-from torchrl.record.loggers import generate_exp_name, get_logger
 from utils import (
     dump_video,
     log_metrics,

@@ -7,18 +7,17 @@ from __future__ import annotations
 from collections import deque
 from typing import Any, Callable
 
-import torch
-
-from tensordict import lazy_stack, TensorDictBase
-
 from torchrl._utils import logger as torchrl_logger
-
 from torchrl.collectors import SyncDataCollector
 from torchrl.collectors.llm.utils import _QueueAsRB
 from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.envs import AsyncEnvPool
 from torchrl.envs.common import EnvBase
+
+import torch
+
+from tensordict import TensorDictBase, lazy_stack
 
 
 class LLMCollector(SyncDataCollector):
@@ -139,8 +138,9 @@ class LLMCollector(SyncDataCollector):
         env: EnvBase | Callable[[], EnvBase],
         *,
         policy: Callable[[TensorDictBase], TensorDictBase] | None = None,
-        policy_factory: Callable[[], Callable[[TensorDictBase], TensorDictBase]]
-        | None = None,
+        policy_factory: (
+            Callable[[], Callable[[TensorDictBase], TensorDictBase]] | None
+        ) = None,
         dialog_turns_per_batch: int,
         yield_only_last_steps: bool | None = None,
         yield_completed_trajectories: bool | None = None,
@@ -150,9 +150,9 @@ class LLMCollector(SyncDataCollector):
         replay_buffer: ReplayBuffer | None = None,
         reset_at_each_iter: bool = False,
         flatten_data: bool | None = None,
-        weight_updater: WeightUpdaterBase
-        | Callable[[], WeightUpdaterBase]
-        | None = None,
+        weight_updater: (
+            WeightUpdaterBase | Callable[[], WeightUpdaterBase] | None
+        ) = None,
         queue: Any | None = None,
     ):
         if queue is not None and replay_buffer is not None:
@@ -223,7 +223,7 @@ class LLMCollector(SyncDataCollector):
 
     @property
     def dialog_turns_per_batch(self) -> int:
-        """Alias to `frames_per_batch`."""
+        """Alia to `frames_per_batch`."""
         return self.requested_frames_per_batch
 
     @property

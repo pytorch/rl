@@ -4,8 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
-"""
-This code exemplifies how a composite actor can be built.
+"""Thi code exemplifies how a composite actor can be built.
 
 The actor has two components: a categorical and a normal distributions.
 
@@ -13,13 +12,15 @@ We use a ProbabilisticActor and explicitly pass it the key-map that we want thro
 argument.
 
 """
+from __future__ import annotations
+
+from torchrl.modules import ProbabilisticActor
 
 import torch
+
 from tensordict import TensorDict
 from tensordict.nn import CompositeDistribution, TensorDictModule
 from torch import distributions as d, nn
-
-from torchrl.modules import ProbabilisticActor
 
 
 class Module(nn.Module):

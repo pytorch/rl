@@ -1,17 +1,14 @@
-"""
-Train example with a distributed collector
+"""Train example with a distributed collector
 ==========================================
 
 This script reproduces the PPO example in https://pytorch.org/rl/tutorials/coding_ppo.html
 with a RayCollector.
 """
+
+from __future__ import annotations
+
 from collections import defaultdict
 
-import matplotlib.pyplot as plt
-import torch
-from tensordict.nn import TensorDictModule
-from tensordict.nn.distributions import NormalParamExtractor
-from torch import nn
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors import SyncDataCollector
 from torchrl.collectors.distributed.ray import RayCollector
@@ -26,12 +23,18 @@ from torchrl.envs import (
     TransformedEnv,
 )
 from torchrl.envs.libs.gym import GymEnv
-from torchrl.envs.utils import check_env_specs, ExplorationType, set_exploration_type
+from torchrl.envs.utils import ExplorationType, check_env_specs, set_exploration_type
 from torchrl.modules import ProbabilisticActor, TanhNormal, ValueOperator
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value import GAE
-from tqdm import tqdm
 
+import matplotlib.pyplot as plt
+import torch
+
+from tensordict.nn import TensorDictModule
+from tensordict.nn.distributions import NormalParamExtractor
+from torch import nn
+from tqdm import tqdm
 
 if __name__ == "__main__":
 

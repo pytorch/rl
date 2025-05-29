@@ -2,13 +2,15 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import warnings
 
 from .llm import (
-    as_nested_tensor,
-    as_padded_tensor,
     DataLoadingPrimer,
     KLRewardTransform,
+    as_nested_tensor,
+    as_padded_tensor,
 )
 
 __all__ = [

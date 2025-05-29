@@ -5,38 +5,21 @@
 from __future__ import annotations
 
 import contextlib
+
 from copy import deepcopy
 from dataclasses import dataclass
-
-import torch
-from tensordict import (
-    is_tensor_collection,
-    TensorDict,
-    TensorDictBase,
-    TensorDictParams,
-)
-from tensordict.nn import (
-    composite_lp_aggregate,
-    CompositeDistribution,
-    dispatch,
-    ProbabilisticTensorDictSequential,
-    set_composite_lp_aggregate,
-    TensorDictModule,
-)
-from tensordict.utils import NestedKey
-from torch import distributions as d
 
 from torchrl.modules.distributions import HAS_ENTROPY
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
+    _GAMMA_LMBDA_DEPREC_ERROR,
+    ValueEstimators,
     _cache_values,
     _clip_value_loss,
-    _GAMMA_LMBDA_DEPREC_ERROR,
     _get_default_device,
     _reduce,
     default_value_kwargs,
     distance_loss,
-    ValueEstimators,
 )
 from torchrl.objectives.value import (
     GAE,
@@ -45,6 +28,25 @@ from torchrl.objectives.value import (
     TDLambdaEstimator,
     VTrace,
 )
+
+import torch
+
+from tensordict import (
+    TensorDict,
+    TensorDictBase,
+    TensorDictParams,
+    is_tensor_collection,
+)
+from tensordict.nn import (
+    CompositeDistribution,
+    ProbabilisticTensorDictSequential,
+    TensorDictModule,
+    composite_lp_aggregate,
+    dispatch,
+    set_composite_lp_aggregate,
+)
+from tensordict.utils import NestedKey
+from torch import distributions as d
 
 
 class A2CLoss(LossModule):
@@ -210,11 +212,12 @@ class A2CLoss(LossModule):
       this class must be used with tensordicts and cannot function as a tensordict-independent module.
       This is because composite action spaces inherently rely on the structured representation of data provided by
       tensordicts to handle their actions.
+
     """
 
     @dataclass
     class _AcceptedKeys:
-        """Maintains default values for all configurable tensordict keys.
+        """Maintain default values for all configurable tensordict keys.
 
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values.
@@ -236,6 +239,7 @@ class A2CLoss(LossModule):
             terminated (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is terminated. Will be used for the underlying value estimator.
                 Defaults to ``"terminated"``.
+
         """
 
         advantage: NestedKey = "advantage"
@@ -440,9 +444,11 @@ class A2CLoss(LossModule):
         tensordict_clone = tensordict.select(
             *self.actor_network.in_keys, strict=False
         ).copy()
-        with self.actor_network_params.to_module(
-            self.actor_network
-        ) if self.functional else contextlib.nullcontext():
+        with (
+            self.actor_network_params.to_module(self.actor_network)
+            if self.functional
+            else contextlib.nullcontext()
+        ):
             dist = self.actor_network.get_dist(tensordict_clone)
         if isinstance(dist, CompositeDistribution):
             action_keys = self.tensor_keys.action
@@ -465,7 +471,7 @@ class A2CLoss(LossModule):
         return log_prob, dist
 
     def loss_critic(self, tensordict: TensorDictBase) -> tuple[torch.Tensor, float]:
-        """Returns the loss value of the critic, multiplied by ``critic_coef`` if it is not ``None``.
+        """Return the loss value of the critic, multiplied by ``critic_coef`` if it is not ``None``.
 
         Returns the loss and the clip-fraction.
 
@@ -498,9 +504,11 @@ class A2CLoss(LossModule):
         tensordict_select = tensordict.select(
             *self.critic_network.in_keys, strict=False
         )
-        with self.critic_network_params.to_module(
-            self.critic_network
-        ) if self.functional else contextlib.nullcontext():
+        with (
+            self.critic_network_params.to_module(self.critic_network)
+            if self.functional
+            else contextlib.nullcontext()
+        ):
             state_value = self.critic_network(
                 tensordict_select,
             ).get(self.tensor_keys.value)
@@ -561,9 +569,11 @@ class A2CLoss(LossModule):
             if value_clip_fraction is not None:
                 td_out.set("value_clip_fraction", value_clip_fraction)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
-            if name.startswith("loss_")
-            else value,
+            lambda name, value: (
+                _reduce(value, reduction=self.reduction).squeeze(-1)
+                if name.startswith("loss_")
+                else value
+            ),
         )
         self._clear_weakrefs(
             tensordict,

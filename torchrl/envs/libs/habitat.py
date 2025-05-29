@@ -7,12 +7,13 @@ from __future__ import annotations
 import functools
 import importlib.util
 
-import torch
 from torchrl._utils import _make_ordinal_device
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.utils import _classproperty
+
+import torch
 
 _has_habitat = importlib.util.find_spec("habitat") is not None
 

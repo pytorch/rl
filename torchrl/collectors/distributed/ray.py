@@ -7,17 +7,14 @@ from __future__ import annotations
 
 import asyncio
 import warnings
-from typing import Any, Callable, Iterator, OrderedDict, Sequence
 
-import torch
-import torch.nn as nn
-from tensordict import TensorDict, TensorDictBase
+from typing import Any, Callable, Iterator, OrderedDict, Sequence
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
-    DataCollectorBase,
     DEFAULT_EXPLORATION_TYPE,
+    DataCollectorBase,
     MultiSyncDataCollector,
     SyncDataCollector,
 )
@@ -27,9 +24,15 @@ from torchrl.data import ReplayBuffer
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import EnvCreator
 
+import torch
+import torch.nn as nn
+
+from tensordict import TensorDict, TensorDictBase
+
 RAY_ERR = None
 try:
     import ray
+
     from ray._private.services import get_node_ip_address
 
     _has_ray = True
@@ -66,7 +69,7 @@ DEFAULT_REMOTE_CLASS_CONFIG = {
 
 
 def print_remote_collector_info(self):
-    """Prints some information about the remote collector."""
+    """Print some information about the remote collector."""
     s = (
         f"Created remote collector with in machine "
         f"{get_node_ip_address()} using gpus {ray.get_gpu_ids()}"
@@ -77,7 +80,7 @@ def print_remote_collector_info(self):
 
 @classmethod
 def as_remote(cls, remote_config):
-    """Creates an instance of a remote ray class.
+    """Create an instance of a remote ray class.
 
     Args:
         cls (Python Class): class to be remotely instantiated.
@@ -85,6 +88,7 @@ def as_remote(cls, remote_config):
 
     Returns:
         A function that creates ray remote class instances.
+
     """
     remote_collector = ray.remote(**remote_config)(cls)
     remote_collector.is_remote = True
@@ -306,6 +310,7 @@ class RayCollector(DataCollectorBase):
         ...     if i == 2:
         ...         print(data)
         ...         break
+
     """
 
     def __init__(
@@ -313,9 +318,9 @@ class RayCollector(DataCollectorBase):
         create_env_fn: Callable | EnvBase | list[Callable] | list[EnvBase],
         policy: Callable[[TensorDictBase], TensorDictBase] | None = None,
         *,
-        policy_factory: Callable[[], Callable]
-        | list[Callable[[], Callable]]
-        | None = None,
+        policy_factory: (
+            Callable[[], Callable] | list[Callable[[], Callable]] | None
+        ) = None,
         frames_per_batch: int,
         total_frames: int = -1,
         device: torch.device | list[torch.device] | None = None,
@@ -338,9 +343,9 @@ class RayCollector(DataCollectorBase):
         update_after_each_batch: bool = False,
         max_weight_update_interval: int = -1,
         replay_buffer: ReplayBuffer | None = None,
-        weight_updater: WeightUpdaterBase
-        | Callable[[], WeightUpdaterBase]
-        | None = None,
+        weight_updater: (
+            WeightUpdaterBase | Callable[[], WeightUpdaterBase] | None
+        ) = None,
     ):
         self.frames_per_batch = frames_per_batch
         if remote_configs is None:
@@ -362,7 +367,7 @@ class RayCollector(DataCollectorBase):
 
         # Make sure input parameters are consistent
         def check_consistency_with_num_collectors(param, param_name, num_collectors):
-            """Checks that if param is a list, it has length num_collectors."""
+            """Check that if param is a list, it has length num_collectors."""
             if isinstance(param, list):
                 if len(param) != num_collectors:
                     raise ValueError(
@@ -385,7 +390,7 @@ class RayCollector(DataCollectorBase):
             )
 
         def check_list_length_consistency(*lists):
-            """Checks that all input lists have the same length.
+            """Check that all input lists have the same length.
 
             If any non-list input is given, it is converted to a list
             of the same length as the others by repeating the same
@@ -607,36 +612,38 @@ class RayCollector(DataCollectorBase):
         collector_kwargs,
         remote_configs,
     ):
-        """Creates and adds a number of remote collectors to the set."""
+        """Create and adds a number of remote collectors to the set."""
         for env_maker, other_params, remote_config in zip(
             create_env_fn, collector_kwargs, remote_configs
         ):
             cls = self.collector_class.as_remote(remote_config).remote
             collector = self._make_collector(
                 cls,
-                env_maker=[env_maker] * num_envs
-                if num_envs > 1
-                or (
-                    isinstance(self.collector_class, type)
-                    and not issubclass(self.collector_class, SyncDataCollector)
-                )
-                else env_maker,
+                env_maker=(
+                    [env_maker] * num_envs
+                    if num_envs > 1
+                    or (
+                        isinstance(self.collector_class, type)
+                        and not issubclass(self.collector_class, SyncDataCollector)
+                    )
+                    else env_maker
+                ),
                 policy=policy,
                 other_params=other_params,
             )
             self._remote_collectors.append(collector)
 
     def local_policy(self):
-        """Returns local collector."""
+        """Return local collector."""
         return self._local_policy
 
     @property
     def remote_collectors(self):
-        """Returns list of remote collectors."""
+        """Return list of remote collectors."""
         return self._remote_collectors
 
     def stop_remote_collectors(self):
-        """Stops all remote collectors."""
+        """Stop all remote collectors."""
         for _ in range(len(self._remote_collectors)):
             collector = self.remote_collectors.pop()
             # collector.__ray_terminate__.remote()  # This will kill the actor but let pending tasks finish
@@ -674,7 +681,7 @@ class RayCollector(DataCollectorBase):
                 yield proc(d)
 
     def _sync_iterator(self) -> Iterator[TensorDictBase]:
-        """Collects one data batch per remote collector in each iteration."""
+        """Collect one data batch per remote collector in each iteration."""
         while self.collected_frames < self.total_frames:
             if self.update_after_each_batch or self.max_weight_update_interval > -1:
                 torchrl_logger.info("Updating weights on all workers")
@@ -713,7 +720,7 @@ class RayCollector(DataCollectorBase):
     _task = None
 
     def start(self):
-        """Starts the RayCollector."""
+        """Start the RayCollector."""
         if self.replay_buffer is None:
             raise RuntimeError("Replay buffer must be defined for asyncio execution.")
         if self._task is None or self._task.done():
@@ -726,14 +733,14 @@ class RayCollector(DataCollectorBase):
             continue
 
     async def async_shutdown(self):
-        """Finishes processes started by ray.init() during async execution."""
+        """Finishe processes started by ray.init() during async execution."""
         if self._task is not None:
             await self._task
         self.stop_remote_collectors()
         ray.shutdown()
 
     def _async_iterator(self) -> Iterator[TensorDictBase]:
-        """Collects a data batch from a single remote collector in each iteration."""
+        """Collect a data batch from a single remote collector in each iteration."""
         pending_tasks = {}
         for index, collector in enumerate(self.remote_collectors):
             future = collector.next.remote()
@@ -780,13 +787,13 @@ class RayCollector(DataCollectorBase):
             self.shutdown()
 
     def set_seed(self, seed: int, static_seed: bool = False) -> list[int]:
-        """Calls parent method for each remote collector iteratively and returns final seed."""
+        """Call parent method for each remote collector iteratively and returns final seed."""
         for collector in self.remote_collectors:
             seed = ray.get(object_refs=collector.set_seed.remote(seed, static_seed))
         return seed
 
     def state_dict(self) -> list[OrderedDict]:
-        """Calls parent method for each remote collector and returns a list of results."""
+        """Call parent method for each remote collector and returns a list of results."""
         futures = [
             collector.state_dict.remote() for collector in self.remote_collectors
         ]
@@ -794,7 +801,7 @@ class RayCollector(DataCollectorBase):
         return results
 
     def load_state_dict(self, state_dict: OrderedDict | list[OrderedDict]) -> None:
-        """Calls parent method for each remote collector."""
+        """Call parent method for each remote collector."""
         if isinstance(state_dict, OrderedDict):
             state_dicts = [state_dict]
         if len(state_dict) == 1:
@@ -803,7 +810,7 @@ class RayCollector(DataCollectorBase):
             collector.load_state_dict.remote(state_dict)
 
     def shutdown(self, timeout: float | None = None) -> None:
-        """Finishes processes started by ray.init()."""
+        """Finishe processes started by ray.init()."""
         self.stop_remote_collectors()
         ray.shutdown()
 

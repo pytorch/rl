@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import dataclasses
 import importlib
+
 from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Any
@@ -98,6 +99,7 @@ class DecisionTransformer(nn.Module):
                 "transformers is not installed. Please install it with `pip install transformers`."
             )
         import transformers
+
         from transformers.models.gpt2.modeling_gpt2 import GPT2Model
 
         if config is None:

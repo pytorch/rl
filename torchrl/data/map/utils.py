@@ -13,6 +13,7 @@ def _plot_plotly_tree(
     tree: Tree, make_labels: Callable[[Tree], str] | None = None  # noqa: F821
 ):
     import plotly.graph_objects as go
+
     from igraph import Graph
 
     if make_labels is None:

@@ -6,15 +6,18 @@
 from __future__ import annotations
 
 import importlib
+
 from typing import Any
 
-import numpy as np
-import torch
-from tensordict import TensorDict, TensorDictBase
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.tensor_specs import Categorical, Composite, TensorSpec, Unbounded
 from torchrl.envs.common import _EnvWrapper
 from torchrl.envs.utils import _classproperty
+
+import numpy as np
+import torch
+
+from tensordict import TensorDict, TensorDictBase
 
 _has_envpool = importlib.util.find_spec("envpool") is not None
 
@@ -214,7 +217,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         envpool_output: tuple[treevalue.TreeValue | np.ndarray, Any],  # noqa: F821
         reset_workers: torch.Tensor | None,
     ):
-        """Process output of envpool env.reset."""
+        """Proces output of envpool env.reset."""
         import treevalue
 
         observation, _ = envpool_output
@@ -242,7 +245,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
     def _transform_step_output(
         self, envpool_output: tuple[Any, Any, Any, ...]
     ) -> TensorDict:
-        """Process output of envpool env.step."""
+        """Proces output of envpool env.step."""
         out = envpool_output
         if len(out) == 4:
             obs, reward, done, info = out
@@ -271,7 +274,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
     def _treevalue_or_numpy_to_tensor_or_dict(
         self, x: treevalue.TreeValue | np.ndarray  # noqa: F821
     ) -> torch.Tensor | dict[str, torch.Tensor]:
-        """Converts observation returned by EnvPool.
+        """Convert observation returned by EnvPool.
 
         EnvPool step and reset return observation as a numpy array or a TreeValue of numpy arrays, which we convert
         to a tensor or a dictionary of tensors. Currently only supports depth 1 trees, but can easily be extended to
@@ -290,7 +293,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
     def _treevalue_to_dict(
         self, tv: treevalue.TreeValue  # noqa: F821
     ) -> dict[str, Any]:
-        """Converts TreeValue to a dictionary.
+        """Convert TreeValue to a dictionary.
 
         Currently only supports depth 1 trees, but can easily be extended to arbitrary depth if necessary.
         """

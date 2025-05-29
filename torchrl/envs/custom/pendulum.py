@@ -4,13 +4,14 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import numpy as np
-
-import torch
-from tensordict import TensorDict, TensorDictBase
 from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import make_composite_from_td
+
+import numpy as np
+import torch
+
+from tensordict import TensorDict, TensorDictBase
 
 
 class PendulumEnv(EnvBase):
@@ -354,10 +355,12 @@ class PendulumEnv(EnvBase):
         # of unbounded values.
         composite = Composite(
             {
-                key: make_composite_from_td(tensor)
-                if isinstance(tensor, TensorDictBase)
-                else Unbounded(
-                    dtype=tensor.dtype, device=tensor.device, shape=tensor.shape
+                key: (
+                    make_composite_from_td(tensor)
+                    if isinstance(tensor, TensorDictBase)
+                    else Unbounded(
+                        dtype=tensor.dtype, device=tensor.device, shape=tensor.shape
+                    )
                 )
                 for key, tensor in td.items()
             },
@@ -372,7 +375,7 @@ class PendulumEnv(EnvBase):
 
     @staticmethod
     def gen_params(g=10.0, batch_size=None, device=None) -> TensorDictBase:
-        """Returns a ``tensordict`` containing the physical parameters such as gravitational force and torque or speed limits."""
+        """Return a ``tensordict`` containing the physical parameters such as gravitational force and torque or speed limits."""
         if batch_size is None:
             batch_size = []
         td = TensorDict(

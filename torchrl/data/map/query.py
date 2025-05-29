@@ -7,19 +7,21 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Callable, List, Mapping, TypeVar
 
-import torch
-import torch.nn as nn
-from tensordict import NestedKey, TensorDictBase
-from tensordict.nn.common import TensorDictModuleBase
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.map.hash import SipHash
+
+import torch
+import torch.nn as nn
+
+from tensordict import NestedKey, TensorDictBase
+from tensordict.nn.common import TensorDictModuleBase
 
 K = TypeVar("K")
 V = TypeVar("V")
 
 
 class HashToInt(nn.Module):
-    """Converts a hash value to an integer that can be used for indexing a contiguous storage."""
+    """Convert a hash value to an integer that can be used for indexing a contiguous storage."""
 
     def __init__(self):
         super().__init__()

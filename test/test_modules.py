@@ -21,15 +21,13 @@ else:
     from _utils_internal import get_default_devices, retry
     from mocking_classes import MockBatchedUnLockedEnv
 from packaging import version
-from tensordict import TensorDict
-from torch import nn
 from torchrl.data.tensor_specs import Bounded, Composite
 from torchrl.modules import (
+    GRU,
+    LSTM,
     CEMPlanner,
     DTActor,
-    GRU,
     GRUCell,
-    LSTM,
     LSTMCell,
     MultiAgentConvNet,
     MultiAgentMLP,
@@ -42,16 +40,16 @@ from torchrl.modules import (
 )
 from torchrl.modules.distributions.utils import safeatanh, safetanh
 from torchrl.modules.models import (
+    MLP,
     BatchRenorm1d,
     Conv3dNet,
     ConvNet,
-    MLP,
     NoisyLazyLinear,
     NoisyLinear,
 )
 from torchrl.modules.models.decision_transformer import (
-    _has_transformers,
     DecisionTransformer,
+    _has_transformers,
 )
 from torchrl.modules.models.model_based import (
     DreamerActor,
@@ -64,6 +62,9 @@ from torchrl.modules.models.model_based import (
 from torchrl.modules.models.utils import SquashDims
 from torchrl.modules.planners.mppi import MPPIPlanner
 from torchrl.objectives.value import TDLambdaEstimator
+
+from tensordict import TensorDict
+from torch import nn
 
 
 @pytest.fixture

@@ -5,27 +5,29 @@
 from __future__ import annotations
 
 import math
+
 from dataclasses import dataclass
 from numbers import Number
 
-import numpy as np
-import torch
-from tensordict import TensorDict, TensorDictBase, TensorDictParams
-from tensordict.nn import composite_lp_aggregate, dispatch, TensorDictModule
-from tensordict.utils import NestedKey
-from torch import Tensor
-
 from torchrl.data.tensor_specs import Composite
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
-from torchrl.objectives import default_value_kwargs, distance_loss, ValueEstimators
+from torchrl.objectives import ValueEstimators, default_value_kwargs, distance_loss
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
-    _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _cache_values,
     _reduce,
     _vmap_func,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+
+import numpy as np
+import torch
+
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
+from tensordict.nn import TensorDictModule, composite_lp_aggregate, dispatch
+from tensordict.utils import NestedKey
+from torch import Tensor
 
 
 class REDQLoss_deprecated(LossModule):
@@ -88,11 +90,12 @@ class REDQLoss_deprecated(LossModule):
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
         deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
             Defaults to ``False``.
+
     """
 
     @dataclass
     class _AcceptedKeys:
-        """Maintains default values for all configurable tensordict keys.
+        """Maintain default values for all configurable tensordict keys.
 
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values.
@@ -116,6 +119,7 @@ class REDQLoss_deprecated(LossModule):
             terminated (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is terminated. Will be used for the underlying value estimator.
                 Defaults to ``"terminated"``.
+
         """
 
         action: NestedKey = "action"
@@ -347,9 +351,11 @@ class REDQLoss_deprecated(LossModule):
             [],
         )
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction)
-            if name.startswith("loss_")
-            else value,
+            lambda name, value: (
+                _reduce(value, reduction=self.reduction)
+                if name.startswith("loss_")
+                else value
+            ),
             batch_size=[],
         )
         self._clear_weakrefs(

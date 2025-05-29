@@ -7,10 +7,7 @@ from __future__ import annotations
 import importlib.util
 import warnings
 
-import torch
 from packaging import version
-from tensordict import TensorDict, TensorDictBase
-
 from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
 from torchrl.envs.common import _EnvWrapper
 from torchrl.envs.libs.jax_utils import (
@@ -23,6 +20,10 @@ from torchrl.envs.libs.jax_utils import (
     _tree_reshape,
 )
 from torchrl.envs.utils import _classproperty
+
+import torch
+
+from tensordict import TensorDict, TensorDictBase
 
 _has_brax = importlib.util.find_spec("brax") is not None
 

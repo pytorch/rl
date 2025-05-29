@@ -7,21 +7,22 @@ from __future__ import annotations
 import argparse
 import importlib.util
 
+from torchrl.collectors.llm import LLMCollector
+from torchrl.data.llm import LLMData
+from torchrl.envs.llm import LLMEnv
+from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
+
 import pytest
 import torch
 
 from mocking_classes import DummyStrDataLoader
 from tensordict import (
-    lazy_stack,
     LazyStackedTensorDict,
     NonTensorStack,
-    set_list_to_stack,
     TensorDict,
+    lazy_stack,
+    set_list_to_stack,
 )
-from torchrl.collectors.llm import LLMCollector
-from torchrl.data.llm import LLMData
-from torchrl.envs.llm import LLMEnv
-from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from transformers import OPTForCausalLM
 
 _has_transformers = importlib.util.find_spec("transformers")
@@ -487,8 +488,7 @@ class TestLLMActor:
         tokenizer = vllm_instance.get_tokenizer()
         self._run_check_collector(policy, from_text=from_text, tokenizer=tokenizer)
 
-    def test_transformers_collection(self):
-        ...
+    def test_transformers_collection(self): ...
 
     @classmethod
     def env_constructor(cls, **kwargs):

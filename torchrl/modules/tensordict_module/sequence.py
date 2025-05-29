@@ -5,11 +5,11 @@
 
 from __future__ import annotations
 
-from tensordict.nn import TensorDictModule, TensorDictSequential
-from torch import nn
-
 from torchrl.data.tensor_specs import Composite
 from torchrl.modules.tensordict_module.common import SafeModule
+
+from tensordict.nn import TensorDictModule, TensorDictSequential
+from torch import nn
 
 
 class SafeSequential(TensorDictSequential, SafeModule):
@@ -121,7 +121,7 @@ class SafeSequential(TensorDictSequential, SafeModule):
             try:
                 spec.update(module.spec)
             except AttributeError:
-                spec.update(Composite({key: None for key in module.out_keys}))
+                spec.update(Composite(dict.fromkeys(module.out_keys)))
 
         super(TensorDictSequential, self).__init__(
             spec=spec,

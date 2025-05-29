@@ -7,25 +7,11 @@ from __future__ import annotations
 import abc
 import functools
 import warnings
+
 from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from functools import wraps
 from typing import Callable
-
-import torch
-from tensordict import is_tensor_collection, TensorDictBase
-from tensordict.nn import (
-    composite_lp_aggregate,
-    dispatch,
-    ProbabilisticTensorDictModule,
-    set_composite_lp_aggregate,
-    set_skip_existing,
-    TensorDictModule,
-    TensorDictModuleBase,
-)
-from tensordict.nn.probabilistic import interaction_type
-from tensordict.utils import NestedKey, unravel_key
-from torch import Tensor
 
 from torchrl._utils import RL_WARNINGS
 from torchrl.envs.utils import step_mdp
@@ -44,6 +30,22 @@ from torchrl.objectives.value.functional import (
     vec_td_lambda_return_estimate,
     vtrace_advantage_estimate,
 )
+
+import torch
+
+from tensordict import TensorDictBase, is_tensor_collection
+from tensordict.nn import (
+    ProbabilisticTensorDictModule,
+    TensorDictModule,
+    TensorDictModuleBase,
+    composite_lp_aggregate,
+    dispatch,
+    set_composite_lp_aggregate,
+    set_skip_existing,
+)
+from tensordict.nn.probabilistic import interaction_type
+from tensordict.utils import NestedKey, unravel_key
+from torch import Tensor
 
 try:
     from torch.compiler import is_dynamo_compiling
@@ -107,7 +109,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
     @dataclass
     class _AcceptedKeys:
-        """Maintains default values for all configurable tensordict keys.
+        """Maintain default values for all configurable tensordict keys.
 
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values.
@@ -132,6 +134,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 indicates the log probability of the sampled action.
                 Defaults to ``"sample_log_prob"`` when :func:`~tensordict.nn.composite_lp_aggregate` returns `True`,
                 `"action_log_prob"`  otherwise.
+
         """
 
         advantage: NestedKey = "advantage"
@@ -196,7 +199,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         params: TensorDictBase | None = None,
         target_params: TensorDictBase | None = None,
     ) -> TensorDictBase:
-        """Computes the advantage estimate given the data in tensordict.
+        """Compute the advantage estimate given the data in tensordict.
 
         If a functional module is provided, a nested TensorDict containing the parameters
         (and if relevant the target parameters) can be passed to the module.
@@ -222,6 +225,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
         Returns:
             An updated TensorDict with an advantage and a value_error keys as defined in the constructor.
+
         """
         ...
 
@@ -343,7 +347,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         next_value: torch.Tensor | None = None,
         **kwargs,
     ):
-        """Gets a value estimate, usually used as a target value for the value network.
+        """Get a value estimate, usually used as a target value for the value network.
 
         If the state value key is present under ``tensordict.get(("next", self.tensor_keys.value))``
         then this value will be used without recurring to the value network.
@@ -375,9 +379,11 @@ class ValueEstimatorBase(TensorDictModuleBase):
     def _next_value(self, tensordict, target_params, kwargs):
         step_td = step_mdp(tensordict, keep_other=False)
         if self.value_network is not None:
-            with hold_out_net(
-                self.value_network
-            ) if target_params is None else target_params.to_module(self.value_network):
+            with (
+                hold_out_net(self.value_network)
+                if target_params is None
+                else target_params.to_module(self.value_network)
+            ):
                 self.value_network(step_td)
         next_value = step_td.get(self.tensor_keys.value)
         return next_value
@@ -636,7 +642,7 @@ class TD0Estimator(ValueEstimatorBase):
         params: TensorDictBase | None = None,
         target_params: TensorDictBase | None = None,
     ) -> TensorDictBase:
-        """Computes the TD(0) advantage given the data in tensordict.
+        """Compute the TD(0) advantage given the data in tensordict.
 
         If a functional module is provided, a nested TensorDict containing the parameters
         (and if relevant the target parameters) can be passed to the module.
@@ -710,9 +716,11 @@ class TD0Estimator(ValueEstimatorBase):
                 params = params.detach()
                 if target_params is None:
                     target_params = params.clone(False)
-            with hold_out_net(self.value_network) if (
-                params is None and target_params is None
-            ) else nullcontext():
+            with (
+                hold_out_net(self.value_network)
+                if (params is None and target_params is None)
+                else nullcontext()
+            ):
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
                 value, next_value = self._call_value_nets(
@@ -859,7 +867,7 @@ class TD1Estimator(ValueEstimatorBase):
         params: TensorDictBase | None = None,
         target_params: TensorDictBase | None = None,
     ) -> TensorDictBase:
-        """Computes the TD(1) advantage given the data in tensordict.
+        """Compute the TD(1) advantage given the data in tensordict.
 
         If a functional module is provided, a nested TensorDict containing the parameters
         (and if relevant the target parameters) can be passed to the module.
@@ -932,9 +940,11 @@ class TD1Estimator(ValueEstimatorBase):
                 params = params.detach()
                 if target_params is None:
                     target_params = params.clone(False)
-            with hold_out_net(self.value_network) if (
-                params is None and target_params is None
-            ) else nullcontext():
+            with (
+                hold_out_net(self.value_network)
+                if (params is None and target_params is None)
+                else nullcontext()
+            ):
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
                 value, next_value = self._call_value_nets(
@@ -1091,7 +1101,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
         params: list[Tensor] | None = None,
         target_params: list[Tensor] | None = None,
     ) -> TensorDictBase:
-        r"""Computes the TD(:math:`\lambda`) advantage given the data in tensordict.
+        r"""Compute the TD(:math:`\lambda`) advantage given the data in tensordict.
 
         If a functional module is provided, a nested TensorDict containing the parameters
         (and if relevant the target parameters) can be passed to the module.
@@ -1165,9 +1175,11 @@ class TDLambdaEstimator(ValueEstimatorBase):
                 params = params.detach()
                 if target_params is None:
                     target_params = params.clone(False)
-            with hold_out_net(self.value_network) if (
-                params is None and target_params is None
-            ) else nullcontext():
+            with (
+                hold_out_net(self.value_network)
+                if (params is None and target_params is None)
+                else nullcontext()
+            ):
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
                 value, next_value = self._call_value_nets(
@@ -1320,6 +1332,7 @@ class GAE(ValueEstimatorBase):
         must be turned on in these cases.
         Similarly, if `shifted=False`, the `"is_init"` entry of the root tensordict will be copied onto the
         `"is_init"` of the `"next"` entry, such that trajectories are well separated both for root and `"next"` data.
+
     """
 
     def __init__(
@@ -1353,15 +1366,19 @@ class GAE(ValueEstimatorBase):
         )
         self.register_buffer(
             "gamma",
-            gamma.to(self._device)
-            if isinstance(gamma, Tensor)
-            else torch.tensor(gamma, device=self._device),
+            (
+                gamma.to(self._device)
+                if isinstance(gamma, Tensor)
+                else torch.tensor(gamma, device=self._device)
+            ),
         )
         self.register_buffer(
             "lmbda",
-            lmbda.to(self._device)
-            if isinstance(lmbda, Tensor)
-            else torch.tensor(lmbda, device=self._device),
+            (
+                lmbda.to(self._device)
+                if isinstance(lmbda, Tensor)
+                else torch.tensor(lmbda, device=self._device)
+            ),
         )
         self.average_gae = average_gae
         self.vectorized = vectorized
@@ -1390,7 +1407,7 @@ class GAE(ValueEstimatorBase):
         target_params: list[Tensor] | None = None,
         time_dim: int | None = None,
     ) -> TensorDictBase:
-        """Computes the GAE given the data in tensordict.
+        """Compute the GAE given the data in tensordict.
 
         If a functional module is provided, a nested TensorDict containing the parameters
         (and if relevant the target parameters) can be passed to the module.
@@ -1480,9 +1497,11 @@ class GAE(ValueEstimatorBase):
                 params = params.detach()
                 if target_params is None:
                     target_params = params.clone(False)
-            with hold_out_net(self.value_network) if (
-                params is None and target_params is None
-            ) else nullcontext():
+            with (
+                hold_out_net(self.value_network)
+                if (params is None and target_params is None)
+                else nullcontext()
+            ):
                 # with torch.no_grad():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
@@ -1578,9 +1597,11 @@ class GAE(ValueEstimatorBase):
                 params = params.detach()
                 if target_params is None:
                     target_params = params.clone(False)
-            with hold_out_net(self.value_network) if (
-                params is None and target_params is None
-            ) else nullcontext():
+            with (
+                hold_out_net(self.value_network)
+                if (params is None and target_params is None)
+                else nullcontext()
+            ):
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
                 value, next_value = self._call_value_nets(
@@ -1735,7 +1756,7 @@ class VTrace(ValueEstimatorBase):
         target_params: list[Tensor] | None = None,
         time_dim: int | None = None,
     ) -> TensorDictBase:
-        """Computes the V-Trace correction given the data in tensordict.
+        """Compute the V-Trace correction given the data in tensordict.
 
         If a functional module is provided, a nested TensorDict containing the parameters
         (and if relevant the target parameters) can be passed to the module.

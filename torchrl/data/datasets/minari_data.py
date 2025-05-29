@@ -9,14 +9,13 @@ import json
 import os.path
 import shutil
 import tempfile
+
 from collections import defaultdict
 from contextlib import nullcontext
 from dataclasses import asdict
 from pathlib import Path
 from typing import Callable
 
-import torch
-from tensordict import PersistentTensorDict, TensorDict
 from torchrl._utils import KeyDependentDefaultDict, logger as torchrl_logger
 from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 from torchrl.data.datasets.utils import _get_root_dir
@@ -25,6 +24,10 @@ from torchrl.data.replay_buffers.storages import TensorStorage
 from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter, Writer
 from torchrl.data.tensor_specs import Bounded, Categorical, Composite, Unbounded
 from torchrl.envs.utils import _classproperty
+
+import torch
+
+from tensordict import PersistentTensorDict, TensorDict
 
 _has_tqdm = importlib.util.find_spec("tqdm", None) is not None
 _has_minari = importlib.util.find_spec("minari", None) is not None

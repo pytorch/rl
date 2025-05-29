@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import Callable
 
 import torch
+
 from torch.nn import Module
 
 
@@ -36,6 +37,7 @@ class BinaryToDecimal(Module):
         >>> decimal = binary_to_decimal(binary)
         >>> assert decimal.shape == (2,)
         >>> assert (decimal == torch.Tensor([3, 2])).all()
+
     """
 
     def __init__(
@@ -97,6 +99,7 @@ class SipHash(Module):
         tensor([-4669941682990263259, -3778166555168484291, -9122128731510687521])
         >>> hash_b = hash_module(b)
         >>> assert (hash_a == hash_b).all()
+
     """
 
     def __init__(self, as_tensor: bool = True):
@@ -135,6 +138,7 @@ class RandomProjectionHash(SipHash):
             execution is without effect).
 
         init_method: TODO
+
     """
 
     _N_COMPONENTS_DEFAULT = 16
@@ -167,7 +171,7 @@ class RandomProjectionHash(SipHash):
         return self._n_components.item()
 
     def fit(self, x):
-        """Fits the random projection to the input data."""
+        """Fit the random projection to the input data."""
         self.transform.materialize(
             (x.shape[-1], self.n_components), dtype=self.dtype_cast, device=x.device
         )

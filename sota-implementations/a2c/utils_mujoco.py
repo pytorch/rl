@@ -4,11 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import numpy as np
-import torch.nn
-import torch.optim
-
-from tensordict.nn import AddStateIndependentNormalScale, TensorDictModule
 from torchrl.envs import (
     ClipTransform,
     DoubleToFloat,
@@ -22,6 +17,11 @@ from torchrl.envs.libs.gym import GymEnv
 from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
 from torchrl.record import VideoRecorder
 
+import numpy as np
+import torch.nn
+import torch.optim
+
+from tensordict.nn import AddStateIndependentNormalScale, TensorDictModule
 
 # ====================================================================
 # Environment utils

@@ -47,6 +47,9 @@ We will stick to the DQN example, and show how a policy that outputs a distribut
 later.
 
 """
+
+from __future__ import annotations
+
 import time
 from pathlib import Path
 

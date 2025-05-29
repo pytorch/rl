@@ -9,15 +9,17 @@ import abc
 import functools
 import re
 import warnings
-from typing import Any, Callable, Mapping, Sequence, TypeVar
 
-import numpy as np
-import torch
-from tensordict import NonTensorData, TensorDict, TensorDictBase
+from typing import Any, Callable, Mapping, Sequence, TypeVar
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.tensor_specs import Composite, NonTensor, TensorSpec, Unbounded
-from torchrl.envs.common import _EnvWrapper, _maybe_unlock, EnvBase
+from torchrl.envs.common import EnvBase, _EnvWrapper, _maybe_unlock
+
+import numpy as np
+import torch
+
+from tensordict import NonTensorData, TensorDict, TensorDictBase
 
 T = TypeVar("T", bound=EnvBase)
 
@@ -179,7 +181,7 @@ class GymLikeEnv(_EnvWrapper):
         return self
 
     def fast_encoding(self, mode: bool = True) -> T:
-        """Skips several checks during encoding of the environment output to accelerate the execution of the environment.
+        """Skip several checks during encoding of the environment output to accelerate the execution of the environment.
 
         Args:
             mode (bool, optional): the memoization mode. If ``True``, input checks will be executed only once and then
@@ -223,7 +225,7 @@ class GymLikeEnv(_EnvWrapper):
             self.read_obs = self._read_obs_eager
 
     def read_action(self, action):
-        """Reads the action obtained from the input TensorDict and transforms it in the format expected by the contained environment.
+        """Read the action obtained from the input TensorDict and transforms it in the format expected by the contained environment.
 
         Args:
             action (Tensor or TensorDict): an action to be taken in the environment
@@ -294,7 +296,7 @@ class GymLikeEnv(_EnvWrapper):
     _read_reward: Callable[[Any], Any] | None = None
 
     def read_reward(self, reward):
-        """Reads the reward and maps it to the reward space.
+        """Read the reward and maps it to the reward space.
 
         Args:
             reward (torch.Tensor or TensorDict): reward to be mapped.
@@ -348,7 +350,7 @@ class GymLikeEnv(_EnvWrapper):
     def read_obs(
         self, observations: dict[str, Any] | torch.Tensor | np.ndarray
     ) -> dict[str, Any]:
-        """Reads an observation from the environment and returns an observation compatible with the output TensorDict.
+        """Read an observation from the environment and returns an observation compatible with the output TensorDict.
 
         Args:
             observations (observation under a format dictated by the inner env): observation to be read.
@@ -549,9 +551,7 @@ class GymLikeEnv(_EnvWrapper):
         return tensordict_out
 
     @abc.abstractmethod
-    def _output_transform(
-        self, step_outputs_tuple: tuple
-    ) -> tuple[
+    def _output_transform(self, step_outputs_tuple: tuple) -> tuple[
         Any,
         float | np.ndarray,
         bool | np.ndarray | None,
@@ -586,8 +586,7 @@ class GymLikeEnv(_EnvWrapper):
         ...
 
     @abc.abstractmethod
-    def _reset_output_transform(self, reset_outputs_tuple: tuple) -> tuple:
-        ...
+    def _reset_output_transform(self, reset_outputs_tuple: tuple) -> tuple: ...
 
     @_maybe_unlock
     def set_info_dict_reader(
@@ -595,7 +594,7 @@ class GymLikeEnv(_EnvWrapper):
         info_dict_reader: BaseInfoDictReader | None = None,
         ignore_private: bool = True,
     ) -> GymLikeEnv:
-        """Sets an info_dict_reader function.
+        """Set an info_dict_reader function.
 
         This function should take as input an
         info_dict dictionary and the tensordict returned by the step function, and
@@ -717,7 +716,7 @@ class GymLikeEnv(_EnvWrapper):
                 is_shared=False)
 
         """
-        from torchrl.envs import check_env_specs, TensorDictPrimer, TransformedEnv
+        from torchrl.envs import TensorDictPrimer, TransformedEnv, check_env_specs
 
         if self.info_dict_reader:
             raise RuntimeError("The environment already has an info-dict reader.")

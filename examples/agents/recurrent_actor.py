@@ -4,8 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
-"""
-This code exemplifies how an actor that uses a RNN backbone can be built.
+"""Thi code exemplifies how an actor that uses a RNN backbone can be built.
 
 It is based on snippets from the DQN with RNN tutorial.
 
@@ -13,11 +12,9 @@ There are two main APIs to be aware of when using RNNs, and dedicated notes rega
 of this example: the `set_recurrent_mode` context manager, and the `make_tensordict_primer` method.
 
 """
-from collections import OrderedDict
+from __future__ import annotations
 
-import torch
-from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
-from torch import nn
+from collections import OrderedDict
 
 from torchrl.envs import (
     Compose,
@@ -31,7 +28,12 @@ from torchrl.envs import (
     ToTensorImage,
     TransformedEnv,
 )
-from torchrl.modules import ConvNet, LSTMModule, MLP, QValueModule, set_recurrent_mode
+from torchrl.modules import MLP, ConvNet, LSTMModule, QValueModule, set_recurrent_mode
+
+import torch
+
+from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
+from torch import nn
 
 # Define the device to use for computations (GPU if available, otherwise CPU)
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")

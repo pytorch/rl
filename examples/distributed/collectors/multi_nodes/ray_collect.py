@@ -1,5 +1,4 @@
-"""
-Example use of a distributed collector
+"""Example use of a distributed collector
 ======================================
 
 This example illustrates how a TorchRL collector can be converted into a distributed collector.
@@ -7,12 +6,15 @@ This example illustrates how a TorchRL collector can be converted into a distrib
 This example should create 3 collector instances, 1 local and 2 remote, but 4 instances seem to
 be created. Why?
 """
-from tensordict.nn import TensorDictModule
-from torch import nn
+
+from __future__ import annotations
+
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors.distributed.ray import RayCollector
 from torchrl.envs.libs.gym import GymEnv
 
+from tensordict.nn import TensorDictModule
+from torch import nn
 
 if __name__ == "__main__":
 

@@ -13,13 +13,6 @@ from __future__ import annotations
 
 import warnings
 
-import hydra
-import numpy as np
-import torch
-import tqdm
-from gail_utils import log_metrics, make_gail_discriminator, make_offline_replay_buffer
-from ppo_utils import eval_model, make_env, make_ppo_models
-from tensordict.nn import CudaGraphModule
 from torchrl._utils import compile_with_warmup, timeit
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
@@ -30,6 +23,15 @@ from torchrl.objectives import ClipPPOLoss, GAILLoss, group_optimizers
 from torchrl.objectives.value.advantages import GAE
 from torchrl.record import VideoRecorder
 from torchrl.record.loggers import generate_exp_name, get_logger
+
+import hydra
+import numpy as np
+import torch
+import tqdm
+
+from gail_utils import log_metrics, make_gail_discriminator, make_offline_replay_buffer
+from ppo_utils import eval_model, make_env, make_ppo_models
+from tensordict.nn import CudaGraphModule
 
 torch.set_float32_matmul_precision("high")
 

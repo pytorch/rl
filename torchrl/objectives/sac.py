@@ -6,22 +6,10 @@ from __future__ import annotations
 
 import math
 import warnings
+
 from dataclasses import dataclass
 from functools import wraps
 from numbers import Number
-
-import numpy as np
-import torch
-from tensordict import TensorDict, TensorDictBase, TensorDictParams
-from tensordict.nn import (
-    composite_lp_aggregate,
-    CompositeDistribution,
-    dispatch,
-    set_composite_lp_aggregate,
-    TensorDictModule,
-)
-from tensordict.utils import expand_right, NestedKey
-from torch import Tensor
 
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.data.utils import _find_action_space
@@ -30,15 +18,29 @@ from torchrl.modules import ProbabilisticActor
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
-    _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    ValueEstimators,
+    _cache_values,
     _reduce,
     _vmap_func,
     default_value_kwargs,
     distance_loss,
-    ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+
+import numpy as np
+import torch
+
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
+from tensordict.nn import (
+    CompositeDistribution,
+    TensorDictModule,
+    composite_lp_aggregate,
+    dispatch,
+    set_composite_lp_aggregate,
+)
+from tensordict.utils import NestedKey, expand_right
+from torch import Tensor
 
 
 def _delezify(func):
@@ -253,11 +255,12 @@ class SACLoss(LossModule):
         ...     next_observation=torch.zeros(*batch, n_obs),
         ...     next_reward=torch.randn(*batch, 1))
         >>> loss_actor.backward()
+
     """
 
     @dataclass
     class _AcceptedKeys:
-        """Maintains default values for all configurable tensordict keys.
+        """Maintain default values for all configurable tensordict keys.
 
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values.
@@ -282,6 +285,7 @@ class SACLoss(LossModule):
             terminated (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is terminated. Will be used for the underlying value estimator.
                 Defaults to ``"terminated"``.
+
         """
 
         action: NestedKey = "action"
@@ -640,9 +644,11 @@ class SACLoss(LossModule):
             out["loss_value"] = loss_value
         td_out = TensorDict(out, [])
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction)
-            if name.startswith("loss_")
-            else value,
+            lambda name, value: (
+                _reduce(value, reduction=self.reduction)
+                if name.startswith("loss_")
+                else value
+            ),
         )
         self._clear_weakrefs(
             tensordict,
@@ -1034,11 +1040,12 @@ class DiscreteSACLoss(LossModule):
         ...     next_observation=torch.zeros(*batch, n_obs),
         ...     next_reward=torch.randn(*batch, 1))
         >>> loss_actor.backward()
+
     """
 
     @dataclass
     class _AcceptedKeys:
-        """Maintains default values for all configurable tensordict keys.
+        """Maintain default values for all configurable tensordict keys.
 
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values
@@ -1058,6 +1065,7 @@ class DiscreteSACLoss(LossModule):
             terminated (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is terminated. Will be used for the underlying value estimator.
                 Defaults to ``"terminated"``.
+
         """
 
         action: NestedKey = "action"
@@ -1260,9 +1268,11 @@ class DiscreteSACLoss(LossModule):
         }
         td_out = TensorDict(out, [])
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction)
-            if name.startswith("loss_")
-            else value,
+            lambda name, value: (
+                _reduce(value, reduction=self.reduction)
+                if name.startswith("loss_")
+                else value
+            ),
         )
         self._clear_weakrefs(
             tensordict,

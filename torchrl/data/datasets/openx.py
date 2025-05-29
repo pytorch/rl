@@ -10,12 +10,9 @@ import json
 import os
 import shutil
 import tempfile
+
 from pathlib import Path
 from typing import Any, Callable
-
-import torch
-from tensordict import make_tensordict, NonTensorData, pad, TensorDict
-from tensordict.utils import _is_non_tensor
 
 from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 from torchrl.data.datasets.utils import _get_root_dir
@@ -25,8 +22,13 @@ from torchrl.data.replay_buffers.samplers import (
     SliceSampler,
     SliceSamplerWithoutReplacement,
 )
-from torchrl.data.replay_buffers.storages import _collate_id, Storage, TensorStorage
+from torchrl.data.replay_buffers.storages import Storage, TensorStorage, _collate_id
 from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter, Writer
+
+import torch
+
+from tensordict import NonTensorData, TensorDict, make_tensordict, pad
+from tensordict.utils import _is_non_tensor
 
 _has_datasets = importlib.util.find_spec("datasets", None) is not None
 _has_tv = importlib.util.find_spec("torchvision", None) is not None
@@ -718,8 +720,7 @@ def _slice_data(data: TensorDict, slice_len, pad_value):
 
 
 class _StreamingSampler(Sampler):
-    def __init__(self):
-        ...
+    def __init__(self): ...
 
     def sample(self, storage: Storage, batch_size: int) -> tuple[Any, dict]:
         return range(batch_size), {}
@@ -727,17 +728,14 @@ class _StreamingSampler(Sampler):
     def _empty(self):
         return
 
-    def dumps(self, path):
-        ...
+    def dumps(self, path): ...
 
-    def loads(self, path):
-        ...
+    def loads(self, path): ...
 
     def state_dict(self) -> dict[str, Any]:
         return {}
 
-    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
-        ...
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None: ...
 
 
 OPENX_KEY_MAP = {
@@ -779,6 +777,7 @@ def _make_tensordict_image_conv(data):
                 "the `torchvision` library is required to read the image observation."
             )
         import torchvision.transforms.v2.functional
+
         from PIL import Image
 
         img = Image.open(io.BytesIO(img_bytes))

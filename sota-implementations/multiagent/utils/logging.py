@@ -6,12 +6,14 @@ from __future__ import annotations
 
 import os
 
+from torchrl.envs.libs.vmas import VmasEnv
+from torchrl.record.loggers import Logger, generate_exp_name, get_logger
+from torchrl.record.loggers.wandb import WandbLogger
+
 import numpy as np
 import torch
+
 from tensordict import TensorDictBase
-from torchrl.envs.libs.vmas import VmasEnv
-from torchrl.record.loggers import generate_exp_name, get_logger, Logger
-from torchrl.record.loggers.wandb import WandbLogger
 
 
 def init_logging(cfg, model_name: str):

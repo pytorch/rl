@@ -6,26 +6,25 @@
 from __future__ import annotations
 
 import functools
-
 import json
 import os
 import re
+
 from contextlib import contextmanager
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Literal
-
-import numpy as np
-
-import torch
-from tensordict import NestedKey, NonTensorData, TensorDict, TensorDictBase
-from tensordict.tensorclass import is_non_tensor
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data import Choice, Composite, NonTensor
 from torchrl.data.llm import History
 from torchrl.envs import ConditionalSkip, GymWrapper, Transform, TransformedEnv
 
+import numpy as np
+import torch
+
+from tensordict import NestedKey, NonTensorData, TensorDict, TensorDictBase
+from tensordict.tensorclass import is_non_tensor
 
 # Inv transforms:
 #  Transforms to apply prior to pass the model output to the env
@@ -96,7 +95,7 @@ class MLGymBaseTransform(Transform):
 
 # Transform #0: Resets the env
 class ResetModule(MLGymBaseTransform):
-    """Runs setup pipeline and enables multi-resets.
+    """Run setup pipeline and enables multi-resets.
 
     The reset method reads the 'system' initial input from the config and parses it to a History
     object.
@@ -179,8 +178,10 @@ class ResetModule(MLGymBaseTransform):
         self, env: MLGymWrapper, env_variables: dict[str, Any]
     ) -> None:
         commands_to_execute = (
-            [self.config.state_command.code]
-            +  # [code for code in self.config.util_functions] +
+            [
+                self.config.state_command.code
+            ]  # [code for code in self.config.util_functions] +
+            +
             # [command.code for command in self.config._commands] +
             [f"{k}={v}" for k, v in env_variables.items()]
         )
@@ -278,7 +279,7 @@ class TaskSampler(Transform):
 
 # Transform #1: env -> state
 class ReadState(MLGymBaseTransform):
-    """Reads current state and writes it as a parsable str in the tensordict."""
+    """Read current state and writes it as a parsable str in the tensordict."""
 
     # from mlgym/agent/base.py:BaseAgent:forward_model
     def _step(
@@ -313,7 +314,7 @@ class ReadState(MLGymBaseTransform):
 
 # Transform #2: state -> message
 class StateToMessage(MLGymBaseTransform):
-    """Parses the string using json to a given template.
+    """Parse the string using json to a given template.
 
     Requires:
         - a 'state' key from the ReadState transform
@@ -398,7 +399,7 @@ class StateToMessage(MLGymBaseTransform):
 
 # Transform #3: Append message to history
 class MessageToHistory(MLGymBaseTransform):
-    """Parses the message string to a History object, then reparses the history to a complete message.
+    """Parse the message string to a History object, then reparses the history to a complete message.
 
     .. seealso:: HistoryToMessage
 
@@ -461,9 +462,11 @@ class TemplateTransform(MLGymBaseTransform):
         super().__init__(
             in_keys=["history"] if in_keys is None else in_keys,
             out_keys=[self.prompt_key] if out_keys is None else out_keys,
-            in_keys_inv=[self.prompt_key, self.response_key]
-            if in_keys_inv is None
-            else in_keys_inv,
+            in_keys_inv=(
+                [self.prompt_key, self.response_key]
+                if in_keys_inv is None
+                else in_keys_inv
+            ),
             # TODO: we should not use the response key here but another dedicated entry, like "action_parsed"
             out_keys_inv=[self.response_key] if out_keys_inv is None else out_keys_inv,
         )
@@ -759,6 +762,7 @@ def get_args(
 
     Args:
         args: Optional list of arguments to parse. If not provided, uses sys.argv.
+
     """
     import mlgym.environment.registration  # noqa
     from mlgym import CONFIG_DIR
@@ -798,7 +802,7 @@ def make_mlgym(
     device="cpu",
     reward_wrong_format: float | None = None,
 ) -> TransformedEnv:
-    """Wraps an MLGymEnv in a TorchRL Environment.
+    """Wrap an MLGymEnv in a TorchRL Environment.
 
     The appended transforms will make sure that the data is formatted for the LLM during (for the outputs of `env.step`)
     and for the MLGym API (for inputs to `env.step`).

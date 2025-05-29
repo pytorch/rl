@@ -9,18 +9,16 @@ from __future__ import annotations
 import os
 import socket
 import warnings
+
 from copy import copy, deepcopy
 from datetime import timedelta
 from typing import Any, Callable, Literal, OrderedDict, Sequence
 
-import torch.cuda
-from tensordict import TensorDict, TensorDictBase
-from torch import nn
-from torchrl._utils import _ProcessNoWarn, logger as torchrl_logger, VERBOSE
+from torchrl._utils import VERBOSE, _ProcessNoWarn, logger as torchrl_logger
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
-    DataCollectorBase,
     DEFAULT_EXPLORATION_TYPE,
+    DataCollectorBase,
     MultiSyncDataCollector,
     SyncDataCollector,
 )
@@ -32,6 +30,11 @@ from torchrl.collectors.utils import _NON_NN_POLICY_WEIGHTS, split_trajectories
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import EnvCreator
+
+import torch.cuda
+
+from tensordict import TensorDict, TensorDictBase
+from torch import nn
 
 SUBMITIT_ERR = None
 try:
@@ -279,6 +282,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
             https://github.com/facebookincubator/submitit
             Defaults to "submitit".
         tcp_port (int, optional): the TCP port to be used. Defaults to 10003.
+
     """
 
     def __init__(
@@ -286,9 +290,9 @@ class DistributedSyncDataCollector(DataCollectorBase):
         create_env_fn,
         policy: Callable[[TensorDictBase], TensorDictBase] | None = None,
         *,
-        policy_factory: Callable[[], Callable]
-        | list[Callable[[], Callable]]
-        | None = None,
+        policy_factory: (
+            Callable[[], Callable] | list[Callable[[], Callable]] | None
+        ) = None,
         frames_per_batch: int,
         total_frames: int = -1,
         device: torch.device | list[torch.device] = None,

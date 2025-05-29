@@ -6,10 +6,6 @@ from __future__ import annotations
 
 import importlib.util
 
-import torch
-from tensordict import set_lazy_legacy, TensorDict, TensorDictBase
-from torch.hub import load_state_dict_from_url
-
 from torchrl.data.tensor_specs import Composite, TensorSpec, Unbounded
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.transforms.transforms import (
@@ -23,6 +19,11 @@ from torchrl.envs.transforms.transforms import (
     UnsqueezeTransform,
 )
 from torchrl.envs.transforms.utils import _set_missing_tolerance
+
+import torch
+
+from tensordict import TensorDict, TensorDictBase, set_lazy_legacy
+from torch.hub import load_state_dict_from_url
 
 _has_tv = importlib.util.find_spec("torchvision", None) is not None
 
@@ -192,6 +193,7 @@ class VIPTransform(Compose):
         tensor_pixels_keys (list of str, optional): Optionally, one can keep the
             original images (as collected from the env) in the output tensordict.
             If no value is provided, this won't be collected.
+
     """
 
     @classmethod

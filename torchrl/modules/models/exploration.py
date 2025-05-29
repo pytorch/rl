@@ -7,9 +7,18 @@ from __future__ import annotations
 import functools
 import math
 import warnings
+
 from typing import Sequence
 
+from torchrl._utils import prod
+from torchrl.data.tensor_specs import Unbounded
+from torchrl.data.utils import DEVICE_TYPING, DEVICE_TYPING_ARGS
+from torchrl.envs.utils import ExplorationType, exploration_type
+from torchrl.modules.distributions.utils import _cast_transform_device
+from torchrl.modules.utils import inv_softplus
+
 import torch
+
 from tensordict.nn import TensorDictModuleBase
 from tensordict.utils import NestedKey
 from torch import distributions as d, nn
@@ -17,13 +26,6 @@ from torch.nn import functional as F
 from torch.nn.modules.dropout import _DropoutNd
 from torch.nn.modules.lazy import LazyModuleMixin
 from torch.nn.parameter import UninitializedBuffer, UninitializedParameter
-
-from torchrl._utils import prod
-from torchrl.data.tensor_specs import Unbounded
-from torchrl.data.utils import DEVICE_TYPING, DEVICE_TYPING_ARGS
-from torchrl.envs.utils import exploration_type, ExplorationType
-from torchrl.modules.distributions.utils import _cast_transform_device
-from torchrl.modules.utils import inv_softplus
 
 
 class NoisyLinear(nn.Linear):
@@ -234,7 +236,7 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
 
 
 def reset_noise(layer: nn.Module) -> None:
-    """Resets the noise of noisy layers."""
+    """Reset the noise of noisy layers."""
     if hasattr(layer, "reset_noise"):
         layer.reset_noise()
 
@@ -531,7 +533,7 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
 
 
 class ConsistentDropout(_DropoutNd):
-    """Implements a :class:`~torch.nn.Dropout` variant with consistent dropout.
+    """Implement a :class:`~torch.nn.Dropout` variant with consistent dropout.
 
     This method is proposed in `"Consistent Dropout for Policy Gradient Reinforcement Learning" (Hausknecht & Wagener, 2022)
     <https://arxiv.org/abs/2202.11818>`_.
@@ -586,6 +588,7 @@ class ConsistentDropout(_DropoutNd):
             mask (torch.Tensor, optional): the optional mask for the dropout.
 
         Returns: a tensor and a corresponding mask in train mode, and only a tensor in eval mode.
+
         """
         if self.training:
             if mask is None:
@@ -637,6 +640,7 @@ class ConsistentDropoutModule(TensorDictModuleBase):
             batch_size=torch.Size([3]),
             device=None,
             is_shared=False)
+
     """
 
     def __init__(
@@ -682,7 +686,7 @@ class ConsistentDropoutModule(TensorDictModuleBase):
         return tensordict
 
     def make_tensordict_primer(self):
-        """Makes a tensordict primer for the environment to generate random masks during reset calls.
+        """Make a tensordict primer for the environment to generate random masks during reset calls.
 
         .. seealso:: :func:`torchrl.modules.utils.get_primers_from_module` for a method to generate all primers for a given
         module.

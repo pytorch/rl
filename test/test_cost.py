@@ -13,37 +13,11 @@ import operator
 import os
 import sys
 import warnings
+
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 
-import numpy as np
-import pytest
-import torch
-
 from packaging import version, version as pack_version
-from tensordict import assert_allclose_td, TensorDict, TensorDictBase
-from tensordict._C import unravel_keys
-from tensordict.nn import (
-    composite_lp_aggregate,
-    CompositeDistribution,
-    InteractionType,
-    NormalParamExtractor,
-    ProbabilisticTensorDictModule,
-    ProbabilisticTensorDictModule as ProbMod,
-    ProbabilisticTensorDictSequential,
-    ProbabilisticTensorDictSequential as ProbSeq,
-    set_composite_lp_aggregate,
-    TensorDictModule,
-    TensorDictModule as Mod,
-    TensorDictSequential,
-    TensorDictSequential as Seq,
-    WrapModule,
-)
-from tensordict.nn.distributions.composite import _add_suffix
-from tensordict.nn.utils import Buffer
-from tensordict.utils import unravel_key
-from torch import autograd, nn
-
 from torchrl._utils import _standardize
 from torchrl.data import Bounded, Categorical, Composite, MultiOneHot, OneHot, Unbounded
 from torchrl.data.postprocs.postprocs import MultiStep
@@ -51,17 +25,17 @@ from torchrl.envs import EnvBase, GymEnv, InitTracker, SerialEnv
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import TensorDictPrimer, TransformedEnv
-from torchrl.envs.utils import exploration_type, ExplorationType, set_exploration_type
+from torchrl.envs.utils import ExplorationType, exploration_type, set_exploration_type
 from torchrl.modules import (
     DistributionalQValueActor,
     GRUModule,
     LSTMModule,
     OneHotCategorical,
     QValueActor,
-    recurrent_mode,
     SafeSequential,
-    set_recurrent_mode,
     WorldModelWrapper,
+    recurrent_mode,
+    set_recurrent_mode,
 )
 from torchrl.modules.distributions.continuous import TanhDelta, TanhNormal
 from torchrl.modules.models import QMixer
@@ -107,16 +81,16 @@ from torchrl.objectives import (
     TD3BCLoss,
     TD3Loss,
 )
-from torchrl.objectives.common import add_random_module, LossModule
+from torchrl.objectives.common import LossModule, add_random_module
 from torchrl.objectives.deprecated import DoubleREDQLoss_deprecated, REDQLoss_deprecated
 from torchrl.objectives.redq import REDQLoss
 from torchrl.objectives.reinforce import ReinforceLoss
 from torchrl.objectives.utils import (
-    _vmap_func,
     HardUpdate,
-    hold_out_net,
     SoftUpdate,
     ValueEstimators,
+    _vmap_func,
+    hold_out_net,
 )
 from torchrl.objectives.value.advantages import (
     GAE,
@@ -144,6 +118,33 @@ from torchrl.objectives.value.utils import (
     _make_gammas_tensor,
     _split_and_pad_sequence,
 )
+
+import numpy as np
+import pytest
+import torch
+
+from tensordict import TensorDict, TensorDictBase, assert_allclose_td
+from tensordict._C import unravel_keys
+from tensordict.nn import (
+    CompositeDistribution,
+    InteractionType,
+    NormalParamExtractor,
+    ProbabilisticTensorDictModule,
+    ProbabilisticTensorDictModule as ProbMod,
+    ProbabilisticTensorDictSequential,
+    ProbabilisticTensorDictSequential as ProbSeq,
+    TensorDictModule,
+    TensorDictModule as Mod,
+    TensorDictSequential,
+    TensorDictSequential as Seq,
+    WrapModule,
+    composite_lp_aggregate,
+    set_composite_lp_aggregate,
+)
+from tensordict.nn.distributions.composite import _add_suffix
+from tensordict.nn.utils import Buffer
+from tensordict.utils import unravel_key
+from torch import autograd, nn
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import (  # noqa
@@ -281,14 +282,11 @@ class MARLEnv(EnvBase):
     def _step(
         self,
         tensordict: TensorDictBase,
-    ) -> TensorDictBase:
-        ...
+    ) -> TensorDictBase: ...
 
-    def _reset(self, tensordic):
-        ...
+    def _reset(self, tensordic): ...
 
-    def _set_seed(self, seed: int | None) -> None:
-        ...
+    def _set_seed(self, seed: int | None) -> None: ...
 
 
 class LossModuleTestBase:
@@ -9072,7 +9070,7 @@ class TestPPO(LossModuleTestBase):
         separate_losses,
         composite_action_dist,
     ):
-        """Tests PPO with shared module with and without passing twice across the common module."""
+        """Test PPO with shared module with and without passing twice across the common module."""
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_ppo(
             device=device, composite_action_dist=composite_action_dist
@@ -9304,9 +9302,11 @@ class TestPPO(LossModuleTestBase):
             "advantage": "advantage",
             "value_target": "value_target",
             "value": "state_value",
-            "sample_log_prob": "action_log_prob"
-            if not composite_action_dist
-            else ("action", "action1_log_prob"),
+            "sample_log_prob": (
+                "action_log_prob"
+                if not composite_action_dist
+                else ("action", "action1_log_prob")
+            ),
             "action": "action" if not composite_action_dist else ("action", "action1"),
             "reward": "reward",
             "done": "done",
@@ -10093,9 +10093,9 @@ class TestA2C(LossModuleTestBase):
         td = td.exclude(loss_fn.tensor_keys.value_target)
         if advantage is not None:
             advantage.set_keys(
-                sample_log_prob=actor.log_prob_keys
-                if composite_action_dist
-                else "action_log_prob"
+                sample_log_prob=(
+                    actor.log_prob_keys if composite_action_dist else "action_log_prob"
+                )
             )
             advantage(td)
         elif td_est is not None:
@@ -15047,7 +15047,7 @@ class TestValues:
     @pytest.mark.parametrize("T", [200, 5, 3])
     @pytest.mark.parametrize("has_done", [True, False])
     def test_tdlambda_tensor_gamma(self, device, gamma, lmbda, N, T, has_done):
-        """Tests vec_td_lambda_advantage_estimate against itself with
+        """Test vec_td_lambda_advantage_estimate against itself with
         gamma being a tensor or a scalar
 
         """
@@ -15124,7 +15124,7 @@ class TestValues:
     def test_tdlambda_tensor_gamma_single_element(
         self, device, gamma, lmbda, N, T, F, has_done, gamma_tensor, lmbda_tensor
     ):
-        """Tests vec_td_lambda_advantage_estimate against itself with
+        """Test vec_td_lambda_advantage_estimate against itself with
         gamma being a tensor or a scalar
 
         """
@@ -15203,7 +15203,7 @@ class TestValues:
     @pytest.mark.parametrize("T", [3, 5, 200])
     @pytest.mark.parametrize("has_done", [True, False])
     def test_td1_tensor_gamma(self, device, gamma, N, T, has_done):
-        """Tests vec_td_lambda_advantage_estimate against itself with
+        """Test vec_td_lambda_advantage_estimate against itself with
         gamma being a tensor or a scalar
 
         """
@@ -15272,11 +15272,10 @@ class TestValues:
     def test_vectdlambda_tensor_gamma(
         self, device, gamma, lmbda, N, T, dtype_fixture, has_done  # noqa
     ):
-        """Tests td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
+        """Test td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
         with gamma being a tensor or a scalar
 
         """
-
         torch.manual_seed(0)
 
         done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
@@ -15345,11 +15344,10 @@ class TestValues:
     def test_vectd1_tensor_gamma(
         self, device, gamma, N, T, dtype_fixture, has_done  # noqa
     ):
-        """Tests td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
+        """Test td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
         with gamma being a tensor or a scalar
 
         """
-
         torch.manual_seed(0)
 
         done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
@@ -15416,7 +15414,7 @@ class TestValues:
     def test_vectdlambda_rand_gamma(
         self, device, lmbda, N, T, rolling_gamma, dtype_fixture, has_done, seed  # noqa
     ):
-        """Tests td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
+        """Test td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
         with gamma being a random tensor
 
         """
@@ -15496,7 +15494,7 @@ class TestValues:
     def test_vectd1_rand_gamma(
         self, device, N, T, rolling_gamma, dtype_fixture, has_done, seed  # noqa
     ):
-        """Tests td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
+        """Test td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
         with gamma being a random tensor
 
         """
@@ -15572,9 +15570,7 @@ class TestValues:
     @pytest.mark.parametrize("T", [3, 5, 200])
     @pytest.mark.parametrize("rolling_gamma", [True, False])
     def test_custom_conv1d_tensor(self, device, gamma, N, T, rolling_gamma):
-        """
-        Tests the _custom_conv1d logic against a manual for-loop implementation
-        """
+        """Test the _custom_conv1d logic against a manual for-loop implementation"""
         torch.manual_seed(0)
 
         if gamma == "rand":
@@ -15606,7 +15602,7 @@ class TestValues:
     @pytest.mark.parametrize("T", [3, 5, 200])
     @pytest.mark.parametrize("rolling_gamma", [True, False])
     def test_successive_traj_tdlambda(self, device, N, T, rolling_gamma):
-        """Tests td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
+        """Test td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
         with gamma being a random tensor
 
         """
@@ -15714,7 +15710,7 @@ class TestValues:
     @pytest.mark.parametrize("N", [(3,), (3, 7)])
     @pytest.mark.parametrize("T", [3, 5, 200])
     def test_successive_traj_tdadv(self, device, N, T):
-        """Tests td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
+        """Test td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
         with gamma being a random tensor
 
         """
@@ -15859,7 +15855,7 @@ class TestValues:
         N,
         T,
     ):
-        """Tests td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
+        """Test td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
         with gamma being a random tensor
 
         """
@@ -16788,8 +16784,7 @@ class TestUtils:
         setter.unset()
 
     def test_add_random_module(self):
-        class MyMod(nn.Module):
-            ...
+        class MyMod(nn.Module): ...
 
         add_random_module(MyMod)
         import torchrl.objectives.utils
@@ -16812,7 +16807,7 @@ class TestUtils:
     @pytest.mark.parametrize("T", [1, 10])
     @pytest.mark.parametrize("device", get_default_devices())
     def test_get_num_per_traj_no_stops(self, B, T, device):
-        """check _get_num_per_traj when input contains no stops"""
+        """Check _get_num_per_traj when input contains no stops"""
         size = (*B, T) if B else (T,)
 
         done = torch.zeros(*size, dtype=torch.bool, device=device)
@@ -16827,7 +16822,7 @@ class TestUtils:
     @pytest.mark.parametrize("T", [5, 100])
     @pytest.mark.parametrize("device", get_default_devices())
     def test_get_num_per_traj(self, B, T, device):
-        """check _get_num_per_traj where input contains a stop at half of each trace"""
+        """Check _get_num_per_traj where input contains a stop at half of each trace"""
         size = (*B, T)
 
         done = torch.zeros(*size, dtype=torch.bool, device=device)
@@ -16844,7 +16839,7 @@ class TestUtils:
     @pytest.mark.parametrize("T", [5, 100])
     @pytest.mark.parametrize("device", get_default_devices())
     def test_split_pad_reverse(self, B, T, device):
-        """calls _split_and_pad_sequence and reverts it"""
+        """Call _split_and_pad_sequence and reverts it"""
         torch.manual_seed(42)
 
         size = (*B, T)
@@ -16876,8 +16871,7 @@ class TestUtils:
 
     @pytest.mark.parametrize("device", get_default_devices())
     def test_split_pad_manual(self, device):
-        """handcrafted example to test _split_and_pad_seqeunce"""
-
+        """Handcrafted example to test _split_and_pad_seqeunce"""
         traj = torch.as_tensor([[0, 1, 2, 3, 4], [5, 6, 7, 8, 9]], device=device)
         splits = torch.as_tensor([3, 2, 1, 4], device=device)
         res = torch.as_tensor(
@@ -16891,7 +16885,7 @@ class TestUtils:
     @pytest.mark.parametrize("T", [5, 100])
     @pytest.mark.parametrize("device", get_default_devices())
     def test_split_pad_reverse_tensordict(self, B, T, device):
-        """calls _split_and_pad_sequence and reverts it on tensordict input"""
+        """Call _split_and_pad_sequence and reverts it on tensordict input"""
         torch.manual_seed(42)
 
         td = TensorDict(

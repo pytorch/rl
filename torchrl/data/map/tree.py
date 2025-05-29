@@ -5,24 +5,26 @@
 from __future__ import annotations
 
 import weakref
+
 from collections import deque
 from typing import Any, Callable, Literal
-
-import torch
-from tensordict import (
-    merge_tensordicts,
-    NestedKey,
-    TensorClass,
-    TensorDict,
-    TensorDictBase,
-    unravel_key,
-)
 
 from torchrl.data.map.tdstorage import TensorDictMap
 from torchrl.data.map.utils import _plot_plotly_box, _plot_plotly_tree
 from torchrl.data.replay_buffers.storages import ListStorage
 from torchrl.data.tensor_specs import Composite
 from torchrl.envs.common import EnvBase
+
+import torch
+
+from tensordict import (
+    NestedKey,
+    TensorClass,
+    TensorDict,
+    TensorDictBase,
+    merge_tensordicts,
+    unravel_key,
+)
 
 
 class Tree(TensorClass["nocast"]):
@@ -108,7 +110,7 @@ class Tree(TensorClass["nocast"]):
         batch_size: torch.Size | None = None,
         specs: Composite | None = None,
     ) -> Tree:
-        """Creates a new node given some data."""
+        """Create a new node given some data."""
         if "next" in data.keys():
             rollout = data
             if not rollout.ndim:
@@ -172,7 +174,7 @@ class Tree(TensorClass["nocast"]):
 
     @property
     def selected_actions(self) -> torch.Tensor | TensorDictBase | None:
-        """Returns a tensor containing all the selected actions branching out from this node."""
+        """Return a tensor containing all the selected actions branching out from this node."""
         if self.subtree is None:
             return None
         return self.subtree.rollout[..., 0]["action"]
@@ -195,7 +197,7 @@ class Tree(TensorClass["nocast"]):
 
     @property
     def branching_action(self) -> torch.Tensor | TensorDictBase | None:
-        """Returns the action that branched out to this particular node.
+        """Return the action that branched out to this particular node.
 
         Returns:
             a tensor, tensordict or None if the node has no parent.
@@ -211,7 +213,7 @@ class Tree(TensorClass["nocast"]):
 
     @property
     def node_observation(self) -> torch.Tensor | TensorDictBase:
-        """Returns the observation associated with this particular node.
+        """Return the observation associated with this particular node.
 
         This is the observation (or bag of observations) that defines the node before a branching occurs.
         If the node contains a :meth:`rollout` attribute, the node observation is typically identical to the
@@ -228,7 +230,7 @@ class Tree(TensorClass["nocast"]):
 
     @property
     def node_observations(self) -> torch.Tensor | TensorDictBase:
-        """Returns the observations associated with this particular node in a TensorDict format.
+        """Return the observations associated with this particular node in a TensorDict format.
 
         This is the observation (or bag of observations) that defines the node before a branching occurs.
         If the node contains a :meth:`rollout` attribute, the node observation is typically identical to the
@@ -245,7 +247,7 @@ class Tree(TensorClass["nocast"]):
 
     @property
     def visits(self) -> int | torch.Tensor:
-        """Returns the number of visits associated with this particular node.
+        """Return the number of visits associated with this particular node.
 
         This is an alias for the :attr:`~.count` attribute.
 
@@ -282,6 +284,7 @@ class Tree(TensorClass["nocast"]):
 
         Returns:
             A ``Tree`` containing the parent data or ``None`` if the parent data is out of scope or the node is the root.
+
         """
         parent = self._parent
         if parent is not None:
@@ -341,7 +344,7 @@ class Tree(TensorClass["nocast"]):
 
     @property
     def is_terminal(self) -> bool | torch.Tensor:
-        """Returns True if the tree has no children nodes."""
+        """Return True if the tree has no children nodes."""
         if self.rollout is not None:
             return self.rollout[..., -1]["next", "done"].squeeze(-1)
         # If there is no rollout, there is no preceding data - either this is a root or it's a floating node.
@@ -349,13 +352,13 @@ class Tree(TensorClass["nocast"]):
         return False
 
     def fully_expanded(self, env: EnvBase) -> bool:
-        """Returns True if the number of children is equal to the environment cardinality."""
+        """Return True if the number of children is equal to the environment cardinality."""
         cardinality = env.cardinality(self.node_data)
         num_actions = self.num_children
         return cardinality == num_actions
 
     def get_vertex_by_id(self, id: int) -> Tree:
-        """Goes through the tree and returns the node corresponding the given id."""
+        """Goe through the tree and returns the node corresponding the given id."""
         q = deque()
         q.append(self)
         while len(q):
@@ -367,7 +370,7 @@ class Tree(TensorClass["nocast"]):
         raise ValueError(f"Node with id {id} not found.")
 
     def get_vertex_by_hash(self, hash: int) -> Tree:
-        """Goes through the tree and returns the node corresponding the given hash."""
+        """Goe through the tree and returns the node corresponding the given hash."""
         q = deque()
         q.append(self)
         while len(q):
@@ -389,9 +392,9 @@ class Tree(TensorClass["nocast"]):
     def vertices(
         self, *, key_type: Literal["id", "hash", "path"] = "hash"
     ) -> dict[int | tuple[int], Tree]:
-        """Returns a map containing the vertices of the Tree.
+        """Return a map containing the vertices of the Tree.
 
-        Keyword args:
+        Keyword Args:
             key_type (Literal["id", "hash", "path"], optional): Specifies the type of key to use for the vertices.
 
                 - "id": Use the vertex ID as the key.
@@ -438,7 +441,7 @@ class Tree(TensorClass["nocast"]):
         return result
 
     def num_vertices(self, *, count_repeat: bool = False) -> int:
-        """Returns the number of unique vertices in the Tree.
+        """Return the number of unique vertices in the Tree.
 
         Keyword Args:
             count_repeat (bool, optional): Determines whether to count repeated
@@ -463,13 +466,14 @@ class Tree(TensorClass["nocast"]):
         )
 
     def edges(self) -> list[tuple[int, int]]:
-        """Retrieves a list of edges in the tree.
+        """Retrieve a list of edges in the tree.
 
         Each edge is represented as a tuple of two node IDs: the parent node ID and the child node ID.
         The tree is traversed using Breadth-First Search (BFS) to ensure all edges are visited.
 
         Returns:
             A list of tuples, where each tuple contains a parent node ID and a child node ID.
+
         """
         result = []
         q = deque()
@@ -486,13 +490,14 @@ class Tree(TensorClass["nocast"]):
         return result
 
     def valid_paths(self):
-        """Generates all valid paths in the tree.
+        """Generate all valid paths in the tree.
 
         A valid path is a sequence of child indices that starts at the root node and ends at a leaf node.
         Each path is represented as a tuple of integers, where each integer corresponds to the index of a child node.
 
         Yields:
             tuple: A valid path in the tree.
+
         """
         # Initialize a queue with the current tree node and an empty path
         q = deque()
@@ -513,7 +518,7 @@ class Tree(TensorClass["nocast"]):
                 q.append((tree.subtree[i], cur_path_tree))
 
     def max_length(self):
-        """Returns the maximum length of all valid paths in the tree.
+        """Return the maximum length of all valid paths in the tree.
 
         The length of a path is defined as the number of nodes in the path.
         If the tree is empty, returns 0.
@@ -530,7 +535,7 @@ class Tree(TensorClass["nocast"]):
         return max(*lengths)
 
     def rollout_from_path(self, path: tuple[int]) -> TensorDictBase | None:
-        """Retrieves the rollout data along a given path in the tree.
+        """Retrieve the rollout data along a given path in the tree.
 
         The rollout data is concatenated along the last dimension (dim=-1) for each node in the path.
         If no rollout data is found along the path, returns ``None``.
@@ -579,7 +584,7 @@ class Tree(TensorClass["nocast"]):
         info: list[str] = None,
         make_labels: Callable[[Any, ...], Any] | None = None,
     ):
-        """Plots a visualization of the tree using the specified backend and figure type.
+        """Plot a visualization of the tree using the specified backend and figure type.
 
         Args:
             backend: The plotting backend to use. Currently only supports 'plotly'.
@@ -589,6 +594,7 @@ class Tree(TensorClass["nocast"]):
 
         Raises:
             NotImplementedError: If an unsupported backend or figure type is specified.
+
         """
         if backend == "plotly":
             if figure == "box":
@@ -604,7 +610,7 @@ class Tree(TensorClass["nocast"]):
         )
 
     def to_string(self, node_format_fn=lambda tree: tree.node_data.to_dict()):
-        """Generates a string representation of the tree.
+        """Generate a string representation of the tree.
 
         This function can pull out information from each of the nodes in a tree,
         so it can be useful for debugging. The nodes are listed line-by-line.
@@ -655,6 +661,7 @@ class Tree(TensorClass["nocast"]):
             (1, 0) {'observation': tensor(68)}
             (1, 1) {'observation': tensor(9045)}
             (2,) {'observation': tensor(75)}
+
         """
         queue = [
             # tree, path
@@ -802,6 +809,7 @@ class MCTSForest:
         ...     intersection=True,
         ... )
         True
+
     """
 
     def __init__(
@@ -924,6 +932,7 @@ class MCTSForest:
 
         Returns:
             A list of strings or tuples representing the observation keys.
+
         """
         observation_keys = getattr(self, "_observation_keys", None)
         if observation_keys is None:
@@ -943,7 +952,7 @@ class MCTSForest:
         self._excluded_keys = _make_list_of_nestedkeys(value, "excluded_keys")
 
     def get_keys_from_env(self, env: EnvBase):
-        """Writes missing done, action and reward keys to the Forest given an environment.
+        """Write missing done, action and reward keys to the Forest given an environment.
 
         Existing keys are not overwritten.
         """
@@ -1165,6 +1174,7 @@ class MCTSForest:
                 batch_size=torch.Size([]),
                 device=None,
                 is_shared=False)
+
         """
         source, dest = (
             rollout.exclude("next").copy(),
@@ -1364,7 +1374,7 @@ class MCTSForest:
         return len(self.data_map)
 
     def to_string(self, td_root, node_format_fn=lambda tree: tree.node_data.to_dict()):
-        """Generates a string representation of a tree in the forest.
+        """Generate a string representation of a tree in the forest.
 
         This function can pull out information from each of the nodes in a tree,
         so it can be useful for debugging. The nodes are listed line-by-line.
@@ -1416,6 +1426,7 @@ class MCTSForest:
             (1, 0) {'observation': tensor(68)}
             (1, 1) {'observation': tensor(9045)}
             (2,) {'observation': tensor(75)}
+
         """
         tree = self.get_tree(td_root)
         return tree.to_string(node_format_fn)

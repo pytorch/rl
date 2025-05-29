@@ -11,23 +11,26 @@ import math
 import operator
 import os
 import typing
+
 from pathlib import Path
 from typing import Any, Callable, Union
 
+from torchrl._utils import implement_for, logger as torchrl_logger
+
 import numpy as np
 import torch
+
 from tensordict import (
-    lazy_stack,
     MemoryMappedTensor,
     NonTensorData,
     TensorDict,
     TensorDictBase,
+    lazy_stack,
     unravel_key,
 )
 from torch import Tensor
 from torch.nn import functional as F
 from torch.utils._pytree import LeafSpec, tree_flatten, tree_unflatten
-from torchrl._utils import implement_for, logger as torchrl_logger
 
 SINGLE_TENSOR_BUFFER_NAME = os.environ.get(
     "SINGLE_TENSOR_BUFFER_NAME", "_-single-tensor-_"
@@ -65,7 +68,7 @@ def _to_torch(
 
 
 def pin_memory_output(fun) -> Callable:
-    """Calls pin_memory on outputs of decorated function if they have such method."""
+    """Call pin_memory on outputs of decorated function if they have such method."""
 
     def decorated_fun(self, *args, **kwargs):
         output = fun(self, *args, **kwargs)
@@ -93,7 +96,7 @@ def _pin_memory(output: Any) -> Any:
 def _reduce(
     tensor: torch.Tensor, reduction: str, dim: int | None = None
 ) -> float | torch.Tensor:
-    """Reduces a tensor given the reduction method."""
+    """Reduce a tensor given the reduction method."""
     if reduction == "max":
         result = tensor.max(dim=dim)
     elif reduction == "min":
@@ -267,8 +270,8 @@ class TED2Flat:
                 keys_to_expand=keys_to_expand,
             )
 
-        with data.flatten(1, -1) if data.ndim > 2 else contextlib.nullcontext(
-            data
+        with (
+            data.flatten(1, -1) if data.ndim > 2 else contextlib.nullcontext(data)
         ) as data_flat:
             if data.ndim > 2:
                 done = done.flatten(1, -1)
@@ -485,8 +488,8 @@ class Flat2TED:
                     out = lazy_stack(out_list, i)
 
             # Create a function that reads slices of the input data
-            with out.flatten(1, -1) if out.ndim > 2 else contextlib.nullcontext(
-                out
+            with (
+                out.flatten(1, -1) if out.ndim > 2 else contextlib.nullcontext(out)
             ) as out_flat:
                 nsteps = done.shape[0]
                 n_elt_batch = done.shape[1:].numel()
@@ -607,7 +610,7 @@ class Flat2TED:
 
 
 class TED2Nested(TED2Flat):
-    """Converts a TED-formatted dataset into a tensordict populated with nested tensors where each row is a trajectory."""
+    """Convert a TED-formatted dataset into a tensordict populated with nested tensors where each row is a trajectory."""
 
     _shift: int = None
     _is_full: bool = None
@@ -701,7 +704,7 @@ class TED2Nested(TED2Flat):
 
 
 class Nested2TED(Flat2TED):
-    """Converts a nested tensordict where each row is a trajectory into the TED format."""
+    """Convert a nested tensordict where each row is a trajectory into the TED format."""
 
     def __call__(self, data, out: TensorDictBase = None):
         # Get a flat representation of data
@@ -718,7 +721,7 @@ class Nested2TED(Flat2TED):
 
 
 class H5Split(TED2Flat):
-    """Splits a dataset prepared with TED2Nested into a TensorDict where each trajectory is stored as views on their parent nested tensors."""
+    """Split a dataset prepared with TED2Nested into a TensorDict where each trajectory is stored as views on their parent nested tensors."""
 
     _shift: int = None
     _is_full: bool = None
@@ -737,7 +740,7 @@ class H5Split(TED2Flat):
 
 
 class H5Combine:
-    """Combines trajectories in a persistent tensordict into a single standing tensordict stored in filesystem."""
+    """Combine trajectories in a persistent tensordict into a single standing tensordict stored in filesystem."""
 
     def __call__(self, data, out=None):
         # TODO: this load the entire H5 in memory, which can be problematic

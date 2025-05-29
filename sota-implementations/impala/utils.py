@@ -4,9 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import torch.nn
-import torch.optim
-from tensordict.nn import TensorDictModule
 from torchrl.envs import (
     CatFrames,
     DoubleToFloat,
@@ -17,22 +14,26 @@ from torchrl.envs import (
     NoopResetEnv,
     Resize,
     RewardSum,
-    set_gym_backend,
     SignTransform,
     StepCounter,
     ToTensorImage,
     TransformedEnv,
     VecNorm,
+    set_gym_backend,
 )
 from torchrl.modules import (
+    MLP,
     ActorValueOperator,
     ConvNet,
-    MLP,
     OneHotCategorical,
     ProbabilisticActor,
     ValueOperator,
 )
 
+import torch.nn
+import torch.optim
+
+from tensordict.nn import TensorDictModule
 
 # ====================================================================
 # Environment utils

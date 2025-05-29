@@ -6,12 +6,6 @@ from __future__ import annotations
 
 import functools
 
-import torch.nn
-import torch.optim
-from tensordict.nn import InteractionType, TensorDictModule
-from tensordict.nn.distributions import NormalParamExtractor
-from torch.distributions import Categorical
-
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import (
     Composite,
@@ -32,7 +26,6 @@ from torchrl.envs import (
     RewardSum,
     TransformedEnv,
 )
-
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
@@ -46,6 +39,12 @@ from torchrl.objectives import DiscreteIQLLoss, HardUpdate, IQLLoss, SoftUpdate
 from torchrl.record import VideoRecorder
 from torchrl.trainers.helpers.models import ACTIVATIONS
 
+import torch.nn
+import torch.optim
+
+from tensordict.nn import InteractionType, TensorDictModule
+from tensordict.nn.distributions import NormalParamExtractor
+from torch.distributions import Categorical
 
 # ====================================================================
 # Environment utils

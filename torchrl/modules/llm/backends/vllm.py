@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Recipes for vLLM instantiation.
+"""Recipe for vLLM instantiation.
 
 From https://docs.vllm.ai/en/v0.7.0/getting_started/examples/rlhf.html
 """
@@ -13,11 +13,10 @@ from __future__ import annotations
 
 import os
 
-import torch
-
 from torchrl._utils import logger as torchrl_logger
-
 from torchrl.modules.llm.utils import _cuda_visible_devices
+
+import torch
 
 from vllm import LLM
 from vllm.utils import get_open_port
@@ -27,7 +26,7 @@ from vllm.worker.worker import Worker
 def stateless_init_process_group(
     master_address: str | None, master_port: str | None, rank, world_size, device
 ):
-    """Initializes a stateless process group for distributed communication.
+    """Initialize a stateless process group for distributed communication.
 
     Creates a `StatelessProcessGroup` instance without relying on the global
     process group in `torch.distributed`. This approach is recommended for
@@ -43,6 +42,7 @@ def stateless_init_process_group(
 
     Returns:
         PyNcclCommunicator: A PyNcclCommunicator instance initialized with the created StatelessProcessGroup.
+
     """
     from vllm.distributed.device_communicators.pynccl import PyNcclCommunicator
     from vllm.distributed.utils import StatelessProcessGroup
@@ -143,7 +143,7 @@ def make_vllm_worker(
     make_ray_worker: bool = True,
     **kwargs,
 ) -> LLM | ray.actor.ActorClass:  # noqa
-    """Launches the vLLM inference engine.
+    """Launche the vLLM inference engine.
 
     Args:
         model_name (str): a model name to pass to `vllm.LLM`.
@@ -163,6 +163,7 @@ def make_vllm_worker(
         ...                                        args=(name, p.dtype, p.shape))
         ...     model_update_group.broadcast(p, src=0, stream=torch.cuda.current_stream())
         ...     ray.get(handle)
+
     """
     if make_ray_worker:
         devices = [
@@ -173,6 +174,7 @@ def make_vllm_worker(
             assert d < torch.cuda.device_count()
 
         import ray
+
         from ray.util.placement_group import placement_group
         from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 

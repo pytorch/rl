@@ -8,20 +8,15 @@ from __future__ import annotations
 import collections
 import importlib
 import warnings
+
 from copy import copy
 from types import ModuleType
 from typing import Dict
 from warnings import warn
 
-import numpy as np
-import torch
 from packaging import version
-from tensordict import TensorDict, TensorDictBase
-from torch.utils._pytree import tree_map
-
 from torchrl._utils import implement_for
 from torchrl.data.tensor_specs import (
-    _minmax_dtype,
     Binary,
     Bounded,
     Categorical,
@@ -32,12 +27,19 @@ from torchrl.data.tensor_specs import (
     OneHot,
     TensorSpec,
     Unbounded,
+    _minmax_dtype,
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict, torch_to_numpy_dtype_dict
 from torchrl.envs.batched_envs import CloudpickleWrapper
 from torchrl.envs.common import _EnvPostInit
-from torchrl.envs.gym_like import default_info_dict_reader, GymLikeEnv
+from torchrl.envs.gym_like import GymLikeEnv, default_info_dict_reader
 from torchrl.envs.utils import _classproperty
+
+import numpy as np
+import torch
+
+from tensordict import TensorDict, TensorDictBase
+from torch.utils._pytree import tree_map
 
 try:
     from torch.utils._contextlib import _DecoratorContextManager
@@ -81,7 +83,7 @@ def _minigrid_lib():
 
 
 class set_gym_backend(_DecoratorContextManager):
-    """Sets the gym-backend to a certain value.
+    """Set the gym-backend to a certain value.
 
     Args:
         backend (python module, string or callable returning a module): the
@@ -127,7 +129,7 @@ class set_gym_backend(_DecoratorContextManager):
         self.backend = backend
 
     def _call(self):
-        """Sets the backend as default."""
+        """Set the backend as default."""
         global DEFAULT_GYM
         DEFAULT_GYM = self.backend
         found_setters = collections.defaultdict(lambda: False)
@@ -192,7 +194,7 @@ class set_gym_backend(_DecoratorContextManager):
 
 
 def gym_backend(submodule=None):
-    """Returns the gym backend, or a sumbodule of it.
+    """Return the gym backend, or a sumbodule of it.
 
     Args:
         submodule (str): the submodule to import. If ``None``, the backend
@@ -206,6 +208,7 @@ def gym_backend(submodule=None):
         >>> with set_gym_backend("gymnasium"):
         ...     wrappers = gym_backend('wrappers')
         ...     print(wrappers)
+
     """
     global IMPORT_ERROR
     global DEFAULT_GYM
@@ -314,7 +317,7 @@ def _gym_to_torchrl_spec_transform(
     remap_state_to_observation: bool = True,
     batch_size: tuple = (),
 ) -> TensorSpec:
-    """Maps the gym specs to the TorchRL specs.
+    """Map the gym specs to the TorchRL specs.
 
     Args:
         spec (gym.spaces member): the gym space to transform.
@@ -328,6 +331,7 @@ def _gym_to_torchrl_spec_transform(
             Dict specs to "observation". Default is true.
         batch_size (torch.Size): batch size to which expand the spec. Defaults to
             ``torch.Size([])``.
+
     """
     if batch_size:
         return _gym_to_torchrl_spec_transform(
@@ -641,7 +645,7 @@ def _torchrl_to_gym_spec_transform(
     spec,
     categorical_action_encoding=False,
 ) -> TensorSpec:
-    """Maps TorchRL specs to gym spaces.
+    """Map TorchRL specs to gym spaces.
 
     Args:
         spec: the torchrl spec to transform.

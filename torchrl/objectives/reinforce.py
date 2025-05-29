@@ -5,28 +5,18 @@
 from __future__ import annotations
 
 import contextlib
+
 from copy import deepcopy
 from dataclasses import dataclass
 
-import torch
-from tensordict import TensorDict, TensorDictBase, TensorDictParams
-
-from tensordict.nn import (
-    composite_lp_aggregate,
-    dispatch,
-    ProbabilisticTensorDictSequential,
-    TensorDictModule,
-)
-from tensordict.utils import NestedKey
 from torchrl.objectives.common import LossModule
-
 from torchrl.objectives.utils import (
-    _clip_value_loss,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    ValueEstimators,
+    _clip_value_loss,
     _reduce,
     default_value_kwargs,
     distance_loss,
-    ValueEstimators,
 )
 from torchrl.objectives.value import (
     GAE,
@@ -35,6 +25,17 @@ from torchrl.objectives.value import (
     TDLambdaEstimator,
     VTrace,
 )
+
+import torch
+
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
+from tensordict.nn import (
+    ProbabilisticTensorDictSequential,
+    TensorDictModule,
+    composite_lp_aggregate,
+    dispatch,
+)
+from tensordict.utils import NestedKey
 
 
 class ReinforceLoss(LossModule):
@@ -181,7 +182,7 @@ class ReinforceLoss(LossModule):
 
     @dataclass
     class _AcceptedKeys:
-        """Maintains default values for all configurable tensordict keys.
+        """Maintain default values for all configurable tensordict keys.
 
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values.
@@ -206,6 +207,7 @@ class ReinforceLoss(LossModule):
             terminated (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is terminated. Will be used for the underlying value estimator.
                 Defaults to ``"terminated"``.
+
         """
 
         advantage: NestedKey = "advantage"
@@ -378,16 +380,18 @@ class ReinforceLoss(LossModule):
             self.value_estimator(
                 tensordict,
                 params=self.critic_network_params.detach() if self.functional else None,
-                target_params=self.target_critic_network_params
-                if self.functional
-                else None,
+                target_params=(
+                    self.target_critic_network_params if self.functional else None
+                ),
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
 
         # compute log-prob
-        with self.actor_network_params.to_module(
-            self.actor_network
-        ) if self.functional else contextlib.nullcontext():
+        with (
+            self.actor_network_params.to_module(self.actor_network)
+            if self.functional
+            else contextlib.nullcontext()
+        ):
             tensordict = self.actor_network(tensordict)
 
         log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
@@ -401,9 +405,11 @@ class ReinforceLoss(LossModule):
         if value_clip_fraction is not None:
             td_out.set("value_clip_fraction", value_clip_fraction)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
-            if name.startswith("loss_")
-            else value,
+            lambda name, value: (
+                _reduce(value, reduction=self.reduction).squeeze(-1)
+                if name.startswith("loss_")
+                else value
+            ),
         )
         self._clear_weakrefs(
             tensordict,
@@ -444,9 +450,11 @@ class ReinforceLoss(LossModule):
         tensordict_select = tensordict.select(
             *self.critic_network.in_keys, strict=False
         )
-        with self.critic_network_params.to_module(
-            self.critic_network
-        ) if self.functional else contextlib.nullcontext():
+        with (
+            self.critic_network_params.to_module(self.critic_network)
+            if self.functional
+            else contextlib.nullcontext()
+        ):
             state_value = self.critic_network(tensordict_select).get(
                 self.tensor_keys.value
             )

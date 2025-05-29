@@ -6,9 +6,11 @@ from __future__ import annotations
 
 import importlib
 
-import torch
-from tensordict import tensorclass
 from torchrl.data.llm.dataset import TensorDictTokenizer, TokenizedDatasetLoader
+
+import torch
+
+from tensordict import tensorclass
 
 DEFAULT_DATASET = "CarperAI/openai_summarize_comparisons"
 _has_datasets = importlib.util.find_spec("datasets") is not None
@@ -27,7 +29,7 @@ class RewardData:
 
 @tensorclass
 class PairwiseDataset:
-    """Represents a dataset in a pairwise manner (chosen vs rejected).
+    """Represent a dataset in a pairwise manner (chosen vs rejected).
 
     Attributes:
         chosen_data: data to be chosen.
@@ -72,7 +74,7 @@ class PairwiseDataset:
         from_disk: bool = False,
         num_workers: int | None = None,
     ):
-        """Returns a :class:`PairwiseDataset` from a dataset name.
+        """Return a :class:`PairwiseDataset` from a dataset name.
 
         Args:
             split (str): ``"train"`` or ``"valid"`` depending on the data split needed.

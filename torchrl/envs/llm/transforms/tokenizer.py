@@ -7,19 +7,21 @@ from __future__ import annotations
 
 from typing import Sequence
 
-import torch
-from tensordict import NonTensorData, NonTensorStack, TensorDictBase
-from tensordict.nn import dispatch
-from tensordict.utils import _zip_strict, NestedKey
-from torch import Tensor
 from torchrl._utils import _replace_last
 from torchrl.data.tensor_specs import Bounded, Composite, TensorSpec
 from torchrl.envs import Transform, UnaryTransform
 from torchrl.envs.transforms.utils import _set_missing_tolerance
 
+import torch
+
+from tensordict import NonTensorData, NonTensorStack, TensorDictBase
+from tensordict.nn import dispatch
+from tensordict.utils import NestedKey, _zip_strict
+from torch import Tensor
+
 
 class Tokenizer(UnaryTransform):
-    r"""Applies a tokenization operation on the specified inputs.
+    r"""Applie a tokenization operation on the specified inputs.
 
     Args:
         in_keys (sequence of NestedKey): the keys of inputs to the tokenization operation.

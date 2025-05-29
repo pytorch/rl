@@ -2,16 +2,17 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 from .brax import BraxEnv, BraxWrapper
 from .dm_control import DMControlEnv, DMControlWrapper
 from .envpool import MultiThreadedEnv, MultiThreadedEnvWrapper
 from .gym import (
-    gym_backend,
     GymEnv,
     GymWrapper,
     MOGymEnv,
     MOGymWrapper,
+    gym_backend,
     register_gym_spec_conversion,
     set_gym_backend,
 )

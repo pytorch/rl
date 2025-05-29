@@ -7,18 +7,19 @@ from __future__ import annotations
 import argparse
 import importlib.util
 
-import numpy as np
-import pytest
-import torch
-from mocking_classes import DummyStrDataLoader
-
-from tensordict import lazy_stack, set_capture_non_tensor_stack, TensorDict
 from torchrl.data import LazyStackStorage, ReplayBuffer, Unbounded
 from torchrl.envs import Transform
 from torchrl.envs.llm import LLMEnv
 from torchrl.modules.llm import TransformersWrapper
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.llm.grpo import GRPOLoss, GRPOLossOutput, MCAdvantage
+
+import numpy as np
+import pytest
+import torch
+
+from mocking_classes import DummyStrDataLoader
+from tensordict import TensorDict, lazy_stack, set_capture_non_tensor_stack
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 prompts = [
@@ -75,8 +76,7 @@ def test_mc_advantage(ndim):
         assert "advantage" in s.keys()
 
 
-def test_grpo():
-    ...
+def test_grpo(): ...
 
 
 class TestPPO4LLMs:

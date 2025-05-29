@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import math
 import warnings
+
 from functools import wraps
 
 import torch
@@ -45,7 +46,7 @@ SHAPE_ERR = (
 
 
 def _transpose_time(fun):
-    """Checks the time_dim argument of the function to allow for any dim.
+    """Check the time_dim argument of the function to allow for any dim.
 
     If not -2, makes a transpose of all the multi-dim input tensors to bring
     time at -2, and does the opposite transform for the outputs.
@@ -181,7 +182,7 @@ def generalized_advantage_estimate(
 
 
 def _geom_series_like(t, r, thr):
-    """Creates a geometric series of the form [1, gammalmbda, gammalmbda**2] with the shape of `t`.
+    """Create a geometric series of the form [1, gammalmbda, gammalmbda**2] with the shape of `t`.
 
     Drops all elements which are smaller than `thr` (unless in compile mode).
     """
@@ -1280,7 +1281,7 @@ def vtrace_advantage_estimate(
     # not a kwarg because used directly
     time_dim: int = -2,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Computes V-Trace off-policy actor critic targets.
+    """Compute V-Trace off-policy actor critic targets.
 
     Refer to "IMPALA: Scalable Distributed Deep-RL with Importance Weighted  Actor-Learner Architectures"
     https://arxiv.org/abs/1802.01561 for more context.
@@ -1300,6 +1301,7 @@ def vtrace_advantage_estimate(
 
     All tensors (values, reward and done) must have shape
     ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
+
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
         raise RuntimeError(SHAPE_ERR)

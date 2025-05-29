@@ -6,24 +6,25 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import torch
-from tensordict import TensorDict, TensorDictBase, TensorDictParams
-from tensordict.nn import dispatch, TensorDictModule
-from tensordict.utils import NestedKey
-
 from torchrl.data.tensor_specs import Bounded, Composite, TensorSpec
 from torchrl.envs.utils import step_mdp
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
-    _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    ValueEstimators,
+    _cache_values,
     _reduce,
     _vmap_func,
     default_value_kwargs,
     distance_loss,
-    ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+
+import torch
+
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
+from tensordict.nn import TensorDictModule, dispatch
+from tensordict.utils import NestedKey
 
 
 class TD3Loss(LossModule):
@@ -174,7 +175,7 @@ class TD3Loss(LossModule):
 
     @dataclass
     class _AcceptedKeys:
-        """Maintains default values for all configurable tensordict keys.
+        """Maintain default values for all configurable tensordict keys.
 
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values.
@@ -194,6 +195,7 @@ class TD3Loss(LossModule):
             terminated (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is terminated. Will be used for the underlying value estimator.
                 Defaults to ``"terminated"``.
+
         """
 
         action: NestedKey = "action"

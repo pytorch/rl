@@ -5,15 +5,17 @@
 from __future__ import annotations
 
 import importlib
-from typing import Mapping, Sequence
 
-import torch
-from tensordict import TensorDict, TensorDictBase
+from typing import Mapping, Sequence
 
 from torchrl.data.tensor_specs import Categorical, Composite, TensorSpec
 from torchrl.envs.common import _EnvWrapper
 from torchrl.envs.libs.dm_control import _dmcontrol_to_torchrl_spec_transform
-from torchrl.envs.utils import _classproperty, check_marl_grouping, MarlGroupMapType
+from torchrl.envs.utils import MarlGroupMapType, _classproperty, check_marl_grouping
+
+import torch
+
+from tensordict import TensorDict, TensorDictBase
 
 _has_meltingpot = importlib.util.find_spec("meltingpot") is not None
 
@@ -47,7 +49,7 @@ def _remove_world_observations_from_obs_spec(
 
 
 def _global_state_spec_from_obs_spec(
-    observation_spec: Sequence[Mapping[str, dm_env.specs.Array]]  # noqa
+    observation_spec: Sequence[Mapping[str, dm_env.specs.Array]],  # noqa
 ) -> Mapping[str, dm_env.specs.Array]:  # noqa
     # We only look at agent 0 since world entries are the same for all agents
     world_entries = _filter_global_state_from_dict(observation_spec[0], world=True)
@@ -181,8 +183,9 @@ class MeltingpotWrapper(_EnvWrapper):
         self,
         env: meltingpot.utils.substrates.substrate.Substrate = None,  # noqa
         categorical_actions: bool = True,
-        group_map: MarlGroupMapType
-        | dict[str, list[str]] = MarlGroupMapType.ALL_IN_ONE_GROUP,
+        group_map: (
+            MarlGroupMapType | dict[str, list[str]]
+        ) = MarlGroupMapType.ALL_IN_ONE_GROUP,
         max_steps: int = None,
         **kwargs,
     ):
@@ -447,7 +450,7 @@ class MeltingpotWrapper(_EnvWrapper):
         return td
 
     def get_rgb_image(self) -> torch.Tensor:
-        """Returns an RGB image of the environment.
+        """Return an RGB image of the environment.
 
         Returns:
             a ``torch.Tensor`` containing image in format WHC.
@@ -560,8 +563,9 @@ class MeltingpotEnv(MeltingpotWrapper):
         *,
         max_steps: int | None = None,
         categorical_actions: bool = True,
-        group_map: MarlGroupMapType
-        | dict[str, list[str]] = MarlGroupMapType.ALL_IN_ONE_GROUP,
+        group_map: (
+            MarlGroupMapType | dict[str, list[str]]
+        ) = MarlGroupMapType.ALL_IN_ONE_GROUP,
         **kwargs,
     ):
         if not _has_meltingpot:

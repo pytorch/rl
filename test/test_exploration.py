@@ -7,19 +7,11 @@ from __future__ import annotations
 import argparse
 import os
 
-import pytest
-import torch
-from scipy.stats import ttest_1samp
-from tensordict import TensorDict
-
-from tensordict.nn import InteractionType, TensorDictModule, TensorDictSequential
-from torch import nn
 from torchrl._utils import _replace_last
-
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import Bounded, Categorical, Composite, OneHot
 from torchrl.envs import SerialEnv
-from torchrl.envs.transforms.transforms import gSDENoise, InitTracker, TransformedEnv
+from torchrl.envs.transforms.transforms import InitTracker, TransformedEnv, gSDENoise
 from torchrl.envs.utils import set_exploration_type
 from torchrl.modules import SafeModule, SafeSequential
 from torchrl.modules.distributions import (
@@ -34,12 +26,20 @@ from torchrl.modules.tensordict_module.actors import (
     QValueActor,
 )
 from torchrl.modules.tensordict_module.exploration import (
-    _OrnsteinUhlenbeckProcess,
     AdditiveGaussianModule,
     EGreedyModule,
     EGreedyWrapper,
     OrnsteinUhlenbeckProcessModule,
+    _OrnsteinUhlenbeckProcess,
 )
+
+import pytest
+import torch
+
+from scipy.stats import ttest_1samp
+from tensordict import TensorDict
+from tensordict.nn import InteractionType, TensorDictModule, TensorDictSequential
+from torch import nn
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import get_default_devices
@@ -738,9 +738,7 @@ class TestConsistentDropout:
     @pytest.mark.parametrize("parallel_spec", [False, True])
     @pytest.mark.parametrize("device", get_default_devices())
     def test_consistent_dropout(self, dropout_p, parallel_spec, device):
-        """
-
-        This preliminary test seeks to ensure two things for both
+        """Thi preliminary test seeks to ensure two things for both
         ConsistentDropout and ConsistentDropoutModule:
         1. Rollout transitions generate a dropout mask as desired.
             - We can easily verify the existence of a mask
@@ -845,11 +843,12 @@ class TestConsistentDropout:
         inner_verify_routine(policy_td_seq, env)
 
     def test_consistent_dropout_primer(self):
+        from torchrl.envs import SerialEnv, StepCounter
+        from torchrl.modules import ConsistentDropoutModule, get_primers_from_module
+
         import torch
 
         from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
-        from torchrl.envs import SerialEnv, StepCounter
-        from torchrl.modules import ConsistentDropoutModule, get_primers_from_module
 
         torch.manual_seed(0)
 

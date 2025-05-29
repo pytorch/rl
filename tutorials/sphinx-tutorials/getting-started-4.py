@@ -42,6 +42,7 @@ Get started with logging
 # at least an experiment name and possibly a logging directory and other
 # hyperparameters.
 #
+from __future__ import annotations
 
 from torchrl.record import CSVLogger
 

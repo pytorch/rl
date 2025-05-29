@@ -6,11 +6,9 @@ from __future__ import annotations
 
 import functools
 import typing
+
 from typing import Any, Callable, List, Tuple, Union
 
-import numpy as np
-import torch
-from torch import Tensor
 from torchrl.data.tensor_specs import (
     Binary,
     Categorical,
@@ -22,6 +20,11 @@ from torchrl.data.tensor_specs import (
     StackedComposite,
     TensorSpec,
 )
+
+import numpy as np
+import torch
+
+from torch import Tensor
 
 numpy_to_torch_dtype_dict = {
     np.dtype("bool"): torch.bool,
@@ -189,6 +192,7 @@ def check_no_exclusive_keys(spec: TensorSpec, recurse: bool = True):
     Args:
         spec (TensorSpec): the spec to check
         recurse (bool): if True, check recursively in nested specs. Default is True.
+
     """
     if isinstance(spec, StackedComposite):
         keys = set(spec.keys())
@@ -207,7 +211,7 @@ def check_no_exclusive_keys(spec: TensorSpec, recurse: bool = True):
 
 
 def contains_lazy_spec(spec: TensorSpec) -> bool:
-    """Returns true if a spec contains lazy stacked specs.
+    """Return true if a spec contains lazy stacked specs.
 
     Args:
         spec (TensorSpec): the spec to check

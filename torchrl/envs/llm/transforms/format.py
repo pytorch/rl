@@ -10,9 +10,9 @@
 
 from __future__ import annotations
 
-from tensordict import NonTensorData
-
 from torchrl.envs.transforms.transforms import Transform
+
+from tensordict import NonTensorData
 
 
 class TemplateTransform(Transform):

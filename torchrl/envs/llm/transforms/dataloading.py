@@ -5,21 +5,23 @@
 from __future__ import annotations
 
 import warnings
+
 from collections import deque
 from collections.abc import Mapping
 from typing import Any, Callable, Iterable, Literal
-
-import torch
-from tensordict import is_tensor_collection, lazy_stack, TensorDict, TensorDictBase
 
 from torchrl.data.tensor_specs import Composite
 from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms.transforms import TensorDictPrimer, Transform
 from torchrl.envs.utils import make_composite_from_td
 
+import torch
+
+from tensordict import TensorDict, TensorDictBase, is_tensor_collection, lazy_stack
+
 
 def as_nested_tensor(list_of_tensordicts: list[TensorDictBase]) -> TensorDictBase:
-    """Stacks a list of tensordicts into a single tensordict with nested tensors.
+    """Stack a list of tensordicts into a single tensordict with nested tensors.
 
     Args:
         list_of_tensordicts (list[TensorDictBase]): A list of tensordicts to stack.
@@ -42,7 +44,7 @@ def as_nested_tensor(list_of_tensordicts: list[TensorDictBase]) -> TensorDictBas
 def as_padded_tensor(
     list_of_tensordicts: list[[TensorDictBase]], dim=0, stack_dim: int = 0
 ) -> TensorDictBase:
-    """Stacks a list of tensordicts into a single tensordict with padded tensors.
+    """Stack a list of tensordicts into a single tensordict with padded tensors.
 
     Args:
         list_of_tensordicts (list[[TensorDictBase]]): A list of tensordicts to stack.
@@ -51,6 +53,7 @@ def as_padded_tensor(
 
     Returns:
         TensorDictBase: A tensordict with padded tensors.
+
     """
 
     def _stack_tensors(*list_of_tensors):
@@ -349,9 +352,11 @@ class DataLoadingPrimer(TensorDictPrimer):
         dataloader: Iterable[dict[str, Any]],
         *,
         primers: Composite | None = None,
-        stack_method: Callable[[Any], Any]
-        | Literal["as_nested_tensor", "as_padded_tensor"]
-        | None = None,
+        stack_method: (
+            Callable[[Any], Any]
+            | Literal["as_nested_tensor", "as_padded_tensor"]
+            | None
+        ) = None,
         batch_size: int | torch.Size | None = None,
         repeats: int | None = None,
         device: torch.device | None = None,
@@ -453,7 +458,7 @@ class DataLoadingPrimer(TensorDictPrimer):
             yield from obj
 
     def _load_from_dataloader(self, reset: torch.Tensor | None = None):
-        """Loads a single element from the dataloader, or alternatively from the buffer.
+        """Load a single element from the dataloader, or alternatively from the buffer.
 
         If `reset` is passed, then one element per reset will be loaded.
         """

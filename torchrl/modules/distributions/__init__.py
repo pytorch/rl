@@ -2,9 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
-from tensordict.nn import NormalParamExtractor
-from torch import distributions as torch_dist
+from __future__ import annotations
 
 from .continuous import (
     Delta,
@@ -22,6 +20,8 @@ from .discrete import (
     Ordinal,
     ReparamGradientStrategy,
 )
+from tensordict.nn import NormalParamExtractor
+from torch import distributions as torch_dist
 
 distributions_maps = {
     str(dist).lower(): dist

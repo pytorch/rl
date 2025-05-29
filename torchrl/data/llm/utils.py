@@ -8,13 +8,14 @@ import abc
 import collections
 import importlib
 
+from torchrl.data.llm.prompt import PromptData
+
 import numpy as np
 import torch
-from tensordict import TensorDict
-from torch import nn, Tensor
-from torch.nn import functional as F
 
-from torchrl.data.llm.prompt import PromptData
+from tensordict import TensorDict
+from torch import Tensor, nn
+from torch.nn import functional as F
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 
@@ -28,8 +29,7 @@ class KLControllerBase(abc.ABC):
     """
 
     @abc.abstractmethod
-    def update(self, kl_values: list[float]) -> float:
-        ...
+    def update(self, kl_values: list[float]) -> float: ...
 
 
 class ConstantKLController(KLControllerBase):
@@ -44,6 +44,7 @@ class ConstantKLController(KLControllerBase):
         model (nn.Module, optional): wrapped model that needs to be controlled.
             Must have an attribute ``"kl_coef"``. If provided, the ``"kl_coef"`` will
             be updated in-place.
+
     """
 
     def __init__(
@@ -85,6 +86,7 @@ class AdaptiveKLController(KLControllerBase):
 
     Reference: Section 2.2 https://arxiv.org/pdf/1909.08593.pdf#page=2
     Source: https://github.com/openai/lm-human-preferences/blob/master/lm_human_preferences/train_policy.py
+
     """
 
     def __init__(
@@ -485,7 +487,7 @@ class RolloutFromModel:
 
     @torch.no_grad()
     def generate(self, batch: PromptData, generation_config=None):
-        """Generates a sequence of tokens from a batch of data sampled from the data collector.
+        """Generate a sequence of tokens from a batch of data sampled from the data collector.
 
         Args:
             batch (PromptData): the data to be used. Must have ``input_ids``

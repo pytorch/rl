@@ -2,19 +2,13 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import contextlib
 import logging
+
 from contextlib import nullcontext
 from copy import deepcopy
-
-import torch
-import torch._dynamo
-
-from hydra.utils import to_absolute_path
-from models.reward import init_reward_model
-
-from tensordict import TensorDict
-from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from torchrl.data import (
     LazyTensorStorage,
@@ -27,8 +21,15 @@ from torchrl.data.llm.prompt import PromptData
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value import GAE
-
 from torchrl.record.loggers import Logger
+
+import torch
+import torch._dynamo
+
+from hydra.utils import to_absolute_path
+from models.reward import init_reward_model
+from tensordict import TensorDict
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from transformers import GenerationConfig, GPT2Tokenizer
 
 
@@ -179,16 +180,16 @@ class RewardEstimator:
     """
 
     def __init__(self, eval_iters, episode_length, reward_model, ref_model):
-        """
-        Args:
-            eval_iters (int): number of batches on which we would like to estimate reward
+        """Args:
+        eval_iters (int): number of batches on which we would like to estimate reward
 
-            episode_length (int): max number of generated new tokens
+        episode_length (int): max number of generated new tokens
 
-            reward_model (GPT2RewardModel): reward model
+        reward_model (GPT2RewardModel): reward model
 
-            ref_model (GPT2LMHeadModel): original transformer model that it is used to
-                correctly compute kl component of reward.
+        ref_model (GPT2LMHeadModel): original transformer model that it is used to
+            correctly compute kl component of reward.
+
         """
         self.ref_model = ref_model
         self.reward_model = reward_model
@@ -224,9 +225,7 @@ def resolve_name_or_path(name_or_path):
 
 
 def get_file_logger(name, filename, level=logging.DEBUG):
-    """
-    Set up logger that will log to the given filename.
-    """
+    """Set up logger that will log to the given filename."""
     logger = logging.getLogger(name)
     handler = logging.FileHandler(filename)
     handler.setFormatter(
@@ -239,9 +238,7 @@ def get_file_logger(name, filename, level=logging.DEBUG):
 
 
 def setup(sys_cfg):
-    """
-    Set manual seed, configure backend and autocasting.
-    """
+    """Set manual seed, configure backend and autocasting."""
     device = sys_cfg.device
     dtype = sys_cfg.dtype
 

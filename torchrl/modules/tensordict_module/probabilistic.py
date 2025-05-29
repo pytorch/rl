@@ -6,7 +6,13 @@ from __future__ import annotations
 
 import warnings
 
+from torchrl.data.tensor_specs import Composite, TensorSpec
+from torchrl.modules.distributions import Delta
+from torchrl.modules.tensordict_module.common import _forward_hook_safe_action
+from torchrl.modules.tensordict_module.sequence import SafeSequential
+
 import torch
+
 from tensordict import TensorDictBase, unravel_key_list
 from tensordict.nn import (
     InteractionType,
@@ -15,10 +21,6 @@ from tensordict.nn import (
     TensorDictModule,
 )
 from tensordict.utils import NestedKey
-from torchrl.data.tensor_specs import Composite, TensorSpec
-from torchrl.modules.distributions import Delta
-from torchrl.modules.tensordict_module.common import _forward_hook_safe_action
-from torchrl.modules.tensordict_module.sequence import SafeSequential
 
 
 class SafeProbabilisticModule(ProbabilisticTensorDictModule):
@@ -179,6 +181,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         >>> data["action"].mean().backward()
         >>> print(data["loc"].grad) # clamp anihilates gradients
         tensor([0., 0., 0., 0., 0., 0., 0., 0., 0., 0.])
+
     """
 
     def __init__(
@@ -267,7 +270,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         self._spec = spec
 
     def random(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Samples a random element in the target space, irrespective of any input.
+        """Sample a random element in the target space, irrespective of any input.
 
         If multiple output keys are present, only the first will be written in the input :obj:`tensordict`.
 

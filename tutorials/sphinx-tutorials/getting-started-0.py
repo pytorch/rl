@@ -60,6 +60,7 @@ Get started with Environments, TED and transforms
 #
 # Creating your environment is typically as straightforward as the underlying
 # backend API allows. Here's an example using gym:
+from __future__ import annotations
 
 from torchrl.envs import GymEnv
 

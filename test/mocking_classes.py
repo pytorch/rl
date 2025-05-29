@@ -7,12 +7,6 @@ from __future__ import annotations
 import random
 import string
 
-import numpy as np
-import torch
-import torch.nn as nn
-from tensordict import tensorclass, TensorDict, TensorDictBase
-from tensordict.nn import TensorDictModuleBase
-from tensordict.utils import expand_right, NestedKey
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data import (
     Binary,
@@ -30,10 +24,18 @@ from torchrl.envs import Transform
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based.common import ModelBasedEnvBase
 from torchrl.envs.utils import (
+    MarlGroupMapType,
     _terminated_or_truncated,
     check_marl_grouping,
-    MarlGroupMapType,
 )
+
+import numpy as np
+import torch
+import torch.nn as nn
+
+from tensordict import TensorDict, TensorDictBase, tensorclass
+from tensordict.nn import TensorDictModuleBase
+from tensordict.utils import NestedKey, expand_right
 
 spec_dict = {
     "bounded": Bounded,
@@ -262,7 +264,7 @@ class MockSerialEnv(EnvBase):
 
 
 class MockBatchedLockedEnv(EnvBase):
-    """Mocks an env whose batch_size defines the size of the output tensordict"""
+    """Mock an env whose batch_size defines the size of the output tensordict"""
 
     @classmethod
     def __new__(
@@ -413,7 +415,7 @@ class MockBatchedLockedEnv(EnvBase):
 
 
 class MockBatchedUnLockedEnv(MockBatchedLockedEnv):
-    """Mocks an env which batch_size does not define the size of the output tensordict.
+    """Mock an env which batch_size does not define the size of the output tensordict.
 
     The size of the output tensordict is defined by the input tensordict itself.
 
@@ -461,26 +463,30 @@ class StateLessCountingEnv(EnvBase):
             tensordict = TensorDict(device=self.device)
         tensordict.update(
             TensorDict(
-                count=torch.zeros(
-                    (
-                        *shape,
-                        1,
-                    ),
-                    dtype=torch.int32,
-                )
-                if count is None
-                else count,
-                max_count=torch.randint(
-                    10,
-                    20,
-                    (
-                        *shape,
-                        1,
-                    ),
-                    dtype=torch.int32,
-                )
-                if max_count is None
-                else max_count,
+                count=(
+                    torch.zeros(
+                        (
+                            *shape,
+                            1,
+                        ),
+                        dtype=torch.int32,
+                    )
+                    if count is None
+                    else count
+                ),
+                max_count=(
+                    torch.randint(
+                        10,
+                        20,
+                        (
+                            *shape,
+                            1,
+                        ),
+                        dtype=torch.int32,
+                    )
+                    if max_count is None
+                    else max_count
+                ),
                 **self.done_spec.zero(shape),
                 **self.full_reward_spec.zero(shape),
             )
@@ -506,8 +512,7 @@ class StateLessCountingEnv(EnvBase):
             device=tensordict.device,
         )
 
-    def _set_seed(self, seed: int | None) -> None:
-        ...
+    def _set_seed(self, seed: int | None) -> None: ...
 
 
 class DiscreteActionVecMockEnv(_MockEnv):
@@ -977,6 +982,7 @@ class DummyModelBasedEnvBase(ModelBasedEnvBase):
         device (str or torch.device, optional): the device to use for the environment.
         dtype (torch.dtype, optional): the dtype to use for the environment.
         batch_size (sequence of int, optional): the batch size to use for the environment.
+
     """
 
     def __init__(
@@ -1204,8 +1210,9 @@ class MultiAgentCountingEnv(EnvBase):
     def __init__(
         self,
         n_agents: int,
-        group_map: MarlGroupMapType
-        | dict[str, list[str]] = MarlGroupMapType.ALL_IN_ONE_GROUP,
+        group_map: (
+            MarlGroupMapType | dict[str, list[str]]
+        ) = MarlGroupMapType.ALL_IN_ONE_GROUP,
         max_steps: int = 5,
         start_val: int = 0,
         **kwargs,
@@ -2098,8 +2105,7 @@ class EnvWithMetadata(EnvBase):
         data.update(self._saved_full_reward_spec.zero())
         return data
 
-    def _set_seed(self, seed: int | None) -> None:
-        ...
+    def _set_seed(self, seed: int | None) -> None: ...
 
 
 class AutoResettingCountingEnv(CountingEnv):
@@ -2236,11 +2242,13 @@ class EnvWithScalarAction(EnvBase):
             -1,
             1,
             shape=(
-                *self.batch_size,
-                1,
-            )
-            if self.singleton
-            else self.batch_size,
+                (
+                    *self.batch_size,
+                    1,
+                )
+                if self.singleton
+                else self.batch_size
+            ),
         )
         self.observation_spec = Composite(
             observation=Unbounded(
@@ -2293,8 +2301,7 @@ class EnvWithScalarAction(EnvBase):
             ),
         )
 
-    def _set_seed(self, seed: int | None) -> None:
-        ...
+    def _set_seed(self, seed: int | None) -> None: ...
 
 
 class EnvThatDoesNothing(EnvBase):
@@ -2307,8 +2314,7 @@ class EnvThatDoesNothing(EnvBase):
     ) -> TensorDictBase:
         return TensorDict(batch_size=self.batch_size, device=self.device)
 
-    def _set_seed(self, seed: int | None) -> None:
-        ...
+    def _set_seed(self, seed: int | None) -> None: ...
 
 
 class Str2StrEnv(EnvBase):
@@ -2368,8 +2374,7 @@ class EnvThatErrorsAfter10Iters(EnvBase):
             .update(self.full_reward_spec.zero())
         )
 
-    def _set_seed(self, seed: int | None) -> None:
-        ...
+    def _set_seed(self, seed: int | None) -> None: ...
 
 
 @tensorclass()

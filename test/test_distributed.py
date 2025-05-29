@@ -2,8 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""
-Contains distributed tests which are expected to be a considerable burden for the CI
+"""Contain distributed tests which are expected to be a considerable burden for the CI
 ====================================================================================
 """
 from __future__ import annotations
@@ -13,11 +12,9 @@ import argparse
 import os
 import sys
 import time
+
 from functools import partial
 
-import pytest
-from tensordict import TensorDict
-from tensordict.nn import TensorDictModuleBase
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data import (
     LazyTensorStorage,
@@ -27,6 +24,11 @@ from torchrl.data import (
     SamplerWithoutReplacement,
 )
 
+import pytest
+
+from tensordict import TensorDict
+from tensordict.nn import TensorDictModuleBase
+
 try:
     import ray
 
@@ -35,10 +37,6 @@ try:
 except ModuleNotFoundError as err:
     _has_ray = False
     RAY_ERR = err
-
-import torch
-
-from torch import multiprocessing as mp, nn
 
 from torchrl.collectors.collectors import (
     MultiaSyncDataCollector,
@@ -53,6 +51,10 @@ from torchrl.collectors.distributed import (
 )
 from torchrl.collectors.distributed.ray import DEFAULT_RAY_INIT_CONFIG
 from torchrl.envs.utils import RandomPolicy
+
+import torch
+
+from torch import multiprocessing as mp, nn
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test.mocking_classes import ContinuousActionVecMockEnv, CountingEnv

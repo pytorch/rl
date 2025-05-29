@@ -2,16 +2,18 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import os
 import weakref
+
 from warnings import warn
 
 import torch
 
 from tensordict import set_lazy_legacy
-
 from torch import multiprocessing as mp
-from torch.distributions.transforms import _InverseTransform, ComposeTransform
+from torch.distributions.transforms import ComposeTransform, _InverseTransform
 
 set_lazy_legacy(False).set()
 
@@ -20,7 +22,6 @@ if torch.cuda.device_count() > 1:
     os.environ["MUJOCO_EGL_DEVICE_ID"] = str(1 + (os.getpid() % n))
 
 from ._extension import _init_extension
-
 
 try:
     from .version import __version__

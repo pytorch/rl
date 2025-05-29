@@ -5,17 +5,19 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
 
-import torch
-from tensordict import TensorDict, TensorDictBase, TensorDictParams
-from tensordict.nn import dispatch, TensorDictModule
-from tensordict.utils import NestedKey
-from torch import distributions as d
+from dataclasses import dataclass
 
 from torchrl.modules import ProbabilisticActor
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import _reduce, distance_loss
+
+import torch
+
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
+from tensordict.nn import TensorDictModule, dispatch
+from tensordict.utils import NestedKey
+from torch import distributions as d
 
 
 class OnlineDTLoss(LossModule):
@@ -45,11 +47,12 @@ class OnlineDTLoss(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
+
     """
 
     @dataclass
     class _AcceptedKeys:
-        """Maintains default values for all configurable tensordict keys.
+        """Maintain default values for all configurable tensordict keys.
 
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values.
@@ -236,9 +239,11 @@ class OnlineDTLoss(LossModule):
         }
         td_out = TensorDict(out, [])
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
-            if name.startswith("loss_")
-            else value,
+            lambda name, value: (
+                _reduce(value, reduction=self.reduction).squeeze(-1)
+                if name.startswith("loss_")
+                else value
+            ),
         )
         self._clear_weakrefs(
             tensordict,
@@ -263,11 +268,12 @@ class DTLoss(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
+
     """
 
     @dataclass
     class _AcceptedKeys:
-        """Maintains default values for all configurable tensordict keys.
+        """Maintain default values for all configurable tensordict keys.
 
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values.
@@ -277,6 +283,7 @@ class DTLoss(LossModule):
                 Defaults to ``"action"``.
             action_pred (NestedKey): The tensordict key where the output action (from the model) is expected.
                 Defaults to ``"action"``.
+
         """
 
         # the "action" contained in the dataset

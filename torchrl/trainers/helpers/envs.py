@@ -6,17 +6,18 @@
 # This makes omegaconf unhappy with typing.Any
 # Therefore we need Optional and Union
 # from __future__ import annotations
+from __future__ import annotations
 
 import importlib.util
+
 from copy import copy
 from dataclasses import dataclass, field as dataclass_field
-from typing import Any, Callable, Optional, Sequence, Union
+from typing import Any, Callable, Optional, Sequence
 
-import torch
-from torchrl._utils import logger as torchrl_logger, VERBOSE
+from torchrl._utils import VERBOSE, logger as torchrl_logger
 from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
-from torchrl.envs.env_creator import env_creator, EnvCreator
+from torchrl.envs.env_creator import EnvCreator, env_creator
 from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import (
@@ -36,12 +37,14 @@ from torchrl.envs.transforms import (
 )
 from torchrl.envs.transforms.transforms import (
     FlattenObservation,
-    gSDENoise,
     InitTracker,
     StepCounter,
+    gSDENoise,
 )
 from torchrl.record.loggers import Logger
 from torchrl.record.recorder import VideoRecorder
+
+import torch
 
 LIBS = {
     "gym": GymEnv,
@@ -104,7 +107,7 @@ def make_env_transforms(
     batch_dims=0,
     obs_norm_state_dict=None,
 ):
-    """Creates the typical transforms for and env."""
+    """Create the typical transforms for and env."""
     env = TransformedEnv(env)
 
     from_pixels = cfg.from_pixels
@@ -210,7 +213,7 @@ def make_env_transforms(
 
 
 def get_norm_state_dict(env):
-    """Gets the normalization loc and scale from the env state_dict."""
+    """Get the normalization loc and scale from the env state_dict."""
     sd = env.state_dict()
     sd = {
         key: val
@@ -224,18 +227,18 @@ def transformed_env_constructor(
     cfg: DictConfig,  # noqa: F821
     video_tag: str = "",
     logger: Optional[Logger] = None,  # noqa
-    stats: Optional[dict] = None,
+    stats: dict | None = None,
     norm_obs_only: bool = False,
     use_env_creator: bool = False,
-    custom_env_maker: Optional[Callable] = None,
-    custom_env: Optional[EnvBase] = None,
+    custom_env_maker: Callable | None = None,
+    custom_env: EnvBase | None = None,
     return_transformed_envs: bool = True,
-    action_dim_gsde: Optional[int] = None,
-    state_dim_gsde: Optional[int] = None,
-    batch_dims: Optional[int] = 0,
-    obs_norm_state_dict: Optional[dict] = None,
-) -> Union[Callable, EnvCreator]:
-    """Returns an environment creator from an argparse.Namespace built with the appropriate parser constructor.
+    action_dim_gsde: int | None = None,
+    state_dim_gsde: int | None = None,
+    batch_dims: int | None = 0,
+    obs_norm_state_dict: dict | None = None,
+) -> Callable | EnvCreator:
+    """Return an environment creator from an argparse.Namespace built with the appropriate parser constructor.
 
     Args:
         cfg (DictConfig): a DictConfig containing the arguments of the script.
@@ -265,6 +268,7 @@ def transformed_env_constructor(
             it should be set to 1 (or the number of dims of the batch).
         obs_norm_state_dict (dict, optional): the state_dict of the ObservationNorm transform to be loaded into the
             environment
+
     """
 
     def make_transformed_env(**kwargs) -> TransformedEnv:
@@ -340,12 +344,13 @@ def transformed_env_constructor(
 
 def parallel_env_constructor(
     cfg: DictConfig, **kwargs  # noqa: F821
-) -> Union[ParallelEnv, EnvCreator]:
-    """Returns a parallel environment from an argparse.Namespace built with the appropriate parser constructor.
+) -> ParallelEnv | EnvCreator:
+    """Return a parallel environment from an argparse.Namespace built with the appropriate parser constructor.
 
     Args:
         cfg (DictConfig): config containing user-defined arguments
         kwargs: keyword arguments for the `transformed_env_constructor` method.
+
     """
     batch_transform = cfg.batch_transform
     if not batch_transform:
@@ -385,9 +390,9 @@ def parallel_env_constructor(
 def get_stats_random_rollout(
     cfg: DictConfig,  # noqa: F821
     proof_environment: EnvBase = None,
-    key: Optional[str] = None,
+    key: str | None = None,
 ):
-    """Gathers stas (loc and scale) from an environment using random rollouts.
+    """Gather stas (loc and scale) from an environment using random rollouts.
 
     Args:
         cfg (DictConfig): a config object with `init_env_steps` field, indicating
@@ -463,9 +468,9 @@ def get_stats_random_rollout(
 def initialize_observation_norm_transforms(
     proof_environment: EnvBase,
     num_iter: int = 1000,
-    key: Union[str, tuple[str, ...]] = None,
+    key: str | tuple[str, ...] = None,
 ):
-    """Calls :obj:`ObservationNorm.init_stats` on all uninitialized :obj:`ObservationNorm` instances of a :obj:`TransformedEnv`.
+    """Call :obj:`ObservationNorm.init_stats` on all uninitialized :obj:`ObservationNorm` instances of a :obj:`TransformedEnv`.
 
     If an :obj:`ObservationNorm` already has non-null :obj:`loc` or :obj:`scale`, a call to :obj:`initialize_observation_norm_transforms` will be a no-op.
     Similarly, if the transformed environment does not contain any :obj:`ObservationNorm`, a call to this function will have no effect.
@@ -504,7 +509,7 @@ def initialize_observation_norm_transforms(
 
 
 def retrieve_observation_norms_state_dict(proof_environment: TransformedEnv):
-    """Traverses the transforms of the environment and retrieves the :obj:`ObservationNorm` state dicts.
+    """Traverse the transforms of the environment and retrieves the :obj:`ObservationNorm` state dicts.
 
     Returns a list of tuple (idx, state_dict) for each :obj:`ObservationNorm` transform in proof_environment
     If the environment transforms do not contain any :obj:`ObservationNorm`, returns an empty list
@@ -512,6 +517,7 @@ def retrieve_observation_norms_state_dict(proof_environment: TransformedEnv):
     Args:
         proof_environment (EnvBase instance, optional): the :obj:``TransformedEnv` to retrieve the :obj:`ObservationNorm`
             state dict from
+
     """
     obs_norm_state_dicts = []
 

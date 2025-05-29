@@ -6,14 +6,19 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 
+from torchrl.envs.transforms.transforms import Transform
+from torchrl.objectives.ppo import ClipPPOLoss
+from torchrl.objectives.utils import _maybe_get_or_select, _reduce, _sum_td_features
+
 import torch
+
 from tensordict import (
-    is_tensor_collection,
     NestedKey,
     TensorClass,
     TensorDict,
     TensorDictBase,
     TensorDictParams,
+    is_tensor_collection,
 )
 from tensordict.nn import (
     ProbabilisticTensorDictSequential,
@@ -21,10 +26,6 @@ from tensordict.nn import (
     TensorDictModuleBase,
 )
 from torch import distributions as d
-
-from torchrl.envs.transforms.transforms import Transform
-from torchrl.objectives.ppo import ClipPPOLoss
-from torchrl.objectives.utils import _maybe_get_or_select, _reduce, _sum_td_features
 
 
 class GRPOLossOutput(TensorClass["nocast"]):
@@ -80,6 +81,7 @@ class GRPOLoss(ClipPPOLoss):
 
             .. note:: Parameters and buffers from the policy / critic will not be cast to that device to ensure that
                 the storages match the ones that are passed to other components, such as data collectors.
+
     """
 
     actor_network: TensorDictModule
@@ -91,9 +93,9 @@ class GRPOLoss(ClipPPOLoss):
 
     def __init__(
         self,
-        actor_network: ProbabilisticTensorDictSequential
-        | TensorDictModuleBase
-        | None = None,
+        actor_network: (
+            ProbabilisticTensorDictSequential | TensorDictModuleBase | None
+        ) = None,
         *,
         clip_epsilon: float = 0.2,
         entropy_bonus: bool = True,
@@ -175,9 +177,11 @@ class GRPOLoss(ClipPPOLoss):
 
         td_out.set("ESS", _reduce(ess, self.reduction) / batch)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
-            if name.startswith("loss_")
-            else value,
+            lambda name, value: (
+                _reduce(value, reduction=self.reduction).squeeze(-1)
+                if name.startswith("loss_")
+                else value
+            ),
         )
         if self.kl_to_ref_coeff is not None:
             loss_kl, kl_penalty = self._kl_to_ref(tensordict)

@@ -2,12 +2,10 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import argparse
 import time
-
-import pytest
-import torch.cuda
-import tqdm
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.collectors.collectors import (
@@ -19,6 +17,10 @@ from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import EnvCreator, GymEnv, ParallelEnv, StepCounter, TransformedEnv
 from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.envs.utils import RandomPolicy
+
+import pytest
+import torch.cuda
+import tqdm
 
 
 def single_collector_setup():

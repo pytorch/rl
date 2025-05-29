@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 """Helper script to package wheels and relocate binaries."""
+from __future__ import annotations
 
 import glob
 import hashlib
@@ -14,6 +15,7 @@ import os.path as osp
 import shutil
 import sys
 import zipfile
+
 from base64 import urlsafe_b64encode
 
 HERE = osp.dirname(osp.abspath(__file__))
@@ -34,14 +36,13 @@ def rehash(path, blocksize=1 << 20):
 
 
 def unzip_file(file, dest):
-    """Decompress zip `file` into directory `dest`."""
+    """Decompres zip `file` into directory `dest`."""
     with zipfile.ZipFile(file, "r") as zip_ref:
         zip_ref.extractall(dest)
 
 
 def is_program_installed(basename):
-    """
-    Return program absolute path if installed in PATH.
+    """Return program absolute path if installed in PATH.
     Otherwise, return None
     On macOS systems, a .app is considered installed if
     it exists.
@@ -56,8 +57,7 @@ def is_program_installed(basename):
 
 
 def find_program(basename):
-    """
-    Find program in PATH and return absolute path
+    """Find program in PATH and return absolute path
     Try adding .exe or .bat to basename on Windows platforms
     (return None if not found)
     """

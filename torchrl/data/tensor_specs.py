@@ -12,6 +12,7 @@ import gc
 import math
 import warnings
 import weakref
+
 from collections.abc import Iterable
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -23,35 +24,36 @@ from typing import (
     Dict,
     Generic,
     List,
-    overload,
     Sequence,
     Tuple,
     TypeVar,
     Union,
+    overload,
 )
 
-import numpy as np
+from torchrl._utils import _make_ordinal_device, get_binary_env_var, implement_for
 
+import numpy as np
 import tensordict
 import torch
+
 from tensordict import (
-    is_tensor_collection,
     LazyStackedTensorDict,
     NonTensorData,
     NonTensorStack,
-    set_capture_non_tensor_stack,
     TensorDict,
     TensorDictBase,
+    is_tensor_collection,
+    set_capture_non_tensor_stack,
     unravel_key,
 )
 from tensordict.base import NO_DEFAULT
 from tensordict.utils import (
+    NestedKey,
     _getitem_batch_size,
     expand_as_right,
     is_non_tensor,
-    NestedKey,
 )
-from torchrl._utils import _make_ordinal_device, get_binary_env_var, implement_for
 
 try:
     from torch.compiler import is_compiling
@@ -133,6 +135,7 @@ def _validate_idx(shape: list[int], idx: int, axis: int = 0):
         shape (list[int]): Input shape
         idx (int): Index, may be negative
         axis (int): Shape axis to check
+
     """
     if shape[axis] >= 0 and (idx >= shape[axis] or idx < 0 and -idx > shape[axis]):
         raise IndexError(
@@ -149,6 +152,7 @@ def _validate_iterable(
         idx (Iterable[Any]): Iterable, may contain nested iterables
         expected_type (Type): Required item type in the Iterable (e.g. int)
         iterable_classname (str): Iterable type as a string (e.g. 'List'). Logging purpose only.
+
     """
     for item in idx:
         if isinstance(item, Iterable):
@@ -173,6 +177,7 @@ def _slice_indexing(shape: list[int], idx: slice) -> list[int]:
         [2, 4]
         >>> list(torch.rand(3, 4)[:2].shape)
         [2, 4]
+
     """
     if idx.step == 0:
         raise ValueError("slice step cannot be zero")
@@ -224,6 +229,7 @@ def _shape_indexing(
         torch.Size([4, 1])
         >>> _shape_indexing([3, 4], idx)
         torch.Size([4, 1])
+
     """
     if not isinstance(shape, list):
         shape = list(shape)
@@ -341,6 +347,7 @@ class invertible_dict(dict):
         >>> my_dict = invertible_dict(a=3, b=2)
         >>> inv_dict = my_dict.invert()
         >>> assert {2, 3} == set(inv_dict.keys())
+
     """
 
     def __init__(self, *args, inv_dict=None, **kwargs):
@@ -580,7 +587,7 @@ class TensorSpec(metaclass=abc.ABCMeta):
     SPEC_HANDLED_FUNCTIONS = {}
 
     def memoize_encode(self, mode: bool = True) -> None:
-        """Creates a cached sequence of callables for the `encode` method that speeds up its execution.
+        """Create a cached sequence of callables for the `encode` method that speeds up its execution.
 
         This should only be used whenever the input type, shape etc. are expected to be consistent across calls
         for a given spec.
@@ -589,6 +596,7 @@ class TensorSpec(metaclass=abc.ABCMeta):
             mode (bool, optional): Whether the cache should be used. Defaults to `True`.
 
         .. seealso:: the cache can be erased via :meth:`~torchrl.data.TensorSpec.erase_memoize_cache`.
+
         """
         warnings.warn(
             "memoized encoding is an experimental feature. Use at your own risks."
@@ -599,7 +607,7 @@ class TensorSpec(metaclass=abc.ABCMeta):
             self.encode = self._encode_eager
 
     def erase_memoize_cache(self) -> None:
-        """Clears the memoized cache for cached encode execution.
+        """Clear the memoized cache for cached encode execution.
 
         .. seealso:: :meth:`~torchrl.data.TensorSpec.memoize_encode`.
         """
@@ -656,7 +664,7 @@ class TensorSpec(metaclass=abc.ABCMeta):
         *,
         ignore_device: bool = False,
     ) -> torch.Tensor | TensorDictBase:
-        """Encodes a value given the specified spec, and return the corresponding tensor.
+        """Encode a value given the specified spec, and return the corresponding tensor.
 
         This method is to be used in environments that return a value (eg, a numpy array) that can be
         easily mapped to the TorchRL required domain.
@@ -805,7 +813,7 @@ class TensorSpec(metaclass=abc.ABCMeta):
     def to_numpy(
         self, val: torch.Tensor | TensorDictBase, safe: bool = None
     ) -> np.ndarray | dict:
-        """Returns the ``np.ndarray`` correspondent of an input tensor.
+        """Return the ``np.ndarray`` correspondent of an input tensor.
 
         This is intended to be the inverse operation of :meth:`.encode`.
 
@@ -844,14 +852,14 @@ class TensorSpec(metaclass=abc.ABCMeta):
 
     @property
     def _safe_shape(self) -> torch.Size:
-        """Returns a shape where all heterogeneous values are replaced by one (to be expandable)."""
+        """Return a shape where all heterogeneous values are replaced by one (to be expandable)."""
         return _size([int(v) if v >= 0 else 1 for v in self.shape])
 
     @abc.abstractmethod
     def index(
         self, index: INDEX_TYPING, tensor_to_index: torch.Tensor | TensorDictBase
     ) -> torch.Tensor | TensorDictBase:
-        """Indexes the input tensor.
+        """Indexe the input tensor.
 
         This method is to be used with specs that encode one or more categorical variables (e.g.,
         :class:`~torchrl.data.OneHot` or :class:`~torchrl.data.Categorical`), such that indexing of a tensor
@@ -882,12 +890,11 @@ class TensorSpec(metaclass=abc.ABCMeta):
         ...
 
     @overload
-    def expand(self, shape: torch.Size):
-        ...
+    def expand(self, shape: torch.Size): ...
 
     @abc.abstractmethod
     def expand(self, *shape: int) -> T:
-        """Returns a new Spec with the expanded shape.
+        """Return a new Spec with the expanded shape.
 
         Args:
             *shape (tuple or iterable of int): the new shape of the Spec.
@@ -900,7 +907,7 @@ class TensorSpec(metaclass=abc.ABCMeta):
         ...
 
     def squeeze(self, dim: int | None = None) -> T:
-        """Returns a new Spec with all the dimensions of size ``1`` removed.
+        """Return a new Spec with all the dimensions of size ``1`` removed.
 
         When ``dim`` is given, a squeeze operation is done only in that dimension.
 
@@ -914,7 +921,7 @@ class TensorSpec(metaclass=abc.ABCMeta):
         return self.__class__(shape=shape, device=self.device, dtype=self.dtype)
 
     def unsqueeze(self, dim: int) -> T:
-        """Returns a new Spec with one more singleton dimension (at the position indicated by ``dim``).
+        """Return a new Spec with one more singleton dimension (at the position indicated by ``dim``).
 
         Args:
             dim (int or None): the dimension to apply the unsqueeze operation to.
@@ -924,7 +931,7 @@ class TensorSpec(metaclass=abc.ABCMeta):
         return self.__class__(shape=shape, device=self.device, dtype=self.dtype)
 
     def make_neg_dim(self, dim: int) -> T:
-        """Converts a specific dimension to ``-1``."""
+        """Convert a specific dimension to ``-1``."""
         if dim < 0:
             dim = self.ndim + dim
         if dim < 0 or dim > self.ndim - 1:
@@ -932,11 +939,10 @@ class TensorSpec(metaclass=abc.ABCMeta):
         self.shape = _size([s if i != dim else -1 for i, s in enumerate(self.shape)])
 
     @overload
-    def reshape(self, shape) -> T:
-        ...
+    def reshape(self, shape) -> T: ...
 
     def reshape(self, *shape) -> T:
-        """Reshapes a ``TensorSpec``.
+        """Reshape a ``TensorSpec``.
 
         Check :func:`~torch.reshape` for more information on this method.
 
@@ -948,11 +954,10 @@ class TensorSpec(metaclass=abc.ABCMeta):
     view = reshape
 
     @abc.abstractmethod
-    def _reshape(self, shape: torch.Size) -> T:
-        ...
+    def _reshape(self, shape: torch.Size) -> T: ...
 
     def unflatten(self, dim: int, sizes: tuple[int]) -> T:
-        """Unflattens a ``TensorSpec``.
+        """Unflatten a ``TensorSpec``.
 
         Check :func:`~torch.unflatten` for more information on this method.
 
@@ -964,7 +969,7 @@ class TensorSpec(metaclass=abc.ABCMeta):
         return self._reshape(shape)
 
     def flatten(self, start_dim: int, end_dim: int) -> T:
-        """Flattens a ``TensorSpec``.
+        """Flatten a ``TensorSpec``.
 
         Check :func:`~torch.flatten` for more information on this method.
 
@@ -1007,7 +1012,7 @@ class TensorSpec(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def enumerate(self, use_mask: bool = False) -> Any:
-        """Returns all the samples that can be obtained from the TensorSpec.
+        """Return all the samples that can be obtained from the TensorSpec.
 
         The samples will be stacked along the first dimension.
 
@@ -1016,6 +1021,7 @@ class TensorSpec(metaclass=abc.ABCMeta):
         Args:
             use_mask (bool, optional): If ``True`` and the spec has a mask,
                 samples that are masked are excluded. Default is ``False``.
+
         """
         ...
 
@@ -1036,7 +1042,7 @@ class TensorSpec(metaclass=abc.ABCMeta):
         return val
 
     def assert_is_in(self, value: torch.Tensor) -> None:
-        """Asserts whether a tensor belongs to the box, and raises an exception otherwise.
+        """Assert whether a tensor belongs to the box, and raises an exception otherwise.
 
         Args:
             value (torch.Tensor): value to be checked.
@@ -1050,7 +1056,7 @@ class TensorSpec(metaclass=abc.ABCMeta):
             )
 
     def type_check(self, value: torch.Tensor, key: NestedKey = None) -> None:
-        """Checks the input value ``dtype`` against the ``TensorSpec`` ``dtype`` and raises an exception if they don't match.
+        """Check the input value ``dtype`` against the ``TensorSpec`` ``dtype`` and raises an exception if they don't match.
 
         Args:
             value (torch.Tensor): tensor whose dtype has to be checked.
@@ -1067,7 +1073,7 @@ class TensorSpec(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def rand(self, shape: torch.Size = None) -> torch.Tensor | TensorDictBase:
-        """Returns a random tensor in the space defined by the spec.
+        """Return a random tensor in the space defined by the spec.
 
         The sampling will be done uniformly over the space, unless the box is unbounded in which case normal values
         will be drawn.
@@ -1082,14 +1088,14 @@ class TensorSpec(metaclass=abc.ABCMeta):
         ...
 
     def sample(self, shape: torch.Size = None) -> torch.Tensor | TensorDictBase:
-        """Returns a random tensor in the space defined by the spec.
+        """Return a random tensor in the space defined by the spec.
 
         See :meth:`rand` for details.
         """
         return self.rand(shape=shape)
 
     def zero(self, shape: torch.Size = None) -> torch.Tensor | TensorDictBase:
-        """Returns a zero-filled tensor in the box.
+        """Return a zero-filled tensor in the box.
 
         .. note:: Even though there is no guarantee that ``0`` belongs to the spec domain,
             this method will not raise an exception when this condition is violated.
@@ -1113,7 +1119,7 @@ class TensorSpec(metaclass=abc.ABCMeta):
         return self.zero(shape=shape)
 
     def one(self, shape: torch.Size = None) -> torch.Tensor | TensorDictBase:
-        """Returns a one-filled tensor in the box.
+        """Return a one-filled tensor in the box.
 
         .. note:: Even though there is no guarantee that ``1`` belongs to the spec domain,
             this method will not raise an exception when this condition is violated.
@@ -1136,25 +1142,25 @@ class TensorSpec(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def to(self, dest: torch.dtype | DEVICE_TYPING) -> TensorSpec:
-        """Casts a TensorSpec to a device or a dtype.
+        """Cast a TensorSpec to a device or a dtype.
 
         Returns the same spec if no change is made.
         """
         ...
 
     def cpu(self):
-        """Casts the TensorSpec to 'cpu' device."""
+        """Cast the TensorSpec to 'cpu' device."""
         return self.to("cpu")
 
     def cuda(self, device=None):
-        """Casts the TensorSpec to 'cuda' device."""
+        """Cast the TensorSpec to 'cuda' device."""
         if device is None:
             return self.to("cuda")
         return self.to(f"cuda:{device}")
 
     @abc.abstractmethod
     def clone(self) -> TensorSpec:
-        """Creates a copy of the TensorSpec."""
+        """Create a copy of the TensorSpec."""
         ...
 
     def __repr__(self):
@@ -1202,7 +1208,7 @@ class _LazyStackedMixin(Generic[T]):
             self.dim = len(self.shape) + self.dim
 
     def clear_device_(self):
-        """Clears the device of the Composite."""
+        """Clear the device of the Composite."""
         for spec in self._specs:
             spec.clear_device_()
         return self
@@ -1588,7 +1594,7 @@ class Stacked(_LazyStackedMixin[TensorSpec], TensorSpec):
         )
 
     def type_check(self, value: torch.Tensor, key: NestedKey | None = None) -> None:
-        for (val, spec) in zip(value.unbind(self.dim), self._specs):
+        for val, spec in zip(value.unbind(self.dim), self._specs):
             spec.type_check(val)
 
     def is_in(self, value) -> bool:
@@ -1725,7 +1731,7 @@ class OneHot(TensorSpec):
         return self.n
 
     def update_mask(self, mask):
-        """Sets a mask to prevent some of the possible outcomes when a sample is taken.
+        """Set a mask to prevent some of the possible outcomes when a sample is taken.
 
         The mask can also be set during initialization of the spec.
 
@@ -1743,6 +1749,7 @@ class OneHot(TensorSpec):
             >>> ts.rand()
             tensor([[1, 0, 0],
                     [1, 0, 0]])
+
         """
         if mask is not None:
             try:
@@ -2051,7 +2058,7 @@ class OneHot(TensorSpec):
         return tensor_to_index.gather(-1, index)
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
-        """Indexes the current TensorSpec based on the provided index.
+        """Indexe the current TensorSpec based on the provided index.
 
         The last dimension of the spec corresponding to the variable domain cannot be indexed.
         """
@@ -2117,7 +2124,7 @@ class OneHot(TensorSpec):
         )
 
     def to_categorical(self, val: torch.Tensor, safe: bool = None) -> torch.Tensor:
-        """Converts a given one-hot tensor in categorical format.
+        """Convert a given one-hot tensor in categorical format.
 
         Args:
             val (torch.Tensor, optional): One-hot tensor to convert in categorical format.
@@ -2137,6 +2144,7 @@ class OneHot(TensorSpec):
             >>> categ_sample = one_hot.to_categorical(one_hot_sample)
             >>> categ_sample
             tensor([1, 1])
+
         """
         if safe is None:
             safe = _CHECK_SPEC_ENCODE
@@ -2145,7 +2153,7 @@ class OneHot(TensorSpec):
         return val.long().argmax(-1)
 
     def to_categorical_spec(self) -> Categorical:
-        """Converts the spec to the equivalent categorical spec.
+        """Convert the spec to the equivalent categorical spec.
 
         Examples:
             >>> one_hot = OneHot(3, shape=(2, 3))
@@ -2593,7 +2601,7 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
         )
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
-        """Indexes the current TensorSpec based on the provided index."""
+        """Indexe the current TensorSpec based on the provided index."""
         if _is_nested_list(idx):
             raise NotImplementedError(
                 "Pending resolution of https://github.com/pytorch/pytorch/issues/100080."
@@ -2701,6 +2709,7 @@ class NonTensor(TensorSpec):
             ['a string', 'a string', 'a string'],
             batch_size=torch.Size([3]),
             device=None)
+
     """
 
     example_data: Any = None
@@ -2877,7 +2886,7 @@ class NonTensor(TensorSpec):
         )
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
-        """Indexes the current TensorSpec based on the provided index."""
+        """Indexe the current TensorSpec based on the provided index."""
         indexed_shape = _size(_shape_indexing(self.shape, idx))
         return self.__class__(
             shape=indexed_shape,
@@ -3106,7 +3115,7 @@ class Unbounded(TensorSpec, metaclass=_UnboundedMeta):
         )
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
-        """Indexes the current TensorSpec based on the provided index."""
+        """Indexe the current TensorSpec based on the provided index."""
         indexed_shape = _size(_shape_indexing(self.shape, idx))
         return self.__class__(shape=indexed_shape, device=self.device, dtype=self.dtype)
 
@@ -3263,7 +3272,7 @@ class MultiOneHot(OneHot):
         return enums
 
     def update_mask(self, mask):
-        """Sets a mask to prevent some of the possible outcomes when a sample is taken.
+        """Set a mask to prevent some of the possible outcomes when a sample is taken.
 
         The mask can also be set during initialization of the spec.
 
@@ -3284,6 +3293,7 @@ class MultiOneHot(OneHot):
             >>> ts.rand()
             tensor([[1, 0, 0, 0, 1],
                     [1, 0, 0, 1, 0]])
+
         """
         if mask is not None:
             try:
@@ -3510,7 +3520,7 @@ class MultiOneHot(OneHot):
         return result
 
     def to_categorical(self, val: torch.Tensor, safe: bool = None) -> torch.Tensor:
-        """Converts a given one-hot tensor in categorical format.
+        """Convert a given one-hot tensor in categorical format.
 
         Args:
             val (torch.Tensor, optional): One-hot tensor to convert in categorical format.
@@ -3539,7 +3549,7 @@ class MultiOneHot(OneHot):
         return torch.stack([val.long().argmax(-1) for val in vals], -1)
 
     def to_categorical_spec(self) -> MultiCategorical:
-        """Converts the spec to the equivalent categorical spec.
+        """Convert the spec to the equivalent categorical spec.
 
         Examples:
             >>> mone_hot = MultiOneHot((2, 3, 4))
@@ -3663,7 +3673,7 @@ class MultiOneHot(OneHot):
         )
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
-        """Indexes the current TensorSpec based on the provided index.
+        """Indexe the current TensorSpec based on the provided index.
 
         The last dimension of the spec corresponding to the domain of the tensor elements is non-indexable.
         """
@@ -3794,7 +3804,7 @@ class Categorical(TensorSpec):
         return self.n
 
     def update_mask(self, mask):
-        """Sets a mask to prevent some of the possible outcomes when a sample is taken.
+        """Set a mask to prevent some of the possible outcomes when a sample is taken.
 
         The mask can also be set during initialization of the spec.
 
@@ -3812,6 +3822,7 @@ class Categorical(TensorSpec):
             >>> # One of the three possible outcomes is masked
             >>> ts.rand()
             tensor([0, 2, 2, 0, 2, 0, 2, 2, 0, 2])
+
         """
         if mask is not None:
             try:
@@ -3910,7 +3921,7 @@ class Categorical(TensorSpec):
         return gathered.all()
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
-        """Indexes the current TensorSpec based on the provided index."""
+        """Indexe the current TensorSpec based on the provided index."""
         indexed_shape = _size(_shape_indexing(self.shape, idx))
         return self.__class__(
             n=self.space.n,
@@ -3946,7 +3957,7 @@ class Categorical(TensorSpec):
         return super().to_numpy(val, safe)
 
     def to_one_hot(self, val: torch.Tensor, safe: bool = None) -> torch.Tensor:
-        """Encodes a discrete tensor from the spec domain into its one-hot correspondent.
+        """Encode a discrete tensor from the spec domain into its one-hot correspondent.
 
         Args:
             val (torch.Tensor, optional): Tensor to one-hot encode.
@@ -3965,6 +3976,7 @@ class Categorical(TensorSpec):
             >>> onehot_sample = categ.to_one_hot(categ_sample)
             >>> onehot_sample
             tensor([ True, False, False])
+
         """
         if safe is None:
             safe = _CHECK_SPEC_ENCODE
@@ -3977,7 +3989,7 @@ class Categorical(TensorSpec):
         return val
 
     def to_one_hot_spec(self) -> OneHot:
-        """Converts the spec to the equivalent one-hot spec.
+        """Convert the spec to the equivalent one-hot spec.
 
         Examples:
             >>> categ = Categorical(3)
@@ -4130,6 +4142,7 @@ class Choice(TensorSpec):
         'a'
         >>> spec.rand().data
         'd'
+
     """
 
     def __init__(
@@ -4250,9 +4263,11 @@ class Choice(TensorSpec):
         if self.num_choices != other.num_choices:
             return False
         return all(
-            (s0 == s1).all()
-            if isinstance(s0, torch.Tensor) or is_tensor_collection(s0)
-            else s0 == s1
+            (
+                (s0 == s1).all()
+                if isinstance(s0, torch.Tensor) or is_tensor_collection(s0)
+                else s0 == s1
+            )
             for s0, s1 in zip(self._choices, other._choices)
         )
 
@@ -4403,7 +4418,7 @@ class Binary(Categorical):
         )
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
-        """Indexes the current TensorSpec based on the provided index.
+        """Indexe the current TensorSpec based on the provided index.
 
         The last dimension of the spec (length n of the binary vector) cannot be indexed.
         """
@@ -4451,6 +4466,7 @@ class MultiCategorical(Categorical):
         True
         >>> ts.is_in(torch.tensor([2, 10, 1]))
         False
+
     """
 
     def __init__(
@@ -4519,7 +4535,7 @@ class MultiCategorical(Categorical):
         return self.nvec._base.prod()
 
     def update_mask(self, mask):
-        """Sets a mask to prevent some of the possible outcomes when a sample is taken.
+        """Set a mask to prevent some of the possible outcomes when a sample is taken.
 
         The mask can also be set during initialization of the spec.
 
@@ -4545,6 +4561,7 @@ class MultiCategorical(Categorical):
                     [2, 1],
                     [2, 1],
                     [2, 1]])
+
         """
         if mask is not None:
             try:
@@ -4710,7 +4727,7 @@ class MultiCategorical(Categorical):
     def to_one_hot(
         self, val: torch.Tensor, safe: bool = None
     ) -> MultiOneHot | torch.Tensor:
-        """Encodes a discrete tensor from the spec domain into its one-hot correspondent.
+        """Encode a discrete tensor from the spec domain into its one-hot correspondent.
 
         Args:
             val (torch.Tensor, optional): Tensor to one-hot encode.
@@ -4720,6 +4737,7 @@ class MultiCategorical(Categorical):
 
         Returns:
             The one-hot encoded tensor.
+
         """
         if safe is None:
             safe = _CHECK_SPEC_ENCODE
@@ -4734,7 +4752,7 @@ class MultiCategorical(Categorical):
         ).to(self.device)
 
     def to_one_hot_spec(self) -> MultiOneHot:
-        """Converts the spec to the equivalent one-hot spec."""
+        """Convert the spec to the equivalent one-hot spec."""
         if self.ndim > 1:
             return torch.stack([spec.to_one_hot_spec() for spec in self.unbind(0)])
         nvec = [_space.n for _space in self.space]
@@ -4855,7 +4873,7 @@ class MultiCategorical(Categorical):
         )
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
-        """Indexes the current TensorSpec based on the provided index."""
+        """Indexe the current TensorSpec based on the provided index."""
         if _is_nested_list(idx):
             raise NotImplementedError(
                 "Pending resolution of https://github.com/pytorch/pytorch/issues/100080."
@@ -5095,7 +5113,7 @@ class Composite(TensorSpec):
         return len(self.shape)
 
     def pop(self, key: NestedKey, default: Any = NO_DEFAULT) -> Any:
-        """Removes and returns the value associated with the specified key from the composite spec.
+        """Remove and returns the value associated with the specified key from the composite spec.
 
         This method searches for the given key in the composite spec, removes it, and returns its associated value.
         If the key is not found, it returns the provided default value if specified, otherwise raises a `KeyError`.
@@ -5112,6 +5130,7 @@ class Composite(TensorSpec):
 
         Raises:
             KeyError: If the specified key is not found in the composite spec and no default value is provided.
+
         """
         key = unravel_key(key)
         if key in self.keys(True, True):
@@ -5123,7 +5142,7 @@ class Composite(TensorSpec):
         raise KeyError(f"{key} not found in composite spec.")
 
     def separates(self, *keys: NestedKey, default: Any = None) -> Composite:
-        """Splits the composite spec by extracting specified keys and their associated values into a new composite spec.
+        """Split the composite spec by extracting specified keys and their associated values into a new composite spec.
 
         This method iterates over the provided keys, removes them from the current composite spec, and adds them to a new
         composite spec. If a key is not found, the specified default value is used. The new composite spec is returned.
@@ -5139,6 +5158,7 @@ class Composite(TensorSpec):
 
         Note:
             If none of the specified keys are found, the method returns `None`.
+
         """
         out = None
         for key in keys:
@@ -5150,7 +5170,7 @@ class Composite(TensorSpec):
         return out
 
     def set(self, name: str, spec: TensorSpec) -> Composite:
-        """Sets a spec in the Composite spec."""
+        """Set a spec in the Composite spec."""
         if not isinstance(name, str):
             self[name] = spec
             return self
@@ -5202,7 +5222,7 @@ class Composite(TensorSpec):
         self.to(device)
 
     def clear_device_(self):
-        """Clears the device of the Composite."""
+        """Clear the device of the Composite."""
         self._device = None
         for spec in self._specs.values():
             if spec is None:
@@ -5211,7 +5231,7 @@ class Composite(TensorSpec):
         return self
 
     def __getitem__(self, idx):
-        """Indexes the current Composite based on the provided index."""
+        """Indexe the current Composite based on the provided index."""
         if isinstance(idx, (str, tuple)):
             idx_unravel = unravel_key(idx)
         else:
@@ -5256,7 +5276,7 @@ class Composite(TensorSpec):
         )
 
     def get(self, item, default=NO_DEFAULT):
-        """Gets an item from the Composite.
+        """Get an item from the Composite.
 
         If the item is absent, a default value can be passed.
 
@@ -5473,7 +5493,7 @@ class Composite(TensorSpec):
         *,
         is_leaf: Callable[[type], bool] | None = None,
     ) -> _CompositeSpecKeysView:  # noqa: D417
-        """Keys of the Composite.
+        """Key of the Composite.
 
         The keys argument reflect those of :class:`tensordict.TensorDict`.
 
@@ -5508,7 +5528,7 @@ class Composite(TensorSpec):
         *,
         is_leaf: Callable[[type], bool] | None = None,
     ) -> _CompositeSpecItemsView:  # noqa: D417
-        """Items of the Composite.
+        """Item of the Composite.
 
         Args:
             include_nested (bool, optional): if ``False``, the returned keys will not be nested. They will
@@ -5525,6 +5545,7 @@ class Composite(TensorSpec):
             is_leaf (callable, optional): reads a type and returns a boolean indicating if that type
                 should be seen as a leaf. By default, all non-Composite nodes are considered as
                 leaves.
+
         """
         return _CompositeSpecItemsView(
             self,
@@ -5540,7 +5561,7 @@ class Composite(TensorSpec):
         *,
         is_leaf: Callable[[type], bool] | None = None,
     ) -> _CompositeSpecValuesView:  # noqa: D417
-        """Values of the Composite.
+        """Value of the Composite.
 
         Args:
             include_nested (bool, optional): if ``False``, the returned keys will not be nested. They will
@@ -5557,6 +5578,7 @@ class Composite(TensorSpec):
             is_leaf (callable, optional): reads a type and returns a boolean indicating if that type
                 should be seen as a leaf. By default, all non-Composite nodes are considered as
                 leaves.
+
         """
         return _CompositeSpecItemsView(
             self,
@@ -5615,7 +5637,7 @@ class Composite(TensorSpec):
         )
 
     def clone(self) -> Composite:
-        """Clones the Composite spec.
+        """Clone the Composite spec.
 
         Locked specs will not produce locked clones.
         """
@@ -5765,9 +5787,11 @@ class Composite(TensorSpec):
         except RuntimeError:
             device = self._device
         specs = {
-            key: value.expand((*shape, *value.shape[self.ndim :]))
-            if value is not None
-            else None
+            key: (
+                value.expand((*shape, *value.shape[self.ndim :]))
+                if value is not None
+                else None
+            )
             for key, value in tuple(self.items())
         }
         out = Composite(
@@ -5879,7 +5903,7 @@ class Composite(TensorSpec):
     def _propagate_lock(
         self, *, recurse: bool, lock_parents_weakrefs=None, is_compiling
     ):
-        """Registers the parent composite that handles the lock."""
+        """Register the parent composite that handles the lock."""
         self._is_locked = True
         if lock_parents_weakrefs is not None:
             lock_parents_weakrefs = [
@@ -5920,7 +5944,7 @@ class Composite(TensorSpec):
         self.__dict__["__lock_parents_weakrefs"] = value
 
     def lock_(self, recurse: bool | None = None) -> T:
-        """Locks the Composite and prevents modification of its content.
+        """Lock the Composite and prevents modification of its content.
 
         The recurse argument control whether the lock will be propagated to sub-specs.
         The current default is ``False`` but it will be turned to ``True`` for consistency
@@ -6017,7 +6041,7 @@ class Composite(TensorSpec):
         )
 
     def unlock_(self, recurse: bool | None = None) -> T:
-        """Unlocks the Composite and allows modification of its content.
+        """Unlock the Composite and allows modification of its content.
 
         This is only a first-level lock modification, unless specified
         otherwise through the ``recurse`` arg.
@@ -6245,13 +6269,14 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
         return True
 
     def __delitem__(self, key: NestedKey):
-        """Deletes a key from the stacked composite spec.
+        """Delete a key from the stacked composite spec.
 
         This method will be executed if the key is present in at least one of the stacked specs,
         otherwise it will raise an error.
 
         Args:
             key (NestedKey): the key to delete.
+
         """
         at_least_one_deletion = False
         for spec in self._specs:
@@ -6596,7 +6621,7 @@ class _CompositeSpecItemsView:
             if is_leaf is _NESTED_TENSORS_AS_LISTS and isinstance(
                 item, _LazyStackedMixin
             ):
-                for (i, spec) in enumerate(item._specs):
+                for i, spec in enumerate(item._specs):
                     yield from _iter_from_item(unravel_key((key, str(i))), spec)
             else:
                 yield from _iter_from_item(key, item)

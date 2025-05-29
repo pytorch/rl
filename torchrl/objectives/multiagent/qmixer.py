@@ -6,14 +6,9 @@
 from __future__ import annotations
 
 import warnings
+
 from copy import deepcopy
 from dataclasses import dataclass
-
-import torch
-from tensordict import TensorDict, TensorDictBase, TensorDictParams
-from tensordict.nn import dispatch, TensorDictModule
-from tensordict.utils import NestedKey
-from torch import nn
 
 from torchrl.data.tensor_specs import TensorSpec
 from torchrl.data.utils import _find_action_space
@@ -22,14 +17,21 @@ from torchrl.modules.tensordict_module.actors import QValueActor
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
-    _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    ValueEstimators,
+    _cache_values,
     default_value_kwargs,
     distance_loss,
-    ValueEstimators,
 )
 from torchrl.objectives.value import TDLambdaEstimator
 from torchrl.objectives.value.advantages import TD0Estimator, TD1Estimator
+
+import torch
+
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
+from tensordict.nn import TensorDictModule, dispatch
+from tensordict.utils import NestedKey
+from torch import nn
 
 
 class QMixerLoss(LossModule):
@@ -129,11 +131,12 @@ class QMixerLoss(LossModule):
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
+
     """
 
     @dataclass
     class _AcceptedKeys:
-        """Maintains default values for all configurable tensordict keys.
+        """Maintain default values for all configurable tensordict keys.
 
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values.
@@ -161,6 +164,7 @@ class QMixerLoss(LossModule):
             terminated (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is terminated. Will be used for the underlying value estimator.
                 Defaults to ``"terminated"``.
+
         """
 
         advantage: NestedKey = "advantage"

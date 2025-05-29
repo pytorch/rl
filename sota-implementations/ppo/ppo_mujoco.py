@@ -3,26 +3,20 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""
-This script reproduces the Proximal Policy Optimization (PPO) Algorithm
+"""Thi script reproduces the Proximal Policy Optimization (PPO) Algorithm
 results from Schulman et al. 2017 for the on MuJoCo Environments.
 """
 from __future__ import annotations
 
 import warnings
 
-import hydra
 from torchrl._utils import compile_with_warmup
+
+import hydra
 
 
 @hydra.main(config_path="", config_name="config_mujoco", version_base="1.1")
 def main(cfg: DictConfig):  # noqa: F821
-
-    import torch.optim
-    import tqdm
-
-    from tensordict import TensorDict
-    from tensordict.nn import CudaGraphModule
 
     from torchrl._utils import timeit
     from torchrl.collectors import SyncDataCollector
@@ -33,6 +27,12 @@ def main(cfg: DictConfig):  # noqa: F821
     from torchrl.objectives.value.advantages import GAE
     from torchrl.record import VideoRecorder
     from torchrl.record.loggers import generate_exp_name, get_logger
+
+    import torch.optim
+    import tqdm
+
+    from tensordict import TensorDict
+    from tensordict.nn import CudaGraphModule
     from utils_mujoco import eval_model, make_env, make_ppo_models
 
     torch.set_float32_matmul_precision("high")
@@ -256,9 +256,11 @@ def main(cfg: DictConfig):  # noqa: F821
         metrics_to_log.update(
             {
                 "train/lr": loss["alpha"] * cfg_optim_lr,
-                "train/clip_epsilon": loss["alpha"] * cfg_loss_clip_epsilon
-                if cfg_loss_anneal_clip_eps
-                else cfg_loss_clip_epsilon,
+                "train/clip_epsilon": (
+                    loss["alpha"] * cfg_loss_clip_epsilon
+                    if cfg_loss_anneal_clip_eps
+                    else cfg_loss_clip_epsilon
+                ),
             }
         )
 

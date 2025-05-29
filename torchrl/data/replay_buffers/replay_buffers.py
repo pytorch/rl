@@ -11,6 +11,7 @@ import multiprocessing
 import textwrap
 import threading
 import warnings
+
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable, Sequence
@@ -25,20 +26,6 @@ except ImportError:
 
 from functools import partial
 
-from tensordict import (
-    is_tensor_collection,
-    is_tensorclass,
-    LazyStackedTensorDict,
-    NestedKey,
-    TensorDict,
-    TensorDictBase,
-    unravel_key,
-)
-from tensordict.nn.utils import _set_dispatch_td_nn_modules
-from tensordict.utils import expand_as_right, expand_right
-from torch import Tensor
-from torch.utils._pytree import tree_map
-
 from torchrl._utils import accept_remote_rref_udf_invocation
 from torchrl.data.replay_buffers.samplers import (
     PrioritizedSampler,
@@ -47,18 +34,18 @@ from torchrl.data.replay_buffers.samplers import (
     SamplerEnsemble,
 )
 from torchrl.data.replay_buffers.storages import (
-    _get_default_collate,
-    _stack_anything,
     ListStorage,
     Storage,
     StorageEnsemble,
+    _get_default_collate,
+    _stack_anything,
 )
 from torchrl.data.replay_buffers.utils import (
+    INT_CLASSES,
     _is_int,
     _reduce,
     _to_numpy,
     _to_torch,
-    INT_CLASSES,
     pin_memory_output,
 )
 from torchrl.data.replay_buffers.writers import (
@@ -68,7 +55,21 @@ from torchrl.data.replay_buffers.writers import (
     WriterEnsemble,
 )
 from torchrl.data.utils import DEVICE_TYPING
-from torchrl.envs.transforms.transforms import _InvertTransform, Transform
+from torchrl.envs.transforms.transforms import Transform, _InvertTransform
+
+from tensordict import (
+    LazyStackedTensorDict,
+    NestedKey,
+    TensorDict,
+    TensorDictBase,
+    is_tensor_collection,
+    is_tensorclass,
+    unravel_key,
+)
+from tensordict.nn.utils import _set_dispatch_td_nn_modules
+from tensordict.utils import expand_as_right, expand_right
+from torch import Tensor
+from torch.utils._pytree import tree_map
 
 
 class ReplayBuffer:
@@ -232,13 +233,16 @@ class ReplayBuffer:
         pin_memory: bool = False,
         prefetch: int | None = None,
         transform: Transform | Callable | None = None,  # noqa-F821
-        transform_factory: Callable[[], Transform | Callable]
-        | None = None,  # noqa-F821
+        transform_factory: (
+            Callable[[], Transform | Callable] | None
+        ) = None,  # noqa-F821
         batch_size: int | None = None,
         dim_extend: int | None = None,
-        checkpointer: StorageCheckpointerBase  # noqa: F821
-        | Callable[[], StorageCheckpointerBase]  # noqa: F821
-        | None = None,  # noqa: F821
+        checkpointer: (
+            StorageCheckpointerBase  # noqa: F821
+            | Callable[[], StorageCheckpointerBase]  # noqa: F821
+            | None
+        ) = None,  # noqa: F821
         generator: torch.Generator | None = None,
         shared: bool = False,
         compilable: bool = None,
@@ -342,9 +346,9 @@ class ReplayBuffer:
         transform_factory: Callable | None,
     ) -> Transform:
         from torchrl.envs.transforms.transforms import (
-            _CallableTransform,
             Compose,
             Transform,
+            _CallableTransform,
         )
 
         if transform_factory is not None:
@@ -418,7 +422,7 @@ class ReplayBuffer:
         )
 
     def set_storage(self, storage: Storage, collate_fn: Callable | None = None):
-        """Sets a new storage in the replay buffer and returns the previous storage.
+        """Set a new storage in the replay buffer and returns the previous storage.
 
         Args:
             storage (Storage): the new storage for the buffer.
@@ -433,14 +437,14 @@ class ReplayBuffer:
         return prev_storage
 
     def set_writer(self, writer: Writer):
-        """Sets a new writer in the replay buffer and returns the previous writer."""
+        """Set a new writer in the replay buffer and returns the previous writer."""
         prev_writer = self._writer
         self._writer = writer
         self._writer.register_storage(self._storage)
         return prev_writer
 
     def set_sampler(self, sampler: Sampler):
-        """Sets a new sampler in the replay buffer and returns the previous sampler."""
+        """Set a new sampler in the replay buffer and returns the previous sampler."""
         prev_sampler = self._sampler
         self._sampler = sampler
         return prev_sampler
@@ -506,9 +510,11 @@ class ReplayBuffer:
             data = self._collate_fn(data)
 
         if self._transform is not None and len(self._transform):
-            with data.unlock_() if is_tensor_collection(
-                data
-            ) else contextlib.nullcontext():
+            with (
+                data.unlock_()
+                if is_tensor_collection(data)
+                else contextlib.nullcontext()
+            ):
                 data = self._transform(data)
 
         return data
@@ -544,9 +550,11 @@ class ReplayBuffer:
             "_writer": self._writer.state_dict(),
             "_transforms": self._transform.state_dict(),
             "_batch_size": self._batch_size,
-            "_rng": (self._rng.get_state().clone(), str(self._rng.device))
-            if self._rng is not None
-            else None,
+            "_rng": (
+                (self._rng.get_state().clone(), str(self._rng.device))
+                if self._rng is not None
+                else None
+            ),
         }
 
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
@@ -563,7 +571,7 @@ class ReplayBuffer:
             self.set_rng(generator=rng)
 
     def dumps(self, path):
-        """Saves the replay buffer on disk at the specified path.
+        """Save the replay buffer on disk at the specified path.
 
         Args:
             path (Path or str): path where to save the replay buffer.
@@ -619,7 +627,7 @@ class ReplayBuffer:
             json.dump({"batch_size": self._batch_size}, file)
 
     def loads(self, path):
-        """Loads a replay buffer state at the given path.
+        """Load a replay buffer state at the given path.
 
         The buffer should have matching components and be saved using :meth:`dumps`.
 
@@ -646,19 +654,19 @@ class ReplayBuffer:
         self._batch_size = metadata["batch_size"]
 
     def save(self, *args, **kwargs):
-        """Alias for :meth:`dumps`."""
+        """Alia for :meth:`dumps`."""
         return self.dumps(*args, **kwargs)
 
     def dump(self, *args, **kwargs):
-        """Alias for :meth:`dumps`."""
+        """Alia for :meth:`dumps`."""
         return self.dumps(*args, **kwargs)
 
     def load(self, *args, **kwargs):
-        """Alias for :meth:`loads`."""
+        """Alia for :meth:`loads`."""
         return self.loads(*args, **kwargs)
 
     def register_save_hook(self, hook: Callable[[Any], Any]):
-        """Registers a save hook for the storage.
+        """Register a save hook for the storage.
 
         .. note:: Hooks are currently not serialized when saving a replay buffer: they must
             be manually re-initialized every time the buffer is created.
@@ -667,7 +675,7 @@ class ReplayBuffer:
         self._storage.register_save_hook(hook)
 
     def register_load_hook(self, hook: Callable[[Any], Any]):
-        """Registers a load hook for the storage.
+        """Register a load hook for the storage.
 
         .. note:: Hooks are currently not serialized when saving a replay buffer: they must
             be manually re-initialized every time the buffer is created.
@@ -683,6 +691,7 @@ class ReplayBuffer:
 
         Returns:
             index where the data lives in the replay buffer.
+
         """
         if self._transform is not None and len(self._transform):
             with _set_dispatch_td_nn_modules(is_tensor_collection(data)):
@@ -700,7 +709,9 @@ class ReplayBuffer:
     def _extend(self, data: Sequence) -> torch.Tensor:
         is_comp = is_compiling()
         nc = contextlib.nullcontext()
-        with self._replay_lock if not is_comp else nc, self._write_lock if not is_comp else nc:
+        with self._replay_lock if not is_comp else nc, (
+            self._write_lock if not is_comp else nc
+        ):
             if self.dim_extend > 0:
                 data = self._transpose(data)
             index = self._writer.extend(data)
@@ -708,7 +719,7 @@ class ReplayBuffer:
         return index
 
     def extend(self, data: Sequence) -> torch.Tensor:
-        """Extends the replay buffer with one or more elements contained in an iterable.
+        """Extend the replay buffer with one or more elements contained in an iterable.
 
         If present, the inverse transforms will be called.`
 
@@ -761,21 +772,21 @@ class ReplayBuffer:
             data = self._collate_fn(data)
         if self._transform is not None and len(self._transform):
             is_td = is_tensor_collection(data)
-            with data.unlock_() if is_td else contextlib.nullcontext(), _set_dispatch_td_nn_modules(
-                is_td
-            ):
+            with (
+                data.unlock_() if is_td else contextlib.nullcontext()
+            ), _set_dispatch_td_nn_modules(is_td):
                 data = self._transform(data)
 
         return data, info
 
     def empty(self):
-        """Empties the replay buffer and reset cursor to 0."""
+        """Emptie the replay buffer and reset cursor to 0."""
         self._writer._empty()
         self._sampler._empty()
         self._storage._empty()
 
     def sample(self, batch_size: int | None = None, return_info: bool = False) -> Any:
-        """Samples a batch of data from the replay buffer.
+        """Sample a batch of data from the replay buffer.
 
         Uses Sampler to sample indices, and retrieves them from Storage.
 
@@ -789,6 +800,7 @@ class ReplayBuffer:
         Returns:
             A batch of data selected in the replay buffer.
             A tuple containing this batch and info if return_info flag is set to True.
+
         """
         if (
             batch_size is not None
@@ -838,7 +850,7 @@ class ReplayBuffer:
     def append_transform(
         self, transform: Transform, *, invert: bool = False  # noqa-F821
     ) -> ReplayBuffer:  # noqa: D417
-        """Appends transform at the end.
+        """Append transform at the end.
 
         Transforms are applied in order when `sample` is called.
 
@@ -860,7 +872,7 @@ class ReplayBuffer:
             >>> assert (data == 1).all()
 
         """
-        from torchrl.envs.transforms.transforms import _CallableTransform, Transform
+        from torchrl.envs.transforms.transforms import Transform, _CallableTransform
 
         if not isinstance(transform, Transform) and callable(transform):
             transform = _CallableTransform(transform)
@@ -877,7 +889,7 @@ class ReplayBuffer:
         *,
         invert: bool = False,
     ) -> ReplayBuffer:  # noqa: D417
-        """Inserts transform.
+        """Insert transform.
 
         Transforms are executed in order when `sample` is called.
 
@@ -1385,7 +1397,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
         return_info: bool = False,
         include_info: bool = None,
     ) -> TensorDictBase:
-        """Samples a batch of data from the replay buffer.
+        """Sample a batch of data from the replay buffer.
 
         Uses Sampler to sample indices, and retrieves them from Storage.
 
@@ -1399,6 +1411,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
         Returns:
             A tensordict containing a batch of data selected in the replay buffer.
             A tuple containing this tensordict and info if return_info flag is set to True.
+
         """
         if include_info is not None:
             warnings.warn(
@@ -1682,7 +1695,7 @@ class InPlaceSampler:
 
 
 def stack_tensors(list_of_tensor_iterators: list) -> tuple[torch.Tensor]:
-    """Zips a list of iterables containing tensor-like objects and stacks the resulting lists of tensors together.
+    """Zip a list of iterables containing tensor-like objects and stacks the resulting lists of tensors together.
 
     Args:
         list_of_tensor_iterators (list): Sequence containing similar iterators,

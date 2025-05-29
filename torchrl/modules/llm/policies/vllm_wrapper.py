@@ -5,22 +5,23 @@
 from __future__ import annotations
 
 import collections
+
 from typing import Literal
 
+from torchrl.envs.utils import _classproperty
+from torchrl.modules.llm.policies.common import CategoricalSequential
+
 import torch
+
 from tensordict import (
-    lazy_stack,
-    maybe_dense_stack,
     NestedKey,
     TensorDict,
     TensorDictBase,
+    lazy_stack,
+    maybe_dense_stack,
 )
-from tensordict.tensorclass import from_dataclass, NonTensorStack, TensorClass
+from tensordict.tensorclass import NonTensorStack, TensorClass, from_dataclass
 from tensordict.utils import _zip_strict, expand_as_right
-
-from torchrl.envs.utils import _classproperty
-
-from torchrl.modules.llm.policies.common import CategoricalSequential
 
 
 class vLLMWrapper(CategoricalSequential):
@@ -107,6 +108,7 @@ class vLLMWrapper(CategoricalSequential):
 
     .. seealso:: :func:`~torchrl.modules.TransformersWrapper` for a similar interface using the Hugging Face
         Transformers library.
+
     """
 
     text_key: NestedKey = ("text",)
@@ -121,8 +123,9 @@ class vLLMWrapper(CategoricalSequential):
         # noqa
         *,
         return_log_probs: bool | None = None,
-        tokenizer: transformers.tokenization_utils.PreTrainedTokenizer  # noqa
-        | None = None,
+        tokenizer: (
+            transformers.tokenization_utils.PreTrainedTokenizer | None  # noqa
+        ) = None,
         # noqa
         from_text: bool = True,
         device: torch.device | None = None,
@@ -135,6 +138,7 @@ class vLLMWrapper(CategoricalSequential):
         super().__init__()
 
         import vllm
+
         from vllm import SamplingParams
 
         self.model = model
@@ -566,7 +570,7 @@ class vLLMWrapper(CategoricalSequential):
         return tokens_response_td
 
     def _to_list(self, tokens, attention_mask):
-        """Converts a tensor of integer in a masked list (of lists) of integers."""
+        """Convert a tensor of integer in a masked list (of lists) of integers."""
         if isinstance(tokens, torch.Tensor):
             # TODO: make this an ND NonTensorStack
             parent = []

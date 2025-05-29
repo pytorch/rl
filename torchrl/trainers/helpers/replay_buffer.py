@@ -6,9 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import torch
 from torchrl._utils import _make_ordinal_device
-
 from torchrl.data.replay_buffers.replay_buffers import (
     ReplayBuffer,
     TensorDictReplayBuffer,
@@ -17,11 +15,13 @@ from torchrl.data.replay_buffers.samplers import PrioritizedSampler, RandomSampl
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.data.utils import DEVICE_TYPING
 
+import torch
+
 
 def make_replay_buffer(
     device: DEVICE_TYPING, cfg: DictConfig  # noqa: F821
 ) -> ReplayBuffer:  # noqa: F821
-    """Builds a replay buffer using the config built from ReplayArgsConfig."""
+    """Build a replay buffer using the config built from ReplayArgsConfig."""
     device = _make_ordinal_device(torch.device(device))
     if not cfg.prb:
         sampler = RandomSampler()

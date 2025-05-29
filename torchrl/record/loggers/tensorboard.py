@@ -5,13 +5,12 @@
 from __future__ import annotations
 
 import importlib.util
-
 import os
+
 from typing import Sequence
 
-from torch import Tensor
-
 from .common import Logger
+from torch import Tensor
 
 _has_tb = importlib.util.find_spec("tensorboard") is not None
 _has_omgaconf = importlib.util.find_spec("omegaconf") is not None
@@ -34,7 +33,7 @@ class TensorboardLogger(Logger):
         self._has_imported_moviepy = False
 
     def _create_experiment(self) -> SummaryWriter:  # noqa
-        """Creates a tensorboard experiment.
+        """Create a tensorboard experiment.
 
         Args:
             exp_name (str): The name of the experiment.
@@ -52,7 +51,7 @@ class TensorboardLogger(Logger):
         return SummaryWriter(log_dir=log_dir)
 
     def log_scalar(self, name: str, value: float, step: int = None) -> None:
-        """Logs a scalar value to the tensorboard.
+        """Log a scalar value to the tensorboard.
 
         Args:
             name (str): The name of the scalar.
@@ -94,7 +93,7 @@ class TensorboardLogger(Logger):
         )
 
     def log_hparams(self, cfg: DictConfig | dict) -> None:  # noqa: F821
-        """Logs the hyperparameters of the experiment.
+        """Log the hyperparameters of the experiment.
 
         Args:
             cfg (DictConfig or dict): The configuration of the experiment.

@@ -8,31 +8,30 @@ import argparse
 import contextlib
 import importlib.util
 
-import pytest
-import torch
-from mocking_classes import DummyStrDataLoader, DummyTensorDataLoader
-
-from tensordict import (
-    NonTensorData,
-    NonTensorStack,
-    set_capture_non_tensor_stack,
-    set_list_to_stack,
-    TensorDict,
-)
-
 from torchrl._utils import logger as torchrl_logger
 from torchrl.envs import StepCounter
 from torchrl.envs.llm import (
-    as_padded_tensor,
     ChatEnv,
     DataLoadingPrimer,
     GSM8KEnv,
     KLRewardTransform,
     LLMEnv,
+    as_padded_tensor,
     make_gsm8k_env,
 )
-
 from torchrl.modules.llm import TransformersWrapper
+
+import pytest
+import torch
+
+from mocking_classes import DummyStrDataLoader, DummyTensorDataLoader
+from tensordict import (
+    NonTensorData,
+    NonTensorStack,
+    TensorDict,
+    set_capture_non_tensor_stack,
+    set_list_to_stack,
+)
 from transformers import AutoTokenizer
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
@@ -345,9 +344,11 @@ class TestLLMEnv:
         assign_reward,
         assign_done,
     ):
-        with pytest.raises(
-            ValueError, match="from_text"
-        ) if from_text else contextlib.nullcontext():
+        with (
+            pytest.raises(ValueError, match="from_text")
+            if from_text
+            else contextlib.nullcontext()
+        ):
             if from_text:
                 kwargs = {
                     "dataloader": DummyStrDataLoader(batch_size=dl_batch_size),
@@ -561,8 +562,10 @@ class TestGSM8K:
 @pytest.mark.skipif(not _has_ifeval, reason="requires IFEval libs")
 class TestIFEvalEnv:
     def test_ifeval(self):
-        import torch
         from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
+
+        import torch
+
         from transformers import AutoTokenizer
 
         torch.manual_seed(0)

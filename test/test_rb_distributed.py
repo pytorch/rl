@@ -6,20 +6,21 @@ from __future__ import annotations
 
 import argparse
 import os
-
 import sys
 import time
 
-import pytest
-import torch
-import torch.distributed.rpc as rpc
-import torch.multiprocessing as mp
-from tensordict import TensorDict
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.replay_buffers import RemoteTensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import RandomSampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
+
+import pytest
+import torch
+import torch.distributed.rpc as rpc
+import torch.multiprocessing as mp
+
+from tensordict import TensorDict
 
 RETRY_COUNT = 3
 RETRY_BACKOFF = 3

@@ -4,15 +4,15 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from torchrl._utils import logger as torchrl_logger
+from torchrl.collectors import WeightUpdaterBase
+from torchrl.modules.llm.backends.vllm import stateless_init_process_group
+
 import torch
 import torch.cuda
 import torch.distributed
+
 from tensordict import TensorDictBase
-
-from torchrl._utils import logger as torchrl_logger
-
-from torchrl.collectors import WeightUpdaterBase
-from torchrl.modules.llm.backends.vllm import stateless_init_process_group
 from vllm.utils import get_open_port
 
 

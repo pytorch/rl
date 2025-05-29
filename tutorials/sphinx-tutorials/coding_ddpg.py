@@ -65,6 +65,7 @@ TorchRL objectives: Coding a DDPG loss
 #      pip3 install torchrl mujoco glfw
 
 # sphinx_gallery_start_ignore
+from __future__ import annotations
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -655,7 +656,7 @@ max_frames_per_traj = 500
 
 
 def get_env_stats():
-    """Gets the stats of an environment."""
+    """Get the stats of an environment."""
     proof_env = make_transformed_env(make_env())
     t = proof_env.transform[2]
     t.init_stats(init_env_steps)

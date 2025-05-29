@@ -10,6 +10,7 @@ import gc
 import os
 import time
 import weakref
+
 from collections import OrderedDict
 from copy import deepcopy
 from functools import wraps
@@ -18,28 +19,16 @@ from multiprocessing.synchronize import Lock as MpLock
 from typing import Any, Callable, Sequence
 from warnings import warn
 
-import torch
-from tensordict import (
-    is_tensor_collection,
-    LazyStackedTensorDict,
-    TensorDict,
-    TensorDictBase,
-    unravel_key,
-)
-from tensordict.base import _is_leaf_nontensor
-from tensordict.utils import _zip_strict
-from torch import multiprocessing as mp
-
 from torchrl._utils import (
+    VERBOSE,
     _check_for_faulty_process,
     _make_ordinal_device,
     _ProcessNoWarn,
     logger as torchrl_logger,
-    VERBOSE,
 )
 from torchrl.data.tensor_specs import Composite, NonTensor
-from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TYPING
-from torchrl.envs.common import _do_nothing, _EnvPostInit, EnvBase, EnvMetaData
+from torchrl.data.utils import DEVICE_TYPING, CloudpickleWrapper, contains_lazy_spec
+from torchrl.envs.common import EnvBase, EnvMetaData, _do_nothing, _EnvPostInit
 from torchrl.envs.env_creator import get_env_metadata
 
 # legacy
@@ -53,6 +42,19 @@ from torchrl.envs.utils import (
     _update_during_reset,
     clear_mpi_env_vars,
 )
+
+import torch
+
+from tensordict import (
+    LazyStackedTensorDict,
+    TensorDict,
+    TensorDictBase,
+    is_tensor_collection,
+    unravel_key,
+)
+from tensordict.base import _is_leaf_nontensor
+from tensordict.utils import _zip_strict
+from torch import multiprocessing as mp
 
 _CONSOLIDATE_ERR_CAPTURE = (
     "TensorDict.consolidate failed. You can deactivate the tensordict consolidation via the "
@@ -105,12 +107,12 @@ class _dispatch_caller_serial:
 
 
 def lazy_property(prop: property):
-    """Converts a property in a lazy property, that will call _set_properties when queried the first time."""
+    """Convert a property in a lazy property, that will call _set_properties when queried the first time."""
     return property(fget=lazy(prop.fget), fset=prop.fset)
 
 
 def lazy(fun):
-    """Converts a fun in a lazy fun, that will call _set_properties when queried the first time."""
+    """Convert a fun in a lazy fun, that will call _set_properties when queried the first time."""
 
     @wraps(fun)
     def new_fun(self, *args, **kwargs):
@@ -280,6 +282,7 @@ class BatchedEnvBase(EnvBase):
         >>> # serial_for_single to avoid creating parallel envs if not necessary
         >>> env = ParallelEnv(1, make_env, serial_for_single=True)
         >>> assert isinstance(env, SerialEnv)  # serial_for_single allows you to avoid creating parallel envs when not necessary
+
     """
 
     _verbose: bool = VERBOSE
@@ -417,7 +420,7 @@ class BatchedEnvBase(EnvBase):
         return sync_func
 
     def _find_sync_values(self):
-        """Returns the m2w and w2m sync values, in that order."""
+        """Return the m2w and w2m sync values, in that order."""
         if not self._use_buffers:
             return _do_nothing, _do_nothing
         # Simplest case: everything is on the same device
@@ -548,7 +551,7 @@ class BatchedEnvBase(EnvBase):
         self._set_properties()
 
     def update_kwargs(self, kwargs: dict | list[dict]) -> None:
-        """Updates the kwargs of each environment given a dictionary or a list of dictionaries.
+        """Update the kwargs of each environment given a dictionary or a list of dictionaries.
 
         Args:
             kwargs (dict or list of dict): new kwargs to use with the environments
@@ -685,7 +688,7 @@ class BatchedEnvBase(EnvBase):
     output_spec = lazy_property(EnvBase.output_spec)
 
     def _create_td(self) -> None:
-        """Creates self.shared_tensordict_parent, a TensorDict used to store the most recent observations."""
+        """Create self.shared_tensordict_parent, a TensorDict used to store the most recent observations."""
         if not self._use_buffers:
             return
         shared_tensordict_parent = self._env_tensordict.clone()
@@ -843,7 +846,7 @@ class BatchedEnvBase(EnvBase):
         )
 
     def _start_workers(self) -> None:
-        """Starts the various envs."""
+        """Start the various envs."""
         raise NotImplementedError
 
     def __repr__(self) -> str:
@@ -881,7 +884,7 @@ class BatchedEnvBase(EnvBase):
         raise NotImplementedError
 
     def _set_seed(self, seed: int | None) -> None:
-        """This method is not used in batched envs."""
+        """Thi method is not used in batched envs."""
 
     @lazy
     def start(self) -> None:
@@ -922,7 +925,7 @@ class BatchedEnvBase(EnvBase):
 
 
 class SerialEnv(BatchedEnvBase):
-    """Creates a series of environments in the same process."""
+    """Create a series of environments in the same process."""
 
     __doc__ += BatchedEnvBase.__doc__
 
@@ -1261,7 +1264,7 @@ class SerialEnv(BatchedEnvBase):
 
 
 class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
-    """Creates one environment per process.
+    """Create one environment per process.
 
     TensorDicts are passed via shared memory or memory map.
 
@@ -1641,9 +1644,11 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             )
             if self.shared_tensordict_parent.device is None:
                 tensordict = tensordict._fast_apply(
-                    lambda x, y: x[partial_steps].to(y.device)
-                    if y is not None
-                    else x[partial_steps],
+                    lambda x, y: (
+                        x[partial_steps].to(y.device)
+                        if y is not None
+                        else x[partial_steps]
+                    ),
                     self.shared_tensordict_parent,
                     default=None,
                     device=None,
@@ -1713,24 +1718,30 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             tensordict_ = tensordict_.clone()
         elif device is not None:
             next_td = next_td._fast_apply(
-                lambda x: x.to(device, non_blocking=self.non_blocking)
-                if x.device != device
-                else x.clone(),
+                lambda x: (
+                    x.to(device, non_blocking=self.non_blocking)
+                    if x.device != device
+                    else x.clone()
+                ),
                 device=device,
                 filter_empty=True,
             )
             tensordict_ = tensordict_._fast_apply(
-                lambda x: x.to(device, non_blocking=self.non_blocking)
-                if x.device != device
-                else x.clone(),
+                lambda x: (
+                    x.to(device, non_blocking=self.non_blocking)
+                    if x.device != device
+                    else x.clone()
+                ),
                 device=device,
                 filter_empty=True,
             )
             if tensordict.device != device:
                 tensordict = tensordict._fast_apply(
-                    lambda x: x.to(device, non_blocking=self.non_blocking)
-                    if x.device != device
-                    else x,
+                    lambda x: (
+                        x.to(device, non_blocking=self.non_blocking)
+                        if x.device != device
+                        else x
+                    ),
                     device=device,
                     filter_empty=True,
                 )
@@ -1928,9 +1939,11 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             )
             if self.shared_tensordict_parent.device is None:
                 tensordict = tensordict._fast_apply(
-                    lambda x, y: x[partial_steps].to(y.device)
-                    if y is not None
-                    else x[partial_steps],
+                    lambda x, y: (
+                        x[partial_steps].to(y.device)
+                        if y is not None
+                        else x[partial_steps]
+                    ),
                     self.shared_tensordict_parent,
                     default=None,
                     device=None,
@@ -1967,9 +1980,11 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             # What we do instead is keeping the tensors on the side and putting them back after completing _step.
             keys_to_update, keys_to_copy = zip(
                 *[
-                    (key, None)
-                    if key in next_shared_tensordict_parent.keys(True, True)
-                    else (None, key)
+                    (
+                        (key, None)
+                        if key in next_shared_tensordict_parent.keys(True, True)
+                        else (None, key)
+                    )
                     for key in next_td_keys
                 ]
             )
@@ -2325,11 +2340,11 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 def _recursively_strip_locks_from_state_dict(state_dict: OrderedDict) -> OrderedDict:
     return OrderedDict(
         **{
-            k: _recursively_strip_locks_from_state_dict(item)
-            if isinstance(item, OrderedDict)
-            else None
-            if isinstance(item, MpLock)
-            else item
+            k: (
+                _recursively_strip_locks_from_state_dict(item)
+                if isinstance(item, OrderedDict)
+                else None if isinstance(item, MpLock) else item
+            )
             for k, item in state_dict.items()
         }
     )
@@ -2435,11 +2450,11 @@ def _run_worker_pipe_shared_mem(
             # because passing the entire buffer may have unwanted consequences
             selected_reset_keys, reset_kwargs = data
             cur_td = env.reset(
-                tensordict=root_shared_tensordict.select(
-                    *selected_reset_keys, strict=False
-                )
-                if selected_reset_keys
-                else None,
+                tensordict=(
+                    root_shared_tensordict.select(*selected_reset_keys, strict=False)
+                    if selected_reset_keys
+                    else None
+                ),
                 **reset_kwargs,
             )
             shared_tensordict.update_(

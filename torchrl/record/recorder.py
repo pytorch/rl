@@ -6,19 +6,22 @@ from __future__ import annotations
 
 import importlib.util
 import math
+
 from copy import copy
 from typing import Callable, Sequence
 
-import numpy as np
-import torch
-from tensordict import NonTensorData, TensorDictBase
-from tensordict.utils import NestedKey
 from torchrl._utils import _can_be_pickled
 from torchrl.data.tensor_specs import NonTensor, TensorSpec, Unbounded
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import EnvBase
 from torchrl.envs.transforms import ObservationTransform, Transform
 from torchrl.record.loggers import Logger
+
+import numpy as np
+import torch
+
+from tensordict import NonTensorData, TensorDictBase
+from tensordict.utils import NestedKey
 
 _has_tv = importlib.util.find_spec("torchvision", None) is not None
 
@@ -236,12 +239,13 @@ class VideoRecorder(ObservationTransform):
         return self._call(tensordict)
 
     def dump(self, suffix: str | None = None) -> None:
-        """Writes the video to the ``self.logger`` attribute.
+        """Write the video to the ``self.logger`` attribute.
 
         Calling ``dump`` when no image has been stored in a no-op.
 
         Args:
             suffix (str, optional): a suffix for the video to be recorded
+
         """
         if self.obs:
             obs = torch.stack(self.obs, 0).unsqueeze(0).cpu()
@@ -519,7 +523,7 @@ class PixelRenderTransform(Transform):
         return observation_spec
 
     def switch(self, mode: str | bool = None):
-        """Sets the transform on or off.
+        """Set the transform on or off.
 
         Args:
             mode (str or bool, optional): if provided, sets the switch to the desired mode.

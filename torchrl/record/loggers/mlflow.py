@@ -5,14 +5,14 @@
 from __future__ import annotations
 
 import importlib.util
-
 import os
+
 from tempfile import TemporaryDirectory
 from typing import Any, Sequence
 
-from torch import Tensor
-
 from torchrl.record.loggers.common import Logger
+
+from torch import Tensor
 
 _has_tv = importlib.util.find_spec("torchvision") is not None
 
@@ -56,7 +56,7 @@ class MLFlowLogger(Logger):
     def _create_experiment(self) -> mlflow.ActiveRun:  # noqa
         import mlflow
 
-        """Creates an mlflow experiment.
+        """Create an mlflow experiment.
 
         Returns:
             mlflow.ActiveRun: The mlflow experiment object.
@@ -73,13 +73,14 @@ class MLFlowLogger(Logger):
         return mlflow.start_run(experiment_id=self.id)
 
     def log_scalar(self, name: str, value: float, step: int | None = None) -> None:
-        """Logs a scalar value to mlflow.
+        """Log a scalar value to mlflow.
 
         Args:
             name (str): The name of the scalar.
             value (:obj:`float`): The value of the scalar.
             step (int, optional): The step at which the scalar is logged.
                 Defaults to None.
+
         """
         import mlflow
 
@@ -95,6 +96,7 @@ class MLFlowLogger(Logger):
                 for consistency with other loggers.
             **kwargs: Other keyword arguments. By construction, log_video
                 supports 'step' (integer indicating the step index) and 'fps' (defaults to ``self.video_fps``).
+
         """
         import mlflow
         import torchvision
@@ -121,12 +123,14 @@ class MLFlowLogger(Logger):
                 mlflow.log_artifact(f.name, "videos")
 
     def log_hparams(self, cfg: DictConfig | dict) -> None:  # noqa: F821
-        """Logs the hyperparameters of the experiment.
+        """Log the hyperparameters of the experiment.
 
         Args:
             cfg (DictConfig or dict): The configuration of the experiment.
+
         """
         import mlflow
+
         from omegaconf import OmegaConf
 
         mlflow.set_experiment(experiment_id=self.id)

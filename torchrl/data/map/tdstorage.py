@@ -6,20 +6,22 @@ from __future__ import annotations
 
 import abc
 import functools
+
 from abc import abstractmethod
 from typing import Any, Callable, Generic, TypeVar
-
-import torch
-from tensordict import is_tensor_collection, NestedKey, TensorDictBase
-from tensordict.nn.common import TensorDictModuleBase
 
 from torchrl.data.map.hash import RandomProjectionHash, SipHash
 from torchrl.data.map.query import QueryModule
 from torchrl.data.replay_buffers.storages import (
-    _get_default_collate,
     LazyTensorStorage,
     TensorStorage,
+    _get_default_collate,
 )
+
+import torch
+
+from tensordict import NestedKey, TensorDictBase, is_tensor_collection
+from tensordict.nn.common import TensorDictModuleBase
 
 K = TypeVar("K")
 V = TypeVar("V")
@@ -112,6 +114,7 @@ class TensorDictMap(
         >>> new_index["key3"] = torch.Tensor([[4], [5], [6], [7]])
         >>> retrieve_value = tensor_dict_storage[new_index]
         >>> assert cast(torch.Tensor, retrieve_value["index"] == value["index"]).all()
+
     """
 
     def __init__(
@@ -182,7 +185,7 @@ class TensorDictMap(
         write_fn: Callable[[Any, Any], Any] | None = None,
         consolidated: bool | None = None,
     ) -> TensorDictMap:
-        """Creates a new TensorDictStorage from a pair of tensordicts (source and dest) using pre-defined rules of thumb.
+        """Create a new TensorDictStorage from a pair of tensordicts (source and dest) using pre-defined rules of thumb.
 
         Args:
             source (TensorDict): An example of source tensordict, used as index in the storage.

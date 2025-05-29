@@ -5,14 +5,13 @@
 from __future__ import annotations
 
 import importlib.util
-
 import os
 import warnings
+
 from typing import Sequence
 
-from torch import Tensor
-
 from .common import Logger
+from torch import Tensor
 
 _has_wandb = importlib.util.find_spec("wandb") is not None
 _has_omegaconf = importlib.util.find_spec("omegaconf") is not None
@@ -96,13 +95,14 @@ class WandbLogger(Logger):
         self.video_log_counter = 0
 
     def _create_experiment(self) -> WandbLogger:
-        """Creates a wandb experiment.
+        """Create a wandb experiment.
 
         Args:
             exp_name (str): The name of the experiment.
 
         Returns:
             WandbLogger: The wandb experiment logger.
+
         """
         if not _has_wandb:
             raise ImportError("Wandb is not installed")
@@ -114,13 +114,14 @@ class WandbLogger(Logger):
         return wandb.init(**self._wandb_kwargs)
 
     def log_scalar(self, name: str, value: float, step: int | None = None) -> None:
-        """Logs a scalar value to wandb.
+        """Log a scalar value to wandb.
 
         Args:
             name (str): The name of the scalar.
             value (:obj:`float`): The value of the scalar.
             step (int, optional): The step at which the scalar is logged.
                 Defaults to None.
+
         """
         if step is not None:
             self.experiment.log({name: value, "trainer/step": step})
@@ -137,6 +138,7 @@ class WandbLogger(Logger):
                 supports 'step' (integer indicating the step index), 'format'
                 (default is 'mp4') and 'fps' (defaults to ``self.video_fps``). Other kwargs are
                 passed as-is to the :obj:`experiment.log` method.
+
         """
         import wandb
 
@@ -176,7 +178,7 @@ class WandbLogger(Logger):
         )
 
     def log_hparams(self, cfg: DictConfig | dict) -> None:  # noqa: F821
-        """Logs the hyperparameters of the experiment.
+        """Log the hyperparameters of the experiment.
 
         Args:
             cfg (DictConfig or dict): The configuration of the experiment.

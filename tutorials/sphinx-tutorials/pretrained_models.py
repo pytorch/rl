@@ -3,6 +3,9 @@ Using pretrained models
 =======================
 This tutorial explains how to use pretrained models in TorchRL.
 """
+
+from __future__ import annotations
+
 import tempfile
 
 ##############################################################################

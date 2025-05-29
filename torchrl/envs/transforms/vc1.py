@@ -8,14 +8,11 @@ from __future__ import annotations
 import importlib
 import os
 import subprocess
+
 from functools import partial
 
-import torch
-from tensordict import TensorDictBase
-from torch import nn
 from torchrl._utils import logger as torchrl_logger
-
-from torchrl.data.tensor_specs import Composite, DEVICE_TYPING, TensorSpec, Unbounded
+from torchrl.data.tensor_specs import DEVICE_TYPING, Composite, TensorSpec, Unbounded
 from torchrl.envs.transforms.transforms import (
     CenterCrop,
     Compose,
@@ -25,6 +22,11 @@ from torchrl.envs.transforms.transforms import (
     Transform,
 )
 from torchrl.envs.transforms.utils import _set_missing_tolerance
+
+import torch
+
+from tensordict import TensorDictBase
+from torch import nn
 
 _has_vc = importlib.util.find_spec("vc_models") is not None
 
@@ -62,6 +64,7 @@ class VC1Transform(Transform):
             which provides a small, untrained model for testing.
         del_keys (bool, optional): If ``True`` (default), the input key will be
             discarded from the returned tensordict.
+
     """
 
     inplace = False
@@ -258,7 +261,7 @@ class VC1Transform(Transform):
 
     @classmethod
     def make_noload_model(cls):
-        """Creates an naive model at a custom destination."""
+        """Create an naive model at a custom destination."""
         import vc_models
 
         models_filepath = os.path.dirname(os.path.abspath(vc_models.__file__))

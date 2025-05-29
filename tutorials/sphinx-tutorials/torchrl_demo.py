@@ -3,6 +3,7 @@ Introduction to TorchRL
 =======================
 This demo was presented at ICML 2022 on the industry demo day.
 """
+
 ##############################################################################
 # It gives a good overview of TorchRL functionalities. Feel free to reach out
 # to vmoens@fb.com or submit issues if you have questions or comments about
@@ -185,6 +186,7 @@ This demo was presented at ICML 2022 on the industry demo day.
 # ~~~~~~~~~~
 
 # sphinx_gallery_start_ignore
+from __future__ import annotations
 import warnings
 
 warnings.filterwarnings("ignore")

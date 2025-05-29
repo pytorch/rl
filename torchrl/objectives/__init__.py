@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 from torchrl.objectives.a2c import A2CLoss
 from torchrl.objectives.common import LossModule
@@ -25,16 +26,16 @@ from torchrl.objectives.sac import DiscreteSACLoss, SACLoss
 from torchrl.objectives.td3 import TD3Loss
 from torchrl.objectives.td3_bc import TD3BCLoss
 from torchrl.objectives.utils import (
-    default_value_kwargs,
-    distance_loss,
-    group_optimizers,
     HardUpdate,
-    hold_out_net,
-    hold_out_params,
-    next_state_value,
     SoftUpdate,
     TargetNetUpdater,
     ValueEstimators,
+    default_value_kwargs,
+    distance_loss,
+    group_optimizers,
+    hold_out_net,
+    hold_out_params,
+    next_state_value,
 )
 
 __all__ = [

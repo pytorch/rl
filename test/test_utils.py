@@ -7,16 +7,16 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+
 from copy import copy
 from importlib import import_module
 from unittest import mock
 
+from torchrl.objectives.utils import _pseudo_vmap
+
 import _utils_internal
 import pytest
-
 import torch
-
-from torchrl.objectives.utils import _pseudo_vmap
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import capture_log_records, get_default_devices
@@ -24,8 +24,7 @@ else:
     from _utils_internal import capture_log_records, get_default_devices
 from packaging import version
 from torchrl._utils import _rng_decorator, get_binary_env_var, implement_for
-
-from torchrl.envs.libs.gym import gym_backend, GymWrapper, set_gym_backend
+from torchrl.envs.libs.gym import GymWrapper, gym_backend, set_gym_backend
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
@@ -100,9 +99,7 @@ def uncallable(f):
 
 
 class implement_for_test_functions:
-    """
-    Groups functions that are used in tests for `implement_for` decorator.
-    """
+    """Group functions that are used in tests for `implement_for` decorator."""
 
     @staticmethod
     @implement_for(lambda: import_module("_utils_internal"), "0.3")

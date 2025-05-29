@@ -6,16 +6,18 @@ from __future__ import annotations
 
 import abc
 import shutil
+
 from pathlib import Path
 from typing import Callable
-
-import torch
-from tensordict import TensorDictBase
-from torch import multiprocessing as mp
 
 from torchrl._utils import _can_be_pickled
 from torchrl.data.replay_buffers import TensorDictReplayBuffer, TensorStorage
 from torchrl.data.utils import CloudpickleWrapper
+
+import torch
+
+from tensordict import TensorDictBase
+from torch import multiprocessing as mp
 
 
 class BaseDatasetExperienceReplay(TensorDictReplayBuffer):
@@ -35,7 +37,7 @@ class BaseDatasetExperienceReplay(TensorDictReplayBuffer):
 
     @abc.abstractmethod
     def _is_downloaded(self) -> bool:
-        """Checks if the data has been downloaded."""
+        """Check if the data has been downloaded."""
         ...
 
     @property
@@ -66,7 +68,7 @@ class BaseDatasetExperienceReplay(TensorDictReplayBuffer):
         num_frames: int | None = None,
         dest: str | Path,
     ) -> TensorStorage:
-        """Preprocesses a dataset and returns a new storage with the formatted data.
+        """Preprocesse a dataset and returns a new storage with the formatted data.
 
         The data transform must be unitary (work on a single sample of the dataset).
 
@@ -277,5 +279,5 @@ class BaseDatasetExperienceReplay(TensorDictReplayBuffer):
             )
 
     def delete(self):
-        """Deletes a dataset storage from disk."""
+        """Delete a dataset storage from disk."""
         shutil.rmtree(self.data_path)

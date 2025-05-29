@@ -14,9 +14,8 @@ The core component of this example is the `MultiStepActorWrapper` class.
 when the environment has been reset (which is indicated by the InitTracker transform).
 
 """
+from __future__ import annotations
 
-import torch.nn
-from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
 from torchrl.envs import (
     CatFrames,
     Compose,
@@ -26,6 +25,10 @@ from torchrl.envs import (
     TransformedEnv,
 )
 from torchrl.modules.tensordict_module.actors import MultiStepActorWrapper
+
+import torch.nn
+
+from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
 
 time_steps = 6
 n_obs = 4

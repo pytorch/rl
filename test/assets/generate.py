@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 
 """Script used to generate the mini datasets."""
+from __future__ import annotations
+
 import multiprocessing as mp
 import pathlib
 
@@ -13,10 +15,10 @@ except Exception:
     pass
 from tempfile import TemporaryDirectory
 
-from datasets import Dataset, DatasetDict, load_dataset
-
 from torchrl.data.llm.dataset import get_dataloader
 from torchrl.data.llm.prompt import PromptData
+
+from datasets import Dataset, DatasetDict, load_dataset
 
 
 def generate_small_dataset(comparison=True):

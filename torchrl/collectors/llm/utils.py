@@ -8,9 +8,9 @@ import importlib.util
 
 from queue import Full as QueueFull, Queue
 
-from tensordict import TensorDictBase
-
 from torchrl._utils import logger as torchrl_logger
+
+from tensordict import TensorDictBase
 
 _has_ray = importlib.util.find_spec("ray") is not None
 

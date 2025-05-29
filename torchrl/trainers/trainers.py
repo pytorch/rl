@@ -8,23 +8,17 @@ from __future__ import annotations
 import abc
 import pathlib
 import warnings
-from collections import defaultdict, OrderedDict
+
+from collections import OrderedDict, defaultdict
 from copy import deepcopy
 from textwrap import indent
 from typing import Any, Callable, Sequence, Tuple
 
-import numpy as np
-import torch.nn
-from tensordict import pad, TensorDictBase
-from tensordict.nn import TensorDictModule
-from tensordict.utils import expand_right
-from torch import nn, optim
-
 from torchrl._utils import (
     _CKPT_BACKEND,
+    VERBOSE,
     KeyDependentDefaultDict,
     logger as torchrl_logger,
-    VERBOSE,
 )
 from torchrl.collectors.collectors import DataCollectorBase
 from torchrl.collectors.utils import split_trajectories
@@ -37,6 +31,14 @@ from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives.common import LossModule
 from torchrl.record.loggers import Logger
+
+import numpy as np
+import torch.nn
+
+from tensordict import TensorDictBase, pad
+from tensordict.nn import TensorDictModule
+from tensordict.utils import expand_right
+from torch import nn, optim
 
 try:
     from tqdm import tqdm
@@ -79,7 +81,7 @@ class TrainerHookBase:
 
     @abc.abstractmethod
     def register(self, trainer: Trainer, name: str):
-        """Registers the hook in the trainer at a default location.
+        """Register the hook in the trainer at a default location.
 
         Args:
             trainer (Trainer): the trainer where the hook must be registered.
@@ -136,6 +138,7 @@ class Trainer:
             in frame count. Default is 10000.
         save_trainer_file (path, optional): path where to save the trainer.
             Default is None (no saving)
+
     """
 
     @classmethod
@@ -244,7 +247,7 @@ class Trainer:
             "state": StateDict(**self._get_state()),
             "collector": self.collector,
             "loss_module": self.loss_module,
-            **{k: item for k, item in self._modules.items()},
+            **dict(self._modules.items()),
         }
         return self._app_state
 
@@ -297,7 +300,7 @@ class Trainer:
             self._save_trainer()
 
     def load_from_file(self, file: str | pathlib.Path, **kwargs) -> Trainer:
-        """Loads a file and its state-dict in the trainer.
+        """Load a file and its state-dict in the trainer.
 
         Keyword arguments are passed to the :func:`~torch.load` function.
 
@@ -584,7 +587,7 @@ def _load_list_state_dict(list_state_dict, hook_list):
 
 
 class SelectKeys(TrainerHookBase):
-    """Selects keys in a TensorDict batch.
+    """Select keys in a TensorDict batch.
 
     Args:
         keys (iterable of strings): keys to be selected in the tensordict.
@@ -800,7 +803,7 @@ class OptimizerHook(TrainerHookBase):
 
 
 class ClearCudaCache(TrainerHookBase):
-    """Clears cuda cache at a given interval.
+    """Clear cuda cache at a given interval.
 
     Examples:
         >>> clear_cuda = ClearCudaCache(100)
@@ -997,7 +1000,7 @@ def mask_batch(batch: TensorDictBase) -> TensorDictBase:
     tensordict.
 
     Args:
-        batch:
+        batch (TensorDictBase): The batch to mask.
 
     Examples:
         >>> trainer = mocking_trainer()
@@ -1417,7 +1420,7 @@ def _check_input_output_typehint(
 
 
 def flatten_dict(d):
-    """Flattens a dictionary with sub-dictionaries accessed through point-separated (:obj:`"var1.var2"`) fields."""
+    """Flatten a dictionary with sub-dictionaries accessed through point-separated (`"var1.var2"`) fields."""  # noqa: E501
     out = {}
     for key, item in d.items():
         if isinstance(item, dict):

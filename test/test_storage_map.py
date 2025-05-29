@@ -10,11 +10,6 @@ import importlib.util
 import os
 import sys
 
-import pytest
-
-import torch
-
-from tensordict import assert_close, TensorDict
 from torchrl.data import LazyTensorStorage, ListStorage, MCTSForest, Tree
 from torchrl.data.map import (
     BinaryToDecimal,
@@ -24,6 +19,11 @@ from torchrl.data.map import (
     TensorDictMap,
 )
 from torchrl.envs import GymEnv
+
+import pytest
+import torch
+
+from tensordict import TensorDict, assert_close
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import PENDULUM_VERSIONED
@@ -260,7 +260,7 @@ class TesttTensorDictMap:
 # Tests Tree independent of MCTSForest
 class TestTree:
     def dummy_tree(self):
-        """Creates a tree with the following node IDs:
+        """Create a tree with the following node IDs:
 
         0
         ├── 1
@@ -373,8 +373,7 @@ class TestTree:
 
 class TestMCTSForest:
     def dummy_rollouts(self) -> tuple[TensorDict, ...]:
-        """
-        ├── 0
+        """├── 0
         │   ├── 16
         │   ├── 17
         │   ├── 18
@@ -402,7 +401,6 @@ class TestMCTSForest:
         └── 5
 
         """
-
         states0 = torch.arange(6)
         actions0 = torch.full((5,), 0)
 
@@ -460,8 +458,7 @@ class TestMCTSForest:
         return forest
 
     def _make_forest_rebranching(self) -> MCTSForest:
-        """
-        ├── 0
+        """├── 0
         │   ├── 16
         │   ├── 17
         │   ├── 18

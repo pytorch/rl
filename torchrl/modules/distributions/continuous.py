@@ -5,26 +5,28 @@
 from __future__ import annotations
 
 import weakref
+
 from numbers import Number
 from typing import Sequence
 
-import numpy as np
-import torch
 from packaging import version
-from torch import distributions as D, nn
-from torch.distributions import constraints
-from torch.distributions.transforms import _InverseTransform
-
 from torchrl._utils import safe_is_current_stream_capturing
 from torchrl.modules.distributions.truncated_normal import (
     TruncatedNormal as _TruncatedNormal,
 )
 from torchrl.modules.distributions.utils import (
-    _cast_device,
     FasterTransformedDistribution,
+    _cast_device,
     safeatanh_noeps,
     safetanh_noeps,
 )
+
+import numpy as np
+import torch
+
+from torch import distributions as D, nn
+from torch.distributions import constraints
+from torch.distributions.transforms import _InverseTransform
 
 # speeds up distribution construction
 D.Distribution.set_default_validate_args(False)
@@ -44,7 +46,7 @@ TORCH_VERSION_PRE_2_6 = version.parse(TORCH_VERSION) < version.parse("2.6.0")
 
 
 class IndependentNormal(D.Independent):
-    """Implements a Normal distribution with location scaling.
+    """Implement a Normal distribution with location scaling.
 
     Location scaling prevents the location to be "too far" from 0, which ultimately
     leads to numerically unstable samples and poor gradient computation (e.g. gradient explosion).
@@ -69,6 +71,7 @@ class IndependentNormal(D.Independent):
         tanh_loc (bool, optional): if ``False``, the above formula is used for
             the location scaling, otherwise the raw value
             is kept. Default is ``False``;
+
     """
 
     num_params: int = 2
@@ -136,7 +139,7 @@ class NormalParamWrapper(nn.Module):  # noqa: D101
 
 
 class TruncatedNormal(D.Independent):
-    """Implements a Truncated Normal distribution with location scaling.
+    """Implement a Truncated Normal distribution with location scaling.
 
     Location scaling prevents the location to be "too far" from 0, which ultimately
     leads to numerically unstable samples and poor gradient computation (e.g. gradient explosion).
@@ -163,6 +166,7 @@ class TruncatedNormal(D.Independent):
         tanh_loc (bool, optional): if ``True``, the above formula is used for
             the location scaling, otherwise the raw value is kept.
             Default is ``False``;
+
     """
 
     num_params: int = 2
@@ -302,7 +306,7 @@ class _PatchedAffineTransform(D.AffineTransform):
 
 
 class TanhNormal(FasterTransformedDistribution):
-    """Implements a TanhNormal distribution with location scaling.
+    """Implement a TanhNormal distribution with location scaling.
 
     Location scaling prevents the location to be "too far" from 0 when a
     ``TanhTransform`` is applied, but ultimately
@@ -331,6 +335,7 @@ class TanhNormal(FasterTransformedDistribution):
             value is kept. Default is ``False``;
         safe_tanh (bool, optional): if ``True``, the Tanh transform is done "safely", to avoid numerical overflows.
             This will currently break with :func:`torch.compile`.
+
     """
 
     arg_constraints = {
@@ -479,7 +484,7 @@ class TanhNormal(FasterTransformedDistribution):
 
     @torch.enable_grad()
     def get_mode(self):
-        """Computes an estimation of the mode using the Adam optimizer."""
+        """Compute an estimation of the mode using the Adam optimizer."""
         # Get starting point
         m = self.sample((1000,)).mean(0)
         m = torch.nn.Parameter(m.clamp(self.low, self.high).detach())
@@ -518,7 +523,7 @@ class TanhNormal(FasterTransformedDistribution):
 
 
 def uniform_sample_tanhnormal(dist: TanhNormal, size=None) -> torch.Tensor:
-    """Defines what uniform sampling looks like for a TanhNormal distribution.
+    """Define what uniform sampling looks like for a TanhNormal distribution.
 
     Args:
         dist (TanhNormal): distribution defining the space where the sampling should occur.
@@ -620,7 +625,7 @@ class Delta(D.Distribution):
 
 
 class TanhDelta(FasterTransformedDistribution):
-    """Implements a Tanh transformed_in Delta distribution.
+    """Implement a Tanh transformed_in Delta distribution.
 
     Args:
         param (torch.Tensor): parameter of the delta distribution;

@@ -6,10 +6,6 @@ from __future__ import annotations
 
 import functools
 
-import torch
-from tensordict.nn import TensorDictModule, TensorDictSequential
-
-from torch import nn, optim
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.envs import (
@@ -26,12 +22,15 @@ from torchrl.envs import (
 )
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import AdditiveGaussianModule, MLP, TanhModule, ValueOperator
-
+from torchrl.modules import MLP, AdditiveGaussianModule, TanhModule, ValueOperator
 from torchrl.objectives import SoftUpdate
 from torchrl.objectives.td3_bc import TD3BCLoss
 from torchrl.record import VideoRecorder
 
+import torch
+
+from tensordict.nn import TensorDictModule, TensorDictSequential
+from torch import nn, optim
 
 # ====================================================================
 # Environment utils

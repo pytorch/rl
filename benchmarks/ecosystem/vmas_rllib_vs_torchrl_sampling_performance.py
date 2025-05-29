@@ -2,29 +2,28 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+from __future__ import annotations
 
 import os
 import pickle
-
 import time
+
 from pathlib import Path
 from typing import Dict
 
-import numpy as np
-
-import ray
-
-import vmas
-from matplotlib import pyplot as plt
-from ray import tune
-
-from ray.rllib.agents.ppo import PPOTrainer
-from ray.rllib.algorithms.callbacks import DefaultCallbacks
-from ray.tune import register_env
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors import SyncDataCollector
 from torchrl.envs.libs.vmas import VmasEnv
+
+import numpy as np
+import ray
+import vmas
+
+from matplotlib import pyplot as plt
+from ray import tune
+from ray.rllib.agents.ppo import PPOTrainer
+from ray.rllib.algorithms.callbacks import DefaultCallbacks
+from ray.tune import register_env
 from vmas import Wrapper
 
 
@@ -145,14 +144,12 @@ def run_comparison_torchrl_rllib(
     max_n_envs: int = 3000,
     step_n_envs: int = 3,
 ):
-    """
-
-    Args:
-        scenario_name (str): name of scenario to benchmark
-        device (str):  device to ron comparison on ("cpu" or "cuda")
-        n_steps (int):  number of environment steps
-        max_n_envs (int): the maximum number of parallel environments to test
-        step_n_envs (int): the step size in number of environments from 1 to max_n_envs
+    """Args:
+    scenario_name (str): name of scenario to benchmark
+    device (str):  device to ron comparison on ("cpu" or "cuda")
+    n_steps (int):  number of environment steps
+    max_n_envs (int): the maximum number of parallel environments to test
+    step_n_envs (int): the step size in number of environments from 1 to max_n_envs
 
     """
     list_n_envs = np.linspace(1, max_n_envs, step_n_envs)

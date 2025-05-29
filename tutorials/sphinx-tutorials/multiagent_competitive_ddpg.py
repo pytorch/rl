@@ -100,6 +100,7 @@ Key learnings:
 #
 # Import our dependencies:
 #
+from __future__ import annotations
 import copy
 import tempfile
 

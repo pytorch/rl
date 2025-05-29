@@ -9,11 +9,13 @@ from collections import OrderedDict
 from multiprocessing.sharedctypes import Synchronized
 from typing import Callable
 
-import torch
-from tensordict import TensorDictBase
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs.common import EnvBase, EnvMetaData
+
+import torch
+
+from tensordict import TensorDictBase
 
 
 class EnvCreator:
@@ -73,6 +75,7 @@ class EnvCreator:
         ...         p.join()
         env 1:  tensor([11.9934])
         env 2:  tensor([11.9934])
+
     """
 
     def __init__(
@@ -96,7 +99,7 @@ class EnvCreator:
         self.init_()
 
     def make_variant(self, **kwargs) -> EnvCreator:
-        """Creates a variant of the EnvCreator, pointing to the same underlying metadata but with different keyword arguments during construction.
+        """Create a variant of the EnvCreator, pointing to the same underlying metadata but with different keyword arguments during construction.
 
         This can be useful with transforms that share a state, like :class:`~torchrl.envs.TrajCounter`.
 
@@ -229,7 +232,7 @@ def env_creator(fun: Callable) -> EnvCreator:
 
 
 def get_env_metadata(env_or_creator: EnvBase | Callable, kwargs: dict | None = None):
-    """Retrieves a EnvMetaData object from an env."""
+    """Retrieve a EnvMetaData object from an env."""
     if isinstance(env_or_creator, (EnvBase,)):
         return EnvMetaData.metadata_from_env(env_or_creator)
     elif not isinstance(env_or_creator, EnvBase) and not isinstance(

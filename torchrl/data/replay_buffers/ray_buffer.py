@@ -6,10 +6,10 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-import torch
-
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.envs.transforms.transforms import Transform
+
+import torch
 
 RAY_ERR = None
 try:
@@ -23,7 +23,7 @@ except ImportError as err:
 
 @classmethod
 def as_remote(cls, remote_config=None):
-    """Creates an instance of a remote ray class.
+    """Create an instance of a remote ray class.
 
     Args:
         cls (Python Class): class to be remotely instantiated.
@@ -32,6 +32,7 @@ def as_remote(cls, remote_config=None):
 
     Returns:
         A function that creates ray remote class instances.
+
     """
     if remote_config is None:
         from torchrl.collectors.distributed.ray import DEFAULT_REMOTE_CLASS_CONFIG

@@ -8,12 +8,11 @@ import importlib.util
 import os.path
 import shutil
 import tempfile
+
 from contextlib import nullcontext
 from pathlib import Path
 from typing import Callable
 
-import torch
-from tensordict import PersistentTensorDict, TensorDict
 from torchrl._utils import (
     KeyDependentDefaultDict,
     logger as torchrl_logger,
@@ -24,6 +23,10 @@ from torchrl.data.datasets.utils import _get_root_dir
 from torchrl.data.replay_buffers.samplers import Sampler
 from torchrl.data.replay_buffers.storages import TensorStorage
 from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter, Writer
+
+import torch
+
+from tensordict import PersistentTensorDict, TensorDict
 
 _has_tqdm = importlib.util.find_spec("tqdm", None) is not None
 _has_h5py = importlib.util.find_spec("h5py", None) is not None
@@ -213,7 +216,7 @@ class RobosetExperienceReplay(BaseDatasetExperienceReplay):
 
     def _download_from_huggingface(self, tempdir):
         try:
-            from huggingface_hub import hf_hub_download, HfApi
+            from huggingface_hub import HfApi, hf_hub_download
         except ImportError:
             raise ImportError(
                 f"huggingface_hub is required for downloading {type(self)}'s datasets."

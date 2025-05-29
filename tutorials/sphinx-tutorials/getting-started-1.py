@@ -15,6 +15,7 @@ Get started with TorchRL's modules
         !pip install torchrl
 
 """
+
 ###################################
 # Reinforcement Learning is designed to create policies that can effectively
 # tackle specific tasks. Policies can take various forms, from a differentiable
@@ -43,6 +44,7 @@ Get started with TorchRL's modules
 # :class:`~torch.nn.LazyLinear` module with the Pendulum environment we
 # instantiated in the previous tutorial.
 #
+from __future__ import annotations
 
 import torch
 

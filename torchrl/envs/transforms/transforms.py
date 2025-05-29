@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import abc
-
 import functools
 import hashlib
 import importlib.util
@@ -14,38 +13,12 @@ import multiprocessing as mp
 import time
 import warnings
 import weakref
+
 from copy import copy
 from enum import IntEnum
 from functools import wraps
 from textwrap import indent
 from typing import Any, Callable, Mapping, OrderedDict, Sequence, TypeVar, Union
-
-import numpy as np
-
-import torch
-
-from tensordict import (
-    is_tensor_collection,
-    LazyStackedTensorDict,
-    NonTensorData,
-    NonTensorStack,
-    set_lazy_legacy,
-    TensorDict,
-    TensorDictBase,
-    unravel_key,
-    unravel_key_list,
-)
-from tensordict.base import _is_leaf_nontensor
-from tensordict.nn import dispatch, TensorDictModuleBase
-from tensordict.utils import (
-    _unravel_key_to_tuple,
-    _zip_strict,
-    expand_as_right,
-    expand_right,
-    NestedKey,
-)
-from torch import nn, Tensor
-from torch.utils._pytree import tree_map
 
 from torchrl._utils import (
     _append_last,
@@ -55,7 +28,6 @@ from torchrl._utils import (
     auto_unwrap_transformed_env,
     logger as torchrl_logger,
 )
-
 from torchrl.data.tensor_specs import (
     Binary,
     Bounded,
@@ -71,10 +43,10 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuous,
 )
 from torchrl.envs.common import (
+    EnvBase,
     _do_nothing,
     _EnvPostInit,
     _maybe_unlock,
-    EnvBase,
     make_tensordict,
 )
 from torchrl.envs.transforms import functional as F
@@ -90,6 +62,32 @@ from torchrl.envs.utils import (
     make_composite_from_td,
     step_mdp,
 )
+
+import numpy as np
+import torch
+
+from tensordict import (
+    LazyStackedTensorDict,
+    NonTensorData,
+    NonTensorStack,
+    TensorDict,
+    TensorDictBase,
+    is_tensor_collection,
+    set_lazy_legacy,
+    unravel_key,
+    unravel_key_list,
+)
+from tensordict.base import _is_leaf_nontensor
+from tensordict.nn import TensorDictModuleBase, dispatch
+from tensordict.utils import (
+    NestedKey,
+    _unravel_key_to_tuple,
+    _zip_strict,
+    expand_as_right,
+    expand_right,
+)
+from torch import Tensor, nn
+from torch.utils._pytree import tree_map
 
 _has_tv = importlib.util.find_spec("torchvision", None) is not None
 
@@ -308,21 +306,21 @@ class Transform(nn.Module):
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
-        """Resets a transform if it is stateful."""
+        """Reset a transform if it is stateful."""
         return tensordict_reset
 
     def _reset_env_preprocess(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Inverts the input to :meth:`TransformedEnv._reset`, if needed."""
+        """Invert the input to :meth:`TransformedEnv._reset`, if needed."""
         if self.enable_inv_on_reset and tensordict is not None:
             with _set_missing_tolerance(self, True):
                 tensordict = self._inv_call(tensordict)
         return tensordict
 
     def init(self, tensordict) -> None:
-        """Runs init steps for the transform."""
+        """Run init steps for the transform."""
 
     def _apply_transform(self, obs: torch.Tensor) -> None:
-        """Applies the transform to a tensor or a leaf.
+        """Applie the transform to a tensor or a leaf.
 
         This operation can be called multiple times (if multiples keys of the
         tensordict match the keys of the transform) for each entry in ``self.in_keys``
@@ -380,7 +378,7 @@ class Transform(nn.Module):
         return next_tensordict
 
     def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
-        """Reads the input tensordict, and for the selected keys, applies the transform.
+        """Read the input tensordict, and for the selected keys, applies the transform.
 
         ``_call`` can be re-written whenever a modification of the output of env.step needs to be modified independently
         of the data collected in the previous step (including actions and states).
@@ -409,7 +407,7 @@ class Transform(nn.Module):
 
     @dispatch(source="in_keys", dest="out_keys")
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Reads the input tensordict, and for the selected keys, applies the transform.
+        """Read the input tensordict, and for the selected keys, applies the transform.
 
         By default, this method:
 
@@ -447,7 +445,7 @@ class Transform(nn.Module):
         return tensordict
 
     def _inv_apply_transform(self, state: torch.Tensor) -> torch.Tensor:
-        """Applies the inverse transform to a tensor or a leaf.
+        """Applie the inverse transform to a tensor or a leaf.
 
         This operation can be called multiple times (if multiples keys of the
         tensordict match the keys of the transform) for each entry in ``self.in_keys_inv``
@@ -469,7 +467,7 @@ class Transform(nn.Module):
             return state
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Reads and possibly modify the input tensordict before it is passed to :meth:`~torchrl.envs.EnvBase.step`.
+        """Read and possibly modify the input tensordict before it is passed to :meth:`~torchrl.envs.EnvBase.step`.
 
         Examples:
             >>> class AddOneToAllTensorDictBeforeStep(Transform):
@@ -492,7 +490,7 @@ class Transform(nn.Module):
 
     @dispatch(source="in_keys_inv", dest="out_keys_inv")
     def inv(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Reads the input tensordict, and for the selected keys, applies the inverse transform.
+        """Read the input tensordict, and for the selected keys, applies the inverse transform.
 
         By default, this method:
 
@@ -519,18 +517,19 @@ class Transform(nn.Module):
         return out
 
     def transform_env_device(self, device: torch.device):
-        """Transforms the device of the parent env."""
+        """Transform the device of the parent env."""
         return device
 
     def transform_env_batch_size(self, batch_size: torch.Size):
-        """Transforms the batch-size of the parent env."""
+        """Transform the batch-size of the parent env."""
         return batch_size
 
     def transform_output_spec(self, output_spec: Composite) -> Composite:
-        """Transforms the output spec such that the resulting spec matches transform mapping.
+        """Transform the output spec such that the resulting spec matches transform mapping.
 
         This method should generally be left untouched. Changes should be implemented using
         :meth:`transform_observation_spec`, :meth:`transform_reward_spec` and :meth:`transform_full_done_spec`.
+
         Args:
             output_spec (TensorSpec): spec before the transform
 
@@ -568,7 +567,7 @@ class Transform(nn.Module):
         return output_spec
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
-        """Transforms the input spec such that the resulting spec matches transform mapping.
+        """Transform the input spec such that the resulting spec matches transform mapping.
 
         Args:
             input_spec (TensorSpec): spec before the transform
@@ -587,7 +586,7 @@ class Transform(nn.Module):
         return input_spec
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        """Transforms the observation spec such that the resulting spec matches transform mapping.
+        """Transform the observation spec such that the resulting spec matches transform mapping.
 
         Args:
             observation_spec (TensorSpec): spec before the transform
@@ -599,7 +598,7 @@ class Transform(nn.Module):
         return observation_spec
 
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
-        """Transforms the reward spec such that the resulting spec matches transform mapping.
+        """Transform the reward spec such that the resulting spec matches transform mapping.
 
         Args:
             reward_spec (TensorSpec): spec before the transform
@@ -611,7 +610,7 @@ class Transform(nn.Module):
         return reward_spec
 
     def transform_done_spec(self, done_spec: TensorSpec) -> TensorSpec:
-        """Transforms the done spec such that the resulting spec matches transform mapping.
+        """Transform the done spec such that the resulting spec matches transform mapping.
 
         Args:
             done_spec (TensorSpec): spec before the transform
@@ -623,7 +622,7 @@ class Transform(nn.Module):
         return done_spec
 
     def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
-        """Transforms the action spec such that the resulting spec matches transform mapping.
+        """Transform the action spec such that the resulting spec matches transform mapping.
 
         Args:
             action_spec (TensorSpec): spec before the transform
@@ -635,7 +634,7 @@ class Transform(nn.Module):
         return action_spec
 
     def transform_state_spec(self, state_spec: TensorSpec) -> TensorSpec:
-        """Transforms the state spec such that the resulting spec matches transform mapping.
+        """Transform the state spec such that the resulting spec matches transform mapping.
 
         Args:
             state_spec (TensorSpec): spec before the transform
@@ -685,7 +684,7 @@ class Transform(nn.Module):
 
     @property
     def container(self):
-        """Returns the env containing the transform.
+        """Return the env containing the transform.
 
         Examples:
             >>> from torchrl.envs import TransformedEnv, Compose, RewardSum, StepCounter
@@ -693,6 +692,7 @@ class Transform(nn.Module):
             >>> env = TransformedEnv(GymEnv("Pendulum-v1"), Compose(RewardSum(), StepCounter()))
             >>> env.transform[0].container is env
             True
+
         """
         if "_container" not in self.__dict__:
             raise AttributeError("transform parent uninitialized")
@@ -736,7 +736,7 @@ class Transform(nn.Module):
 
     @property
     def parent(self) -> EnvBase | None:
-        """Returns the parent env of the transform.
+        """Return the parent env of the transform.
 
         The parent env is the env that contains all the transforms up until the current one.
 
@@ -1169,7 +1169,7 @@ but got an object of type {type(transform)}."""
         return self.base_env.set_seed(seed, static_seed=static_seed)
 
     def _set_seed(self, seed: int | None) -> None:
-        """This method is not used in transformed envs."""
+        """Thi method is not used in transformed envs."""
 
     def _reset(self, tensordict: TensorDictBase | None = None, **kwargs):
         if tensordict is not None:
@@ -1250,7 +1250,7 @@ but got an object of type {type(transform)}."""
     def append_transform(
         self, transform: Transform | Callable[[TensorDictBase], TensorDictBase]
     ) -> TransformedEnv:
-        """Appends a transform to the env.
+        """Append a transform to the env.
 
         :class:`~torchrl.envs.transforms.Transform` or callable are accepted.
         """
@@ -1274,7 +1274,7 @@ but got an object of type {type(transform)}."""
         return self
 
     def insert_transform(self, index: int, transform: Transform) -> TransformedEnv:
-        """Inserts a transform to the env at the desired index.
+        """Insert a transform to the env at the desired index.
 
         :class:`~torchrl.envs.transforms.Transform` or callable are accepted.
         """
@@ -1367,7 +1367,7 @@ but got an object of type {type(transform)}."""
         pass
 
     def set_missing_tolerance(self, mode=False):
-        """Indicates if an KeyError should be raised whenever an in_key is missing from the input tensordict."""
+        """Indicate if an KeyError should be raised whenever an in_key is missing from the input tensordict."""
         self.transform.set_missing_tolerance(mode)
 
 
@@ -1395,7 +1395,7 @@ class ObservationTransform(Transform):
 
 
 class Compose(Transform):
-    """Composes a chain of transforms.
+    """Compose a chain of transforms.
 
     :class:`~torchrl.envs.transforms.Transform` or ``callable``s are accepted.
 
@@ -1565,7 +1565,7 @@ class Compose(Transform):
     def append(
         self, transform: Transform | Callable[[TensorDictBase], TensorDictBase]
     ) -> None:
-        """Appends a transform in the chain.
+        """Append a transform in the chain.
 
         :class:`~torchrl.envs.transforms.Transform` or callable are accepted.
         """
@@ -1597,7 +1597,7 @@ class Compose(Transform):
         index: int,
         transform: Transform | Callable[[TensorDictBase], TensorDictBase],
     ) -> None:
-        """Inserts a transform in the chain at the desired index.
+        """Insert a transform in the chain at the desired index.
 
         :class:`~torchrl.envs.transforms.Transform` or callable are accepted.
         """
@@ -1698,7 +1698,7 @@ class Compose(Transform):
 
 
 class ToTensorImage(ObservationTransform):
-    """Transforms a numpy-like image (W x H x C) to a pytorch image (C x W x H).
+    """Transform a numpy-like image (W x H x C) to a pytorch image (C x W x H).
 
     Transforms an observation image from a (... x W x H x C) tensor to a
     (... x C x W x H) tensor. Optionally, scales the input tensor from the range
@@ -1716,7 +1716,7 @@ class ToTensorImage(ObservationTransform):
         dtype (torch.dtype, optional): dtype to use for the resulting
             observations.
 
-    Keyword arguments:
+    Keyword Arguments:
         in_keys (list of NestedKeys): keys to process.
         out_keys (list of NestedKeys): keys to write.
         shape_tolerant (bool, optional): if ``True``, the shape of the input
@@ -1733,6 +1733,7 @@ class ToTensorImage(ObservationTransform):
         >>> obs = td.get("pixels")
         >>> print(obs.shape, obs.dtype)
         torch.Size([1, 1, 3, 10, 11]) torch.float32
+
     """
 
     def __init__(
@@ -1833,6 +1834,7 @@ class ClipTransform(Transform):
         >>> env = TransformedEnv(base_env, ClipTransform(in_keys=['observation'], low=-1, high=0.1))
         >>> r = env.rollout(100)
         >>> assert (r["observation"] <= 0.1).all()
+
     """
 
     def __init__(
@@ -1917,12 +1919,16 @@ class ClipTransform(Transform):
                     shape=spec.shape,
                     device=spec.device,
                     dtype=spec.dtype,
-                    high=self.high + self.high_eps
-                    if self.high is not None
-                    else self.high_max,
-                    low=self.low - self.low_eps
-                    if self.low is not None
-                    else self.low_min,
+                    high=(
+                        self.high + self.high_eps
+                        if self.high is not None
+                        else self.high_max
+                    ),
+                    low=(
+                        self.low - self.low_eps
+                        if self.low is not None
+                        else self.low_min
+                    ),
                 )
         return self.parent.output_spec["full_reward_spec"]
 
@@ -1939,7 +1945,7 @@ class ClipTransform(Transform):
 
 
 class TargetReturn(Transform):
-    """Sets a target return for the agent to achieve in the environment.
+    """Set a target return for the agent to achieve in the environment.
 
     In goal-conditioned RL, the :class:`~.TargetReturn` is defined as the
     expected cumulative reward obtained from the current state to the goal state
@@ -2142,7 +2148,7 @@ class TargetReturn(Transform):
 
 
 class RewardClipping(Transform):
-    """Clips the reward between `clamp_min` and `clamp_max`.
+    """Clip the reward between `clamp_min` and `clamp_max`.
 
     Args:
         clip_min (scalar): minimum value of the resulting reward.
@@ -2206,7 +2212,7 @@ class RewardClipping(Transform):
 
 
 class BinarizeReward(Transform):
-    """Maps the reward to a binary value (0 or 1) if the reward is null or non-null, respectively.
+    """Map the reward to a binary value (0 or 1) if the reward is null or non-null, respectively.
 
     Args:
         in_keys (List[NestedKey]): input keys
@@ -2214,6 +2220,7 @@ class BinarizeReward(Transform):
             of ``in_keys``.
         dtype (torch.dtype, optional): the dtype of the binerized reward.
             Defaults to ``torch.int8``.
+
     """
 
     def __init__(
@@ -2244,7 +2251,7 @@ class BinarizeReward(Transform):
 
 
 class Resize(ObservationTransform):
-    """Resizes a pixel observation.
+    """Resize a pixel observation.
 
     Args:
         w (int): resulting width.
@@ -2257,6 +2264,7 @@ class Resize(ObservationTransform):
         >>> t = Resize(64, 84)
         >>> base_env = GymEnv("HalfCheetah-v4", from_pixels=True)
         >>> env = TransformedEnv(base_env, Compose(ToTensorImage(), t))
+
     """
 
     def __init__(
@@ -2352,7 +2360,7 @@ class Resize(ObservationTransform):
 
 
 class Crop(ObservationTransform):
-    """Crops the input image at the specified location and output size.
+    """Crop the input image at the specified location and output size.
 
     Args:
         w (int): resulting width
@@ -2419,7 +2427,7 @@ class Crop(ObservationTransform):
 
 
 class CenterCrop(ObservationTransform):
-    """Crops the center of an image.
+    """Crop the center of an image.
 
     Args:
         w (int): resulting width
@@ -2493,6 +2501,7 @@ class FlattenObservation(ObservationTransform):
             :obj:`FlattenObservation` will map these to the n^th feature dimension
             (ie n^th dimension after batch size of parent env) of the input tensor.
             Defaults to False, ie. non-negative dimensions are not permitted.
+
     """
 
     def __init__(
@@ -2567,7 +2576,7 @@ class FlattenObservation(ObservationTransform):
 
 
 class UnsqueezeTransform(Transform):
-    """Inserts a dimension of size one at the specified position.
+    """Insert a dimension of size one at the specified position.
 
     Args:
         dim (int): dimension to unsqueeze. Must be negative (or allow_positive_dim
@@ -2587,6 +2596,7 @@ class UnsqueezeTransform(Transform):
         in_keys_inv (list of NestedKeys): input entries (read) during :meth:`inv` calls.
         out_keys_inv (list of NestedKeys): input entries (write) during :meth:`~.inv` calls.
             Defaults to ``in_keys_in`` if not provided.
+
     """
 
     invertible = True
@@ -2695,10 +2705,11 @@ class UnsqueezeTransform(Transform):
 
 
 class SqueezeTransform(UnsqueezeTransform):
-    """Removes a dimension of size one at the specified position.
+    """Remove a dimension of size one at the specified position.
 
     Args:
         dim (int): dimension to squeeze.
+
     """
 
     invertible = True
@@ -2906,7 +2917,7 @@ class PermuteTransform(Transform):
 
 
 class GrayScale(ObservationTransform):
-    """Turns a pixel observation to grayscale."""
+    """Turn a pixel observation to grayscale."""
 
     def __init__(
         self,
@@ -3042,9 +3053,11 @@ class ObservationNorm(ObservationTransform):
         self.eps = (
             eps
             if eps is not None
-            else torch.finfo(scale.dtype).eps
-            if isinstance(scale, torch.Tensor) and scale.dtype.is_floating_point
-            else 1e-6
+            else (
+                torch.finfo(scale.dtype).eps
+                if isinstance(scale, torch.Tensor) and scale.dtype.is_floating_point
+                else 1e-6
+            )
         )
 
         if loc is not None and not isinstance(loc, torch.Tensor):
@@ -3079,7 +3092,7 @@ class ObservationNorm(ObservationTransform):
         key: NestedKey | None = None,
         keep_dims: tuple[int] | None = None,
     ) -> None:
-        """Initializes the loc and scale stats of the parent environment.
+        """Initialize the loc and scale stats of the parent environment.
 
         Normalization constant should ideally make the observation statistics approach
         those of a standard Gaussian distribution. This method computes a location
@@ -3259,7 +3272,7 @@ class ObservationNorm(ObservationTransform):
 
 
 class CatFrames(ObservationTransform):
-    """Concatenates successive observation frames into a single tensor.
+    """Concatenate successive observation frames into a single tensor.
 
     This transform is useful for creating a sense of movement or velocity in the observed features.
     It can also be used with models that require access to past observations such as transformers and the like.
@@ -3411,7 +3424,7 @@ class CatFrames(ObservationTransform):
     def make_rb_transform_and_sampler(
         self, batch_size: int, **sampler_kwargs
     ) -> tuple[Transform, torchrl.data.replay_buffers.SliceSampler]:  # noqa: F821
-        """Creates a transform and sampler to be used with a replay buffer when storing frame-stacked data.
+        """Create a transform and sampler to be used with a replay buffer when storing frame-stacked data.
 
         This method helps reduce redundancy in stored data by avoiding the need to
         store the entire stack of frames in the buffer. Instead, it creates a
@@ -3511,7 +3524,7 @@ class CatFrames(ObservationTransform):
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
-        """Resets _buffers."""
+        """Reset _buffers."""
         _reset = _get_reset(self.reset_key, tensordict)
         if self.as_inverse and self.parent is not None:
             raise Exception(
@@ -3833,6 +3846,7 @@ class RewardScaling(Transform):
                 reward = (reward-loc)/scale
 
             as it is done for standardization. Default is `False`.
+
     """
 
     def __init__(
@@ -3893,7 +3907,7 @@ class RewardScaling(Transform):
 
 
 class FiniteTensorDictCheck(Transform):
-    """This transform will check that all the items of the tensordict are finite, and raise an exception if they are not."""
+    """Thi transform will check that all the items of the tensordict are finite, and raise an exception if they are not."""
 
     def __init__(self):
         super().__init__(in_keys=[])
@@ -3912,7 +3926,7 @@ class FiniteTensorDictCheck(Transform):
 
 
 class DTypeCastTransform(Transform):
-    """Casts one dtype to another for selected keys.
+    """Cast one dtype to another for selected keys.
 
     Depending on whether the ``in_keys`` or ``in_keys_inv`` are provided
     during construction, the class behavior will change:
@@ -4131,7 +4145,7 @@ class DTypeCastTransform(Transform):
 
     @dispatch(source="in_keys", dest="out_keys")
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Reads the input tensordict, and for the selected keys, applies the transform."""
+        """Read the input tensordict, and for the selected keys, applies the transform."""
         in_keys = self.in_keys
         out_keys = self.out_keys
         if in_keys is None:
@@ -4284,7 +4298,7 @@ class DTypeCastTransform(Transform):
 
 
 class DoubleToFloat(DTypeCastTransform):
-    """Casts one dtype to another for selected keys.
+    """Cast one dtype to another for selected keys.
 
     Depending on whether the ``in_keys`` or ``in_keys_inv`` are provided
     during construction, the class behavior will change:
@@ -4410,7 +4424,7 @@ class DoubleToFloat(DTypeCastTransform):
 
 
 class DeviceCastTransform(Transform):
-    """Moves data from one device to another.
+    """Move data from one device to another.
 
     Args:
         device (torch.device or equivalent): the destination device.
@@ -4656,7 +4670,7 @@ class DeviceCastTransform(Transform):
 
 
 class CatTensors(Transform):
-    """Concatenates several keys in a single tensor.
+    """Concatenate several keys in a single tensor.
 
     This is especially useful if multiple keys describe a single state (e.g.
     "observation_position" and
@@ -4734,7 +4748,7 @@ class CatTensors(Transform):
         return self._keys_to_exclude
 
     def _find_in_keys(self):
-        """Gathers all the entries from observation spec which shape is 1d."""
+        """Gather all the entries from observation spec which shape is 1d."""
         parent = self.parent
         obs_spec = parent.observation_spec
         in_keys = []
@@ -4759,11 +4773,11 @@ class CatTensors(Transform):
             pos_idx = self.dim > 0
             abs_idx = self.dim if pos_idx else -self.dim - 1
             values = [
-                v
-                if abs_idx < v.ndimension()
-                else v.unsqueeze(0)
-                if not pos_idx
-                else v.unsqueeze(-1)
+                (
+                    v
+                    if abs_idx < v.ndimension()
+                    else v.unsqueeze(0) if not pos_idx else v.unsqueeze(-1)
+                )
                 for v in values
             ]
 
@@ -4810,9 +4824,11 @@ class CatTensors(Transform):
 
         sum_shape = sum(
             [
-                observation_spec[key].shape[self.dim]
-                if observation_spec[key].shape
-                else 1
+                (
+                    observation_spec[key].shape[self.dim]
+                    if observation_spec[key].shape
+                    else 1
+                )
                 for key in keys
             ]
         )
@@ -4841,7 +4857,7 @@ class CatTensors(Transform):
 
 
 class UnaryTransform(Transform):
-    r"""Applies a unary operation on the specified inputs.
+    r"""Applie a unary operation on the specified inputs.
 
     Args:
         in_keys (sequence of NestedKey): the keys of inputs to the unary operation.
@@ -4920,6 +4936,7 @@ class UnaryTransform(Transform):
         [torchrl][INFO] check_env_specs succeeded!
 
     """
+
     enable_inv_on_reset = True
 
     def __init__(
@@ -5086,7 +5103,7 @@ class UnaryTransform(Transform):
 
 
 class Hash(UnaryTransform):
-    r"""Adds a hash value to a tensordict.
+    r"""Add a hash value to a tensordict.
 
     Args:
         in_keys (sequence of NestedKey): the keys of the values to hash.
@@ -5185,6 +5202,7 @@ class Hash(UnaryTransform):
             is_shared=False)
         >>> env.check_env_specs()
         [torchrl][INFO] check_env_specs succeeded!
+
     """
 
     def __init__(
@@ -5245,6 +5263,7 @@ class Hash(UnaryTransform):
 
         Returns:
             Any: The input that the hash was generated from.
+
         """
         if self._repertoire is None:
             raise RuntimeError(
@@ -5267,7 +5286,7 @@ class Hash(UnaryTransform):
 
     @classmethod
     def reproducible_hash(cls, string, seed=None):
-        """Creates a reproducible 256-bit hash from a string using a seed.
+        """Create a reproducible 256-bit hash from a string using a seed.
 
         Args:
             string (str or None): The input string. If ``None``, null string ``""`` is used.
@@ -5275,6 +5294,7 @@ class Hash(UnaryTransform):
 
         Returns:
             Tensor: Shape ``(32,)`` with dtype ``torch.uint8``.
+
         """
         if string is None:
             string = ""
@@ -5298,7 +5318,7 @@ class Hash(UnaryTransform):
 
 
 class Tokenizer(UnaryTransform):
-    r"""Applies a tokenization operation on the specified inputs.
+    r"""Applie a tokenization operation on the specified inputs.
 
     Args:
         in_keys (sequence of NestedKey): the keys of inputs to the tokenization operation.
@@ -5601,7 +5621,7 @@ class Tokenizer(UnaryTransform):
 
 
 class Stack(Transform):
-    """Stacks tensors and tensordicts.
+    """Stack tensors and tensordicts.
 
     Concatenates a sequence of tensors or tensordicts along a new dimension.
     The tensordicts or tensors under ``in_keys`` must all have the same shapes.
@@ -5674,6 +5694,7 @@ class Stack(Transform):
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
+
     """
 
     invertible = True
@@ -5812,7 +5833,7 @@ class Stack(Transform):
 
 
 class DiscreteActionProjection(Transform):
-    """Projects discrete actions from a high dimensional space to a low dimensional space.
+    """Project discrete actions from a high dimensional space to a low dimensional space.
 
     Given a discrete action (from 1 to N) encoded as a one-hot vector and a
     maximum action index num_actions (with num_actions < N), transforms the action such that
@@ -5848,6 +5869,7 @@ class DiscreteActionProjection(Transform):
         >>> _ = transform.inv(td)
         >>> print(td.get("action"))
         tensor([1])
+
     """
 
     def __init__(
@@ -5961,7 +5983,7 @@ class FrameSkipTransform(Transform):
 
 
 class NoopResetEnv(Transform):
-    """Runs a series of random actions when an environment is reset.
+    """Run a series of random actions when an environment is reset.
 
     Args:
         env (EnvBase): env on which the random actions have to be
@@ -6188,16 +6210,16 @@ class TensorDictPrimer(Transform):
         To facilitate this process, the method :func:`~torchrl.modules.utils.get_primers_from_module`
         automatically checks for required primer transforms in a module and its submodules and
         generates them.
+
     """
 
     def __init__(
         self,
         primers: dict | Composite = None,
         random: bool | None = None,
-        default_value: float
-        | Callable
-        | dict[NestedKey, float]
-        | dict[NestedKey, Callable] = None,
+        default_value: (
+            float | Callable | dict[NestedKey, float] | dict[NestedKey, Callable]
+        ) = None,
         reset_key: NestedKey | None = None,
         expand_specs: bool = None,
         single_default_value: bool = False,
@@ -6246,9 +6268,7 @@ class TensorDictPrimer(Transform):
         elif single_default_value:
             pass
         else:
-            default_value = {
-                key: default_value for key in self.primers.keys(True, True)
-            }
+            default_value = dict.fromkeys(self.primers.keys(True, True), default_value)
         self.single_default_value = single_default_value
         self.default_value = default_value
         self._validated = False
@@ -6403,7 +6423,7 @@ class TensorDictPrimer(Transform):
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
-        """Sets the default values in the input tensordict.
+        """Set the default values in the input tensordict.
 
         If the parent is batch-locked, we make sure the specs have the appropriate leading
         shape. We allow for execution when the parent is missing, in which case the
@@ -6501,7 +6521,7 @@ class TensorDictPrimer(Transform):
 
 
 class PinMemoryTransform(Transform):
-    """Calls pin_memory on the tensordict to facilitate writing on CUDA devices."""
+    """Call pin_memory on the tensordict to facilitate writing on CUDA devices."""
 
     def __init__(self):
         super().__init__()
@@ -6684,7 +6704,7 @@ class VecNorm(Transform, metaclass=_VecNormMeta):
         self.frozen = False
 
     def freeze(self) -> VecNorm:
-        """Freezes the VecNorm, avoiding the stats to be updated when called.
+        """Freeze the VecNorm, avoiding the stats to be updated when called.
 
         See :meth:`~.unfreeze`.
         """
@@ -6692,7 +6712,7 @@ class VecNorm(Transform, metaclass=_VecNormMeta):
         return self
 
     def unfreeze(self) -> VecNorm:
-        """Unfreezes the VecNorm.
+        """Unfreeze the VecNorm.
 
         See :meth:`~.freeze`.
         """
@@ -6700,7 +6720,7 @@ class VecNorm(Transform, metaclass=_VecNormMeta):
         return self
 
     def frozen_copy(self):
-        """Returns a copy of the Transform that keeps track of the stats but does not update them."""
+        """Return a copy of the Transform that keeps track of the stats but does not update them."""
         if self._td is None:
             raise RuntimeError(
                 "Make sure the VecNorm has been initialized before creating a frozen copy."
@@ -6834,7 +6854,7 @@ class VecNorm(Transform, metaclass=_VecNormMeta):
         return (value - mean) / std.clamp_min(self.eps)
 
     def to_observation_norm(self) -> Compose | ObservationNorm:
-        """Converts VecNorm into an ObservationNorm class that can be used at inference time.
+        """Convert VecNorm into an ObservationNorm class that can be used at inference time.
 
         The :class:`~torchrl.envs.ObservationNorm` layer can be updated using the :meth:`~torch.nn.Module.state_dict`
         API.
@@ -6905,14 +6925,14 @@ class VecNorm(Transform, metaclass=_VecNormMeta):
 
     @property
     def loc(self):
-        """Returns a TensorDict with the loc to be used for an affine transform."""
+        """Return a TensorDict with the loc to be used for an affine transform."""
         # We can't cache that value bc the summary stats could be updated by a different process
         loc, _ = self._get_loc_scale(loc_only=True)
         return loc
 
     @property
     def scale(self):
-        """Returns a TensorDict with the scale to be used for an affine transform."""
+        """Return a TensorDict with the scale to be used for an affine transform."""
         # We can't cache that value bc the summary stats could be updated by a different process
         _, scale = self._get_loc_scale(scale_only=True)
         return scale
@@ -6923,7 +6943,7 @@ class VecNorm(Transform, metaclass=_VecNormMeta):
         keys: Sequence[str] | None = None,
         memmap: bool = False,
     ) -> TensorDictBase:
-        """Creates a shared tensordict for normalization across processes.
+        """Create a shared tensordict for normalization across processes.
 
         Args:
             env (EnvBase): example environment to be used to create the
@@ -7064,7 +7084,7 @@ class VecNorm(Transform, metaclass=_VecNormMeta):
 
 
 class RewardSum(Transform):
-    """Tracks episode cumulative rewards.
+    """Track episode cumulative rewards.
 
     This transform accepts a list of tensordict reward keys (i.e. ´in_keys´) and tracks their cumulative
     value along the time dimension for each episode.
@@ -7100,6 +7120,7 @@ class RewardSum(Transform):
         tensor([[1.],
                 [2.],
                 [3.]])
+
     """
 
     def __init__(
@@ -7110,7 +7131,7 @@ class RewardSum(Transform):
         *,
         reward_spec: bool = False,
     ):
-        """Initialises the transform. Filters out non-reward input keys and defines output keys."""
+        """Initialise the transform. Filters out non-reward input keys and defines output keys."""
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         self._reset_keys = reset_keys
         self._keys_checked = False
@@ -7225,7 +7246,7 @@ class RewardSum(Transform):
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
-        """Resets episode rewards."""
+        """Reset episode rewards."""
         for in_key, reset_key, out_key in _zip_strict(
             self.in_keys, self.reset_keys, self.out_keys
         ):
@@ -7241,7 +7262,7 @@ class RewardSum(Transform):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
-        """Updates the episode rewards with the step rewards."""
+        """Update the episode rewards with the step rewards."""
         # Update episode rewards
         for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
             if in_key in next_tensordict.keys(include_nested=True):
@@ -7292,7 +7313,7 @@ class RewardSum(Transform):
         return episode_reward_spec
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        """Transforms the observation spec, adding the new keys generated by RewardSum."""
+        """Transform the observation spec, adding the new keys generated by RewardSum."""
         if self.reward_spec:
             return observation_spec
         if not isinstance(observation_spec, Composite):
@@ -7323,7 +7344,7 @@ class RewardSum(Transform):
 
 
 class StepCounter(Transform):
-    """Counts the steps from a reset and optionally sets the truncated state to ``True`` after a certain number of steps.
+    """Count the steps from a reset and optionally sets the truncated state to ``True`` after a certain number of steps.
 
     The ``"done"`` state is also adapted accordingly (as done is the disjunction
     of task completion and early truncation).
@@ -7703,7 +7724,7 @@ class StepCounter(Transform):
 
 
 class ExcludeTransform(Transform):
-    """Excludes keys from the data.
+    """Exclude keys from the data.
 
     Args:
         *excluded_keys (iterable of NestedKey): The name of the keys to exclude. If the key is
@@ -8115,6 +8136,7 @@ class RandomCropTensorDict(Transform):
             :class:`RandomCropTensorDict` will NOT check that this is respected
             hence any error caused by an improper mask risks to go unnoticed.
             Defaults: None (no mask key).
+
     """
 
     def __init__(
@@ -8546,7 +8568,7 @@ class RenameTransform(Transform):
 
 
 class Reward2GoTransform(Transform):
-    """Calculates the reward to go based on the episode reward and a discount factor.
+    """Calculate the reward to go based on the episode reward and a discount factor.
 
     As the :class:`~.Reward2GoTransform` is only an inverse transform the ``in_keys`` will be directly used for the ``in_keys_inv``.
     The reward-to-go can be only calculated once the episode is finished. Therefore, the transform should be applied to the replay buffer
@@ -9079,6 +9101,7 @@ class BurnInTransform(Transform):
         torch.Size([1, 5])
         >>> td.get("hidden").abs().sum()
         tensor(37.0344)
+
     """
 
     invertible = False
@@ -9190,6 +9213,7 @@ class SignTransform(Transform):
         >>> r = env.rollout(100)
         >>> obs = r["observation"]
         >>> assert (torch.logical_or(torch.logical_or(obs == -1, obs == 1), obs == 0.0)).all()
+
     """
 
     def __init__(
@@ -9247,7 +9271,7 @@ class SignTransform(Transform):
 
 
 class RemoveEmptySpecs(Transform):
-    """Removes empty specs and content from an environment.
+    """Remove empty specs and content from an environment.
 
     Examples:
         >>> import torch
@@ -9358,6 +9382,7 @@ class RemoveEmptySpecs(Transform):
             device=cpu,
             is_shared=False)
         check_env_specs(env)
+
     """
 
     _has_empty_input = True
@@ -9460,7 +9485,7 @@ class RemoveEmptySpecs(Transform):
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
-        """Resets a transform if it is stateful."""
+        """Reset a transform if it is stateful."""
         return self._call(tensordict_reset)
 
     forward = _call
@@ -9694,6 +9719,7 @@ class BatchSizeTransform(Transform):
             device=None,
             is_shared=False)
         >>> collector.shutdown()
+
     """
 
     _ENV_ERR = "BatchSizeTransform.{} requires a parent env."
@@ -9703,8 +9729,9 @@ class BatchSizeTransform(Transform):
         *,
         batch_size: torch.Size | None = None,
         reshape_fn: Callable[[TensorDictBase], TensorDictBase] | None = None,
-        reset_func: Callable[[TensorDictBase, TensorDictBase], TensorDictBase]
-        | None = None,
+        reset_func: (
+            Callable[[TensorDictBase, TensorDictBase], TensorDictBase] | None
+        ) = None,
         env_kwarg: bool = False,
     ):
         super().__init__()
@@ -10537,7 +10564,7 @@ class TrajCounter(Transform):
                 device=tensordict_reset.device,
                 dtype=torch.bool,
             )
-        with (self._traj_count):
+        with self._traj_count:
             tc = int(self._traj_count.value)
             self._traj_count.value = self._traj_count.value + reset.sum().item()
             episodes = torch.arange(tc, tc + reset.sum(), device=self.parent.device)
@@ -10611,7 +10638,7 @@ class TrajCounter(Transform):
 
 
 class LineariseRewards(Transform):
-    """Transforms a multi-objective reward signal to a single-objective one via a weighted sum.
+    """Transform a multi-objective reward signal to a single-objective one via a weighted sum.
 
     Args:
         in_keys (List[NestedKey]): The keys under which the multi-objective rewards are found.
@@ -10645,6 +10672,7 @@ class LineariseRewards(Transform):
         >>> td = so_env.rollout(5)
         >>> td["next", "reward"].shape
         torch.Size([5, 1])
+
     """
 
     def __init__(

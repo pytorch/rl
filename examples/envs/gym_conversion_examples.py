@@ -3,14 +3,14 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""
-This script gives some examples of gym environment conversion with Dict, Tuple and Sequence spaces.
-"""
-
-import gymnasium as gym
-from gymnasium import spaces
+"""Thi script gives some examples of gym environment conversion with Dict, Tuple and Sequence spaces."""
+from __future__ import annotations
 
 from torchrl.envs import GymWrapper
+
+import gymnasium as gym
+
+from gymnasium import spaces
 
 action_space = spaces.Discrete(2)
 

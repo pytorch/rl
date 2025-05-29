@@ -5,17 +5,20 @@
 from __future__ import annotations
 
 import abc
+
 from copy import deepcopy
 from textwrap import indent
 from typing import Sequence
 
+from torchrl.data.utils import DEVICE_TYPING
+from torchrl.modules.models import MLP, ConvNet
+from torchrl.modules.models.utils import _reset_parameters_recursive
+
 import numpy as np
 import torch
+
 from tensordict import TensorDict
 from torch import nn
-from torchrl.data.utils import DEVICE_TYPING
-from torchrl.modules.models import ConvNet, MLP
-from torchrl.modules.models.utils import _reset_parameters_recursive
 
 
 class MultiAgentNetBase(nn.Module):
@@ -111,12 +114,10 @@ class MultiAgentNetBase(nn.Module):
             )
 
     @abc.abstractmethod
-    def _build_single_net(self, *, device, **kwargs):
-        ...
+    def _build_single_net(self, *, device, **kwargs): ...
 
     @abc.abstractmethod
-    def _pre_forward_check(self, inputs):
-        ...
+    def _pre_forward_check(self, inputs): ...
 
     @staticmethod
     def vmap_func_module(module, *args, **kwargs):
@@ -171,7 +172,7 @@ class MultiAgentNetBase(nn.Module):
         return output
 
     def get_stateful_net(self, copy: bool = True):
-        """Returns a stateful version of the network.
+        """Return a stateful version of the network.
 
         This can be used to initialize parameters.
 
@@ -225,7 +226,7 @@ class MultiAgentNetBase(nn.Module):
         return net
 
     def from_stateful_net(self, stateful_net: nn.Module):
-        """Populates the parameters given a stateful version of the network.
+        """Populate the parameters given a stateful version of the network.
 
         See :meth:`get_stateful_net` for details on how to gather a stateful version of the network.
 
@@ -256,7 +257,7 @@ class MultiAgentNetBase(nn.Module):
         return f"{self.__class__.__name__}(\n{module_repr},\n{n_agents},\n{share_params},\n{centralized},\n{agent_dim})"
 
     def reset_parameters(self):
-        """Resets the parameters of the model."""
+        """Reset the parameters of the model."""
 
         def vmap_reset_module(module, *args, **kwargs):
             def reset_module(params):
@@ -405,6 +406,7 @@ class MultiAgentMLP(MultiAgentNetBase):
         )
         We can see that this is the same as in the first example, but now we have 6 MLPs, one per agent!
         >>> assert mlp(obs).shape == (batch, n_agents, n_agent_outputs)
+
     """
 
     def __init__(
@@ -617,6 +619,7 @@ class MultiAgentConvNet(MultiAgentNetBase):
         torch.Size([3, 2, 7, 2592])
         >>> print(all(result[0,0,0] == result[0,0,1]))
         False
+
     """
 
     def __init__(
@@ -780,6 +783,7 @@ class Mixer(nn.Module):
             batch_size=torch.Size([32]),
             device=None,
             is_shared=False)
+
     """
 
     def __init__(
@@ -855,6 +859,7 @@ class Mixer(nn.Module):
 
         Returns:
             chosen_action_value: Tensor of shape [*B]
+
         """
         raise NotImplementedError
 
@@ -914,6 +919,7 @@ class VDNMixer(Mixer):
             batch_size=torch.Size([32]),
             device=None,
             is_shared=False)
+
     """
 
     def __init__(
@@ -994,6 +1000,7 @@ class QMixer(Mixer):
             batch_size=torch.Size([32]),
             device=None,
             is_shared=False)
+
     """
 
     def __init__(

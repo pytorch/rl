@@ -21,12 +21,15 @@
 
 
 # -- Project information -----------------------------------------------------
+from __future__ import annotations
+
 import os.path
 import sys
 import warnings
 
-import pytorch_sphinx_theme
 import torchrl
+
+import pytorch_sphinx_theme
 
 # Suppress warnings
 warnings.filterwarnings("ignore", category=UserWarning)

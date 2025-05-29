@@ -3,8 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""
-Multi-head Agent and PPO Loss
+"""Multi-head Agent and PPO Loss
 =============================
 
 This example demonstrates how to use TorchRL to create a multi-head agent with three separate distributions
@@ -72,23 +71,26 @@ Step-by-step Explanation
 The code below sets up a multi-head agent with three distributions and demonstrates how to train it using PPO losses.
 
 """
+from __future__ import annotations
 
 import functools
 
+from torchrl.objectives import ClipPPOLoss, KLPENPPOLoss, PPOLoss
+
 import torch
+
 from tensordict import TensorDict
 from tensordict.nn import (
     CompositeDistribution,
     InteractionType,
     ProbabilisticTensorDictModule as Prob,
     ProbabilisticTensorDictSequential as ProbSeq,
-    set_composite_lp_aggregate,
     TensorDictModule as Mod,
     TensorDictSequential as Seq,
     WrapModule as Wrap,
+    set_composite_lp_aggregate,
 )
 from torch import distributions as d
-from torchrl.objectives import ClipPPOLoss, KLPENPPOLoss, PPOLoss
 
 set_composite_lp_aggregate(False).set()
 

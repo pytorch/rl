@@ -17,12 +17,6 @@ def main(cfg: DictConfig):  # noqa: F821
 
     from copy import deepcopy
 
-    import torch.optim
-    import tqdm
-
-    from tensordict import from_module
-    from tensordict.nn import CudaGraphModule
-
     from torchrl._utils import timeit
     from torchrl.collectors import SyncDataCollector
     from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
@@ -32,6 +26,12 @@ def main(cfg: DictConfig):  # noqa: F821
     from torchrl.objectives.value import GAE
     from torchrl.record import VideoRecorder
     from torchrl.record.loggers import generate_exp_name, get_logger
+
+    import torch.optim
+    import tqdm
+
+    from tensordict import from_module
+    from tensordict.nn import CudaGraphModule
     from utils_mujoco import eval_model, make_env, make_ppo_models
 
     # Define paper hyperparameters

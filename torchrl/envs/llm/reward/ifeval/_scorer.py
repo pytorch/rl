@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Modifications from original script.
+"""Modification from original script.
 
 Modifications include:
 
@@ -18,14 +18,14 @@ from __future__ import annotations
 import importlib.util
 import re
 
-import torch
-from jedi.inference.gradual.typing import Callable
-
-from tensordict import NestedKey, NonTensorData, TensorClass, TensorDict, TensorDictBase
-from tensordict.tensorclass import is_non_tensor
-
 from torchrl.data.tensor_specs import Composite, TensorSpec, Unbounded
 from torchrl.envs import Transform
+
+import torch
+
+from jedi.inference.gradual.typing import Callable
+from tensordict import NestedKey, NonTensorData, TensorClass, TensorDict, TensorDictBase
+from tensordict.tensorclass import is_non_tensor
 
 _has_langdetect = importlib.util.find_spec("langdetect") is not None
 _has_nltk = importlib.util.find_spec("nltk") is not None

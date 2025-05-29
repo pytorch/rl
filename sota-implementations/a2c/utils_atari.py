@@ -4,10 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import numpy as np
-import torch.nn
-import torch.optim
-from tensordict.nn import TensorDictModule
 from torchrl.data.tensor_specs import CategoricalBox
 from torchrl.envs import (
     CatFrames,
@@ -21,17 +17,17 @@ from torchrl.envs import (
     ParallelEnv,
     Resize,
     RewardSum,
-    set_gym_backend,
     SignTransform,
     StepCounter,
     ToTensorImage,
     TransformedEnv,
     VecNorm,
+    set_gym_backend,
 )
 from torchrl.modules import (
+    MLP,
     ActorValueOperator,
     ConvNet,
-    MLP,
     OneHotCategorical,
     ProbabilisticActor,
     TanhNormal,
@@ -39,6 +35,11 @@ from torchrl.modules import (
 )
 from torchrl.record import VideoRecorder
 
+import numpy as np
+import torch.nn
+import torch.optim
+
+from tensordict.nn import TensorDictModule
 
 # ====================================================================
 # Environment utils

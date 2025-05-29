@@ -8,11 +8,13 @@ import argparse
 import time
 import warnings
 
+from torchrl._utils import logger as torchrl_logger
+
 import pytest
 import torch
+
 from tensordict import LazyStackedTensorDict, TensorDict
 from torch import multiprocessing as mp
-from torchrl._utils import logger as torchrl_logger
 
 
 class TestShared:

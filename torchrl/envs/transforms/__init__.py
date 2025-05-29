@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 from .gym_transforms import EndOfLifeTransform
 from .llm import KLRewardTransform
@@ -32,7 +33,6 @@ from .transforms import (
     FlattenObservation,
     FrameSkipTransform,
     GrayScale,
-    gSDENoise,
     Hash,
     InitTracker,
     LineariseRewards,
@@ -68,6 +68,7 @@ from .transforms import (
     UnsqueezeTransform,
     VecGymEnvTransform,
     VecNorm,
+    gSDENoise,
 )
 from .vc1 import VC1Transform
 from .vecnorm import VecNormV2

@@ -8,14 +8,8 @@ import argparse
 import functools
 import os
 
-import pytest
-import torch
-
 import torchrl.modules
-from tensordict import LazyStackedTensorDict, pad, TensorDict, unravel_key_list
-from tensordict.nn import InteractionType, TensorDictModule, TensorDictSequential
-from tensordict.utils import assert_close
-from torch import nn
+
 from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
 from torchrl.envs import (
     CatFrames,
@@ -28,27 +22,27 @@ from torchrl.envs import (
 )
 from torchrl.envs.utils import set_exploration_type, step_mdp
 from torchrl.modules import (
+    MLP,
     AdditiveGaussianModule,
     DecisionTransformerInferenceWrapper,
     DTActor,
     GRUModule,
     LSTMModule,
-    MLP,
     MultiStepActorWrapper,
     NormalParamExtractor,
     OnlineDTActor,
     ProbabilisticActor,
     SafeModule,
-    set_recurrent_mode,
     TanhDelta,
     TanhNormal,
     ValueOperator,
+    set_recurrent_mode,
 )
 from torchrl.modules.models.decision_transformer import _has_transformers
 from torchrl.modules.tensordict_module.common import (
+    VmapModule,
     ensure_tensordict_compatible,
     is_tensordict_compatible,
-    VmapModule,
 )
 from torchrl.modules.tensordict_module.probabilistic import (
     SafeProbabilisticModule,
@@ -57,6 +51,14 @@ from torchrl.modules.tensordict_module.probabilistic import (
 from torchrl.modules.tensordict_module.sequence import SafeSequential
 from torchrl.modules.utils import get_primers_from_module
 from torchrl.objectives import DDPGLoss
+
+import pytest
+import torch
+
+from tensordict import LazyStackedTensorDict, TensorDict, pad, unravel_key_list
+from tensordict.nn import InteractionType, TensorDictModule, TensorDictSequential
+from tensordict.utils import assert_close
+from torch import nn
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test.mocking_classes import CountingEnv, DiscreteActionVecMockEnv

@@ -5,13 +5,8 @@
 from __future__ import annotations
 
 import warnings
-from dataclasses import dataclass
 
-import torch
-from tensordict import TensorDict, TensorDictBase, TensorDictParams
-from tensordict.nn import dispatch, TensorDictModule
-from tensordict.utils import NestedKey
-from torch import nn
+from dataclasses import dataclass
 
 from torchrl.data.tensor_specs import TensorSpec
 from torchrl.data.utils import _find_action_space
@@ -24,13 +19,20 @@ from torchrl.modules.tensordict_module.common import ensure_tensordict_compatibl
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
+    ValueEstimators,
     _reduce,
     default_value_kwargs,
     distance_loss,
-    ValueEstimators,
 )
 from torchrl.objectives.value import TDLambdaEstimator
 from torchrl.objectives.value.advantages import TD0Estimator, TD1Estimator
+
+import torch
+
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
+from tensordict.nn import TensorDictModule, dispatch
+from tensordict.utils import NestedKey
+from torch import nn
 
 
 class DQNLoss(LossModule):
@@ -123,7 +125,7 @@ class DQNLoss(LossModule):
 
     @dataclass
     class _AcceptedKeys:
-        """Maintains default values for all configurable tensordict keys.
+        """Maintain default values for all configurable tensordict keys.
 
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values.
@@ -149,6 +151,7 @@ class DQNLoss(LossModule):
             terminated (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is terminated. Will be used for the underlying value estimator.
                 Defaults to ``"terminated"``.
+
         """
 
         advantage: NestedKey = "advantage"
@@ -295,7 +298,7 @@ class DQNLoss(LossModule):
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDict:
-        """Computes the DQN loss given a tensordict sampled from the replay buffer.
+        """Compute the DQN loss given a tensordict sampled from the replay buffer.
 
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
             a priority to items in the tensordict.
@@ -407,11 +410,12 @@ class DistributionalDQNLoss(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
+
     """
 
     @dataclass
     class _AcceptedKeys:
-        """Maintains default values for all configurable tensordict keys.
+        """Maintain default values for all configurable tensordict keys.
 
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values
@@ -431,6 +435,7 @@ class DistributionalDQNLoss(LossModule):
                 Defaults to ``"terminated"``.
             steps_to_next_obs (NestedKey): The input tensordict key where the steps_to_next_obs is expected.
                 Defaults to ``"steps_to_next_obs"``.
+
         """
 
         action_value: NestedKey = "action_value"

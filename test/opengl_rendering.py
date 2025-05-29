@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Headless GPU-accelerated OpenGL context creation on Google Colaboratory.
+"""Headles GPU-accelerated OpenGL context creation on Google Colaboratory.
 Typical usage:
     # Optional PyOpenGL configuratiopn can be done here.
     # import OpenGL
@@ -24,7 +24,6 @@ Typical usage:
 """
 from __future__ import annotations
 
-
 # pylint: disable=unused-import,g-import-not-at-top,g-statement-before-imports
 
 try:
@@ -39,6 +38,7 @@ except ImportError:
 
 import ctypes
 import os
+
 from ctypes import pointer, util
 
 os.environ["PYOPENGL_PLATFORM"] = "egl"
@@ -67,6 +67,7 @@ try:
     util.find_library = _find_library_new
     import OpenGL.EGL as egl
     import OpenGL.GL as gl  # noqa: F401
+
     from OpenGL import error
     from OpenGL.EGL.EXT.device_base import egl_get_devices
     from OpenGL.raw.EGL.EXT.platform_device import EGL_PLATFORM_DEVICE_EXT
@@ -81,7 +82,7 @@ finally:
 
 
 def create_initialized_headless_egl_display():
-    """Creates an initialized EGL display directly on a device."""
+    """Create an initialized EGL display directly on a device."""
     for device in egl_get_devices():
         display = egl.eglGetPlatformDisplayEXT(EGL_PLATFORM_DEVICE_EXT, device, None)
 
@@ -103,8 +104,10 @@ def create_opengl_context(surface_size=(640, 480)):
     """Create offscreen OpenGL context and make it current.
     Users are expected to directly use EGL API in case more advanced
     context management is required.
+
     Args:
       surface_size: (width, height), size of the offscreen rendering surface.
+
     """
     egl_display = create_initialized_headless_egl_display()
     if egl_display == egl.EGL_NO_DISPLAY:

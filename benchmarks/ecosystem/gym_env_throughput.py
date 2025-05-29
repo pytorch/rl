@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""This script executes some envs across the Gym library with the explicit scope of testing the throughput using the various TorchRL components.
+"""Thi script executes some envs across the Gym library with the explicit scope of testing the throughput using the various TorchRL components.
 
 We test:
 - gym async envs embedded in a TorchRL's GymEnv wrapper,
@@ -14,11 +14,10 @@ We test:
 The tests are executed with various number of cpus, and on different devices.
 
 """
+from __future__ import annotations
+
 import time
 
-# import myosuite  # noqa: F401
-import torch
-import tqdm
 from torchrl._utils import timeit
 from torchrl.collectors import (
     MultiaSyncDataCollector,
@@ -28,6 +27,10 @@ from torchrl.collectors import (
 from torchrl.envs import EnvCreator, GymEnv, ParallelEnv
 from torchrl.envs.libs.gym import gym_backend as gym_bc, set_gym_backend
 from torchrl.envs.utils import RandomPolicy
+
+# import myosuite  # noqa: F401
+import torch
+import tqdm
 
 if __name__ == "__main__":
     avail_devices = ("cpu",)

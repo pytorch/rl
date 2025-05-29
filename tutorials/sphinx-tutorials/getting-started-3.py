@@ -16,6 +16,8 @@ Get started with data collection and storage
 
 """
 
+from __future__ import annotations
+
 import tempfile
 
 #################################

@@ -5,22 +5,22 @@
 from __future__ import annotations
 
 import dataclasses
-
 import re
+
 from typing import Literal
+
+from torchrl._utils import logger as torchrl_logger
 
 import torch
 
 from tensordict import (
-    lazy_stack,
     LazyStackedTensorDict,
-    list_to_stack,
     TensorClass,
     TensorDict,
+    lazy_stack,
+    list_to_stack,
 )
 from tensordict.utils import _maybe_correct_neg_dim
-
-from torchrl._utils import logger as torchrl_logger
 
 _CHAT_TEMPLATES = {
     "chatml_format": """{% for message in messages %}
@@ -30,7 +30,7 @@ _CHAT_TEMPLATES = {
     {{- '<|im_start|>assistant\n' }}
 {%- endif %}
 """,
-    "qwen": """'{%- if tools %}\n    {{- \'<|im_start|>system\\n\' }}\n    {%- if messages[0][\'role\'] == \'system\' %}\n        {{- messages[0][\'content\'] }}\n    {%- else %}\n        {{- \'You are a helpful assistant.\' }}\n    {%- endif %}\n    {{- "\\n\\n# Tools\\n\\nYou may call one or more functions to assist with the user query.\\n\\nYou are provided with function signatures within <tools></tools> XML tags:\\n<tools>" }}\n    {%- for tool in tools %}\n        {{- "\\n" }}\n        {{- tool | tojson }}\n    {%- endfor %}\n    {{- "\\n</tools>\\n\\nFor each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\\n<tool_call>\\n{\\"name\\": <function-name>, \\"arguments\\": <args-json-object>}\\n</tool_call><|im_end|>\\n" }}\n{%- else %}\n    {%- if messages[0][\'role\'] == \'system\' %}\n        {{- \'<|im_start|>system\\n\' + messages[0][\'content\'] + \'<|im_end|>\\n\' }}\n    {%- else %}\n        {{- \'<|im_start|>system\\nYou are a helpful assistant.<|im_end|>\\n\' }}\n    {%- endif %}\n{%- endif %}\n{%- for message in messages %}\n    {%- if (message.role == "user") or (message.role == "system" and not loop.first) or (message.role == "assistant" and not message.tool_calls) %}\n        {{- \'<|im_start|>\' + message.role + \'\\n\' + message.content + \'<|im_end|>\' + \'\\n\' }}\n    {%- elif message.role == "assistant" %}\n        {{- \'<|im_start|>\' + message.role }}\n        {%- if message.content %}\n            {{- \'\\n\' + message.content }}\n        {%- endif %}\n        {%- for tool_call in message.tool_calls %}\n            {%- if tool_call.function is defined %}\n                {%- set tool_call = tool_call.function %}\n            {%- endif %}\n            {{- \'\\n<tool_call>\\n{"name": "\' }}\n            {{- tool_call.name }}\n            {{- \'", "arguments": \' }}\n            {{- tool_call.arguments | tojson }}\n            {{- \'}\\n</tool_call>\' }}\n        {%- endfor %}\n        {{- \'<|im_end|>\\n\' }}\n    {%- elif message.role == "tool" %}\n        {%- if (loop.index0 == 0) or (messages[loop.index0 - 1].role != "tool") %}\n            {{- \'<|im_start|>user\' }}\n        {%- endif %}\n        {{- \'\\n<tool_response>\\n\' }}\n        {{- message.content }}\n        {{- \'\\n</tool_response>\' }}\n        {%- if loop.last or (messages[loop.index0 + 1].role != "tool") %}\n            {{- \'<|im_end|>\\n\' }}\n        {%- endif %}\n    {%- endif %}\n{%- endfor %}\n{%- if add_generation_prompt %}\n    {{- \'<|im_start|>assistant\\n\' }}\n{%- endif %}\n'""",
+    "qwen": """'{%- if tools %}\n {{- \'<|im_start|>system\\n\' }}\n {%- if messages[0][\'role\'] == \'system\' %}\n {{- messages[0][\'content\'] }}\n {%- else %}\n {{- \'You are a helpful assistant.\' }}\n {%- endif %}\n {{- "\\n\\n# Tools\\n\\nYou may call one or more functions to assist with the user query.\\n\\nYou are provided with function signatures within <tools></tools> XML tags:\\n<tools>" }}\n {%- for tool in tools %}\n {{- "\\n" }}\n {{- tool | tojson }}\n {%- endfor %}\n {{- "\\n</tools>\\n\\nFor each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\\n<tool_call>\\n{\\"name\\": <function-name>, \\"arguments\\": <args-json-object>}\\n</tool_call><|im_end|>\\n" }}\n{%- else %}\n {%- if messages[0][\'role\'] == \'system\' %}\n {{- \'<|im_start|>system\\n\' + messages[0][\'content\'] + \'<|im_end|>\\n\' }}\n {%- else %}\n {{- \'<|im_start|>system\\nYou are a helpful assistant.<|im_end|>\\n\' }}\n {%- endif %}\n{%- endif %}\n{%- for message in messages %}\n {%- if (message.role == "user") or (message.role == "system" and not loop.first) or (message.role == "assistant" and not message.tool_calls) %}\n {{- \'<|im_start|>\' + message.role + \'\\n\' + message.content + \'<|im_end|>\' + \'\\n\' }}\n {%- elif message.role == "assistant" %}\n {{- \'<|im_start|>\' + message.role }}\n {%- if message.content %}\n {{- \'\\n\' + message.content }}\n {%- endif %}\n {%- for tool_call in message.tool_calls %}\n {%- if tool_call.function is defined %}\n {%- set tool_call = tool_call.function %}\n {%- endif %}\n {{- \'\\n<tool_call>\\n{"name": "\' }}\n {{- tool_call.name }}\n {{- \'", "arguments": \' }}\n {{- tool_call.arguments | tojson }}\n {{- \'}\\n</tool_call>\' }}\n {%- endfor %}\n {{- \'<|im_end|>\\n\' }}\n {%- elif message.role == "tool" %}\n {%- if (loop.index0 == 0) or (messages[loop.index0 - 1].role != "tool") %}\n {{- \'<|im_start|>user\' }}\n {%- endif %}\n {{- \'\\n<tool_response>\\n\' }}\n {{- message.content }}\n {{- \'\\n</tool_response>\' }}\n {%- if loop.last or (messages[loop.index0 + 1].role != "tool") %}\n {{- \'<|im_end|>\\n\' }}\n {%- endif %}\n {%- endif %}\n{%- endfor %}\n{%- if add_generation_prompt %}\n {{- \'<|im_start|>assistant\\n\' }}\n{%- endif %}\n'""",
 }
 
 
@@ -120,7 +120,7 @@ class History(TensorClass["nocast"]):
         return_tensors: str | None = "pt",
         **kwargs,
     ):
-        """Applies a chat template to the history.
+        """Applie a chat template to the history.
 
         Keyword Args:
             tokenizer (transformers.PreTrainedTokenizer): The tokenizer to use.
@@ -135,6 +135,7 @@ class History(TensorClass["nocast"]):
 
         Returns:
             The formatted history.
+
         """
         if chat_template is None:
             if tokenizer is None:
@@ -193,13 +194,14 @@ class History(TensorClass["nocast"]):
 
     @classmethod
     def _inv_chatml(cls, text: str) -> History:
-        """Inverts a chatml string into a History object.
+        """Invert a chatml string into a History object.
 
         Args:
             text (str): The chatml string to invert.
 
         Returns:
             History: The inverted History object.
+
         """
         torchrl_logger.debug(f"Inverting chatml:\n{text}")
         pattern = r"<\|im_start\|>(.*?)\n(.*?)<\|im_end\|>"
@@ -271,7 +273,7 @@ class History(TensorClass["nocast"]):
     def append(
         self, history: History, *, inplace: bool = True, dim: int = -1
     ) -> History:
-        """Appends a new history to the current one.
+        """Append a new history to the current one.
 
         Args:
             history (History): The new history to append.
@@ -280,6 +282,7 @@ class History(TensorClass["nocast"]):
 
         Returns:
             History: The appended History object.
+
         """
         if not self.batch_dims:
             raise RuntimeError(

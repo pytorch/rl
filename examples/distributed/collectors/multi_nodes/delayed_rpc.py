@@ -23,18 +23,21 @@ from the jump host and pass the slurm specs to submitit.
   and DEFAULT_SLURM_CONF_MAIN dictionaries below).
 
 """
+from __future__ import annotations
+
 import time
+
 from argparse import ArgumentParser
 
-import tqdm
 from torchrl._utils import logger as torchrl_logger
-
 from torchrl.collectors.distributed import RPCDataCollector, submitit_delayed_launcher
 from torchrl.collectors.distributed.default_configs import (
     DEFAULT_SLURM_CONF,
     DEFAULT_SLURM_CONF_MAIN,
 )
 from torchrl.envs import EnvCreator
+
+import tqdm
 
 parser = ArgumentParser()
 parser.add_argument("--partition", "-p", help="slurm partition to use")
@@ -111,11 +114,12 @@ frames_per_batch = args.frames_per_batch
     framework="rpc",
 )
 def main():
-    import gym
     from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
     from torchrl.data import Bounded
     from torchrl.envs.libs.gym import GymEnv, set_gym_backend
     from torchrl.envs.utils import RandomPolicy
+
+    import gym
 
     collector_class = SyncDataCollector if num_workers == 1 else MultiSyncDataCollector
     device_str = "device" if num_workers == 1 else "devices"

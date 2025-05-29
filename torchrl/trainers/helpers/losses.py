@@ -15,7 +15,7 @@ from torchrl.objectives.utils import TargetNetUpdater
 def make_target_updater(
     cfg: DictConfig, loss_module: LossModule  # noqa: F821
 ) -> TargetNetUpdater | None:
-    """Builds a target network weight update object."""
+    """Build a target network weight update object."""
     if cfg.loss == "double":
         if not cfg.hard_update:
             target_net_updater = SoftUpdate(
@@ -37,7 +37,7 @@ def make_target_updater(
 
 
 def make_dqn_loss(model, cfg) -> tuple[DQNLoss, TargetNetUpdater | None]:
-    """Builds the DQN loss module."""
+    """Build the DQN loss module."""
     loss_kwargs = {}
     if cfg.distributional:
         loss_class = DistributionalDQNLoss

@@ -6,12 +6,9 @@ from __future__ import annotations
 
 import functools
 import tempfile
+
 from contextlib import nullcontext
 
-import torch
-from tensordict.nn import InteractionType, TensorDictModule
-
-from torch import nn, optim
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import (
     Composite,
@@ -35,12 +32,15 @@ from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import MLP, SafeModule
 from torchrl.modules.distributions import OneHotCategorical
-
 from torchrl.modules.tensordict_module.actors import ProbabilisticActor
 from torchrl.objectives import SoftUpdate
 from torchrl.objectives.sac import DiscreteSACLoss
 from torchrl.record import VideoRecorder
 
+import torch
+
+from tensordict.nn import InteractionType, TensorDictModule
+from torch import nn, optim
 
 # ====================================================================
 # Environment utils

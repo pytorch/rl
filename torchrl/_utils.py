@@ -16,19 +16,22 @@ import threading
 import time
 import traceback
 import warnings
+
 from contextlib import nullcontext
 from copy import copy
 from functools import wraps
 from importlib import import_module
 from textwrap import indent
-from typing import Any, Callable, cast, TypeVar
+from typing import Any, Callable, TypeVar, cast
+
+from packaging.version import parse
 
 import numpy as np
 import torch
-from packaging.version import parse
+
 from tensordict import unravel_key
 from tensordict.utils import NestedKey
-from torch import multiprocessing as mp, Tensor
+from torch import Tensor, multiprocessing as mp
 
 try:
     from torch.compiler import is_compiling
@@ -159,10 +162,11 @@ class timeit:
 
     @staticmethod
     def print(prefix: str = None) -> str:  # noqa: T202
-        """Prints the state of the timer.
+        """Print the state of the timer.
 
         Returns:
             the string printed using the logger.
+
         """
         keys = list(timeit._REG)
         keys.sort()
@@ -189,7 +193,7 @@ class timeit:
         prefix: str = None,
         erase: bool = False,
     ) -> None:
-        """Prints the state of the timer at regular intervals."""
+        """Print the state of the timer at regular intervals."""
         interval = max(1, total_count // num_prints)
         if cls._printevery_count % interval == 0:
             cls.print(prefix=prefix)
@@ -264,6 +268,7 @@ class KeyDependentDefaultDict(collections.defaultdict):
         >>> my_dict = KeyDependentDefaultDict(lambda key: "foo_" + key)
         >>> print(my_dict["bar"])
         foo_bar
+
     """
 
     def __init__(self, fun):
@@ -289,12 +294,13 @@ def prod(sequence):
 
 
 def get_binary_env_var(key):
-    """Parses and returns the binary environment variable value.
+    """Parse and returns the binary environment variable value.
 
     If not present in environment, it is considered `False`.
 
     Args:
         key (str): name of the environment variable.
+
     """
     val = os.environ.get(key, "False")
     if val in ("0", "False", "false"):
@@ -310,7 +316,7 @@ def get_binary_env_var(key):
 
 
 class _Dynamic_CKPT_BACKEND:
-    """Allows CKPT_BACKEND to be changed on-the-fly."""
+    """Allow CKPT_BACKEND to be changed on-the-fly."""
 
     backends = ["torch", "torchsnapshot"]
 
@@ -391,6 +397,7 @@ class implement_for:
         ...
 
         This indicates that the function is compatible with gym 0.13+, but doesn't with gym 0.14+.
+
     """
 
     # Stores pointers to fitting implementations: dict[func_name] = func_pointer
@@ -423,7 +430,7 @@ class implement_for:
 
     @staticmethod
     def get_class_that_defined_method(f):
-        """Returns the class of a method, if it is defined, and None otherwise."""
+        """Return the class of a method, if it is defined, and None otherwise."""
         out = f.__globals__.get(f.__qualname__.split(".")[0], None)
         return out
 
@@ -456,7 +463,7 @@ class implement_for:
         return cls
 
     def module_set(self):
-        """Sets the function in its module, if it exists already."""
+        """Set the function in its module, if it exists already."""
         prev_setter = type(self)._implementations.get(self.get_func_name(self.fn), None)
         if prev_setter is not None:
             prev_setter.do_set = False
@@ -482,7 +489,7 @@ class implement_for:
 
     @classmethod
     def import_module(cls, module_name: Callable | str) -> str:
-        """Imports module and returns its version."""
+        """Import module and returns its version."""
         if not callable(module_name):
             module = cls._cache_modules.get(module_name, None)
             if module is None:
@@ -578,7 +585,7 @@ class implement_for:
 
     @classmethod
     def reset(cls, setters_dict: dict[str, implement_for] = None):
-        """Resets the setters in setter_dict.
+        """Reset the setters in setter_dict.
 
         ``setter_dict`` is a copy of implementations. We just need to iterate through its
         values and call :meth:`module_set` for each.
@@ -617,7 +624,7 @@ def accept_remote_rref_invocation(func):
 
 
 def accept_remote_rref_udf_invocation(decorated_class):
-    """Class decorator that applies `accept_remote_rref_invocation` to all public methods."""
+    """Clas decorator that applies `accept_remote_rref_invocation` to all public methods."""
     # ignores private methods
     for name in dir(decorated_class):
         method = getattr(decorated_class, name)
@@ -804,7 +811,7 @@ class _ProcessNoWarn(mp.Process):
 
 
 def print_directory_tree(path, indent="", display_metadata=True):
-    """Prints the directory tree starting from the specified path.
+    """Print the directory tree starting from the specified path.
 
     Args:
         path (str): The path of the directory to print.
@@ -947,7 +954,7 @@ def _standardize(
     std: Tensor | None = None,
     eps: float | None = None,
 ):
-    """Standardizes the input tensor with the possibility of excluding specific dims from the statistics.
+    """Standardize the input tensor with the possibility of excluding specific dims from the statistics.
 
     Useful when processing multi-agent data to keep the agent dimensions independent.
 
@@ -1030,6 +1037,7 @@ def compile_with_warmup(*args, warmup: int = 1, **kwargs):
         >>> compiled_model = compile_with_warmup(model, warmup=10)
         >>> # First 10 calls use the original model
         >>> # After 10 calls, the model is compiled and used
+
     """
     if len(args):
         model = args[0]
@@ -1128,6 +1136,7 @@ def auto_unwrap_transformed_env(allow_none=False):
     Returns:
         bool or None: The current setting for automatically unwrapping TransformedEnv
             instances.
+
     """
     global _AUTO_UNWRAP
     if _AUTO_UNWRAP is None and allow_none:

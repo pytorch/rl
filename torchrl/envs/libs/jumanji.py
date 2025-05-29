@@ -6,20 +6,22 @@ from __future__ import annotations
 
 import importlib.util
 
-import numpy as np
-import torch
 from packaging import version
-from tensordict import TensorDict, TensorDictBase
 from torchrl.envs.common import _EnvPostInit
 from torchrl.envs.utils import _classproperty
+
+import numpy as np
+import torch
+
+from tensordict import TensorDict, TensorDictBase
 
 _has_jumanji = importlib.util.find_spec("jumanji") is not None
 
 from torchrl.data.tensor_specs import (
+    DEVICE_TYPING,
     Bounded,
     Categorical,
     Composite,
-    DEVICE_TYPING,
     MultiCategorical,
     MultiOneHot,
     OneHot,
@@ -28,7 +30,6 @@ from torchrl.data.tensor_specs import (
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict
 from torchrl.envs.gym_like import GymLikeEnv
-
 from torchrl.envs.libs.jax_utils import (
     _extract_spec,
     _ndarray_to_tensor,
@@ -113,7 +114,7 @@ class _JumanjiMakeRender(_EnvPostInit):
 
 
 class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
-    """Jumanji's environment wrapper.
+    """Jumanji' environment wrapper.
 
     Jumanji offers a vectorized simulation framework based on Jax.
     TorchRL's wrapper incurs some overhead for the jax-to-torch conversion,
@@ -399,7 +400,7 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
         return env
 
     def make_render(self):
-        """Returns a transformed environment that can be rendered.
+        """Return a transformed environment that can be rendered.
 
         Examples:
             >>> from torchrl.envs import JumanjiEnv
@@ -430,6 +431,7 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
 
     def _make_state_example(self, env):
         import jax
+
         from jax import numpy as jnp
 
         key = jax.random.PRNGKey(0)
@@ -548,7 +550,7 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
         as_numpy: bool = False,
         **kwargs,
     ):
-        """Renders the environment output given an input tensordict.
+        """Render the environment output given an input tensordict.
 
         This method is intended to be called by the :class:`~torchrl.record.PixelRenderTransform`
         created whenever `from_pixels=True` is selected.
@@ -675,6 +677,7 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
         self, tensordict: TensorDictBase | None = None, **kwargs
     ) -> TensorDictBase:
         import jax
+
         from jax import numpy as jnp
 
         if self.batch_locked or tensordict is None:
@@ -714,7 +717,7 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
         return tensordict_out
 
     def read_reward(self, reward):
-        """Reads the reward and maps it to the reward space.
+        """Read the reward and maps it to the reward space.
 
         Args:
             reward (torch.Tensor or TensorDict): reward to be mapped.
@@ -734,11 +737,9 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
 
         return reward
 
-    def _output_transform(self, step_outputs_tuple: tuple) -> tuple:
-        ...
+    def _output_transform(self, step_outputs_tuple: tuple) -> tuple: ...
 
-    def _reset_output_transform(self, reset_outputs_tuple: tuple) -> tuple:
-        ...
+    def _reset_output_transform(self, reset_outputs_tuple: tuple) -> tuple: ...
 
 
 class JumanjiEnv(JumanjiWrapper):
@@ -926,6 +927,7 @@ class JumanjiEnv(JumanjiWrapper):
         setup: [...]
           Median: 172.31 ms
           2 measurements, 1 runs per measurement, 1 thread
+
     """
 
     def __init__(self, env_name, **kwargs):

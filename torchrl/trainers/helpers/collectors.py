@@ -7,10 +7,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from tensordict import TensorDictBase
-
-from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModuleWrapper
-
 from torchrl.collectors.collectors import (
     DataCollectorBase,
     MultiaSyncDataCollector,
@@ -21,6 +17,9 @@ from torchrl.data.postprocs import MultiStep
 from torchrl.envs.batched_envs import ParallelEnv
 from torchrl.envs.common import EnvBase
 
+from tensordict import TensorDictBase
+from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModuleWrapper
+
 
 def sync_async_collector(
     env_fns: Callable | list[Callable],
@@ -29,7 +28,7 @@ def sync_async_collector(
     num_collectors: int | None = None,
     **kwargs,
 ) -> MultiaSyncDataCollector:
-    """Runs asynchronous collectors, each running synchronous environments.
+    """Run asynchronous collectors, each running synchronous environments.
 
     .. aafig::
 
@@ -89,7 +88,7 @@ def sync_sync_collector(
     num_collectors: int | None = None,
     **kwargs,
 ) -> SyncDataCollector | MultiSyncDataCollector:
-    """Runs synchronous collectors, each running synchronous environments.
+    """Run synchronous collectors, each running synchronous environments.
 
     E.g.
 
@@ -195,7 +194,7 @@ def _make_collector(
         try:
             num_env = num_env_per_collector * num_collectors
             env_fns = [env_fns for _ in range(num_env)]
-        except (TypeError):
+        except TypeError:
             raise Exception(
                 "num_env was not a list but num_env_per_collector and num_collectors were not both specified,"
                 f"got num_env_per_collector={num_env_per_collector} and num_collectors={num_collectors}"
@@ -250,11 +249,11 @@ def _make_collector(
 
 def make_collector_offpolicy(
     make_env: Callable[[], EnvBase],
-    actor_model_explore: (TensorDictModuleWrapper | ProbabilisticTensorDictSequential),
+    actor_model_explore: TensorDictModuleWrapper | ProbabilisticTensorDictSequential,
     cfg: DictConfig,  # noqa: F821
     make_env_kwargs: dict | None = None,
 ) -> DataCollectorBase:
-    """Returns a data collector for off-policy sota-implementations.
+    """Return a data collector for off-policy sota-implementations.
 
     Args:
         make_env (Callable): environment creator
@@ -312,11 +311,11 @@ def make_collector_offpolicy(
 
 def make_collector_onpolicy(
     make_env: Callable[[], EnvBase],
-    actor_model_explore: (TensorDictModuleWrapper | ProbabilisticTensorDictSequential),
+    actor_model_explore: TensorDictModuleWrapper | ProbabilisticTensorDictSequential,
     cfg: DictConfig,  # noqa: F821
     make_env_kwargs: dict | None = None,
 ) -> DataCollectorBase:
-    """Makes a collector in on-policy settings.
+    """Make a collector in on-policy settings.
 
     Args:
         make_env (Callable): environment creator

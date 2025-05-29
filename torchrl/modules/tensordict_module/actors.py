@@ -6,20 +6,6 @@ from __future__ import annotations
 
 from typing import Sequence
 
-import torch
-from tensordict import TensorDictBase, unravel_key
-from tensordict.nn import (
-    CompositeDistribution,
-    dispatch,
-    TensorDictModule,
-    TensorDictModuleBase,
-    TensorDictModuleWrapper,
-    TensorDictSequential,
-)
-from tensordict.utils import expand_as_right, NestedKey
-from torch import nn
-from torch.distributions import Categorical
-
 from torchrl._utils import _replace_last
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.data.utils import _process_action_space_spec
@@ -29,6 +15,21 @@ from torchrl.modules.tensordict_module.probabilistic import (
     SafeProbabilisticTensorDictSequential,
 )
 from torchrl.modules.tensordict_module.sequence import SafeSequential
+
+import torch
+
+from tensordict import TensorDictBase, unravel_key
+from tensordict.nn import (
+    CompositeDistribution,
+    TensorDictModule,
+    TensorDictModuleBase,
+    TensorDictModuleWrapper,
+    TensorDictSequential,
+    dispatch,
+)
+from tensordict.utils import NestedKey, expand_as_right
+from torch import nn
+from torch.distributions import Categorical
 
 
 class Actor(SafeModule):
@@ -1453,7 +1454,7 @@ class ActorValueOperator(SafeSequential):
         )
 
     def get_policy_operator(self) -> SafeSequential:
-        """Returns a standalone policy operator that maps an observation to an action."""
+        """Return a standalone policy operator that maps an observation to an action."""
         if isinstance(self.module[1], SafeProbabilisticTensorDictSequential):
             return SafeProbabilisticTensorDictSequential(
                 self.module[0], *self.module[1].module
@@ -1461,15 +1462,15 @@ class ActorValueOperator(SafeSequential):
         return SafeSequential(self.module[0], self.module[1])
 
     def get_value_operator(self) -> SafeSequential:
-        """Returns a standalone value network operator that maps an observation to a value estimate."""
+        """Return a standalone value network operator that maps an observation to a value estimate."""
         return SafeSequential(self.module[0], self.module[2])
 
     def get_policy_head(self) -> SafeSequential:
-        """Returns the policy head."""
+        """Return the policy head."""
         return self.module[1]
 
     def get_value_head(self) -> SafeSequential:
-        """Returns the value head."""
+        """Return the value head."""
         return self.module[2]
 
 
@@ -1615,7 +1616,7 @@ class ActorCriticOperator(ActorValueOperator):
             )
 
     def get_critic_operator(self) -> TensorDictModuleWrapper:
-        """Returns a standalone critic network operator that maps a state-action pair to a critic estimate."""
+        """Return a standalone critic network operator that maps a state-action pair to a critic estimate."""
         return self
 
     def get_value_operator(self) -> TensorDictModuleWrapper:
@@ -1626,11 +1627,11 @@ class ActorCriticOperator(ActorValueOperator):
         )
 
     def get_policy_head(self) -> SafeSequential:
-        """Returns the policy head."""
+        """Return the policy head."""
         return self.module[1]
 
     def get_value_head(self) -> SafeSequential:
-        """Returns the value head."""
+        """Return the value head."""
         return self.module[2]
 
 
@@ -1742,11 +1743,11 @@ class ActorCriticWrapper(SafeSequential):
         )
 
     def get_policy_operator(self) -> SafeSequential:
-        """Returns a standalone policy operator that maps an observation to an action."""
+        """Return a standalone policy operator that maps an observation to an action."""
         return self.module[0]
 
     def get_value_operator(self) -> SafeSequential:
-        """Returns a standalone value network operator that maps an observation to a value estimate."""
+        """Return a standalone value network operator that maps an observation to a value estimate."""
         return self.module[1]
 
     get_policy_head = get_policy_operator
@@ -1828,6 +1829,7 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
             batch_size=torch.Size([1]),
             device=None,
             is_shared=False)
+
     """
 
     def __init__(
@@ -1857,7 +1859,7 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
             if self.action_key not in self._spec.keys():
                 self._spec[self.action_key] = None
         else:
-            self._spec = Composite({key: None for key in policy.out_keys})
+            self._spec = Composite(dict.fromkeys(policy.out_keys))
         if device is not None:
             self._spec = self._spec.to(device)
         self.checked = False
@@ -1876,7 +1878,7 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         )
 
     def set_tensor_keys(self, **kwargs):
-        """Sets the input keys of the module.
+        """Set the input keys of the module.
 
         Keyword Args:
             observation (NestedKey, optional): The observation key.
@@ -1923,9 +1925,9 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         self._check_tensor_dims(return_to_go, observation, action)
 
         observation[..., : -self.inference_context, :] = 0
-        action[
-            ..., : -(self.inference_context - 1), :
-        ] = 0  # as we add zeros to the end of the action
+        action[..., : -(self.inference_context - 1), :] = (
+            0  # as we add zeros to the end of the action
+        )
         action = torch.cat(
             [
                 action[..., 1:, :],
@@ -2053,6 +2055,7 @@ class TanhModule(TensorDictModuleBase):
         >>> data['b']
         tensor([2.0315, 2.8455, 2.6027, 2.4746, 1.7843, 2.7782, 0.2111, 0.5115, 1.4687,
                 0.5760])
+
     """
 
     def __init__(
@@ -2083,7 +2086,7 @@ class TanhModule(TensorDictModuleBase):
         else:
             # if one spec is present, we assume it is the same for all keys
             spec = Composite(
-                {out_key: spec for out_key in out_keys},
+                dict.fromkeys(out_keys, spec),
             )
 
         leaf_specs = [spec[out_key] for out_key in self.out_keys]
@@ -2145,7 +2148,7 @@ class TanhModule(TensorDictModuleBase):
 
 
 class LMHeadActorValueOperator(ActorValueOperator):
-    """Builds an Actor-Value operator from an huggingface-like *LMHeadModel.
+    """Build an Actor-Value operator from an huggingface-like *LMHeadModel.
 
     This method:
 
@@ -2159,6 +2162,7 @@ class LMHeadActorValueOperator(ActorValueOperator):
         base_model (nn.Module): a torch model composed by a `.transformer` model and `.lm_head` linear layer
 
       .. note:: For more details regarding the class construction, please refer to :class:`~.ActorValueOperator`.
+
     """
 
     def __init__(self, base_model):

@@ -106,6 +106,7 @@ We will cover six crucial components of TorchRL:
 #
 
 # sphinx_gallery_start_ignore
+from __future__ import annotations
 import warnings
 
 warnings.filterwarnings("ignore")

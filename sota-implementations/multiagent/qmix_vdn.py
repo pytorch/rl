@@ -6,10 +6,6 @@ from __future__ import annotations
 
 import time
 
-import hydra
-import torch
-from tensordict.nn import TensorDictModule, TensorDictSequential
-from torch import nn
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import TensorDictReplayBuffer
@@ -22,6 +18,12 @@ from torchrl.modules import EGreedyModule, QValueModule, SafeSequential
 from torchrl.modules.models.multiagent import MultiAgentMLP, QMixer, VDNMixer
 from torchrl.objectives import SoftUpdate, ValueEstimators
 from torchrl.objectives.multiagent.qmixer import QMixerLoss
+
+import hydra
+import torch
+
+from tensordict.nn import TensorDictModule, TensorDictSequential
+from torch import nn
 from utils.logging import init_logging, log_evaluation, log_training
 
 

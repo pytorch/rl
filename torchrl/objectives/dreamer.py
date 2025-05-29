@@ -6,23 +6,24 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import torch
-from tensordict import TensorDict
-from tensordict.nn import TensorDictModule
-from tensordict.utils import NestedKey
-
 from torchrl._utils import timeit
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
+    ValueEstimators,
     default_value_kwargs,
     distance_loss,
     hold_out_net,
-    ValueEstimators,
 )  # distance_loss,
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+
+import torch
+
+from tensordict import TensorDict
+from tensordict.nn import TensorDictModule
+from tensordict.utils import NestedKey
 
 
 class DreamerModelLoss(LossModule):
@@ -50,11 +51,12 @@ class DreamerModelLoss(LossModule):
             over all dimensions. Otherwise, a sum will be performed over all
             non-batch/time dimensions and an average over batch and time.
             Default: False.
+
     """
 
     @dataclass
     class _AcceptedKeys:
-        """Maintains default values for all configurable tensordict keys.
+        """Maintain default values for all configurable tensordict keys.
 
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values
@@ -76,6 +78,7 @@ class DreamerModelLoss(LossModule):
                 Defaults to ``"pixels"``.
             reco_pixels (NestedKey): The reconstruction pixels is expected to be
                 in the tensordict key ("next", reco_pixels). Defaults to ``"reco_pixels"``.
+
         """
 
         reward: NestedKey = "reward"
@@ -216,7 +219,7 @@ class DreamerActorLoss(LossModule):
 
     @dataclass
     class _AcceptedKeys:
-        """Maintains default values for all configurable tensordict keys.
+        """Maintain default values for all configurable tensordict keys.
 
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values.
@@ -232,6 +235,7 @@ class DreamerActorLoss(LossModule):
                 trajectory is done is expected ("next", done). Defaults to ``"done"``.
             terminated (NestedKey): The input tensordict key where the flag if a
                 trajectory is terminated is expected ("next", terminated). Defaults to ``"terminated"``.
+
         """
 
         belief: NestedKey = "belief"
@@ -387,7 +391,7 @@ class DreamerValueLoss(LossModule):
 
     @dataclass
     class _AcceptedKeys:
-        """Maintains default values for all configurable tensordict keys.
+        """Maintain default values for all configurable tensordict keys.
 
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values
@@ -395,6 +399,7 @@ class DreamerValueLoss(LossModule):
         Attributes:
             value (NestedKey): The input tensordict key where the state value is expected.
                 Defaults to ``"state_value"``.
+
         """
 
         value: NestedKey = "state_value"

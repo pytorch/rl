@@ -8,14 +8,6 @@ import argparse
 import importlib.util
 import os
 
-import pytest
-import torch
-import torch.nn.functional as F
-
-from tensordict import TensorDictBase
-from tensordict.nn import NormalParamExtractor
-from torch import autograd, nn
-from torch.utils._pytree import tree_map
 from torchrl.modules import (
     OneHotCategorical,
     OneHotOrdinal,
@@ -32,6 +24,15 @@ from torchrl.modules.distributions import (
 )
 from torchrl.modules.distributions.continuous import SafeTanhTransform
 from torchrl.modules.distributions.discrete import _generate_ordinal_logits
+
+import pytest
+import torch
+import torch.nn.functional as F
+
+from tensordict import TensorDictBase
+from tensordict.nn import NormalParamExtractor
+from torch import autograd, nn
+from torch.utils._pytree import tree_map
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import get_default_devices
@@ -386,7 +387,7 @@ class TestMaskedCategorical:
                 probs=torch.tensor(()), mask=torch.tensor(()), indices=torch.tensor(())
             )
 
-    @pytest.mark.parametrize("neg_inf", [-float(10.0), -float("inf")])
+    @pytest.mark.parametrize("neg_inf", [-10.0, -float("inf")])
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("sparse", [True, False])
     @pytest.mark.parametrize("logits", [True, False])
@@ -420,7 +421,7 @@ class TestMaskedCategorical:
         else:
             assert (dist.log_prob(torch.ones_like(sample)) > -float("inf")).all()
 
-    @pytest.mark.parametrize("neg_inf", [-float(10.0), -float("inf")])
+    @pytest.mark.parametrize("neg_inf", [-10.0, -float("inf")])
     @pytest.mark.parametrize("sparse", [True, False])
     @pytest.mark.parametrize("logits", [True, False])
     def test_backprop(self, neg_inf, sparse, logits):
@@ -583,7 +584,7 @@ class TestMaskedOneHotCategorical:
                 probs=torch.tensor(()), mask=torch.tensor(()), indices=torch.tensor(())
             )
 
-    @pytest.mark.parametrize("neg_inf", [-float(10.0), -float("inf")])
+    @pytest.mark.parametrize("neg_inf", [-10.0, -float("inf")])
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("sparse", [True, False])
     @pytest.mark.parametrize("logits", [True, False])
@@ -625,7 +626,7 @@ class TestMaskedOneHotCategorical:
         else:
             assert (dist.log_prob(sample_unfeasible) > -float("inf")).all()
 
-    @pytest.mark.parametrize("neg_inf", [-float(10.0), -float("inf")])
+    @pytest.mark.parametrize("neg_inf", [-10.0, -float("inf")])
     @pytest.mark.parametrize("sparse", [True, False])
     @pytest.mark.parametrize("logits", [True, False])
     def test_backprop(self, neg_inf, sparse, logits):

@@ -7,18 +7,21 @@ from __future__ import annotations
 import heapq
 import json
 import textwrap
+
 from abc import ABC, abstractmethod
 from copy import copy
 from multiprocessing.context import get_spawning_popen
 from pathlib import Path
 from typing import Any, Sequence
 
+from torchrl._utils import _STRDTYPE2DTYPE
+
 import numpy as np
 import torch
-from tensordict import is_tensor_collection, MemoryMappedTensor, TensorDictBase
+
+from tensordict import MemoryMappedTensor, TensorDictBase, is_tensor_collection
 from tensordict.utils import expand_as_right, is_tensorclass
 from torch import multiprocessing as mp
-from torchrl._utils import _STRDTYPE2DTYPE
 
 try:
     from torch.utils._pytree import tree_leaves
@@ -49,33 +52,28 @@ class Writer(ABC):
 
     @abstractmethod
     def add(self, data: Any) -> int:
-        """Inserts one piece of data at an appropriate index, and returns that index."""
+        """Insert one piece of data at an appropriate index, and returns that index."""
         ...
 
     @abstractmethod
     def extend(self, data: Sequence) -> torch.Tensor:
-        """Inserts a series of data points at appropriate indices, and returns a tensor containing the indices."""
+        """Insert a series of data points at appropriate indices, and returns a tensor containing the indices."""
         ...
 
     @abstractmethod
-    def _empty(self):
-        ...
+    def _empty(self): ...
 
     @abstractmethod
-    def dumps(self, path):
-        ...
+    def dumps(self, path): ...
 
     @abstractmethod
-    def loads(self, path):
-        ...
+    def loads(self, path): ...
 
     @abstractmethod
-    def state_dict(self) -> dict[str, Any]:
-        ...
+    def state_dict(self) -> dict[str, Any]: ...
 
     @abstractmethod
-    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
-        ...
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None: ...
 
     def _replicate_index(self, index):
         # replicates the index in a non-zero format to have as many indices as
@@ -125,11 +123,9 @@ class ImmutableDatasetWriter(Writer):
     def _empty(self):
         raise RuntimeError(self.WRITING_ERR)
 
-    def dumps(self, path):
-        ...
+    def dumps(self, path): ...
 
-    def loads(self, path):
-        ...
+    def loads(self, path): ...
 
     def state_dict(self) -> dict[str, Any]:
         return {}
@@ -463,7 +459,7 @@ class TensorDictMaxValueWriter(Writer):
         return super().register_storage(storage)
 
     def get_insert_index(self, data: Any) -> int:
-        """Returns the index where the data should be inserted, or ``None`` if it should not be inserted."""
+        """Return the index where the data should be inserted, or ``None`` if it should not be inserted."""
         if not is_tensor_collection(data):
             raise RuntimeError(
                 f"{type(self)} expects data to be a tensor collection (tensordict or tensorclass). Found a {type(data)} instead."
@@ -521,7 +517,7 @@ class TensorDictMaxValueWriter(Writer):
         _write_count.value = value
 
     def add(self, data: Any) -> int | torch.Tensor:
-        """Inserts a single element of data at an appropriate index, and returns that index.
+        """Insert a single element of data at an appropriate index, and returns that index.
 
         The ``rank_key`` in the data passed to this module should be structured as [].
         If it has more dimensions, it will be reduced to a single value using the ``reduction`` method.
@@ -539,7 +535,7 @@ class TensorDictMaxValueWriter(Writer):
         return index
 
     def extend(self, data: TensorDictBase) -> None:
-        """Inserts a series of data points at appropriate indices.
+        """Insert a series of data points at appropriate indices.
 
         The ``rank_key`` in the data passed to this module should be structured as [B].
         If it has more dimensions, it will be reduced to a single value using the ``reduction`` method.

@@ -8,22 +8,23 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass
 
-import torch
-from tensordict import TensorDict, TensorDictBase, TensorDictParams
-from tensordict.nn import dispatch, TensorDictModule
-from tensordict.utils import NestedKey, unravel_key
-
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
-    _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    ValueEstimators,
+    _cache_values,
     _reduce,
     default_value_kwargs,
     distance_loss,
-    ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+
+import torch
+
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
+from tensordict.nn import TensorDictModule, dispatch
+from tensordict.utils import NestedKey, unravel_key
 
 
 class DDPGLoss(LossModule):
@@ -144,7 +145,7 @@ class DDPGLoss(LossModule):
 
     @dataclass
     class _AcceptedKeys:
-        """Maintains default values for all configurable tensordict keys.
+        """Maintain default values for all configurable tensordict keys.
 
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values.
@@ -282,7 +283,7 @@ class DDPGLoss(LossModule):
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDict:
-        """Computes the DDPG losses given a tensordict sampled from the replay buffer.
+        """Compute the DDPG losses given a tensordict sampled from the replay buffer.
 
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
             a priority to items in the tensordict.

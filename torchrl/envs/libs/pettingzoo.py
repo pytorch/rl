@@ -7,17 +7,20 @@ from __future__ import annotations
 import copy
 import importlib
 import warnings
+
 from typing import Dict
 
-import numpy as np
 import packaging
-import torch
-from tensordict import TensorDictBase
 
 from torchrl.data.tensor_specs import Categorical, Composite, OneHot, Unbounded
 from torchrl.envs.common import _EnvWrapper
 from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform, set_gym_backend
-from torchrl.envs.utils import _classproperty, check_marl_grouping, MarlGroupMapType
+from torchrl.envs.utils import MarlGroupMapType, _classproperty, check_marl_grouping
+
+import numpy as np
+import torch
+
+from tensordict import TensorDictBase
 
 _has_pettingzoo = importlib.util.find_spec("pettingzoo") is not None
 
@@ -193,6 +196,7 @@ class PettingZooWrapper(_EnvWrapper):
         >>> print(env.group_map)
         ... {'player_1': ['player_1'], 'player_2': ['player_2']}
         >>> env.rollout(10)
+
     """
 
     git_url = "https://github.com/Farama-Foundation/PettingZoo"
@@ -313,7 +317,7 @@ class PettingZooWrapper(_EnvWrapper):
         elif isinstance(self.group_map, MarlGroupMapType):
             self.group_map = self.group_map.get_group_map(self.possible_agents)
         check_marl_grouping(self.group_map, self.possible_agents)
-        self.has_action_mask = {group: False for group in self.group_map.keys()}
+        self.has_action_mask = dict.fromkeys(self.group_map.keys(), False)
 
         action_spec = Composite()
         observation_spec = Composite()
@@ -400,9 +404,11 @@ class PettingZooWrapper(_EnvWrapper):
             del group_observation_inner_spec["action_mask"]
             group_observation_spec["action_mask"] = Categorical(
                 n=2,
-                shape=group_action_spec["action"].shape
-                if not self.categorical_actions
-                else group_action_spec["action"].to_one_hot_spec().shape,
+                shape=(
+                    group_action_spec["action"].shape
+                    if not self.categorical_actions
+                    else group_action_spec["action"].to_one_hot_spec().shape
+                ),
                 dtype=torch.bool,
                 device=self.device,
             )
@@ -501,9 +507,11 @@ class PettingZooWrapper(_EnvWrapper):
                     ]
                     self.observation_spec[group]["action_mask"] = Categorical(
                         n=2,
-                        shape=group_action_spec.shape
-                        if not self.categorical_actions
-                        else group_action_spec.to_one_hot_spec().shape,
+                        shape=(
+                            group_action_spec.shape
+                            if not self.categorical_actions
+                            else group_action_spec.to_one_hot_spec().shape
+                        ),
                         dtype=torch.bool,
                         device=self.device,
                     )
@@ -966,6 +974,7 @@ class PettingZooEnv(PettingZooWrapper):
         >>> print(env.group_map)
         ... {'player_1': ['player_1'], 'player_2': ['player_2']}
         >>> env.rollout(10)
+
     """
 
     def __init__(

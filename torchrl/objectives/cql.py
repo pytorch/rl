@@ -6,16 +6,9 @@ from __future__ import annotations
 
 import math
 import warnings
+
 from copy import deepcopy
 from dataclasses import dataclass
-
-import numpy as np
-import torch
-import torch.nn as nn
-from tensordict import TensorDict, TensorDictBase, TensorDictParams
-from tensordict.nn import dispatch, TensorDictModule
-from tensordict.utils import NestedKey, unravel_key
-from torch import Tensor
 
 from torchrl.data.tensor_specs import Composite
 from torchrl.data.utils import _find_action_space
@@ -24,15 +17,24 @@ from torchrl.modules.tensordict_module.actors import ProbabilisticActor, QValueA
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
-    _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
+    ValueEstimators,
+    _cache_values,
     _reduce,
     _vmap_func,
     default_value_kwargs,
     distance_loss,
-    ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+
+import numpy as np
+import torch
+import torch.nn as nn
+
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
+from tensordict.nn import TensorDictModule, dispatch
+from tensordict.utils import NestedKey, unravel_key
+from torch import Tensor
 
 
 class CQLLoss(LossModule):
@@ -52,7 +54,7 @@ class CQLLoss(LossModule):
             .. warning:: When a list of parameters if passed, it will __not__ be compared against the policy parameters
               and all the parameters will be considered as untied.
 
-    Keyword args:
+    Keyword Args:
         loss_function (str, optional): loss function to be used with
             the value function loss. Default is `"smooth_l1"`.
         alpha_init (:obj:`float`, optional): initial entropy multiplier.
@@ -208,11 +210,12 @@ class CQLLoss(LossModule):
         ...     next_observation=torch.zeros(*batch, n_obs),
         ...     next_reward=torch.randn(*batch, 1))
         >>> loss_actor.backward()
+
     """
 
     @dataclass
     class _AcceptedKeys:
-        """Maintains default values for all configurable tensordict keys.
+        """Maintain default values for all configurable tensordict keys.
 
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values.
@@ -242,6 +245,7 @@ class CQLLoss(LossModule):
                 Defaults to ``"done"``.
             terminated (NestedKey): The input tensordict key where the terminated flag is expected.
                 Defaults to ``"terminated"``.
+
         """
 
         action: NestedKey = "action"
@@ -837,7 +841,11 @@ class CQLLoss(LossModule):
             self.tensor_keys.state_action_value
         )
         # split q values
-        (q_random, q_curr, q_new,) = state_action_value.split(
+        (
+            q_random,
+            q_curr,
+            q_new,
+        ) = state_action_value.split(
             [
                 self.num_qvalue_nets,
                 self.num_qvalue_nets,
@@ -962,6 +970,7 @@ class DiscreteCQLLoss(LossModule):
 
     Args:
         value_network (Union[QValueActor, nn.Module]): The Q-value network used to estimate state-action values.
+
     Keyword Args:
         loss_function (Optional[str]): The distance function used to calculate the distance between the predicted
             Q-values and the target Q-values. Defaults to ``l2``.
@@ -1036,11 +1045,12 @@ class DiscreteCQLLoss(LossModule):
         ...     next_done=next_done,
         ...     next_terminated=next_terminated,
         ...     action=action)
+
     """
 
     @dataclass
     class _AcceptedKeys:
-        """Maintains default values for all configurable tensordict keys.
+        """Maintain default values for all configurable tensordict keys.
 
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values.
@@ -1271,7 +1281,7 @@ class DiscreteCQLLoss(LossModule):
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDict:
-        """Computes the (DQN) CQL loss given a tensordict sampled from the replay buffer.
+        """Compute the (DQN) CQL loss given a tensordict sampled from the replay buffer.
 
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
             a priority to items in the tensordict.

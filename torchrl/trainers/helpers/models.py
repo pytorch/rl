@@ -5,12 +5,9 @@
 from __future__ import annotations
 
 import itertools
+
 from dataclasses import dataclass
 
-import torch
-from tensordict import set_lazy_legacy
-from tensordict.nn import InteractionType
-from torch import nn
 from torchrl.data.tensor_specs import Categorical, Composite, Unbounded
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
@@ -38,7 +35,7 @@ from torchrl.modules.models.model_based import (
     RSSMPrior,
     RSSMRollout,
 )
-from torchrl.modules.models.models import DuelingCnnDQNet, DuelingMlpDQNet, MLP
+from torchrl.modules.models.models import MLP, DuelingCnnDQNet, DuelingMlpDQNet
 from torchrl.modules.tensordict_module import (
     Actor,
     DistributionalQValueActor,
@@ -46,6 +43,12 @@ from torchrl.modules.tensordict_module import (
 )
 from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
 from torchrl.trainers.helpers import transformed_env_constructor
+
+import torch
+
+from tensordict import set_lazy_legacy
+from tensordict.nn import InteractionType
+from torch import nn
 
 DISTRIBUTIONS = {
     "delta": Delta,
@@ -602,7 +605,7 @@ class REDQModelConfig:
 
 @dataclass
 class ContinuousModelConfig:
-    """Continuous control model config struct."""
+    """Continuou control model config struct."""
 
     annealing_frames: int = 1000000
     # float of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.

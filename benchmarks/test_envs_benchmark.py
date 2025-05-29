@@ -2,14 +2,17 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import argparse
+
+from torchrl.envs import ParallelEnv, SerialEnv, StepCounter, TransformedEnv, step_mdp
+from torchrl.envs.libs.dm_control import DMControlEnv
 
 import pytest
 import torch
 
 from tensordict import TensorDict
-from torchrl.envs import ParallelEnv, SerialEnv, step_mdp, StepCounter, TransformedEnv
-from torchrl.envs.libs.dm_control import DMControlEnv
 
 
 def make_simple_env():

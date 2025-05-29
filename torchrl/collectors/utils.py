@@ -8,8 +8,7 @@ from typing import Callable
 
 import torch
 
-from tensordict import NestedKey, pad, set_lazy_legacy, TensorDictBase
-
+from tensordict import NestedKey, TensorDictBase, pad, set_lazy_legacy
 
 _NON_NN_POLICY_WEIGHTS = (
     "The policy is not an nn.Module. TorchRL will assume that the parameter set is empty and "

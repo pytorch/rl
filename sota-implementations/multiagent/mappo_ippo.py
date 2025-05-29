@@ -6,11 +6,6 @@ from __future__ import annotations
 
 import time
 
-import hydra
-import torch
-from tensordict.nn import TensorDictModule
-from tensordict.nn.distributions import NormalParamExtractor
-from torch import nn
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import TensorDictReplayBuffer
@@ -22,6 +17,13 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import ProbabilisticActor, TanhNormal, ValueOperator
 from torchrl.modules.models.multiagent import MultiAgentMLP
 from torchrl.objectives import ClipPPOLoss, ValueEstimators
+
+import hydra
+import torch
+
+from tensordict.nn import TensorDictModule
+from tensordict.nn.distributions import NormalParamExtractor
+from torch import nn
 from utils.logging import init_logging, log_evaluation, log_training
 from utils.utils import DoneTransform
 

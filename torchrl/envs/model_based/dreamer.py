@@ -4,14 +4,16 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import torch
-from tensordict import TensorDict
-from tensordict.nn import TensorDictModule
 from torchrl.data.tensor_specs import Composite
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based import ModelBasedEnvBase
 from torchrl.envs.transforms.transforms import Transform
+
+import torch
+
+from tensordict import TensorDict
+from tensordict.nn import TensorDictModule
 
 
 class DreamerEnv(ModelBasedEnvBase):
@@ -32,7 +34,7 @@ class DreamerEnv(ModelBasedEnvBase):
         self.belief_shape = belief_shape
 
     def set_specs_from_env(self, env: EnvBase):
-        """Sets the specs of the environment from the specs of the given environment."""
+        """Set the specs of the environment from the specs of the given environment."""
         super().set_specs_from_env(env)
         self.action_spec = self.action_spec.to(self.device)
         self.state_spec = Composite(
@@ -74,6 +76,7 @@ class DreamerDecoder(Transform):
     Examples:
         >>> model_based_env = DreamerEnv(...)
         >>> model_based_env_eval = model_based_env.append_transform(DreamerDecoder())
+
     """
 
     def _call(self, next_tensordict):

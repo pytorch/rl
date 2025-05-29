@@ -2,8 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""
-Benchmarking different types of batched environments
+"""Benchmarking different types of batched environments
 ====================================================
 Compares runtime for different environments which allow performing operations in a batch.
 - SerialEnv executes the operations sequentially
@@ -14,16 +13,20 @@ Run as "python benchmarks/benchmark_batched_envs.py"
 Requires pandas ("pip install pandas").
 
 """
+from __future__ import annotations
+
+from torchrl._utils import logger as torchrl_logger
 
 import pandas as pd
-from torchrl._utils import logger as torchrl_logger
 
 pd.set_option("display.max_columns", 100)
 pd.set_option("display.width", 1000)
-import torch
-from torch.utils.benchmark import Timer
 from torchrl.envs import MultiThreadedEnv, ParallelEnv, SerialEnv
 from torchrl.envs.libs.gym import GymEnv
+
+import torch
+
+from torch.utils.benchmark import Timer
 
 N_STEPS = 1000
 

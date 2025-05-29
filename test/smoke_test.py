@@ -8,8 +8,6 @@ from __future__ import annotations
 def test_imports():
     from torchrl.data import (
         PrioritizedReplayBuffer,
-        ReplayBuffer,
-        TensorSpec,
     )  # noqa: F401
     from torchrl.envs import Transform, TransformedEnv  # noqa: F401
     from torchrl.envs.gym_like import GymLikeEnv  # noqa: F401

@@ -12,11 +12,13 @@ import pytest
 
 
 def test_dm_control():
+    from torchrl.envs.libs.dm_control import DMControlEnv, _has_dmc  # noqa
+
     import dm_control  # noqa: F401
     import dm_env  # noqa: F401
+
     from dm_control import suite  # noqa: F401
     from dm_control.suite.wrappers import pixels  # noqa: F401
-    from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv  # noqa
 
     assert _has_dmc
     env = DMControlEnv("cheetah", "run")

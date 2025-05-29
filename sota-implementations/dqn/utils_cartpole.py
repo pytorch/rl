@@ -4,14 +4,14 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import torch.nn
-import torch.optim
 from torchrl.data import Composite
 from torchrl.envs import RewardSum, StepCounter, TransformedEnv
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.modules import MLP, QValueActor
 from torchrl.record import VideoRecorder
 
+import torch.nn
+import torch.optim
 
 # ====================================================================
 # Environment utils

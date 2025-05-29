@@ -6,11 +6,6 @@ from __future__ import annotations
 
 from typing import Callable
 
-import torch
-
-from tensordict import NestedKey, set_list_to_stack, TensorDict, TensorDictBase
-from tensordict.tensorclass import NonTensorData, NonTensorStack
-
 from torchrl.data.map.hash import SipHash
 from torchrl.data.tensor_specs import (
     Categorical as CategoricalSpec,
@@ -20,6 +15,11 @@ from torchrl.data.tensor_specs import (
 )
 from torchrl.envs import EnvBase
 from torchrl.envs.utils import _StepMDP
+
+import torch
+
+from tensordict import NestedKey, TensorDict, TensorDictBase, set_list_to_stack
+from tensordict.tensorclass import NonTensorData, NonTensorStack
 
 
 class LLMHashingEnv(EnvBase):
@@ -120,7 +120,7 @@ class LLMHashingEnv(EnvBase):
 
     @set_list_to_stack(True)
     def make_tensordict(self, input: str | list[str]) -> TensorDict:
-        """Converts a string or list of strings in a TensorDict with appropriate shape and device."""
+        """Convert a string or list of strings in a TensorDict with appropriate shape and device."""
         list_len = len(input) if isinstance(input, list) else 0
         tensordict = TensorDict(
             {self.observation_key: self._tokenizer(input)}, device=self.device
@@ -130,7 +130,7 @@ class LLMHashingEnv(EnvBase):
         return self.reset(tensordict)
 
     def _reset(self, tensordict: TensorDictBase):
-        """Initializes the environment with a given observation.
+        """Initialize the environment with a given observation.
 
         Args:
             tensordict (TensorDictBase): A TensorDict containing the initial observation.
@@ -169,13 +169,14 @@ class LLMHashingEnv(EnvBase):
         return out
 
     def _step(self, tensordict):
-        """Takes an action (i.e., the next token to generate) and returns the next observation and reward.
+        """Take an action (i.e., the next token to generate) and returns the next observation and reward.
 
         Args:
             tensordict: A TensorDict containing the current observation and action.
 
         Returns:
             A TensorDict containing the next observation, its hash, and other relevant information.
+
         """
         out = tensordict.empty()
         action = tensordict.get("action")
@@ -208,7 +209,7 @@ class LLMHashingEnv(EnvBase):
         return out.update(kwargs)
 
     def _set_seed(self, *args) -> None:
-        """Sets the seed for the environment's randomness.
+        """Set the seed for the environment's randomness.
 
         .. note:: This environment has no randomness, so this method does nothing.
         """

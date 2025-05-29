@@ -17,15 +17,13 @@ The default task is `Pong-v5` but a different one can be picked through the
 `--env` flag. Any available gym env will work.
 
 """
+from __future__ import annotations
+
 import time
+
 from argparse import ArgumentParser
 
-import gym
-
-import torch
-import tqdm
 from torchrl._utils import logger as torchrl_logger
-
 from torchrl.collectors.collectors import (
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
@@ -35,6 +33,10 @@ from torchrl.collectors.distributed import DistributedDataCollector
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.utils import RandomPolicy
+
+import gym
+import torch
+import tqdm
 
 parser = ArgumentParser()
 parser.add_argument(

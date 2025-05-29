@@ -6,11 +6,12 @@ from __future__ import annotations
 
 import abc
 
-import torch
-from tensordict import TensorDictBase
-
 from torchrl.envs.common import EnvBase
 from torchrl.modules import SafeModule
+
+import torch
+
+from tensordict import TensorDictBase
 
 
 class MPCPlannerBase(SafeModule, metaclass=abc.ABCMeta):
@@ -22,6 +23,7 @@ class MPCPlannerBase(SafeModule, metaclass=abc.ABCMeta):
     Args:
         env (EnvBase): The environment to perform the planning step on (Can be :obj:`ModelBasedEnvBase` or :obj:`EnvBase`).
         action_key (str, optional): The key that will point to the computed action.
+
     """
 
     def __init__(
@@ -43,10 +45,11 @@ class MPCPlannerBase(SafeModule, metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def planning(self, td: TensorDictBase) -> torch.Tensor:
-        """Performs the MPC planning step.
+        """Perform the MPC planning step.
 
         Args:
             td (TensorDict): The TensorDict to perform the planning step on.
+
         """
         raise NotImplementedError()
 

@@ -3,8 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""
-Sample latency benchmarking (using RPC)
+"""Sample latency benchmarking (using RPC)
 ======================================
 A rough benchmark of sample latency using different storage types over the network using `torch.rpc`.
 Run this script with --rank=0 and --rank=1 flags set in separate processes - these ranks correspond to the trainer worker and buffer worker respectively, and both need to be initialised.
@@ -13,17 +12,17 @@ e.g. to benchmark LazyMemmapStorage, run the following commands using either two
     - python3 benchmark_sample_latency_over_rpc.py --rank=1 --storage=LazyMemmapStorage
 This code is based on examples/distributed/distributed_replay_buffer.py.
 """
+from __future__ import annotations
+
 import argparse
 import os
 import pickle
 import sys
 import time
 import timeit
+
 from datetime import datetime
 
-import torch
-import torch.distributed.rpc as rpc
-from tensordict import TensorDict
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.replay_buffers import RemoteTensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import RandomSampler
@@ -33,6 +32,11 @@ from torchrl.data.replay_buffers.storages import (
     ListStorage,
 )
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
+
+import torch
+import torch.distributed.rpc as rpc
+
+from tensordict import TensorDict
 
 RETRY_LIMIT = 2
 RETRY_DELAY_SECS = 3

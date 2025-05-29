@@ -5,17 +5,20 @@
 from __future__ import annotations
 
 import uuid
+
 from datetime import datetime
 
-import hydra
-import torch.cuda
-from tensordict.nn import TensorDictSequential
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import OrnsteinUhlenbeckProcessModule
 from torchrl.record import VideoRecorder
 from torchrl.record.loggers import get_logger
+
+import hydra
+import torch.cuda
+
+from tensordict.nn import TensorDictSequential
 from utils import (
     correct_for_frame_skip,
     get_norm_state_dict,

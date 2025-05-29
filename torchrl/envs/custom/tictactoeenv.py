@@ -4,10 +4,12 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import torch
-from tensordict import TensorDict, TensorDictBase
 from torchrl.data.tensor_specs import Categorical, Composite, Unbounded
 from torchrl.envs.common import EnvBase
+
+import torch
+
+from tensordict import TensorDict, TensorDictBase
 
 
 class TicTacToeEnv(EnvBase):
@@ -251,8 +253,7 @@ class TicTacToeEnv(EnvBase):
             return torch.where(done, state, state_select)
         return state
 
-    def _set_seed(self, seed: int | None) -> None:
-        ...
+    def _set_seed(self, seed: int | None) -> None: ...
 
     @staticmethod
     def win(board: torch.Tensor, action: torch.Tensor):

@@ -5,25 +5,27 @@
 from __future__ import annotations
 
 import dataclasses
+
 from copy import deepcopy
 from numbers import Number
 from typing import Callable, Sequence
-
-import torch
-from torch import nn
 
 from torchrl._utils import prod
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.modules.models.decision_transformer import DecisionTransformer
 from torchrl.modules.models.utils import (
-    _find_depth,
-    create_on_device,
     LazyMapping,
     SquashDims,
     Squeeze2dLayer,
     SqueezeLayer,
+    _find_depth,
+    create_on_device,
 )
 from torchrl.modules.tensordict_module.common import DistributionalDQNnet  # noqa
+
+import torch
+
+from torch import nn
 
 
 class MLP(nn.Sequential):
@@ -546,7 +548,7 @@ class ConvNet(nn.Sequential):
 
     @classmethod
     def default_atari_dqn(cls, num_actions: int):
-        """Returns the default DQN as presented in the seminal DQN paper.
+        """Return the default DQN as presented in the seminal DQN paper.
 
         Args:
             num_actions (int): the action space of the atari game.
@@ -817,7 +819,7 @@ class Conv3dNet(nn.Sequential):
 
 
 class DuelingMlpDQNet(nn.Module):
-    """Creates a Dueling MLP Q-network.
+    """Create a Dueling MLP Q-network.
 
     Presented in https://arxiv.org/abs/1511.06581
 
@@ -1174,12 +1176,12 @@ class DdpgCnnActor(nn.Module):
             "paddings": [0, 0, 1],
             "activation_class": nn.ELU,
             "norm_class": None,
-            "aggregator_class": SquashDims
-            if not use_avg_pooling
-            else nn.AdaptiveAvgPool2d,
-            "aggregator_kwargs": {"ndims_in": 3}
-            if not use_avg_pooling
-            else {"output_size": (1, 1)},
+            "aggregator_class": (
+                SquashDims if not use_avg_pooling else nn.AdaptiveAvgPool2d
+            ),
+            "aggregator_kwargs": (
+                {"ndims_in": 3} if not use_avg_pooling else {"output_size": (1, 1)}
+            ),
             "squeeze_output": use_avg_pooling,
         }
         conv_net_kwargs = conv_net_kwargs if conv_net_kwargs is not None else {}
@@ -1368,12 +1370,12 @@ class DdpgCnnQNet(nn.Module):
             "paddings": [0, 0, 1],
             "activation_class": nn.ELU,
             "norm_class": None,
-            "aggregator_class": SquashDims
-            if not use_avg_pooling
-            else nn.AdaptiveAvgPool2d,
-            "aggregator_kwargs": {"ndims_in": 3}
-            if not use_avg_pooling
-            else {"output_size": (1, 1)},
+            "aggregator_class": (
+                SquashDims if not use_avg_pooling else nn.AdaptiveAvgPool2d
+            ),
+            "aggregator_kwargs": (
+                {"ndims_in": 3} if not use_avg_pooling else {"output_size": (1, 1)}
+            ),
             "squeeze_output": use_avg_pooling,
         }
         conv_net_kwargs = conv_net_kwargs if conv_net_kwargs is not None else {}
@@ -1532,6 +1534,7 @@ class OnlineDTActor(nn.Module):
         torch.Size([32, 10, 2])
         >>> std.shape
         torch.Size([32, 10, 2])
+
     """
 
     def __init__(

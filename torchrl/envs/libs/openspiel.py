@@ -7,9 +7,6 @@ from __future__ import annotations
 
 import importlib.util
 
-import torch
-from tensordict import TensorDict, TensorDictBase
-
 from torchrl.data.tensor_specs import (
     Categorical,
     Composite,
@@ -18,7 +15,11 @@ from torchrl.data.tensor_specs import (
     Unbounded,
 )
 from torchrl.envs.common import _EnvWrapper
-from torchrl.envs.utils import _classproperty, check_marl_grouping, MarlGroupMapType
+from torchrl.envs.utils import MarlGroupMapType, _classproperty, check_marl_grouping
+
+import torch
+
+from tensordict import TensorDict, TensorDictBase
 
 _has_pyspiel = importlib.util.find_spec("pyspiel") is not None
 
@@ -131,6 +132,7 @@ class OpenSpielWrapper(_EnvWrapper):
         >>> # After resetting, now the current state is equal to `td_restore`
         >>> (td == td_restore).all()
         True
+
     """
 
     git_url = "https://github.com/google-deepmind/open_spiel"
@@ -157,8 +159,9 @@ class OpenSpielWrapper(_EnvWrapper):
         self,
         env=None,
         *,
-        group_map: MarlGroupMapType
-        | dict[str, list[str]] = MarlGroupMapType.ALL_IN_ONE_GROUP,
+        group_map: (
+            MarlGroupMapType | dict[str, list[str]]
+        ) = MarlGroupMapType.ALL_IN_ONE_GROUP,
         categorical_actions: bool = False,
         return_state: bool = False,
         **kwargs,
@@ -346,9 +349,11 @@ class OpenSpielWrapper(_EnvWrapper):
             agents_acting = []
         else:
             agents_acting = [
-                self.agent_names
-                if self.parallel
-                else self.agent_names[self._env.current_player()]
+                (
+                    self.agent_names
+                    if self.parallel
+                    else self.agent_names[self._env.current_player()]
+                )
             ]
         for group, agents in self.group_map.items():
             action_masks = []
@@ -594,14 +599,16 @@ class OpenSpielEnv(OpenSpielWrapper):
         >>> # After resetting, now the current state is equal to `td_restore`
         >>> (td == td_restore).all()
         True
+
     """
 
     def __init__(
         self,
         game_string,
         *,
-        group_map: MarlGroupMapType
-        | dict[str, list[str]] = MarlGroupMapType.ALL_IN_ONE_GROUP,
+        group_map: (
+            MarlGroupMapType | dict[str, list[str]]
+        ) = MarlGroupMapType.ALL_IN_ONE_GROUP,
         categorical_actions=False,
         return_state: bool = False,
         **kwargs,

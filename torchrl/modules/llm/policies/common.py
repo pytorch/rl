@@ -4,12 +4,14 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from torchrl.modules import MaskedCategorical
+
 import torch
+
 from tensordict import NestedKey, TensorDictBase
 from tensordict.nn import TensorDictModuleBase, TensorDictSequential
 from torch import distributions as D
 from torch.distributions import Categorical
-from torchrl.modules import MaskedCategorical
 
 
 class CategoricalSequential(TensorDictModuleBase):

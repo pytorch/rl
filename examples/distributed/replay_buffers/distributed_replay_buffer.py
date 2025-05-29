@@ -1,5 +1,4 @@
-"""
-Example use of a distributed replay buffer
+"""Example use of a distributed replay buffer
 ===========================
 
 This example illustrates how a skeleton reinforcement learning algorithm can be implemented in a distributed fashion with communication between nodes/workers handled using `torch.rpc`.
@@ -7,20 +6,24 @@ It focuses on how to set up a replay buffer worker that accepts remote operation
 In this model, >= 1 data collectors workers are responsible for collecting experiences in an environment, the replay buffer worker receives all of these experiences and exposes them to a trainer that is responsible for making parameter updates to any required models.
 """
 
+from __future__ import annotations
+
 import argparse
 import os
 import random
 import sys
 import time
 
-import torch
-import torch.distributed.rpc as rpc
-from tensordict import TensorDict
 from torchrl._utils import accept_remote_rref_invocation, logger as torchrl_logger
 from torchrl.data.replay_buffers import RemoteTensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import RandomSampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
+
+import torch
+import torch.distributed.rpc as rpc
+
+from tensordict import TensorDict
 
 RETRY_LIMIT = 2
 RETRY_DELAY_SECS = 3
@@ -45,6 +48,7 @@ class DummyDataCollectorNode:
 
     Args:
         replay_buffer (rpc.RRef): the RRef associated with the construction of the replay buffer
+
     """
 
     def __init__(self, replay_buffer: rpc.RRef) -> None:
@@ -156,6 +160,7 @@ class ReplayBufferNode(RemoteTensorDictReplayBuffer):
 
     Args:
         capacity (int): the maximum number of elements that can be stored in the replay buffer.
+
     """
 
     def __init__(self, capacity: int):

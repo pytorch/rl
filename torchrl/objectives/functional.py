@@ -10,7 +10,7 @@ import torch
 def cross_entropy_loss(
     log_policy: torch.Tensor, action: torch.Tensor, inplace: bool = False
 ) -> torch.Tensor:
-    """Returns the cross entropy loss defined as the log-softmax value indexed by the action index.
+    """Return the cross entropy loss defined as the log-softmax value indexed by the action index.
 
     Supports discrete (integer) actions or one-hot encodings.
 

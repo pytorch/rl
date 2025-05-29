@@ -84,6 +84,7 @@ TorchRL trainer: A DQN example
 # of this algorithm.
 
 # sphinx_gallery_start_ignore
+from __future__ import annotations
 import tempfile
 import warnings
 

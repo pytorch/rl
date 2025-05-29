@@ -6,11 +6,7 @@ from __future__ import annotations
 
 import functools
 
-import torch
-from tensordict.nn import InteractionType, TensorDictModule
-from tensordict.nn.distributions import NormalParamExtractor
-from torch import nn, optim
-from torchrl.collectors import aSyncDataCollector, SyncDataCollector
+from torchrl.collectors import SyncDataCollector, aSyncDataCollector
 from torchrl.data import (
     LazyMemmapStorage,
     LazyTensorStorage,
@@ -34,6 +30,12 @@ from torchrl.modules.distributions import TanhNormal
 from torchrl.objectives import SoftUpdate
 from torchrl.objectives.sac import SACLoss
 from torchrl.record import VideoRecorder
+
+import torch
+
+from tensordict.nn import InteractionType, TensorDictModule
+from tensordict.nn.distributions import NormalParamExtractor
+from torch import nn, optim
 
 # ====================================================================
 # Environment utils

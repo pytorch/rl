@@ -8,19 +8,10 @@ import argparse
 import importlib.util
 import os
 
-import pytest
-import torch
-from tensordict import TensorDict
-from tensordict.nn import CompositeDistribution, TensorDictModule
-from tensordict.nn.distributions import NormalParamExtractor
-
-from torch import distributions as dist, nn
-
 from torchrl.data import Binary, Bounded, Categorical, Composite, MultiOneHot, OneHot
 from torchrl.data.llm.dataset import _has_transformers
 from torchrl.modules import MLP, SafeModule, TanhDelta, TanhNormal
 from torchrl.modules.tensordict_module.actors import (
-    _process_action_space_spec,
     ActorValueOperator,
     DistributionalQValueActor,
     DistributionalQValueHook,
@@ -31,7 +22,16 @@ from torchrl.modules.tensordict_module.actors import (
     QValueHook,
     QValueModule,
     ValueOperator,
+    _process_action_space_spec,
 )
+
+import pytest
+import torch
+
+from tensordict import TensorDict
+from tensordict.nn import CompositeDistribution, TensorDictModule
+from tensordict.nn.distributions import NormalParamExtractor
+from torch import distributions as dist, nn
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import get_default_devices

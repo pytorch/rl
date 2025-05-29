@@ -55,6 +55,7 @@ Using Replay Buffers
 # replay buffer is a straightforward process, as shown in the following
 # example:
 #
+from __future__ import annotations
 
 import gc
 

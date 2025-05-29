@@ -13,17 +13,18 @@ driving, a trajectory might be interrupted due to external factors such as hardw
 intervention, resulting in incomplete or inconsistent data. By filtering out these incomplete trajectories,
 we can improve the quality of the training data and increase the robustness of our models.
 """
+from __future__ import annotations
 
-import torch
-from tensordict import TensorDictBase
 from torchrl.data import LazyTensorStorage, ReplayBuffer
 from torchrl.envs import GymEnv, TrajCounter, Transform
 
+import torch
+
+from tensordict import TensorDictBase
+
 
 class CompletedTrajectoryRepertoire(Transform):
-    """
-    A transform that keeps track of completed trajectories and filters them out during sampling.
-    """
+    """A transform that keeps track of completed trajectories and filters them out during sampling."""
 
     def __init__(self):
         super().__init__()
@@ -31,7 +32,7 @@ class CompletedTrajectoryRepertoire(Transform):
         self.repertoire_tensor = torch.zeros((), dtype=torch.int64)
 
     def _update_repertoire(self, tensordict: TensorDictBase) -> None:
-        """Updates the repertoire of completed trajectories."""
+        """Update the repertoire of completed trajectories."""
         done = tensordict["next", "terminated"].squeeze(-1)
         traj = tensordict["next", "traj_count"][done].view(-1)
         if traj.numel():
@@ -43,12 +44,12 @@ class CompletedTrajectoryRepertoire(Transform):
             )
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Updates the repertoire of completed trajectories during insertion."""
+        """Update the repertoire of completed trajectories during insertion."""
         self._update_repertoire(tensordict)
         return tensordict
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Filters out incomplete trajectories during sampling."""
+        """Filter out incomplete trajectories during sampling."""
         traj = tensordict["next", "traj_count"]
         traj = traj.unsqueeze(-1)
         has_traj = (traj == self.repertoire_tensor).any(-1)

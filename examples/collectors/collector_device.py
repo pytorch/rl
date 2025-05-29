@@ -3,8 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""
-Using the SyncDataCollector with Different Device Combinations
+"""Using the SyncDataCollector with Different Device Combinations
 ==============================================================
 
 TorchRL's SyncDataCollector allows you to specify the devices on which different components of the data collection
@@ -50,15 +49,10 @@ By following this example, you can learn how to use the SyncDataCollector with d
 that your policy's parameters are kept in sync.
 
 """
+from __future__ import annotations
 
 import logging
 import time
-
-import torch.cuda
-import torch.nn as nn
-import torch.optim as optim
-
-from tensordict.nn import TensorDictSequential as TDSeq
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import LazyTensorStorage, ReplayBuffer
@@ -66,6 +60,11 @@ from torchrl.envs import Compose, GymEnv, RewardSum, StepCounter, TransformedEnv
 from torchrl.modules import EGreedyModule, QValueActor
 from torchrl.objectives import DQNLoss, SoftUpdate
 
+import torch.cuda
+import torch.nn as nn
+import torch.optim as optim
+
+from tensordict.nn import TensorDictSequential as TDSeq
 
 logging.basicConfig(level=logging.INFO)
 my_logger = logging.getLogger(__name__)

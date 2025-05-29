@@ -14,15 +14,17 @@ from __future__ import annotations
 
 import warnings
 
+from torchrl._utils import timeit
+from torchrl.envs.utils import ExplorationType, set_exploration_type
+from torchrl.record.loggers import generate_exp_name, get_logger
+
 import hydra
 import numpy as np
 import torch
 import torch.cuda
 import tqdm
+
 from tensordict.nn import CudaGraphModule
-from torchrl._utils import timeit
-from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.record.loggers import generate_exp_name, get_logger
 from utils import (
     log_metrics,
     make_collector,

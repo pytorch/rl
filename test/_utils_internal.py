@@ -12,26 +12,20 @@ import sys
 import time
 import unittest
 import warnings
+
 from functools import wraps
 
-import pytest
-import torch
-import torch.cuda
-from tensordict import NestedKey, tensorclass, TensorDict, TensorDictBase
-from tensordict.nn import TensorDictModuleBase
-from torch import nn, vmap
-
 from torchrl._utils import (
+    RL_WARNINGS,
     implement_for,
     logger as torchrl_logger,
-    RL_WARNINGS,
     seed_generator,
 )
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import MultiThreadedEnv, ObservationNorm
 from torchrl.envs.batched_envs import ParallelEnv, SerialEnv
 from torchrl.envs.libs.envpool import _has_envpool
-from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv
+from torchrl.envs.libs.gym import GymEnv, _has_gym, gym_backend
 from torchrl.envs.transforms import (
     Compose,
     RewardClipping,
@@ -40,6 +34,14 @@ from torchrl.envs.transforms import (
 )
 from torchrl.modules import MLP
 from torchrl.objectives.value.advantages import _vmap_func
+
+import pytest
+import torch
+import torch.cuda
+
+from tensordict import NestedKey, TensorDict, TensorDictBase, tensorclass
+from tensordict.nn import TensorDictModuleBase
+from torch import nn, vmap
 
 # Get relative file path
 # this returns relative path from current file.
@@ -433,7 +435,7 @@ def get_transform_out(env_name, transformed_in, obs_key=None):
 
 
 def make_tc(td):
-    """Makes a tensorclass from a tensordict instance."""
+    """Make a tensorclass from a tensordict instance."""
 
     class MyClass:
         pass
@@ -447,8 +449,7 @@ def make_tc(td):
 def rollout_consistency_assertion(
     rollout, *, done_key="done", observation_key="observation", done_strict=False
 ):
-    """Tests that observations in "next" match observations in the next root tensordict when done is False, and don't match otherwise."""
-
+    """Test that observations in "next" match observations in the next root tensordict when done is False, and don't match otherwise."""
     done = rollout[..., :-1]["next", done_key].squeeze(-1)
     # data resulting from step, when it's not done
     r_not_done = rollout[..., :-1]["next"][~done]
@@ -474,7 +475,7 @@ def rollout_consistency_assertion(
 
 
 def rand_reset(env):
-    """Generates a tensordict with reset keys that mimic the done spec.
+    """Generate a tensordict with reset keys that mimic the done spec.
 
     Values are drawn at random until at least one reset is present.
 

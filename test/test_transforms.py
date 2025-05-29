@@ -14,31 +14,12 @@ import os
 import pickle
 import re
 import sys
+
 from copy import copy
 from functools import partial
 from sys import platform
 
-import numpy as np
-
-import pytest
-
-import tensordict.tensordict
-import torch
-
-from tensordict import (
-    assert_close,
-    LazyStackedTensorDict,
-    NonTensorData,
-    NonTensorStack,
-    TensorDict,
-    TensorDictBase,
-    unravel_key,
-)
-from tensordict.nn import TensorDictSequential, WrapModule
-from tensordict.utils import _unravel_key_to_tuple, assert_allclose_td
-from torch import multiprocessing as mp, nn, Tensor
 from torchrl._utils import _replace_last, prod, set_auto_unwrap_transformed_env
-
 from torchrl.collectors import MultiSyncDataCollector
 from torchrl.data import (
     Bounded,
@@ -78,7 +59,6 @@ from torchrl.envs import (
     FlattenObservation,
     FrameSkipTransform,
     GrayScale,
-    gSDENoise,
     Hash,
     InitTracker,
     LineariseRewards,
@@ -117,26 +97,45 @@ from torchrl.envs import (
     VC1Transform,
     VecNormV2,
     VIPTransform,
+    gSDENoise,
 )
 from torchrl.envs.libs.dm_control import _has_dm_control
-from torchrl.envs.libs.gym import _has_gym, GymEnv, set_gym_backend
+from torchrl.envs.libs.gym import GymEnv, _has_gym, set_gym_backend
 from torchrl.envs.libs.unity_mlagents import _has_unity_mlagents
 from torchrl.envs.transforms import VecNorm
 from torchrl.envs.transforms.llm import KLRewardTransform
 from torchrl.envs.transforms.r3m import _R3MNet
 from torchrl.envs.transforms.transforms import (
-    _has_tv,
+    FORWARD_NOT_IMPLEMENTED,
     ActionDiscretizer,
     BatchSizeTransform,
-    FORWARD_NOT_IMPLEMENTED,
     Transform,
+    _has_tv,
 )
 from torchrl.envs.transforms.vc1 import _has_vc
-from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
-from torchrl.envs.utils import check_env_specs, MarlGroupMapType, step_mdp
-from torchrl.modules import GRUModule, LSTMModule, MLP, ProbabilisticActor, TanhNormal
+from torchrl.envs.transforms.vip import VIPRewardTransform, _VIPNet
+from torchrl.envs.utils import MarlGroupMapType, check_env_specs, step_mdp
+from torchrl.modules import MLP, GRUModule, LSTMModule, ProbabilisticActor, TanhNormal
 from torchrl.modules.utils import get_primers_from_module
 from torchrl.record.recorder import VideoRecorder
+
+import numpy as np
+import pytest
+import tensordict.tensordict
+import torch
+
+from tensordict import (
+    LazyStackedTensorDict,
+    NonTensorData,
+    NonTensorStack,
+    TensorDict,
+    TensorDictBase,
+    assert_close,
+    unravel_key,
+)
+from tensordict.nn import TensorDictSequential, WrapModule
+from tensordict.utils import _unravel_key_to_tuple, assert_allclose_td
+from torch import Tensor, multiprocessing as mp, nn
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import (  # noqa
@@ -229,7 +228,7 @@ class TransformBase:
 
     @abc.abstractmethod
     def test_single_trans_env_check(self):
-        """tests that a transformed env passes the check_env_specs test.
+        """Test that a transformed env passes the check_env_specs test.
 
         If your transform can overwrite a key or create a new entry in the tensordict,
         it is worth trying both options here.
@@ -239,37 +238,37 @@ class TransformBase:
 
     @abc.abstractmethod
     def test_serial_trans_env_check(self):
-        """tests that a serial transformed env (SerialEnv(N, lambda: TransformedEnv(env, transform))) passes the check_env_specs test."""
+        """Test that a serial transformed env (SerialEnv(N, lambda: TransformedEnv(env, transform))) passes the check_env_specs test."""
         raise NotImplementedError
 
     @abc.abstractmethod
     def test_parallel_trans_env_check(self):
-        """tests that a parallel transformed env (ParallelEnv(N, lambda: TransformedEnv(env, transform))) passes the check_env_specs test."""
+        """Test that a parallel transformed env (ParallelEnv(N, lambda: TransformedEnv(env, transform))) passes the check_env_specs test."""
         raise NotImplementedError
 
     @abc.abstractmethod
     def test_trans_serial_env_check(self):
-        """tests that a transformed serial env (TransformedEnv(SerialEnv(N, lambda: env()), transform)) passes the check_env_specs test."""
+        """Test that a transformed serial env (TransformedEnv(SerialEnv(N, lambda: env()), transform)) passes the check_env_specs test."""
         raise NotImplementedError
 
     @abc.abstractmethod
     def test_trans_parallel_env_check(self):
-        """tests that a transformed paprallel env (TransformedEnv(ParallelEnv(N, lambda: env()), transform)) passes the check_env_specs test."""
+        """Test that a transformed paprallel env (TransformedEnv(ParallelEnv(N, lambda: env()), transform)) passes the check_env_specs test."""
         raise NotImplementedError
 
     @abc.abstractmethod
     def test_transform_no_env(self):
-        """tests the transform on dummy data, without an env."""
+        """Test the transform on dummy data, without an env."""
         raise NotImplementedError
 
     @abc.abstractmethod
     def test_transform_compose(self):
-        """tests the transform on dummy data, without an env but inside a Compose."""
+        """Test the transform on dummy data, without an env but inside a Compose."""
         raise NotImplementedError
 
     @abc.abstractmethod
     def test_transform_env(self):
-        """tests the transform on a real env.
+        """Test the transform on a real env.
 
         If possible, do not use a mock env, as bugs may go unnoticed if the dynamic is too
         simplistic. A call to reset() and step() should be tested independently, ie
@@ -280,12 +279,12 @@ class TransformBase:
 
     @abc.abstractmethod
     def test_transform_model(self):
-        """tests the transform before an nn.Module that reads the output."""
+        """Test the transform before an nn.Module that reads the output."""
         raise NotImplementedError
 
     @abc.abstractmethod
     def test_transform_rb(self):
-        """tests the transform when used with a replay buffer.
+        """Test the transform when used with a replay buffer.
 
         If your transform is not supposed to work with a replay buffer, test that
         an error will be raised when called or appended to a RB.
@@ -295,7 +294,7 @@ class TransformBase:
 
     @abc.abstractmethod
     def test_transform_inverse(self):
-        """tests the inverse transform. If not applicable, simply skip this test.
+        """Test the inverse transform. If not applicable, simply skip this test.
 
         If your transform is not supposed to work offline, test that
         an error will be raised when called in a nn.Module.
@@ -1196,9 +1195,11 @@ class TestCatFrames(TransformBase):
         env = SerialEnv(
             3,
             lambda: TransformedEnv(
-                GymEnv("CartPole-v1")
-                if envtype == "gym"
-                else DiscreteActionConvMockEnv(),
+                (
+                    GymEnv("CartPole-v1")
+                    if envtype == "gym"
+                    else DiscreteActionConvMockEnv()
+                ),
                 CatFrames(
                     dim=-3 if envtype == "conv" else -1,
                     N=5,
@@ -4331,8 +4332,7 @@ class TestExcludeTransform(TransformBase):
                 {"done": torch.zeros(1, dtype=torch.bool)}
             )
 
-        def _set_seed(self, seed: int | None) -> None:
-            ...
+        def _set_seed(self, seed: int | None) -> None: ...
 
     def test_single_trans_env_check(self):
         t = Compose(
@@ -4569,8 +4569,7 @@ class TestSelectTransform(TransformBase):
                 {"done": torch.zeros(1, dtype=torch.bool)}
             )
 
-        def _set_seed(self, seed: int | None) -> None:
-            ...
+        def _set_seed(self, seed: int | None) -> None: ...
 
     def test_single_trans_env_check(self):
         t = Compose(
@@ -5038,7 +5037,7 @@ class TestFrameSkipTransform(TransformBase):
     @pytest.mark.skipif(not _has_gym, reason="gym not installed")
     @pytest.mark.parametrize("skip", [-1, 1, 2, 3])
     def test_transform_env(self, skip):
-        """Tests that the built-in frame_skip and the transform lead to the same results."""
+        """Test that the built-in frame_skip and the transform lead to the same results."""
         torch.manual_seed(0)
         if skip < 0:
             with pytest.raises(
@@ -6525,9 +6524,11 @@ class TestRewardSum(TransformBase):
         policy = MultiKeyCountingEnvPolicy(
             full_action_spec=env.action_spec, deterministic=True
         )
-        with pytest.raises(
-            ValueError, match="Could not match the env reset_keys"
-        ) if reset_keys == [("some", "nested", "reset")] else contextlib.nullcontext():
+        with (
+            pytest.raises(ValueError, match="Could not match the env reset_keys")
+            if reset_keys == [("some", "nested", "reset")]
+            else contextlib.nullcontext()
+        ):
             check_env_specs(env)
         if reset_keys != [("some", "nested", "reset")]:
             td = env.rollout(max_steps, policy=policy)
@@ -9522,8 +9523,7 @@ class TestVecNormV2:
             tensordict["reward"] = self.reward_spec.rand()
             return tensordict
 
-        def _set_seed(self, seed: int | None) -> None:
-            ...
+        def _set_seed(self, seed: int | None) -> None: ...
 
     @pytest.mark.parametrize("batched", [False, True])
     def test_vecnorm2_decay1(self, batched):
@@ -10527,7 +10527,7 @@ def test_transform_parent():
 
 
 def test_transform_parent_cache():
-    """Tests the caching and uncaching of the transformed envs."""
+    """Test the caching and uncaching of the transformed envs."""
     env = TransformedEnv(
         ContinuousActionVecMockEnv(),
         FrameSkipTransform(3),
@@ -11885,8 +11885,7 @@ class TestActionMask(TransformBase):
                 td.set("done", ~(mask.any().view(1)))
                 return td
 
-            def _set_seed(self, seed: int | None) -> None:
-                ...
+            def _set_seed(self, seed: int | None) -> None: ...
 
         return MaskedEnv
 
@@ -12571,9 +12570,10 @@ class TestEndOfLife(TransformBase):
     @pytest.mark.parametrize("eol_key", ["eol_key", ("nested", "eol")])
     @pytest.mark.parametrize("lives_key", ["lives_key", ("nested", "lives")])
     def test_transform_env(self, eol_key, lives_key):
-        from tensordict.nn import TensorDictModule
         from torchrl.objectives import DQNLoss
         from torchrl.objectives.value import GAE
+
+        from tensordict.nn import TensorDictModule
 
         with set_gym_backend("gymnasium"):
             env = TransformedEnv(
@@ -12681,7 +12681,7 @@ class TestBurnInTransform(TransformBase):
     @pytest.mark.parametrize("sequence_length", [4, 8])
     @pytest.mark.parametrize("burn_in", [2])
     def test_transform_no_env(self, module, batch_size, sequence_length, burn_in):
-        """tests the transform on dummy data, without an env."""
+        """Test the transform on dummy data, without an env."""
         torch.manual_seed(0)
         data = self._make_batch(batch_size, sequence_length)
 
@@ -12716,7 +12716,7 @@ class TestBurnInTransform(TransformBase):
     @pytest.mark.parametrize("sequence_length", [4, 8])
     @pytest.mark.parametrize("burn_in", [2])
     def test_transform_compose(self, module, batch_size, sequence_length, burn_in):
-        """tests the transform on dummy data, without an env but inside a Compose."""
+        """Test the transform on dummy data, without an env but inside a Compose."""
         torch.manual_seed(0)
         data = self._make_batch(batch_size, sequence_length)
 
@@ -13055,8 +13055,7 @@ class TestRemoveEmptySpecs(TransformBase):
                 .update(self.full_reward_spec.rand())
             )
 
-        def _set_seed(self, seed: int | None) -> None:
-            ...
+        def _set_seed(self, seed: int | None) -> None: ...
 
     def test_single_trans_env_check(self):
         env = TransformedEnv(self.DummyEnv(), RemoveEmptySpecs())
@@ -13266,8 +13265,7 @@ class TestBatchSizeTransform(TransformBase):
             result.update(self.full_reward_spec.zero(tensordict.batch_size))
             return result
 
-        def _set_seed(self, seed: int | None) -> None:
-            ...
+        def _set_seed(self, seed: int | None) -> None: ...
 
     @classmethod
     def reset_func(tensordict, tensordict_reset, env):
@@ -14378,11 +14376,9 @@ class TestMultiAction(TransformBase):
             within=False,
         )
 
-    def test_transform_no_env(self):
-        ...
+    def test_transform_no_env(self): ...
 
-    def test_transform_compose(self):
-        ...
+    def test_transform_compose(self): ...
 
     @pytest.mark.parametrize("bwad", [True, False])
     def test_transform_env(self, bwad):
@@ -14418,8 +14414,7 @@ class TestMultiAction(TransformBase):
             break_when_any_done=bwad,
         )
 
-    def test_transform_model(self):
-        ...
+    def test_transform_model(self): ...
 
     def test_transform_rb(self):
         return

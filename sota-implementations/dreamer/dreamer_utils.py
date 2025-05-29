@@ -6,21 +6,10 @@ from __future__ import annotations
 
 import functools
 import tempfile
+
 from contextlib import nullcontext
 
-import torch
-
-import torch.nn as nn
-from tensordict import NestedKey
-from tensordict.nn import (
-    InteractionType,
-    ProbabilisticTensorDictModule,
-    ProbabilisticTensorDictSequential,
-    TensorDictModule,
-    TensorDictSequential,
-)
 from torchrl.collectors import SyncDataCollector
-
 from torchrl.data import (
     Composite,
     LazyMemmapStorage,
@@ -28,7 +17,6 @@ from torchrl.data import (
     TensorDictReplayBuffer,
     Unbounded,
 )
-
 from torchrl.envs import (
     Compose,
     DeviceCastTransform,
@@ -46,18 +34,18 @@ from torchrl.envs import (
     RenameTransform,
     Resize,
     RewardSum,
-    set_gym_backend,
     StepCounter,
     TensorDictPrimer,
     ToTensorImage,
     TransformedEnv,
+    set_gym_backend,
 )
-from torchrl.envs.utils import check_env_specs, ExplorationType, set_exploration_type
+from torchrl.envs.utils import ExplorationType, check_env_specs, set_exploration_type
 from torchrl.modules import (
+    MLP,
     AdditiveGaussianModule,
     DreamerActor,
     IndependentNormal,
-    MLP,
     ObsDecoder,
     ObsEncoder,
     RSSMPosterior,
@@ -71,6 +59,18 @@ from torchrl.modules import (
     WorldModelWrapper,
 )
 from torchrl.record import VideoRecorder
+
+import torch
+import torch.nn as nn
+
+from tensordict import NestedKey
+from tensordict.nn import (
+    InteractionType,
+    ProbabilisticTensorDictModule,
+    ProbabilisticTensorDictSequential,
+    TensorDictModule,
+    TensorDictSequential,
+)
 
 
 def _make_env(cfg, device, from_pixels=False):
