@@ -28,10 +28,13 @@ python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_te
 export DISPLAY=:99
 Xvfb :99 -screen 0 1400x900x24 > /dev/null 2>&1 &
 
-CKPT_BACKEND=torch MUJOCO_GL=egl python .github/unittest/helpers/coverage_run_parallel.py -m pytest --instafail -v --durations 200 --ignore test/test_distributed.py \
---ignore test/test_rlhf.py \
---ignore test/llm \
---timeout=120 --mp_fork_if_no_cuda
+CKPT_BACKEND=torch MUJOCO_GL=egl python .github/unittest/helpers/coverage_run_parallel.py -m pytest \
+    --instafail -v \
+    --durations 200 \
+    --ignore test/test_distributed.py \
+    --ignore test/test_rlhf.py \
+    --ignore test/llm \
+    --mp_fork_if_no_cuda
 
 #pytest --instafail -v --durations 200
 #python test/test_libs.py

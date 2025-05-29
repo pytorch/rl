@@ -2534,8 +2534,8 @@ class TestStack:
                 choices = [NonTensorData("a"), NonTensorData("b"), NonTensorData("c")]
             else:
                 choices = [
-                    NonTensorStack("a").expand(shape + (1,)).squeeze(-1),
-                    NonTensorStack("d").expand(shape + (1,)).squeeze(-1),
+                    NonTensorData("a", batch_size=shape),
+                    NonTensorData("d", batch_size=shape),
                 ]
 
         spec0 = Choice(choices)

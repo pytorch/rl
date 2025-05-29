@@ -6421,7 +6421,10 @@ def _stack_specs(list_of_spec, dim=0, out=None):
             if dim < 0:
                 dim += len(shape) + 1
             shape.insert(dim, len(list_of_spec))
-            return spec0.clone().unsqueeze(dim).expand(shape)
+            spec0 = spec0.clone()
+            spec0 = spec0.unsqueeze(dim)
+            spec0 = spec0.expand(shape)
+            return spec0
         return Stacked(*list_of_spec, dim=dim)
     else:
         raise NotImplementedError
