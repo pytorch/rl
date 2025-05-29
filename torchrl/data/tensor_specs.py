@@ -4312,7 +4312,9 @@ class Binary(Categorical):
         # Consistency checks between `shape` and `n`.
         if len(shape) == 0:
             if n is not None and n != 0:
-                raise ValueError("'n' must be zero for spec {self.__class__} when using an empty shape")
+                raise ValueError(
+                    f"'n' must be zero for spec {self.__class__} when using an empty shape"
+                )
         else:
             if shape[-1] != n:
                 raise ValueError(
