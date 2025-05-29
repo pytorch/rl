@@ -391,6 +391,26 @@ class ContinuousBox(Box):
     _low: torch.Tensor
     _high: torch.Tensor
     device: torch.device | None = None
+    _batch_size: torch.Size | None = None
+
+    @property
+    def batch_size(self):
+        return self._batch_size
+
+    @batch_size.setter
+    def batch_size(self, value: torch.Size | tuple):
+        # Check batch size is compatible with low and high
+        value = _remove_neg_shapes(value)
+        if self._batch_size is None:
+            if value != self._low.shape[: len(value)]:
+                raise ValueError(
+                    f"Batch size {value} is not compatible with low and high {self._low.shape}"
+                )
+            # Remove batch size from low and high
+            if value:
+                self._low = self._low.flatten(0, len(value) - 1)[0].clone()
+                self._high = self._high.flatten(0, len(value) - 1)[0].clone()
+        self._batch_size = torch.Size(value)
 
     # We store the tensors on CPU to avoid overloading CUDA with tensors that are rarely used.
     @property
@@ -398,6 +418,8 @@ class ContinuousBox(Box):
         low = self._low
         if self.device is not None and low.device != self.device:
             low = low.to(self.device)
+        if self._batch_size:
+            low = low.expand((*self._batch_size, *low.shape)).clone()
         return low
 
     @property
@@ -405,6 +427,8 @@ class ContinuousBox(Box):
         high = self._high
         if self.device is not None and high.device != self.device:
             high = high.to(self.device)
+        if self._batch_size:
+            high = high.expand((*self._batch_size, *high.shape)).clone()
         return high
 
     def unbind(self, dim: int = 0):
@@ -417,15 +441,30 @@ class ContinuousBox(Box):
     def low(self, value):
         self.device = value.device
         self._low = value
+        if self._batch_size is not None:
+            if value.shape[: len(self._batch_size)] != self._batch_size:
+                raise ValueError(
+                    f"Batch size {value.shape[:len(self._batch_size)]} is not compatible with low and high {self._batch_size}"
+                )
+            if self._batch_size:
+                self._low = self._low.flatten(0, len(self._batch_size) - 1)[0].clone()
 
     @high.setter
     def high(self, value):
         self.device = value.device
         self._high = value
+        if self._batch_size is not None:
+            if value.shape[: len(self._batch_size)] != self._batch_size:
+                raise ValueError(
+                    f"Batch size {value.shape[:len(self._batch_size)]} is not compatible with low and high {self._batch_size}"
+                )
+            if self._batch_size:
+                self._high = self._high.flatten(0, len(self._batch_size) - 1)[0].clone()
 
     def __post_init__(self):
         self.low = self.low.clone()
         self.high = self.high.clone()
+        self._batch_size = None
 
     def __iter__(self):
         yield self.low
@@ -2365,6 +2404,10 @@ class Bounded(TensorSpec, metaclass=_BoundedMeta):
             domain=domain,
         )
         self.encode = self._encode_eager
+
+    def _register_batch_size(self, batch_size: torch.Size | tuple):
+        # Register batch size in the space to decrease the memory footprint of the specs
+        self.space.batch_size = batch_size
 
     def index(
         self, index: INDEX_TYPING, tensor_to_index: torch.Tensor | TensorDictBase
@@ -5185,6 +5228,8 @@ class Composite(TensorSpec):
                         f"{self.ndim} dimensions should match but got spec.shape={spec.shape} and "
                         f"Composite.shape={self.shape}."
                     )
+        if isinstance(spec, Bounded):
+            spec._register_batch_size(self.shape)
         self._specs[name] = spec
         return self
 
