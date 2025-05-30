@@ -2168,7 +2168,7 @@ class LMHeadActorValueOperator(ActorValueOperator):
             TensorDictModule(
                 base_model.transformer,
                 in_keys={"input_ids": "input_ids", "attention_mask": "attention_mask"},
-                out_keys=["x"],
+                out_keys=["x", "_"],
             ),
             TensorDictModule(lambda x: x[:, -1, :], in_keys=["x"], out_keys=["x"]),
         )

@@ -79,7 +79,7 @@ def test_probabilistic_actor_nested_delta(log_prob_key, nested_dim=5, n_actions=
     if log_prob_key:
         assert td_out[log_prob_key].shape == (5,)
     else:
-        assert td_out["sample_log_prob"].shape == (5,)
+        assert td_out["data", "action_log_prob"].shape == (5,)
 
     policy = ProbabilisticActor(
         module=policy_module,
@@ -99,7 +99,7 @@ def test_probabilistic_actor_nested_delta(log_prob_key, nested_dim=5, n_actions=
     if log_prob_key:
         assert td_out[log_prob_key].shape == (5,)
     else:
-        assert td_out["sample_log_prob"].shape == (5,)
+        assert td_out["data", "action_log_prob"].shape == (5,)
 
 
 @pytest.mark.parametrize(
@@ -144,7 +144,7 @@ def test_probabilistic_actor_nested_normal(log_prob_key, nested_dim=5, n_actions
     if log_prob_key:
         assert td_out[log_prob_key].shape == (5,)
     else:
-        assert td_out["sample_log_prob"].shape == (5,)
+        assert td_out["data", "action_log_prob"].shape == (5,)
 
     policy = ProbabilisticActor(
         module=policy_module,
@@ -164,7 +164,7 @@ def test_probabilistic_actor_nested_normal(log_prob_key, nested_dim=5, n_actions
     if log_prob_key:
         assert td_out[log_prob_key].shape == (5,)
     else:
-        assert td_out["sample_log_prob"].shape == (5,)
+        assert td_out["data", "action_log_prob"].shape == (5,)
 
 
 class TestQValue:
@@ -867,7 +867,7 @@ def test_lmhead_actorvalueoperator(device):
 
     # check actor
     assert aco.module[1].in_keys == ["x"]
-    assert aco.module[1].out_keys == ["logits", "action", "sample_log_prob"]
+    assert aco.module[1].out_keys == ["logits", "action", "action_log_prob"]
     assert aco.module[1][0].module is base_model.lm_head
 
     # check critic
