@@ -406,11 +406,28 @@ class ContinuousBox(Box):
                 raise ValueError(
                     f"Batch size {value} is not compatible with low and high {self._low.shape}"
                 )
-            # Remove batch size from low and high
-            if value:
-                self._low = self._low.flatten(0, len(value) - 1)[0].clone()
-                self._high = self._high.flatten(0, len(value) - 1)[0].clone()
-        self._batch_size = torch.Size(value)
+        if value is None:
+            self._batch_size = None
+            self._low = self.low.clone()
+            self._high = self.high.clone()
+            return
+        # Remove batch size from low and high
+        if value:
+            # Check that low and high have a single value
+            td_low_high = TensorDict(
+                low=self.low, high=self.high, batch_size=value
+            ).flatten()
+            td_low_high0 = td_low_high[0]
+            if torch.allclose(
+                td_low_high0["low"], td_low_high["low"]
+            ) and torch.allclose(td_low_high0["high"], td_low_high["high"]):
+                self._low = td_low_high0["low"].clone()
+                self._high = td_low_high0["high"].clone()
+                self._batch_size = torch.Size(value)
+        else:
+            self._low = self.low.clone()
+            self._high = self.high.clone()
+            self._batch_size = torch.Size(value)
 
     # We store the tensors on CPU to avoid overloading CUDA with tensors that are rarely used.
     @property
