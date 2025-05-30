@@ -1964,11 +1964,7 @@ class OneHot(TensorSpec):
             else:
                 mask_flat = mask
             shape_out = mask.shape[:-1]
-            m = (
-                torch.multinomial(mask_flat.float(), 1)
-                .reshape(shape_out)
-                .to(self.dtype)
-            )
+            m = torch.multinomial(mask_flat.float(), 1).reshape(shape_out)
         out = torch.nn.functional.one_hot(m, n).to(self.dtype)
         # torch.zeros((*shape, self.space.n), device=self.device, dtype=self.dtype)
         # out.scatter_(-1, m, 1)
