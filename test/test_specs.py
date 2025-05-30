@@ -1387,6 +1387,9 @@ class TestSpec:
         assert (-3 <= sample).all() and (3 >= sample).all()
         assert sample.shape == torch.Size([100, 10, 5])
 
+    def test_binary_empty_shape_construct(self):
+        assert len(Binary(shape=()).shape) == 0
+
 
 class TestExpand:
     @pytest.mark.parametrize("shape1", [None, (4,), (5, 4)])
