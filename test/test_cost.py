@@ -43,6 +43,7 @@ from tensordict.nn.distributions.composite import _add_suffix
 from tensordict.nn.utils import Buffer
 from tensordict.utils import unravel_key
 from torch import autograd, nn
+
 from torchrl._utils import _standardize
 from torchrl.data import Bounded, Categorical, Composite, MultiOneHot, OneHot, Unbounded
 from torchrl.data.postprocs.postprocs import MultiStep
@@ -202,9 +203,12 @@ class _check_td_steady:
         pass
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        assert (
-            self.td.select(*self.td_clone.keys()) == self.td_clone
-        ).all(), "Some keys have been modified in the tensordict!"
+        assert_allclose_td(
+            self.td,
+            self.td_clone,
+            intersection=True,
+            msg="Some keys have been modified in the tensordict!",
+        )
 
 
 def get_devices():
@@ -2494,6 +2498,95 @@ class TestTD3(LossModuleTestBase):
 
     @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("delay_actor, delay_qvalue", [(True, True)])
+    @pytest.mark.parametrize("policy_noise", [0.1])
+    @pytest.mark.parametrize("noise_clip", [0.1])
+    @pytest.mark.parametrize("td_est", [None])
+    @pytest.mark.parametrize("use_action_spec", [True])
+    @pytest.mark.parametrize("dropout", [0.0])
+    def test_td3_deactivate_vmap(
+        self,
+        delay_actor,
+        delay_qvalue,
+        device,
+        policy_noise,
+        noise_clip,
+        td_est,
+        use_action_spec,
+        dropout,
+    ):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(device=device, dropout=dropout)
+        value = self._create_mock_value(device=device)
+        td = self._create_mock_data_td3(device=device)
+        if use_action_spec:
+            action_spec = actor.spec
+            bounds = None
+        else:
+            bounds = (-1, 1)
+            action_spec = None
+        torch.manual_seed(0)
+        loss_fn_vmap = TD3Loss(
+            actor,
+            value,
+            action_spec=action_spec,
+            bounds=bounds,
+            loss_function="l2",
+            policy_noise=policy_noise,
+            noise_clip=noise_clip,
+            delay_actor=delay_actor,
+            delay_qvalue=delay_qvalue,
+        )
+        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+            with pytest.raises(NotImplementedError):
+                loss_fn_vmap.make_value_estimator(td_est)
+            return
+        if td_est is not None:
+            loss_fn_vmap.make_value_estimator(td_est)
+        tdc = td.clone()
+        with (
+            pytest.warns(
+                UserWarning,
+                match="No target network updater has been associated with this loss module",
+            )
+            if (delay_actor or delay_qvalue)
+            else contextlib.nullcontext()
+        ), _check_td_steady(td):
+            torch.manual_seed(1)
+            loss_vmap = loss_fn_vmap(td)
+        td = tdc
+        torch.manual_seed(0)
+        loss_fn_no_vmap = TD3Loss(
+            actor,
+            value,
+            action_spec=action_spec,
+            bounds=bounds,
+            loss_function="l2",
+            policy_noise=policy_noise,
+            noise_clip=noise_clip,
+            delay_actor=delay_actor,
+            delay_qvalue=delay_qvalue,
+        )
+        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+            with pytest.raises(NotImplementedError):
+                loss_fn_no_vmap.make_value_estimator(td_est)
+            return
+        if td_est is not None:
+            loss_fn_no_vmap.make_value_estimator(td_est)
+        with (
+            pytest.warns(
+                UserWarning,
+                match="No target network updater has been associated with this loss module",
+            )
+            if (delay_actor or delay_qvalue)
+            else contextlib.nullcontext()
+        ), _check_td_steady(td):
+            torch.manual_seed(1)
+            loss_no_vmap = loss_fn_no_vmap(td)
+        assert_allclose_td(loss_vmap, loss_no_vmap)
+
+    @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize(
         "delay_actor, delay_qvalue", [(False, False), (True, True)]
     )
@@ -4085,6 +4178,99 @@ class TestSAC(LossModuleTestBase):
                     p.grad is None or p.grad.norm() == 0.0
                 ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
+    @pytest.mark.parametrize("delay_value", (True,))
+    @pytest.mark.parametrize("delay_actor", (True,))
+    @pytest.mark.parametrize("delay_qvalue", (True,))
+    @pytest.mark.parametrize("num_qvalue", [2])
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("td_est", [None])
+    @pytest.mark.parametrize("composite_action_dist", [False])
+    def test_sac_deactivate_vmap(
+        self,
+        delay_value,
+        delay_actor,
+        delay_qvalue,
+        num_qvalue,
+        device,
+        version,
+        td_est,
+        composite_action_dist,
+    ):
+        if (delay_actor or delay_qvalue) and not delay_value:
+            pytest.skip("incompatible config")
+
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_sac(
+            device=device, composite_action_dist=composite_action_dist
+        )
+
+        actor = self._create_mock_actor(
+            device=device, composite_action_dist=composite_action_dist
+        )
+        qvalue = self._create_mock_qvalue(device=device)
+        if version == 1:
+            value = self._create_mock_value(device=device)
+        else:
+            value = None
+
+        kwargs = {}
+        if delay_actor:
+            kwargs["delay_actor"] = True
+        if delay_qvalue:
+            kwargs["delay_qvalue"] = True
+        if delay_value:
+            kwargs["delay_value"] = True
+
+        torch.manual_seed(0)
+        loss_fn_vmap = SACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            num_qvalue_nets=num_qvalue,
+            loss_function="l2",
+            deactivate_vmap=False,
+            **kwargs,
+        )
+
+        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+            with pytest.raises(NotImplementedError):
+                loss_fn_vmap.make_value_estimator(td_est)
+            return
+        if td_est is not None:
+            loss_fn_vmap.make_value_estimator(td_est)
+
+        tdc = td.clone()
+        torch.manual_seed(0)
+        with _check_td_steady(td), pytest.warns(
+            UserWarning, match="No target network updater"
+        ):
+            loss_vmap = loss_fn_vmap(td)
+        td = tdc
+        torch.manual_seed(0)
+        loss_fn_no_vmap = SACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            num_qvalue_nets=num_qvalue,
+            loss_function="l2",
+            deactivate_vmap=True,
+            **kwargs,
+        )
+
+        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+            with pytest.raises(NotImplementedError):
+                loss_fn_no_vmap.make_value_estimator(td_est)
+            return
+        if td_est is not None:
+            loss_fn_no_vmap.make_value_estimator(td_est)
+
+        torch.manual_seed(0)
+        with _check_td_steady(td), pytest.warns(
+            UserWarning, match="No target network updater"
+        ):
+            loss_no_vmap = loss_fn_no_vmap(td)
+        assert_allclose_td(loss_vmap, loss_no_vmap)
+
     @pytest.mark.parametrize("delay_value", (True, False))
     @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
@@ -4975,6 +5161,86 @@ class TestDiscreteSAC(LossModuleTestBase):
                     p.grad is None or p.grad.norm() == 0.0
                 ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
+    @pytest.mark.parametrize("delay_qvalue", (True,))
+    @pytest.mark.parametrize("num_qvalue", [2])
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("target_entropy_weight", [0.5])
+    @pytest.mark.parametrize("target_entropy", ["auto"])
+    @pytest.mark.parametrize("td_est", [None])
+    def test_discrete_sac_deactivate_vmap(
+        self,
+        delay_qvalue,
+        num_qvalue,
+        device,
+        target_entropy_weight,
+        target_entropy,
+        td_est,
+    ):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_sac(device=device)
+
+        actor = self._create_mock_actor(device=device)
+        qvalue = self._create_mock_qvalue(device=device)
+
+        kwargs = {}
+        if delay_qvalue:
+            kwargs["delay_qvalue"] = True
+
+        torch.manual_seed(0)
+        loss_fn_vmap = DiscreteSACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            num_actions=actor.spec["action"].space.n,
+            num_qvalue_nets=num_qvalue,
+            target_entropy_weight=target_entropy_weight,
+            target_entropy=target_entropy,
+            loss_function="l2",
+            action_space="one-hot",
+            deactivate_vmap=False,
+            **kwargs,
+        )
+        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+            with pytest.raises(NotImplementedError):
+                loss_fn_vmap.make_value_estimator(td_est)
+            return
+        if td_est is not None:
+            loss_fn_vmap.make_value_estimator(td_est)
+
+        tdc = td.clone()
+        with _check_td_steady(td), pytest.warns(
+            UserWarning, match="No target network updater"
+        ):
+            torch.manual_seed(1)
+            loss_vmap = loss_fn_vmap(td)
+        td = tdc
+
+        torch.manual_seed(0)
+        loss_fn_no_vmap = DiscreteSACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            num_actions=actor.spec["action"].space.n,
+            num_qvalue_nets=num_qvalue,
+            target_entropy_weight=target_entropy_weight,
+            target_entropy=target_entropy,
+            loss_function="l2",
+            action_space="one-hot",
+            deactivate_vmap=True,
+            **kwargs,
+        )
+        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+            with pytest.raises(NotImplementedError):
+                loss_fn_no_vmap.make_value_estimator(td_est)
+            return
+        if td_est is not None:
+            loss_fn_no_vmap.make_value_estimator(td_est)
+
+        with _check_td_steady(td), pytest.warns(
+            UserWarning, match="No target network updater"
+        ):
+            torch.manual_seed(1)
+            loss_no_vmap = loss_fn_no_vmap(td)
+        assert_allclose_td(loss_vmap, loss_no_vmap)
+
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [2])
     @pytest.mark.parametrize("device", get_default_devices())
@@ -5659,6 +5925,63 @@ class TestCrossQ(LossModuleTestBase):
                 assert (
                     p.grad is None or p.grad.norm() == 0.0
                 ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
+
+    @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
+    def test_crossq_deactivate_vmap(
+        self,
+        num_qvalue,
+        device,
+        td_est,
+    ):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_crossq(device=device)
+        actor = self._create_mock_actor(device=device)
+        qvalue = self._create_mock_qvalue(device=device)
+        torch.manual_seed(0)
+        loss_fn_vmap = CrossQLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            num_qvalue_nets=num_qvalue,
+            loss_function="l2",
+            deactivate_vmap=False,
+        )
+
+        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+            with pytest.raises(NotImplementedError):
+                loss_fn_vmap.make_value_estimator(td_est)
+            return
+        if td_est is not None:
+            loss_fn_vmap.make_value_estimator(td_est)
+
+        tdc = td.clone()
+        with _check_td_steady(td):
+            torch.manual_seed(1)
+            loss_vmap = loss_fn_vmap(td)
+
+        td = tdc
+
+        torch.manual_seed(0)
+        loss_fn_no_vmap = CrossQLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            num_qvalue_nets=num_qvalue,
+            loss_function="l2",
+            deactivate_vmap=True,
+        )
+
+        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+            with pytest.raises(NotImplementedError):
+                loss_fn_no_vmap.make_value_estimator(td_est)
+            return
+        if td_est is not None:
+            loss_fn_no_vmap.make_value_estimator(td_est)
+
+        with _check_td_steady(td):
+            torch.manual_seed(1)
+            loss_no_vmap = loss_fn_no_vmap(td)
+        assert_allclose_td(loss_vmap, loss_no_vmap)
 
     @pytest.mark.parametrize("num_qvalue", [2])
     @pytest.mark.parametrize("device", get_default_devices())
@@ -7336,6 +7659,85 @@ class TestCQL(LossModuleTestBase):
     )
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("td_est", [None])
+    def test_cql_deactivate_vmap(
+        self,
+        delay_actor,
+        delay_qvalue,
+        max_q_backup,
+        deterministic_backup,
+        with_lagrange,
+        device,
+        td_est,
+    ):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_cql(device=device)
+
+        actor = self._create_mock_actor(device=device)
+        qvalue = self._create_mock_qvalue(device=device)
+
+        torch.manual_seed(0)
+        loss_fn_vmap = CQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            loss_function="l2",
+            max_q_backup=max_q_backup,
+            deterministic_backup=deterministic_backup,
+            with_lagrange=with_lagrange,
+            delay_actor=delay_actor,
+            delay_qvalue=delay_qvalue,
+            deactivate_vmap=False,
+        )
+
+        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+            with pytest.raises(NotImplementedError):
+                loss_fn_vmap.make_value_estimator(td_est)
+            return
+
+        if td_est is not None:
+            loss_fn_vmap.make_value_estimator(td_est)
+        tdc = td.clone()
+        with _check_td_steady(td), pytest.warns(
+            UserWarning, match="No target network updater"
+        ):
+            torch.manual_seed(1)
+            loss_vmap = loss_fn_vmap(td)
+        td = tdc
+
+        torch.manual_seed(0)
+        loss_fn_no_vmap = CQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            loss_function="l2",
+            max_q_backup=max_q_backup,
+            deterministic_backup=deterministic_backup,
+            with_lagrange=with_lagrange,
+            delay_actor=delay_actor,
+            delay_qvalue=delay_qvalue,
+            deactivate_vmap=True,
+        )
+
+        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+            with pytest.raises(NotImplementedError):
+                loss_fn_no_vmap.make_value_estimator(td_est)
+            return
+
+        if td_est is not None:
+            loss_fn_no_vmap.make_value_estimator(td_est)
+
+        with _check_td_steady(td), pytest.warns(
+            UserWarning, match="No target network updater"
+        ):
+            torch.manual_seed(1)
+            loss_no_vmap = loss_fn_no_vmap(td)
+        assert_allclose_td(loss_vmap, loss_no_vmap)
+
+    @pytest.mark.parametrize("delay_actor", (True,))
+    @pytest.mark.parametrize("delay_qvalue", (True,))
+    @pytest.mark.parametrize("max_q_backup", [True])
+    @pytest.mark.parametrize("deterministic_backup", [True])
+    @pytest.mark.parametrize("with_lagrange", [True])
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("td_est", [None])
     def test_cql_qvalfromlist(
         self,
         delay_actor,
@@ -8381,6 +8783,7 @@ class TestPPO(LossModuleTestBase):
             value,
             loss_critic_type="l2",
             functional=functional,
+            device=device,
         )
         if composite_action_dist:
             loss_fn.set_keys(
@@ -8481,6 +8884,7 @@ class TestPPO(LossModuleTestBase):
             value,
             loss_critic_type="l2",
             functional=functional,
+            device=device,
         )
         loss_fn.set_keys(
             action=("action", "action1"),
@@ -8541,9 +8945,19 @@ class TestPPO(LossModuleTestBase):
             device=device, composite_action_dist=composite_action_dist
         )
         value = self._create_mock_value(device=device)
-        loss_fn = loss_class(actor, value, loss_critic_type="l2")
+        loss_fn = loss_class(
+            actor,
+            value,
+            loss_critic_type="l2",
+            device=device,
+        )
         sd = loss_fn.state_dict()
-        loss_fn2 = loss_class(actor, value, loss_critic_type="l2")
+        loss_fn2 = loss_class(
+            actor,
+            value,
+            loss_critic_type="l2",
+            device=device,
+        )
         loss_fn2.load_state_dict(sd)
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
@@ -8591,6 +9005,7 @@ class TestPPO(LossModuleTestBase):
             value,
             loss_critic_type="l2",
             separate_losses=True,
+            device=device,
         )
 
         if advantage is not None:
@@ -8698,6 +9113,7 @@ class TestPPO(LossModuleTestBase):
             loss_critic_type="l2",
             separate_losses=separate_losses,
             entropy_coef=0.0,
+            device=device,
         )
 
         loss_fn2 = loss_class(
@@ -8706,6 +9122,7 @@ class TestPPO(LossModuleTestBase):
             loss_critic_type="l2",
             separate_losses=separate_losses,
             entropy_coef=0.0,
+            device=device,
         )
 
         if advantage is not None:
@@ -8800,7 +9217,12 @@ class TestPPO(LossModuleTestBase):
         else:
             raise NotImplementedError
 
-        loss_fn = loss_class(actor, value, loss_critic_type="l2")
+        loss_fn = loss_class(
+            actor,
+            value,
+            loss_critic_type="l2",
+            device=device,
+        )
 
         params = TensorDict.from_module(loss_fn, as_module=True)
 
@@ -9193,6 +9615,7 @@ class TestPPO(LossModuleTestBase):
                     value,
                     loss_critic_type="l2",
                     clip_value=clip_value,
+                    device=device,
                 )
 
         else:
@@ -9201,6 +9624,7 @@ class TestPPO(LossModuleTestBase):
                 value,
                 loss_critic_type="l2",
                 clip_value=clip_value,
+                device=device,
             )
             advantage(td)
             if composite_action_dist:
@@ -12168,6 +12592,75 @@ class TestIQL(LossModuleTestBase):
 
     @pytest.mark.parametrize("num_qvalue", [2])
     @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("temperature", [0.1])
+    @pytest.mark.parametrize("expectile", [0.1])
+    @pytest.mark.parametrize("td_est", [None])
+    def test_iql_deactivate_vmap(
+        self,
+        num_qvalue,
+        device,
+        temperature,
+        expectile,
+        td_est,
+    ):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_iql(device=device)
+
+        actor = self._create_mock_actor(device=device)
+        qvalue = self._create_mock_qvalue(device=device)
+        value = self._create_mock_value(device=device)
+
+        torch.manual_seed(0)
+        loss_fn_vmap = IQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            num_qvalue_nets=num_qvalue,
+            temperature=temperature,
+            expectile=expectile,
+            loss_function="l2",
+            deactivate_vmap=False,
+        )
+        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+            with pytest.raises(NotImplementedError):
+                loss_fn_vmap.make_value_estimator(td_est)
+            return
+        if td_est is not None:
+            loss_fn_vmap.make_value_estimator(td_est)
+
+        with _check_td_steady(td), pytest.warns(
+            UserWarning, match="No target network updater"
+        ):
+            torch.manual_seed(1)
+            loss_vmap = loss_fn_vmap(td)
+
+        torch.manual_seed(0)
+        loss_fn_no_vmap = IQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            num_qvalue_nets=num_qvalue,
+            temperature=temperature,
+            expectile=expectile,
+            loss_function="l2",
+            deactivate_vmap=True,
+        )
+        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+            with pytest.raises(NotImplementedError):
+                loss_fn_no_vmap.make_value_estimator(td_est)
+            return
+        if td_est is not None:
+            loss_fn_no_vmap.make_value_estimator(td_est)
+
+        with _check_td_steady(td), pytest.warns(
+            UserWarning, match="No target network updater"
+        ):
+            torch.manual_seed(1)
+            loss_no_vmap = loss_fn_no_vmap(td)
+        assert_allclose_td(loss_vmap, loss_no_vmap)
+
+    @pytest.mark.parametrize("num_qvalue", [2])
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("temperature", [0.0])
     @pytest.mark.parametrize("expectile", [0.1])
     def test_iql_state_dict(
@@ -13761,6 +14254,46 @@ def test_updater(mode, value_network_update_interval, device, dtype):
 
 
 class TestValues:
+    def test_gae_multi_done(self):
+
+        # constants
+        batch_size = 10
+        seq_size = 5
+        n_dims = batch_size
+        gamma = 0.99
+        lmbda = 0.98
+
+        env = SerialEnv(
+            batch_size, [functools.partial(GymEnv, "CartPole-v1")] * batch_size
+        )
+        obs_size = env.full_observation_spec[env.observation_keys[0]].shape[-1]
+
+        td = env.rollout(seq_size, break_when_any_done=False)
+        # make the magic happen: swap dims and create an artificial ndim done state
+        done = td["next", "done"].transpose(0, -1)
+        terminated = td["next", "terminated"].transpose(0, -1)
+        reward = td["next", "reward"].transpose(0, -1)
+        td = td[:1]
+        td["next", "done"] = done
+        td["next", "terminated"] = terminated
+        td["next", "reward"] = reward
+
+        critic = TensorDictModule(
+            nn.Linear(obs_size, n_dims),
+            in_keys=[("observation",)],
+            out_keys=[("state_value",)],
+        )
+
+        gae_shifted = GAE(gamma=gamma, lmbda=lmbda, value_network=critic, shifted=True)
+        gae_no_shifted = GAE(
+            gamma=gamma, lmbda=lmbda, value_network=critic, shifted=False
+        )
+
+        torch.testing.assert_close(
+            gae_shifted(td.clone())["advantage"],
+            gae_no_shifted(td.clone())["advantage"],
+        )
+
     @pytest.mark.skipif(not _has_gym, reason="requires gym")
     @pytest.mark.parametrize("module", ["lstm", "gru"])
     def test_gae_recurrent(self, module):

@@ -236,6 +236,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
         device: torch.device | None = None,
+        deactivate_vmap: bool = False,
     ):
         super().__init__()
         if device is None:
@@ -245,6 +246,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         self._device = device
         self._tensor_keys = None
         self.differentiable = differentiable
+        self.deactivate_vmap = deactivate_vmap
         self.skip_existing = skip_existing
         self.__dict__["value_network"] = value_network
         self.dep_keys = {}
@@ -458,11 +460,14 @@ class ValueEstimatorBase(TensorDictModuleBase):
             data_copy = data.copy()
             # we are going to modify the done so let's clone it
             done = data_copy["next", "done"].clone()
-
             # Mark the last step of every sequence as done. We do this because flattening would cause the trajectories
             #  of different batches to be merged.
             done[(slice(None),) * (ndim - 1) + (-1,)].fill_(True)
+            truncated = data_copy.get(("next", "truncated"), done)
+            if truncated is not done:
+                truncated[(slice(None),) * (ndim - 1) + (-1,)].fill_(True)
             data_copy["next", "done"] = done
+            data_copy["next", "truncated"] = truncated
             # Reshape to -1 because we cannot guarantee that all dims have the same number of done states
             with data_copy.view(-1) as data_copy_view:
                 # Interleave next data when done
@@ -480,7 +485,11 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 #    done = [0, 0, 1, 0, 1, 0, 1]
                 # done_cs = [0, 0, 0, 1, 1, 2, 2]
                 # indices = [0, 1, 2, 4, 5, 7, 8]
-                done_view = data_copy_view["next", "done"].squeeze(-1)
+                done_view = data_copy_view["next", "done"]
+                if done_view.shape[-1] == 1:
+                    done_view = done_view.squeeze(-1)
+                else:
+                    done_view = done_view.any(-1)
                 done_cs = done_view.cumsum(0)
                 done_cs = torch.cat([done_cs.new_zeros((1,)), done_cs[:-1]], dim=0)
                 indices = torch.arange(done_cs.shape[0], device=done_cs.device)
@@ -583,6 +592,8 @@ class TD0Estimator(ValueEstimatorBase):
             read from the input tensordict.  Defaults to ``"state_value"``.
         device (torch.device, optional): the device where the buffers will be instantiated.
             Defaults to ``torch.get_default_device()``.
+        deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
+            Defaults to ``False``.
 
     """
 
@@ -599,6 +610,7 @@ class TD0Estimator(ValueEstimatorBase):
         value_key: NestedKey = None,
         skip_existing: bool | None = None,
         device: torch.device | None = None,
+        deactivate_vmap: bool = False,
     ):
         super().__init__(
             value_network=value_network,
@@ -609,6 +621,7 @@ class TD0Estimator(ValueEstimatorBase):
             value_key=value_key,
             skip_existing=skip_existing,
             device=device,
+            deactivate_vmap=deactivate_vmap,
         )
         self.register_buffer("gamma", torch.tensor(gamma, device=self._device))
         self.average_rewards = average_rewards
@@ -800,6 +813,8 @@ class TD1Estimator(ValueEstimatorBase):
             :meth:`~.value_estimate`.
             Negative dimensions are considered with respect to the input
             tensordict.
+        deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
+            Defaults to ``False``.
 
     """
 
@@ -817,6 +832,7 @@ class TD1Estimator(ValueEstimatorBase):
         shifted: bool = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
+        deactivate_vmap: bool = False,
     ):
         super().__init__(
             value_network=value_network,
@@ -827,6 +843,7 @@ class TD1Estimator(ValueEstimatorBase):
             shifted=shifted,
             skip_existing=skip_existing,
             device=device,
+            deactivate_vmap=deactivate_vmap,
         )
         self.register_buffer("gamma", torch.tensor(gamma, device=self._device))
         self.average_rewards = average_rewards
@@ -1024,6 +1041,8 @@ class TDLambdaEstimator(ValueEstimatorBase):
             :meth:`~.value_estimate`.
             Negative dimensions are considered with respect to the input
             tensordict.
+        deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
+            Defaults to ``False``.
 
     """
 
@@ -1043,6 +1062,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
         shifted: bool = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
+        deactivate_vmap: bool = False,
     ):
         super().__init__(
             value_network=value_network,
@@ -1053,6 +1073,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
             skip_existing=skip_existing,
             shifted=shifted,
             device=device,
+            deactivate_vmap=deactivate_vmap,
         )
         self.register_buffer("gamma", torch.tensor(gamma, device=self._device))
         self.register_buffer("lmbda", torch.tensor(lmbda, device=self._device))

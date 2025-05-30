@@ -19,6 +19,7 @@ from torchrl.modules import ProbabilisticActor
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _pseudo_vmap,
     _reduce,
     _vmap_func,
     default_value_kwargs,
@@ -68,6 +69,8 @@ class IQLLoss(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
+        deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
+            Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -266,6 +269,7 @@ class IQLLoss(LossModule):
         priority_key: str = None,
         separate_losses: bool = False,
         reduction: str = None,
+        deactivate_vmap: bool = False,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -273,6 +277,8 @@ class IQLLoss(LossModule):
             reduction = "mean"
         super().__init__()
         self._set_deprecated_ctor_keys(priority=priority_key)
+
+        self.deactivate_vmap = deactivate_vmap
 
         # IQL parameter
         self.temperature = temperature
@@ -323,7 +329,10 @@ class IQLLoss(LossModule):
 
     def _make_vmap(self):
         self._vmap_qvalue_networkN0 = _vmap_func(
-            self.qvalue_network, (None, 0), randomness=self.vmap_randomness
+            self.qvalue_network,
+            (None, 0),
+            randomness=self.vmap_randomness,
+            pseudo_vmap=self.deactivate_vmap,
         )
 
     @property
@@ -824,7 +833,11 @@ class DiscreteIQLLoss(IQLLoss):
             if action.ndim < (state_action_value.ndim - (td_q.ndim - tensordict.ndim)):
                 # unsqueeze the action if it lacks on trailing singleton dim
                 action = action.unsqueeze(-1)
-            chosen_state_action_value = torch.vmap(
+            if self.deactivate_vmap:
+                vmap = _pseudo_vmap
+            else:
+                vmap = torch.vmap
+            chosen_state_action_value = vmap(
                 lambda state_action_value, action: torch.gather(
                     state_action_value, -1, index=action
                 ).squeeze(-1),
@@ -883,7 +896,11 @@ class DiscreteIQLLoss(IQLLoss):
                 ):
                     # unsqueeze the action if it lacks on trailing singleton dim
                     action = action.unsqueeze(-1)
-                chosen_state_action_value = torch.vmap(
+                if self.deactivate_vmap:
+                    vmap = _pseudo_vmap
+                else:
+                    vmap = torch.vmap
+                chosen_state_action_value = vmap(
                     lambda state_action_value, action: torch.gather(
                         state_action_value, -1, index=action
                     ).squeeze(-1),
@@ -932,7 +949,11 @@ class DiscreteIQLLoss(IQLLoss):
             if action.ndim < (state_action_value.ndim - (td_q.ndim - tensordict.ndim)):
                 # unsqueeze the action if it lacks on trailing singleton dim
                 action = action.unsqueeze(-1)
-            pred_val = torch.vmap(
+            if self.deactivate_vmap:
+                vmap = _pseudo_vmap
+            else:
+                vmap = torch.vmap
+            pred_val = vmap(
                 lambda state_action_value, action: torch.gather(
                     state_action_value, -1, index=action
                 ).squeeze(-1),

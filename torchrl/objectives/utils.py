@@ -7,6 +7,7 @@ from __future__ import annotations
 import functools
 import re
 import warnings
+from copy import copy
 from enum import Enum
 from typing import Any, Callable, Iterable
 
@@ -536,9 +537,10 @@ def _vmap_func(module, *args, func=None, pseudo_vmap: bool = False, **kwargs):
             module_args = module_args_params[:-1]
             with params.to_module(module):
                 if func is None:
-                    return module(*module_args)
+                    r = module(*module_args)
                 else:
-                    return getattr(module, func)(*module_args)
+                    r = getattr(module, func)(*module_args)
+                return r
 
         if not pseudo_vmap:
             return vmap(decorated_module, *args, **kwargs)  # noqa: TOR101
@@ -566,27 +568,28 @@ def _pseudo_vmap(
             f"pseudo_vmap only supports 'different' or 'error' randomness modes, but got {randomness=}. If another mode is required, please "
             "submit an issue in TorchRL."
         )
-    if isinstance(in_dims, int):
-        in_dims = (in_dims,)
-    if isinstance(out_dims, int):
-        out_dims = (out_dims,)
     from tensordict.nn.functional_modules import _exclude_td_from_pytree
 
     def _unbind(d, x):
         if d is not None and hasattr(x, "unbind"):
             return x.unbind(d)
         # Generator to reprod the value
-        return (x for _ in range(1000))
+        return (copy(x) for _ in range(1000))
 
     def _stack(d, x):
         if d is not None:
+            x = list(x)
             return torch.stack(list(x), d)
         return x
 
     @functools.wraps(func)
-    def new_func(*args, **kwargs):
+    def new_func(*args, in_dims=in_dims, out_dims=out_dims, **kwargs):
         with _exclude_td_from_pytree():
             # Unbind inputs
+            if isinstance(in_dims, int):
+                in_dims = (in_dims,) * len(args)
+            if isinstance(out_dims, int):
+                out_dims = (out_dims,)
             vs = zip(*tuple(tree_map(_unbind, in_dims, args)))
             rs = []
             for v in vs:

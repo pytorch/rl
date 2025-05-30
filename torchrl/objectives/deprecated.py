@@ -86,6 +86,8 @@ class REDQLoss_deprecated(LossModule):
             ``"none"`` | ``"mean"`` | ``"sum"``. ``"none"``: no reduction will be applied,
             ``"mean"``: the sum of the output will be divided by the number of
             elements in the output, ``"sum"``: the output will be summed. Default: ``"mean"``.
+        deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
+            Defaults to ``False``.
     """
 
     @dataclass
@@ -164,6 +166,7 @@ class REDQLoss_deprecated(LossModule):
         priority_key: str = None,
         separate_losses: bool = False,
         reduction: str = None,
+        deactivate_vmap: bool = False,
     ):
         self._in_keys = None
         self._out_keys = None
@@ -171,6 +174,8 @@ class REDQLoss_deprecated(LossModule):
             reduction = "mean"
         super().__init__()
         self._set_deprecated_ctor_keys(priority_key=priority_key)
+
+        self.deactivate_vmap = deactivate_vmap
 
         self.convert_to_functional(
             actor_network,
@@ -234,7 +239,9 @@ class REDQLoss_deprecated(LossModule):
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
 
     def _make_vmap(self):
-        self._vmap_qvalue_networkN0 = _vmap_func(self.qvalue_network, (None, 0))
+        self._vmap_qvalue_networkN0 = _vmap_func(
+            self.qvalue_network, (None, 0), pseudo_vmap=self.deactivate_vmap
+        )
 
     @property
     def target_entropy(self):
