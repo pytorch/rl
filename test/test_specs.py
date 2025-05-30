@@ -1331,6 +1331,14 @@ class TestSpec:
         sample = [sum(sample == i) for i in range(10)]
         assert chisquare(sample).pvalue > 0.1
 
+    @pytest.mark.parametrize("dtype", [torch.int, torch.int32, torch.int64])
+    def test_categorical_action_spec_rand_masked_right_dtype(self, dtype: torch.dtype):
+        torch.manual_seed(1)
+        action_spec = Categorical(2, dtype=dtype)
+        action_spec.update_mask(torch.tensor([True, False]))
+        sample = action_spec.rand()
+        assert sample.dtype == dtype
+
     def test_mult_discrete_action_spec_rand(self):
         torch.manual_seed(0)
         ns = (10, 5)
