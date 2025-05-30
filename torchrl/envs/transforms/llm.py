@@ -232,6 +232,10 @@ class KLRewardTransform(Transform):
         reward_key = self.in_keys[0]
         reward = next_tensordict.get(reward_key)
         curr_log_prob = tensordict.get(self.sample_log_prob_key)
+        if curr_log_prob is None:
+            raise KeyError(
+                f"log_prob key {self.sample_log_prob_key} not found in tensordict with keys {list(tensordict.keys(True))}"
+            )
         log_prob = log_prob.to(curr_log_prob.device)
         # We want the log-probs to have a similar dim to the reward
         curr_log_prob = curr_log_prob.unsqueeze(-1)

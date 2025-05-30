@@ -12,11 +12,11 @@ if [[ $OSTYPE != 'darwin'* ]]; then
   apt-get install -y vim git wget cmake
 
   # Enable universe repository
-  apt-get install -y software-properties-common
-  add-apt-repository universe
-  apt-get update
+  # apt-get install -y software-properties-common
+  # add-apt-repository universe
+  # apt-get update
 
-  apt-get install -y libsdl2-dev libsdl2-2.0-0
+  # apt-get install -y libsdl2-dev libsdl2-2.0-0
 
   apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev
   apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2 xvfb
