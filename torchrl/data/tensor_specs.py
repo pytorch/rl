@@ -1964,7 +1964,11 @@ class OneHot(TensorSpec):
             else:
                 mask_flat = mask
             shape_out = mask.shape[:-1]
-            m = torch.multinomial(mask_flat.float(), 1).reshape(shape_out)
+            m = (
+                torch.multinomial(mask_flat.float(), 1)
+                .reshape(shape_out)
+                .to(self.dtype)
+            )
         out = torch.nn.functional.one_hot(m, n).to(self.dtype)
         # torch.zeros((*shape, self.space.n), device=self.device, dtype=self.dtype)
         # out.scatter_(-1, m, 1)
@@ -3926,7 +3930,7 @@ class Categorical(TensorSpec):
                 "The last dimension of the mask must match the number of action allowed by the "
                 f"Categorical spec. Got mask.shape={self.mask.shape} and n={n}."
             )
-        out = torch.multinomial(mask_flat.float(), 1).reshape(shape_out)
+        out = torch.multinomial(mask_flat.float(), 1).reshape(shape_out).to(self.dtype)
         return out
 
     def index(
