@@ -3966,7 +3966,7 @@ class Categorical(TensorSpec):
         shape = self.mask.shape
         shape = _size([*torch.broadcast_shapes(shape[:-1], val.shape), shape[-1]])
         mask_expand = self.mask.expand(shape)
-        gathered = mask_expand.gather(-1, val.unsqueeze(-1))
+        gathered = mask_expand.gather(-1, val.unsqueeze(-1).to(torch.long))
         return gathered.all()
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
