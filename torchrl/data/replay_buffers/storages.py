@@ -827,7 +827,7 @@ class TensorStorage(Storage):
         if not self.initialized:
             if not isinstance(cursor, INT_CLASSES):
                 if is_tensor_collection(data):
-                    self._init(data[0])
+                    self._init(data, shape=data.shape[1:])
                 else:
                     self._init(tree_map(lambda x: x[0], data))
             else:
@@ -873,7 +873,7 @@ class TensorStorage(Storage):
             )
         if not self.initialized:
             if not isinstance(cursor, INT_CLASSES):
-                self._init(data[0])
+                self._init(data, shape=data.shape[1:])
             else:
                 self._init(data)
         if not isinstance(cursor, (*INT_CLASSES, slice)):
@@ -993,6 +993,15 @@ class LazyTensorStorage(TensorStorage):
             Defaults to ``False``.
         consolidated (bool, optional): if ``True``, the storage will be consolidated after
             its first expansion. Defaults to ``False``.
+        empty_lazy (bool, optional): if ``True``, any lazy tensordict in the first tensordict
+            passed to the storage will be emptied of its content. This can be used to store
+            ragged data or content with exclusive keys (e.g., when some but not all environments
+            provide extra data to be stored in the buffer).
+            Setting `empty_lazy` to `True` requires :meth:`~.extend` to be called first (a call to `add`
+            will result in an exception).
+            Recall that data stored in lazy stacks is not stored contiguously in memory: indexing can be
+            slower than contiguous data and serialization is more hazardous. Use with caution!
+            Defaults to ``False``.
 
     Examples:
         >>> data = TensorDict({
@@ -1054,6 +1063,7 @@ class LazyTensorStorage(TensorStorage):
         ndim: int = 1,
         compilable: bool = False,
         consolidated: bool = False,
+        empty_lazy: bool = False,
     ):
         super().__init__(
             storage=None,
@@ -1062,11 +1072,13 @@ class LazyTensorStorage(TensorStorage):
             ndim=ndim,
             compilable=compilable,
         )
+        self.empty_lazy = empty_lazy
         self.consolidated = consolidated
 
     def _init(
         self,
         data: TensorDictBase | torch.Tensor | PyTree,  # noqa: F821
+        shape: torch.Size | None = None,
     ) -> None:
         if not self._compilable:
             # TODO: Investigate why this seems to have a performance impact with
@@ -1087,8 +1099,21 @@ class LazyTensorStorage(TensorStorage):
 
         if is_tensor_collection(data):
             out = data.to(self.device)
-            out: TensorDictBase = torch.empty_like(
-                out.expand(max_size_along_dim0(data.shape))
+            if self.empty_lazy:
+                if shape is None:
+                    # shape is None in add
+                    raise RuntimeError(
+                        "Make sure you have called `extend` and not `add` first when setting `empty_lazy=True`."
+                    )
+                out: TensorDictBase = torch.empty_like(
+                    out.expand(max_size_along_dim0(data.shape))
+                )
+            elif shape is None:
+                shape = data.shape
+            else:
+                out = out[0]
+            out: TensorDictBase = out.new_empty(
+                max_size_along_dim0(shape), empty_lazy=self.empty_lazy
             )
             if self.consolidated:
                 out = out.consolidate()
@@ -1286,7 +1311,9 @@ class LazyMemmapStorage(LazyTensorStorage):
         self.initialized = state_dict["initialized"]
         self._len = state_dict["_len"]
 
-    def _init(self, data: TensorDictBase | torch.Tensor) -> None:
+    def _init(
+        self, data: TensorDictBase | torch.Tensor, *, shape: torch.Size | None = None
+    ) -> None:
         torchrl_logger.debug("Creating a MemmapStorage...")
         if self.device == "auto":
             self.device = data.device
@@ -1304,8 +1331,14 @@ class LazyMemmapStorage(LazyTensorStorage):
             return (self.max_size, *data_shape)
 
         if is_tensor_collection(data):
+            if shape is None:
+                # Within add()
+                shape = data.shape
+            else:
+                # Get the first element - we don't care about empty_lazy in memmap storages
+                data = data[0]
             out = data.clone().to(self.device)
-            out = out.expand(max_size_along_dim0(data.shape))
+            out = out.expand(max_size_along_dim0(shape))
             out = out.memmap_like(prefix=self.scratch_dir, existsok=self.existsok)
             if torchrl_logger.isEnabledFor(logging.DEBUG):
                 for key, tensor in sorted(
