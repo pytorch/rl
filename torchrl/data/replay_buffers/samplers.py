@@ -18,6 +18,8 @@ import numpy as np
 import torch
 from tensordict import MemoryMappedTensor, TensorDict
 from tensordict.utils import NestedKey
+
+from torch.utils._pytree import tree_map
 from torchrl._extension import EXTENSION_WARNING
 from torchrl._utils import _replace_last, logger
 from torchrl.data.replay_buffers.storages import Storage, StorageEnsemble, TensorStorage
@@ -676,13 +678,16 @@ class PrioritizedSampler(Sampler):
         )
         with open(path / "sampler_metadata.json", "w") as file:
             json.dump(
-                {
-                    "_alpha": self._alpha,
-                    "_beta": self._beta,
-                    "_eps": self._eps,
-                    "_max_priority": self._max_priority,
-                    "_max_capacity": self._max_capacity,
-                },
+                tree_map(
+                    float,
+                    {
+                        "_alpha": self._alpha,
+                        "_beta": self._beta,
+                        "_eps": self._eps,
+                        "_max_priority": self._max_priority,
+                        "_max_capacity": self._max_capacity,
+                    },
+                ),
                 file,
             )
 
@@ -693,7 +698,11 @@ class PrioritizedSampler(Sampler):
         self._alpha = metadata["_alpha"]
         self._beta = metadata["_beta"]
         self._eps = metadata["_eps"]
-        self._max_priority = metadata["_max_priority"]
+        tree_map(
+            lambda dest, orig: dest.copy_(orig),
+            tuple(self._max_priority),
+            tuple(metadata["_max_priority"]),
+        )
         _max_capacity = metadata["_max_capacity"]
         if _max_capacity != self._max_capacity:
             raise RuntimeError(

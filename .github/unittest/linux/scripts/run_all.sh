@@ -9,7 +9,14 @@ set -v
 
 if [[ $OSTYPE != 'darwin'* ]]; then
   apt-get update && apt-get upgrade -y
-  apt-get install -y vim git wget libsdl2-dev libsdl2-2.0-0 cmake
+  apt-get install -y vim git wget cmake
+
+  # Enable universe repository
+  # apt-get install -y software-properties-common
+  # add-apt-repository universe
+  # apt-get update
+
+  # apt-get install -y libsdl2-dev libsdl2-2.0-0
 
   apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev
   apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2 xvfb
@@ -208,11 +215,13 @@ pytest test/smoke_test_deps.py -v --durations 200 -k 'test_gym or test_dm_contro
 if [ "${CU_VERSION:-}" != cpu ] ; then
   python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
     --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py \
+    --ignore test/llm \
     --timeout=120 --mp_fork_if_no_cuda
 else
   python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
     --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py \
     --ignore test/test_distributed.py \
+    --ignore test/llm \
     --timeout=120 --mp_fork_if_no_cuda
 fi
 

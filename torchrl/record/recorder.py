@@ -14,8 +14,7 @@ import torch
 from tensordict import NonTensorData, TensorDictBase
 from tensordict.utils import NestedKey
 from torchrl._utils import _can_be_pickled
-from torchrl.data import TensorSpec
-from torchrl.data.tensor_specs import NonTensor, Unbounded
+from torchrl.data.tensor_specs import NonTensor, TensorSpec, Unbounded
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import EnvBase
 from torchrl.envs.transforms import ObservationTransform, Transform

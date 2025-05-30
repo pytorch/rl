@@ -3014,6 +3014,49 @@ class TestSamplers:
             assert rb._sampler._max_priority[0] == 21
             assert rb._sampler._max_priority[1] == 0
 
+    def test_prb_serialization(self, tmpdir):
+        rb = ReplayBuffer(
+            storage=LazyMemmapStorage(max_size=10),
+            sampler=PrioritizedSampler(max_capacity=10, alpha=0.8, beta=0.6),
+        )
+
+        td = TensorDict(
+            {
+                "observations": torch.zeros(1, 3),
+                "actions": torch.zeros(1, 1),
+                "rewards": torch.zeros(1, 1),
+                "next_observations": torch.zeros(1, 3),
+                "terminations": torch.zeros(1, 1, dtype=torch.bool),
+            },
+            batch_size=[1],
+        )
+        rb.extend(td)
+
+        rb.save(tmpdir)
+
+        rb2 = ReplayBuffer(
+            storage=LazyMemmapStorage(max_size=10),
+            sampler=PrioritizedSampler(max_capacity=10, alpha=0.5, beta=0.5),
+        )
+
+        td = TensorDict(
+            {
+                "observations": torch.ones(1, 3),
+                "actions": torch.ones(1, 1),
+                "rewards": torch.ones(1, 1),
+                "next_observations": torch.ones(1, 3),
+                "terminations": torch.ones(1, 1, dtype=torch.bool),
+            },
+            batch_size=[1],
+        )
+        rb2.extend(td)
+        rb2.load(tmpdir)
+        assert len(rb) == 1
+        assert rb.sampler._alpha == rb2.sampler._alpha
+        assert rb.sampler._beta == rb2.sampler._beta
+        assert rb.sampler._max_priority[0] == rb2.sampler._max_priority[0]
+        assert rb.sampler._max_priority[1] == rb2.sampler._max_priority[1]
+
     def test_prb_ndim(self):
         """This test lists all the possible ways of updating the priority of a PRB with RB, TRB and TPRB.
 

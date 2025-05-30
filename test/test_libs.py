@@ -3948,6 +3948,20 @@ class TestPettingZoo:
                 td[-1]["next", "player", "reward"] == torch.tensor([[-1], [1]])
             ).all()
 
+    @pytest.mark.parametrize("task", ["simple_v3"])
+    def test_return_state(self, task):
+        env = PettingZooEnv(
+            task=task,
+            parallel=True,
+            seed=0,
+            use_mask=False,
+            return_state=True,
+        )
+        check_env_specs(env)
+        r = env.rollout(10)
+        assert (r["state"] != 0).any()
+        assert (r["next", "state"] != 0).any()
+
     @pytest.mark.parametrize(
         "task",
         [
