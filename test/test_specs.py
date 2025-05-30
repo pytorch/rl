@@ -3999,6 +3999,55 @@ def test_device_ordinal():
     assert spec.device == torch.device("cuda:0")
 
 
+class TestBatchSizeBox:
+    def test_batch_size_box_same(self):
+        spec = Bounded(shape=(10, 2), low=-1, high=1, device=torch.device("cpu"))
+        spec.shape = (10, 2)
+        assert spec.shape == (10, 2)
+        assert spec.space.low.shape == (10, 2)
+        assert spec.space.high.shape == (10, 2)
+        assert spec.space._low.shape == (10, 2)
+        assert spec.space._high.shape == (10, 2)
+        c_spec = Composite(b=spec, shape=(10,))
+        assert spec.shape == (10, 2)
+        assert spec.space.low.shape == (10, 2)
+        assert spec.space.high.shape == (10, 2)
+        assert spec.space._low.shape == (2,)
+        assert spec.space._high.shape == (2,)
+        c_spec = Composite(b=spec, shape=(10, 2))
+        assert spec.shape == (10, 2)
+        assert spec.space.low.shape == (10, 2)
+        assert spec.space.high.shape == (10, 2)
+        assert spec.space._low.shape == ()
+        assert spec.space._high.shape == ()
+        c_spec = Composite(b=spec, shape=())
+        assert spec.shape == (10, 2)
+        assert spec.space.low.shape == (10, 2)
+        assert spec.space.high.shape == (10, 2)
+        assert spec.space._low.shape == (10, 2)
+        assert spec.space._high.shape == (10, 2)
+
+    def test_batch_size_box_diff(self):
+        spec = Bounded(
+            shape=(10, 2),
+            low=-torch.arange(20).view(10, 2),
+            high=torch.arange(20).view(10, 2),
+            device=torch.device("cpu"),
+        )
+        spec.shape = (10, 2)
+        assert spec.shape == (10, 2)
+        assert spec.space.low.shape == (10, 2)
+        assert spec.space.high.shape == (10, 2)
+        assert spec.space._low.shape == (10, 2)
+        assert spec.space._high.shape == (10, 2)
+        c_spec = Composite(b=spec, shape=(10,))
+        assert spec.shape == (10, 2)
+        assert spec.space.low.shape == (10, 2)
+        assert spec.space.high.shape == (10, 2)
+        assert spec.space._low.shape == (10, 2)
+        assert spec.space._high.shape == (10, 2)
+
+
 class TestLegacy:
     def test_one_hot(self):
         with pytest.warns(
