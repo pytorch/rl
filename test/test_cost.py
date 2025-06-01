@@ -112,6 +112,7 @@ from torchrl.objectives.deprecated import DoubleREDQLoss_deprecated, REDQLoss_de
 from torchrl.objectives.redq import REDQLoss
 from torchrl.objectives.reinforce import ReinforceLoss
 from torchrl.objectives.utils import (
+    _sum_td_features,
     _vmap_func,
     HardUpdate,
     hold_out_net,
@@ -9734,7 +9735,8 @@ class TestPPO(LossModuleTestBase):
                     reward=torch.randn(4, 1), done=torch.zeros(4, 1, dtype=torch.bool)
                 ),
             )
-            ppo = cls(policy, value_operator)
+            scalar_entropy = 0.07
+            ppo = cls(policy, value_operator, entropy_coef=scalar_entropy)
             ppo.set_keys(
                 action=[
                     ("agent0", "action"),
@@ -9748,7 +9750,49 @@ class TestPPO(LossModuleTestBase):
                 ],
             )
             loss = ppo(data)
+            composite_entropy = loss["composite_entropy"]
+            entropy = _sum_td_features(composite_entropy)
+            expected_loss = -(scalar_entropy * entropy).mean()  # batch mean
+            torch.testing.assert_close(
+                loss["loss_entropy"], expected_loss, rtol=1e-5, atol=1e-7
+            )
             loss.sum(reduce=True)
+
+            # keep per-head entropies instead of the aggregated tensor
+            set_composite_lp_aggregate(False).set()
+            coef_map = {
+                "agent0": 0.10,
+                "agent1": 0.05,
+                "agent2": 0.02,
+            }
+            ppo_weighted = cls(policy, value_operator, entropy_coef=coef_map)
+            ppo_weighted.set_keys(
+                action=[
+                    ("agent0", "action"),
+                    ("agent1", "action"),
+                    ("agent2", "action"),
+                ],
+                sample_log_prob=[
+                    ("agent0", "action_log_prob"),
+                    ("agent1", "action_log_prob"),
+                    ("agent2", "action_log_prob"),
+                ],
+            )
+            loss = ppo_weighted(data)
+            composite_entropy = loss["composite_entropy"]
+
+            # sanity check: loss_entropy is scalar + finite
+            assert loss["loss_entropy"].ndim == 0
+            assert torch.isfinite(loss["loss_entropy"])
+            # Check individual loss is computed with the right weights
+            expected_loss = 0.0
+            for name, head_entropy in composite_entropy.items():
+                expected_loss -= (
+                    coef_map[name] * _sum_td_features(head_entropy)
+                ).mean()
+            torch.testing.assert_close(
+                loss["loss_entropy"], expected_loss, rtol=1e-5, atol=1e-7
+            )
 
     def test_ppo_marl_aggregate(self):
         env = MARLEnv()
@@ -9790,6 +9834,36 @@ class TestPPO(LossModuleTestBase):
         ppo.set_keys(action=list(env.full_action_spec.keys(True, True)))
         assert isinstance(ppo.tensor_keys.action, list)
         ppo(output)
+
+    def _make_entropy_loss(self, entropy_coef):
+        actor, critic = self._create_mock_actor_value()
+        return PPOLoss(actor, critic, entropy_coef=entropy_coef)
+
+    def test_weighted_entropy_scalar(self):
+        loss = self._make_entropy_loss(entropy_coef=0.5)
+        entropy = torch.tensor(2.0)
+        out = loss._weighted_loss_entropy(entropy)
+        torch.testing.assert_close(out, torch.tensor(-1.0))
+
+    def test_weighted_entropy_mapping(self):
+        coef = {"head_0": 0.3, "head_1": 0.7}
+        loss = self._make_entropy_loss(entropy_coef=coef)
+        entropy = TensorDict(
+            {
+                "head_0": {"action_log_prob": torch.tensor(1.0)},
+                "head_1": {"action_log_prob": torch.tensor(2.0)},
+            },
+            [],
+        )
+        out = loss._weighted_loss_entropy(entropy)
+        expected = -(coef["head_0"] * 1.0 + coef["head_1"] * 2.0)
+        torch.testing.assert_close(out, torch.tensor(expected))
+
+    def test_weighted_entropy_mapping_missing_key(self):
+        loss = self._make_entropy_loss(entropy_coef={"head_not_present": 0.5})
+        entropy = TensorDict({"head_0": {"action_log_prob": torch.tensor(1.0)}}, [])
+        with pytest.raises(KeyError):
+            loss._weighted_loss_entropy(entropy)
 
 
 class TestA2C(LossModuleTestBase):
