@@ -124,7 +124,9 @@ class TestEGreedy:
             {"observation": torch.zeros(*batch_size, action_size)},
             batch_size=batch_size,
         )
-        with pytest.raises(RuntimeError, match="Failed while executing module"):
+        with pytest.raises(
+            KeyError, match="Action mask key action_mask not found in TensorDict"
+        ):
             explorative_policy(td)
 
         torch.manual_seed(0)
@@ -163,9 +165,7 @@ class TestEGreedy:
         assert not (action[~action_mask] == 0).all()
         assert (masked_action[~action_mask] == 0).all()
 
-    def test_no_spec_error(
-        self,
-    ):
+    def test_no_spec_error(self):
         torch.manual_seed(0)
         action_size = 4
         batch_size = (3, 4, 2)
@@ -183,7 +183,10 @@ class TestEGreedy:
             batch_size=batch_size,
         )
 
-        with pytest.raises(RuntimeError, match="Failed while executing module"):
+        with pytest.raises(
+            RuntimeError,
+            match="Failed while executing module|spec must be provided to the exploration wrapper",
+        ):
             explorative_policy(td)
 
     @pytest.mark.parametrize("module", [True, False])
@@ -200,7 +203,9 @@ class TestEGreedy:
                 policy,
             )
         td = TensorDict({"observation": torch.zeros(10, 4)}, batch_size=[10])
-        with pytest.raises(RuntimeError, match="Failed while executing module"):
+        with pytest.raises(
+            ValueError, match="Action spec shape does not match the action shape"
+        ):
             explorative_policy(td)
 
 

@@ -11616,7 +11616,7 @@ class TestKLRewardTransform(TransformBase):
         transform = KLRewardTransform(actor, out_keys=out_key)
         return Compose(
             TensorDictPrimer(
-                sample_log_prob=Unbounded(shape=base_env.action_spec.shape[:-1]),
+                action_log_prob=Unbounded(shape=base_env.action_spec.shape[:-1]),
                 shape=base_env.shape,
             ),
             transform,
@@ -11640,7 +11640,7 @@ class TestKLRewardTransform(TransformBase):
             {
                 "action": torch.randn(*batch, 7),
                 "observation": torch.randn(*batch, 7),
-                "sample_log_prob": torch.randn(*batch),
+                "action_log_prob": torch.randn(*batch),
             },
             batch,
         )
@@ -11658,7 +11658,7 @@ class TestKLRewardTransform(TransformBase):
                 "action": torch.randn(*batch, 7),
                 "observation": torch.randn(*batch, 7),
                 "next": {t[0].in_keys[0]: torch.zeros(*batch, 1)},
-                "sample_log_prob": torch.randn(*batch),
+                "action_log_prob": torch.randn(*batch),
             },
             batch,
         )
@@ -11678,7 +11678,7 @@ class TestKLRewardTransform(TransformBase):
         base_env = self.envclass()
         torch.manual_seed(0)
         actor = self._make_actor()
-        # we need to patch the env and create a sample_log_prob spec to make check_env_specs happy
+        # we need to patch the env and create a action_log_prob spec to make check_env_specs happy
         env = TransformedEnv(
             base_env,
             Compose(
@@ -11711,7 +11711,7 @@ class TestKLRewardTransform(TransformBase):
     @pytest.mark.parametrize("out_key", [None, "some_stuff", ["some_stuff"]])
     def test_single_trans_env_check(self, out_key):
         base_env = self.envclass()
-        # we need to patch the env and create a sample_log_prob spec to make check_env_specs happy
+        # we need to patch the env and create a action_log_prob spec to make check_env_specs happy
         env = TransformedEnv(base_env, self._make_transform_env(out_key, base_env))
         check_env_specs(env)
 
@@ -11776,7 +11776,7 @@ class TestKLRewardTransform(TransformBase):
                 "action": torch.randn(*batch, 7),
                 "observation": torch.randn(*batch, 7),
                 "next": {t.in_keys[0]: torch.zeros(*batch, 1)},
-                "sample_log_prob": torch.randn(*batch),
+                "action_log_prob": torch.randn(*batch),
             },
             batch,
         )
@@ -11796,7 +11796,7 @@ class TestKLRewardTransform(TransformBase):
                 "action": torch.randn(*batch, 7),
                 "observation": torch.randn(*batch, 7),
                 "next": {t.in_keys[0]: torch.zeros(*batch, 1)},
-                "sample_log_prob": torch.randn(*batch),
+                "action_log_prob": torch.randn(*batch),
             },
             batch,
         )
