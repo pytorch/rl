@@ -1331,6 +1331,14 @@ class TestSpec:
         sample = [sum(sample == i) for i in range(10)]
         assert chisquare(sample).pvalue > 0.1
 
+    @pytest.mark.parametrize("dtype", [torch.int, torch.int32, torch.int64])
+    def test_categorical_action_spec_rand_masked_right_dtype(self, dtype: torch.dtype):
+        torch.manual_seed(1)
+        action_spec = Categorical(2, dtype=dtype)
+        action_spec.update_mask(torch.tensor([True, False]))
+        sample = action_spec.rand()
+        assert sample.dtype == dtype
+
     def test_mult_discrete_action_spec_rand(self):
         torch.manual_seed(0)
         ns = (10, 5)
@@ -1386,6 +1394,9 @@ class TestSpec:
         sample = torch.stack([spec.rand() for _ in range(100)], 0)
         assert (-3 <= sample).all() and (3 >= sample).all()
         assert sample.shape == torch.Size([100, 10, 5])
+
+    def test_binary_empty_shape_construct(self):
+        assert len(Binary(shape=()).shape) == 0
 
 
 class TestExpand:
@@ -2534,8 +2545,8 @@ class TestStack:
                 choices = [NonTensorData("a"), NonTensorData("b"), NonTensorData("c")]
             else:
                 choices = [
-                    NonTensorStack("a").expand(shape + (1,)).squeeze(-1),
-                    NonTensorStack("d").expand(shape + (1,)).squeeze(-1),
+                    NonTensorData("a", batch_size=shape),
+                    NonTensorData("d", batch_size=shape),
                 ]
 
         spec0 = Choice(choices)
@@ -3994,6 +4005,55 @@ def test_device_ordinal():
         device=device,
     )
     assert spec.device == torch.device("cuda:0")
+
+
+class TestBatchSizeBox:
+    def test_batch_size_box_same(self):
+        spec = Bounded(shape=(10, 2), low=-1, high=1, device=torch.device("cpu"))
+        spec.shape = (10, 2)
+        assert spec.shape == (10, 2)
+        assert spec.space.low.shape == (10, 2)
+        assert spec.space.high.shape == (10, 2)
+        assert spec.space._low.shape == (10, 2)
+        assert spec.space._high.shape == (10, 2)
+        c_spec = Composite(b=spec, shape=(10,))
+        assert spec.shape == (10, 2)
+        assert spec.space.low.shape == (10, 2)
+        assert spec.space.high.shape == (10, 2)
+        assert spec.space._low.shape == (2,)
+        assert spec.space._high.shape == (2,)
+        c_spec = Composite(b=spec, shape=(10, 2))
+        assert spec.shape == (10, 2)
+        assert spec.space.low.shape == (10, 2)
+        assert spec.space.high.shape == (10, 2)
+        assert spec.space._low.shape == ()
+        assert spec.space._high.shape == ()
+        c_spec = Composite(b=spec, shape=())
+        assert spec.shape == (10, 2)
+        assert spec.space.low.shape == (10, 2)
+        assert spec.space.high.shape == (10, 2)
+        assert spec.space._low.shape == (10, 2)
+        assert spec.space._high.shape == (10, 2)
+
+    def test_batch_size_box_diff(self):
+        spec = Bounded(
+            shape=(10, 2),
+            low=-torch.arange(20).view(10, 2),
+            high=torch.arange(20).view(10, 2),
+            device=torch.device("cpu"),
+        )
+        spec.shape = (10, 2)
+        assert spec.shape == (10, 2)
+        assert spec.space.low.shape == (10, 2)
+        assert spec.space.high.shape == (10, 2)
+        assert spec.space._low.shape == (10, 2)
+        assert spec.space._high.shape == (10, 2)
+        c_spec = Composite(b=spec, shape=(10,))
+        assert spec.shape == (10, 2)
+        assert spec.space.low.shape == (10, 2)
+        assert spec.space.high.shape == (10, 2)
+        assert spec.space._low.shape == (10, 2)
+        assert spec.space._high.shape == (10, 2)
 
 
 class TestLegacy:
