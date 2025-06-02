@@ -38,19 +38,55 @@ if not os.getenv("VLLM_USE_V1", "0"):
     raise ValueError("VLLM_USE_V1=0 not set")
 
 parser = ArgumentParser()
-parser.add_argument("--dataset", type=str, default="gsm8k")
-parser.add_argument("--batch_size", type=int, default=1)
-parser.add_argument("--epochs", type=int, default=1)
-parser.add_argument("--repeats", type=int, default=16)
-parser.add_argument("--num_envs", type=int, default=32)
-parser.add_argument("--steps_per_batch", type=int, default=64)
-parser.add_argument("--optim_batch_size", type=int, default=4)
-# parser.add_argument("--model_name", type=str, default="gpt2")
-parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-3B")
-parser.add_argument("--compile", action="store_true")
-parser.add_argument("--clip_grad_norm", type=float, default=0.5)
-parser.add_argument("--lr", type=float, default=1e-5)
-parser.add_argument("--kl_coef", type=float, default=1e-2)
+parser.add_argument(
+    "--dataset",
+    type=str,
+    default="gsm8k",
+    choices=["gsm8k", "ifeval"],
+    help="Dataset to use. Currently, gsm8k and ifeval are supported.",
+)
+parser.add_argument(
+    "--epochs",
+    type=int,
+    default=1,
+    help="Number of epochs to train for every time a batch is collected.",
+)
+parser.add_argument(
+    "--repeats",
+    type=int,
+    default=16,
+    help="Number of times to repeat the same action in the same batch (for the GRPO objective).",
+)
+parser.add_argument(
+    "--num_envs",
+    type=int,
+    default=8,
+    help="Number of environments to run in parallel (within the LLMCollector).",
+)
+parser.add_argument(
+    "--steps_per_batch",
+    type=int,
+    default=64,
+    help="Number of steps to collect in each batch (within the LLMCollector).",
+)
+parser.add_argument(
+    "--optim_batch_size",
+    type=int,
+    default=4,
+    help="Number of elements in the batch to optimize.",
+)
+parser.add_argument(
+    "--model_name",
+    type=str,
+    default="Qwen/Qwen2.5-3B",
+    help="Model to use. Must be a HuggingFace model name.",
+)
+parser.add_argument("--compile", action="store_true", help="Compile the loss function.")
+parser.add_argument(
+    "--clip_grad_norm", type=float, default=0.5, help="Gradient norm clipping."
+)
+parser.add_argument("--lr", type=float, default=1e-5, help="Learning rate.")
+parser.add_argument("--kl_coef", type=float, default=1e-2, help="KL coefficient.")
 
 
 parser.add_argument("--gpu_memory_utilization", type=float, default=0.5)
@@ -62,6 +98,7 @@ set_list_to_stack(True).set()
 
 if not os.getenv("VLLM_USE_V1", "0"):
     raise ValueError("VLLM_USE_V1=0 not set")
+
 
 def make_device_splits():
     # devices = list(range(torch.cuda.device_count()))
