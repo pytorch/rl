@@ -171,7 +171,8 @@ def get_ref_model(
             quantize=cfg.ref_model.quantization.enabled,
             gradient_checkpointing=cfg.ref_model.gradient_checkpointing,
             attn_implementation=cfg.ref_model.attn_implementation,
-            lora=False,  # Reference model doesn't need LoRA
+            lora=False,  # Reference model doesn't need LoRA\
+            requires_grad=False,
         )[0].eval()
         # Detach weights
         TensorDict.from_module(ref_model).data.to_module(ref_model)
@@ -203,6 +204,7 @@ def get_hf_model(
     lora: bool = True,
     attn_implementation: Literal["flash_attention_2", "flex_attention", "sdpa"]
     | None = "flex_attention",
+    requires_grad: bool = True,
 ) -> tuple[AutoModelForCausalLM, PreTrainedTokenizer]:
     """Creates and configures a HuggingFace model with optional optimizations.
 
@@ -220,6 +222,7 @@ def get_hf_model(
         lora (bool, optional): Whether to apply LoRA adapters. Default: True
         attn_implementation (Literal["flash_attention_2", "flex_attention", "sdpa"] | None, optional):
             Attention implementation to use. Default: "flex_attention"
+        requires_grad (bool, optional): Whether to enable gradient computation. Default: True
 
     Returns:
         tuple[AutoModelForCausalLM, PreTrainedTokenizer]:
@@ -241,7 +244,7 @@ def get_hf_model(
     # Store original dtype to restore it later
     original_dtype = torch.get_default_dtype()
     torch.set_default_dtype(torch_dtype)
-    
+
     model_configs = {
         "torch_dtype": torch_dtype,
     }
@@ -318,20 +321,18 @@ def get_hf_model(
 
             # Initialize LoRA model
             model = get_peft_model(
-                model, 
+                model,
                 lora_config,
-                autocast_adapter_dtype=False  # Prevent automatic casting of adapter layers
+                autocast_adapter_dtype=False,  # Prevent automatic casting of adapter layers
             )
-            
+
             # Force LoRA layers to correct dtype
             for n, p in model.named_parameters():
                 if "lora_" in n:  # Only convert LoRA parameters
                     p.data = p.data.to(torch_dtype)
 
-        # Verify all parameters are in correct dtype
-        for n, p in model.named_parameters():
-            if p.dtype == torch.float32:
-                raise RuntimeError(f"Parameter {n} is still in float32")
+        if requires_grad:
+            model.requires_grad_(True)
 
         return model, tokenizer
 

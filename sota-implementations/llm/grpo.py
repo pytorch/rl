@@ -19,7 +19,7 @@ import tqdm
 from grpo_utils import get_inference_model, get_ref_model, get_train_model
 from omegaconf import DictConfig
 from tensordict import set_list_to_stack
-from torch.cuda.amp import autocast, GradScaler
+from torch.cuda.amp import GradScaler
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors.llm import LLMCollector
 from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
@@ -198,7 +198,7 @@ def train(cfg: DictConfig) -> None:
             for batch_idx, batch in enumerate(rb):
                 pbar.update(1)
                 batch = batch.to(train_devices[0])
-                
+
                 # Forward pass
                 loss = loss_fn(batch)
                 loss_val = loss.mean(reduce=True)
@@ -220,13 +220,17 @@ def train(cfg: DictConfig) -> None:
 
                     # Log metrics
                     wandb_logger.log_scalar("ESS", float(loss.ESS))
-                    wandb_logger.log_scalar("loss_objective", float(loss.loss_objective))
+                    wandb_logger.log_scalar(
+                        "loss_objective", float(loss.loss_objective)
+                    )
                     wandb_logger.log_scalar("clip_fraction", float(loss.clip_fraction))
                     wandb_logger.log_scalar("kl_approx", float(loss.kl_approx))
                     wandb_logger.log_scalar("grad_norm", float(grad_norm))
                     wandb_logger.log_scalar("entropy", float(loss.loss_entropy.mean()))
                     wandb_logger.log_scalar("kl_to_ref", float(loss.kl_to_ref.mean()))
-                    wandb_logger.log_scalar("loss_kl_to_ref", float(loss.loss_kl_to_ref.mean()))
+                    wandb_logger.log_scalar(
+                        "loss_kl_to_ref", float(loss.loss_kl_to_ref.mean())
+                    )
 
                     # Memory management
                     gc.collect()
@@ -254,6 +258,6 @@ def train(cfg: DictConfig) -> None:
 
 
 if __name__ == "__main__":
-      # Setup environment
+    # Setup environment
     setup_environment()
     train()
