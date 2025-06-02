@@ -231,89 +231,102 @@ def get_hf_model(
         RuntimeError: If model initialization fails
     """
     from transformers import AutoModelForCausalLM, AutoTokenizer
+    import contextlib
 
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    if tokenizer.pad_token == tokenizer.eos_token:
-        tokenizer.pad_token = "PAD"
-    tokenizer.padding_side = "left"
+    # Store original dtype to restore it later
+    original_dtype = torch.get_default_dtype()
 
-    # Configure model settings for bfloat16 precision
-    model_configs = {
-        "torch_dtype": torch_dtype,
-    }
+    try:
+        # Set default dtype for all new tensors
+        torch.set_default_dtype(torch_dtype)
 
-    # Only use attention implementation if we're using bfloat16/float16
-    if (
-        torch_dtype in (torch.bfloat16, torch.float16)
-        and torch.cuda.is_available()
-        and attn_implementation
-    ):
-        torchrl_logger.info(f"{attn_implementation} init")
-        model_configs["attn_implementation"] = attn_implementation
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        if tokenizer.pad_token == tokenizer.eos_token:
+            tokenizer.pad_token = "PAD"
+        tokenizer.padding_side = "left"
 
-    if device_map:
-        model_configs["device_map"] = device_map
+        # Configure model settings with consistent dtype
+        model_configs = {
+            "torch_dtype": torch_dtype,
+            "use_cache": not gradient_checkpointing,
+            "trust_remote_code": True,
+        }
 
-    # Configure training settings based on FSDP usage
-    if fsdp != "" and fsdp_config is not None:
-        torchrl_logger.info("Configurations for FSDP")
-        bnb_config_params = {"bnb_4bit_quant_storage": torch_dtype}
-    else:
-        bnb_config_params = {}
+        # Only use attention implementation if we're using bfloat16/float16
+        if (
+            torch_dtype in (torch.bfloat16, torch.float16)
+            and torch.cuda.is_available()
+            and attn_implementation
+        ):
+            torchrl_logger.info(f"{attn_implementation} init")
+            model_configs["attn_implementation"] = attn_implementation
 
-    # Enable Quantization
-    if quantize:
-        try:
-            from transformers.utils.quantization_config import BitsAndBytesConfig
-        except ImportError:
-            raise ImportError("Please install transformers with bitsandbytes support")
+        if device_map:
+            model_configs["device_map"] = device_map
 
-        bnb_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_use_double_quant=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch_dtype,
-            **bnb_config_params,
-        )
-        model_configs["quantization_config"] = bnb_config
+        # Configure training settings based on FSDP usage
+        if fsdp != "" and fsdp_config is not None:
+            torchrl_logger.info("Configurations for FSDP")
+            bnb_config_params = {"bnb_4bit_quant_storage": torch_dtype}
+        else:
+            bnb_config_params = {}
 
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        trust_remote_code=True,
-        use_cache=not gradient_checkpointing,
-        cache_dir="/tmp/.cache",
-        **model_configs,
-    )
+        # Enable Quantization
+        if quantize:
+            try:
+                from transformers.utils.quantization_config import BitsAndBytesConfig
+            except ImportError:
+                raise ImportError("Please install transformers with bitsandbytes support")
 
-    # Configure gradient checkpointing based on FSDP usage
-    if fsdp == "" and fsdp_config is None:
-        if gradient_checkpointing:
-            torchrl_logger.info("gradient_checkpointing enabled")
-            model.gradient_checkpointing_enable()
-    else:
-        if gradient_checkpointing:
-            torchrl_logger.info("gradient_checkpointing enabled")
-            model.gradient_checkpointing_enable(
-                gradient_checkpointing_kwargs={"use_reentrant": False}
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch_dtype,
+                **bnb_config_params,
             )
+            model_configs["quantization_config"] = bnb_config
 
-    if lora:
-        try:
-            from peft import get_peft_model, LoraConfig
-        except ImportError:
-            raise ImportError("Please install peft: pip install peft")
+        # Initialize model with consistent dtype
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            cache_dir="/tmp/.cache",
+            **model_configs,
+        )
 
-        model = get_peft_model(
-            model,
-            LoraConfig(
-                r=lora_r,
-                lora_alpha=lora_alpha,
-                target_modules="all-linear",
-                lora_dropout=lora_dropout,
-                bias="none",
-                task_type="CAUSAL_LM",
-                inference_mode=False,
-            ),
-        ).eval()
+        # Configure gradient checkpointing based on FSDP usage
+        if fsdp == "" and fsdp_config is None:
+            if gradient_checkpointing:
+                torchrl_logger.info("gradient_checkpointing enabled")
+                model.gradient_checkpointing_enable()
+        else:
+            if gradient_checkpointing:
+                torchrl_logger.info("gradient_checkpointing enabled")
+                model.gradient_checkpointing_enable(
+                    gradient_checkpointing_kwargs={"use_reentrant": False}
+                )
 
-    return model, tokenizer
+        if lora:
+            try:
+                from peft import get_peft_model, LoraConfig
+            except ImportError:
+                raise ImportError("Please install peft: pip install peft")
+
+            model = get_peft_model(
+                model,
+                LoraConfig(
+                    r=lora_r,
+                    lora_alpha=lora_alpha,
+                    target_modules="all-linear",
+                    lora_dropout=lora_dropout,
+                    bias="none",
+                    task_type="CAUSAL_LM",
+                    inference_mode=False,
+                ),
+            ).eval()
+
+        return model, tokenizer
+
+    finally:
+        # Restore original default dtype
+        torch.set_default_dtype(original_dtype)
