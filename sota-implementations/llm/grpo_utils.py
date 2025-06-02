@@ -230,37 +230,30 @@ def get_hf_model(
         ImportError: If required dependencies are not installed
         RuntimeError: If model initialization fails
     """
-
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    # Store original dtype to restore it later
-    original_dtype = torch.get_default_dtype()
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    if tokenizer.pad_token == tokenizer.eos_token:
+        tokenizer.pad_token = "PAD"
+    tokenizer.padding_side = "left"
 
-    try:
-        # Set default dtype for all new tensors
+    # Configure model settings for bfloat16 precision
+    if torch_dtype == torch.bfloat16:
+        # Store original dtype to restore it later
+        original_dtype = torch.get_default_dtype()
         torch.set_default_dtype(torch_dtype)
-
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        if tokenizer.pad_token == tokenizer.eos_token:
-            tokenizer.pad_token = "PAD"
-        tokenizer.padding_side = "left"
-
-        # Configure model settings with consistent dtype
+        
         model_configs = {
             "torch_dtype": torch_dtype,
-            "use_cache": not gradient_checkpointing,
-            "trust_remote_code": True,
         }
-
-        # Only use attention implementation if we're using bfloat16/float16
-        if (
-            torch_dtype in (torch.bfloat16, torch.float16)
-            and torch.cuda.is_available()
-            and attn_implementation
-        ):
+        if torch.cuda.is_available() and attn_implementation:
             torchrl_logger.info(f"{attn_implementation} init")
             model_configs["attn_implementation"] = attn_implementation
+    else:
+        original_dtype = None
+        model_configs = {}
 
+    try:
         if device_map:
             model_configs["device_map"] = device_map
 
@@ -289,9 +282,10 @@ def get_hf_model(
             )
             model_configs["quantization_config"] = bnb_config
 
-        # Initialize model with consistent dtype
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
+            trust_remote_code=True,
+            use_cache=not gradient_checkpointing,
             cache_dir="/tmp/.cache",
             **model_configs,
         )
@@ -330,5 +324,6 @@ def get_hf_model(
         return model, tokenizer
 
     finally:
-        # Restore original default dtype
-        torch.set_default_dtype(original_dtype)
+        # Restore original dtype only if we changed it
+        if original_dtype is not None:
+            torch.set_default_dtype(original_dtype)
