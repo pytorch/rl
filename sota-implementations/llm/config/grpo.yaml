@@ -37,9 +37,9 @@ inference_model:
 # Reference model configuration
 ref_model:
   quantization:
-    enabled: true  # Enable quantization for memory efficiency
+    enabled: false  # Enable quantization for memory efficiency
   gradient_checkpointing: false  # Not needed for reference model
-  attn_implementation: flex_attention
+  attn_implementation: 
   torch_dtype: bfloat16
 
 # Policy configuration
