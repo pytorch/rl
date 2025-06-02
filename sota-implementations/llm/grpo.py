@@ -23,6 +23,7 @@ import torch
 import tqdm
 
 from grpo_utils import get_inference_model, get_ref_model, get_train_model
+from tensordict import set_list_to_stack
 from torchrl import logger as torchrl_logger
 from torchrl.collectors.llm import LLMCollector
 from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
@@ -57,6 +58,7 @@ parser.add_argument("--gpu_memory_utilization", type=float, default=0.5)
 torch.set_default_dtype(torch.bfloat16)
 
 torch.set_default_device("cuda:0")
+set_list_to_stack(True).set()
 
 
 def make_device_splits():

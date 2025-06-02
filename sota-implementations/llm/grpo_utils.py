@@ -162,17 +162,13 @@ def get_hf_model(
     # Configure model settings for bfloat16 precision
     # Setup flash_attention_2 for memory-efficient attention computation
     if torch_dtype == torch.bfloat16:
-        torchrl_logger.info("flash_attention_2 init")
 
         model_configs = {
             "torch_dtype": torch_dtype,
         }
         if torch.cuda.is_available() and attn_implementation:
-            model_configs.update(
-                {
-                    "attn_implementation": attn_implementation,
-                }
-            )
+            torchrl_logger.info(f"{attn_implementation} init")
+            model_configs["attn_implementation"] = attn_implementation
     else:
         model_configs = {}
 
