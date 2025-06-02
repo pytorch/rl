@@ -58,8 +58,6 @@ def setup_environment() -> None:
     # Ensure CUDA is using the correct dtype
     if torch.cuda.is_available():
         torch.cuda.set_device("cuda:0")
-        # Set default CUDA dtype to match global default
-        torch.cuda.set_default_tensor_type(f'torch.cuda.{torch.get_default_dtype().__str__().split(".")[-1]}')
 
 
 @hydra.main(version_base=None, config_path="config", config_name="grpo")
