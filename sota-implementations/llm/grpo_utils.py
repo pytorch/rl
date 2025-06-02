@@ -236,6 +236,6 @@ def get_hf_model(
 
         model = get_peft_model(model, config).eval()
 
-    model.requires_grad_(True)
+    # model.requires_grad_(True)
 
     return model, tokenizer
