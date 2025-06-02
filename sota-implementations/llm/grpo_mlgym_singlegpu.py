@@ -34,6 +34,7 @@ from torchrl.envs.llm.libs import make_mlgym
 from torchrl.objectives.llm.grpo import GRPOLoss, MCAdvantage
 from torchrl.record import WandbLogger
 from transformers import PreTrainedTokenizer
+
 parser = ArgumentParser()
 parser.add_argument("--dataset", type=str, default="gsm8k")
 parser.add_argument("--batch_size", type=int, default=1)
@@ -61,7 +62,9 @@ if not os.getenv("VLLM_USE_V1", "0"):
     raise ValueError("VLLM_USE_V1=0 not set")
 
 
-def make_env(tasks: list[str], tokenizer: PreTrainedTokenizer, transform: Transform | None = None) -> EnvBase:
+def make_env(
+    tasks: list[str], tokenizer: PreTrainedTokenizer, transform: Transform | None = None
+) -> EnvBase:
     env = make_mlgym(tasks=tasks, tokenizer=tokenizer)
     if transform is not None:
         env = env.append_transform(transform)
@@ -85,7 +88,11 @@ if __name__ == "__main__":
     #         add_to_reward=False,
     #     )
 
-    env = AsyncEnvPool([partial(make_env, tasks=args.tasks, tokenizer=train_tokenizer)] * args.num_envs, backend="multiprocessing")
+    env = AsyncEnvPool(
+        [partial(make_env, tasks=args.tasks, tokenizer=train_tokenizer)]
+        * args.num_envs,
+        backend="multiprocessing",
+    )
 
     # replay buffer
     rb = ReplayBuffer(
@@ -107,7 +114,7 @@ if __name__ == "__main__":
     )
     for d in collector:
         print(d)
-        print('len rb', len(rb))
+        print("len rb", len(rb))
         break
 
     # Loss module

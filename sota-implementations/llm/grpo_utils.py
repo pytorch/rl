@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+from typing import Literal
 
 import torch
 
@@ -45,12 +46,19 @@ def get_train_model(args, train_devices):
     )
     return policy_training, train_tokenizer
 
+
 def get_train_inference_model(args, train_devices):
     torchrl_logger.info("Creating train model")
 
-    with torch.device(f"cuda:{train_devices[0]}") if train_devices else contextlib.nullcontext():
+    with torch.device(
+        f"cuda:{train_devices[0]}"
+    ) if train_devices else contextlib.nullcontext():
         train_model, train_tokenizer = get_hf_model(
-            args.model_name, device_map=train_devices[0] if train_devices else [], lora=args.lora, gradient_checkpointing=args.gradient_checkpointing, quantize=args.quantize
+            args.model_name,
+            device_map=train_devices[0] if train_devices else [],
+            lora=args.lora,
+            gradient_checkpointing=args.gradient_checkpointing,
+            quantize=args.quantize,
         )
     policy_training = TransformersWrapper(
         train_model,
@@ -139,7 +147,9 @@ def get_hf_model(
     | int
     | torch.device
     | None = None,
-    lora: bool=True,
+    lora: bool = True,
+    attn_implementation: Literal["flash_attention_2", "flex_attention", "sdpa"]
+    | None = "flex_attention",
 ):
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -157,10 +167,12 @@ def get_hf_model(
         model_configs = {
             "torch_dtype": torch_dtype,
         }
-        if torch.cuda.is_available():
-            model_configs.update({
-                "attn_implementation": "flash_attention_2",
-            })
+        if torch.cuda.is_available() and attn_implementation:
+            model_configs.update(
+                {
+                    "attn_implementation": attn_implementation,
+                }
+            )
     else:
         model_configs = {}
 
@@ -178,6 +190,7 @@ def get_hf_model(
     # Enable Quantization
     if quantize:
         from transformers import BitsAndBytesConfig
+
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_use_double_quant=True,
@@ -214,6 +227,7 @@ def get_hf_model(
 
     if lora:
         from peft import get_peft_model, LoraConfig
+
         config = LoraConfig(
             r=lora_r,
             lora_alpha=lora_alpha,

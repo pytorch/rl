@@ -25,7 +25,6 @@ from torchrl._utils import logger as torchrl_logger
 from torchrl.data import Choice, Composite, NonTensor
 from torchrl.data.llm import History
 from torchrl.envs import ConditionalSkip, GymWrapper, Transform, TransformedEnv
-from torchrl.envs.transforms.transforms import BatchSizeTransform
 
 # Inv transforms:
 #  Transforms to apply prior to pass the model output to the env

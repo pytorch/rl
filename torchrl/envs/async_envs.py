@@ -241,10 +241,15 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         if tensordict is None:
             if self._stack_func in ("lazy_stack", "maybe_dense"):
                 tensordict = LazyStackedTensorDict(
-                    *[TensorDict(batch_size=self.env_batch_sizes[i]) for i in range(self.num_envs)]
+                    *[
+                        TensorDict(batch_size=self.env_batch_sizes[i])
+                        for i in range(self.num_envs)
+                    ]
                 )
             else:
-                tensordict = TensorDict(batch_size=(self.num_envs,)+self.env_batch_sizes[0])
+                tensordict = TensorDict(
+                    batch_size=(self.num_envs,) + self.env_batch_sizes[0]
+                )
         tensordict.set(self._env_idx_key, torch.arange(tensordict.shape[0]))
         self._async_private_reset_send(tensordict)
         tensordict = self._async_private_reset_recv(min_get=self.num_envs)
@@ -290,10 +295,15 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         if tensordict is None:
             if self._stack_func in ("lazy_stack", "maybe_dense"):
                 tensordict = LazyStackedTensorDict(
-                    *[TensorDict(batch_size=self.env_batch_sizes[i]) for i in range(self.num_envs)]
+                    *[
+                        TensorDict(batch_size=self.env_batch_sizes[i])
+                        for i in range(self.num_envs)
+                    ]
                 )
             else:
-                tensordict = TensorDict(batch_size=(self.num_envs,)+self.env_batch_sizes[0])
+                tensordict = TensorDict(
+                    batch_size=(self.num_envs,) + self.env_batch_sizes[0]
+                )
         tensordict.set(self._env_idx_key, torch.arange(tensordict.shape[0]))
         self.async_reset_send(tensordict)
         tensordict = self.async_reset_recv(min_get=self.num_envs)
@@ -333,7 +343,9 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         elif isinstance(env_index, int):
             if make_if_none:
                 if tensordict is None:
-                    tensordict = TensorDict(batch_size=self.env_batch_sizes[env_index], device=self.device)
+                    tensordict = TensorDict(
+                        batch_size=self.env_batch_sizes[env_index], device=self.device
+                    )
                 if self.stack in ("lazy_stack", "maybe_dense"):
                     tensordict = tensordict.unsqueeze(0)
                 else:
