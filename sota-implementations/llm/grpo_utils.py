@@ -230,8 +230,8 @@ def get_hf_model(
         ImportError: If required dependencies are not installed
         RuntimeError: If model initialization fails
     """
+
     from transformers import AutoModelForCausalLM, AutoTokenizer
-    import contextlib
 
     # Store original dtype to restore it later
     original_dtype = torch.get_default_dtype()
@@ -276,7 +276,9 @@ def get_hf_model(
             try:
                 from transformers.utils.quantization_config import BitsAndBytesConfig
             except ImportError:
-                raise ImportError("Please install transformers with bitsandbytes support")
+                raise ImportError(
+                    "Please install transformers with bitsandbytes support"
+                )
 
             bnb_config = BitsAndBytesConfig(
                 load_in_4bit=True,
