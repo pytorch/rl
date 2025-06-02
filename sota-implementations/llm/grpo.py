@@ -60,6 +60,8 @@ torch.set_default_dtype(torch.bfloat16)
 torch.set_default_device("cuda:0")
 set_list_to_stack(True).set()
 
+if not os.getenv("VLLM_USE_V1", "0"):
+    raise ValueError("VLLM_USE_V1=0 not set")
 
 def make_device_splits():
     # devices = list(range(torch.cuda.device_count()))

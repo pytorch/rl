@@ -115,9 +115,9 @@ def get_ref_model(args, tokenizer, ref_device):
         model_name = args.model_name
         from transformers import AutoModelForCausalLM
 
-        ref_model = AutoModelForCausalLM.from_pretrained(
-            model_name, device_map=ref_device, torch_dtype=torch.bfloat16
-        ).eval()
+        ref_model = get_hf_model(
+            model_name, device_map=ref_device, torch_dtype=torch.bfloat16, quantize=True, gradient_checkpointing=False,
+        )[0].eval()
         # Detach weights
         TensorDict.from_module(ref_model).data.to_module(ref_model)
         ref_model = TransformersWrapper(
