@@ -52,7 +52,7 @@ train:
   steps_per_batch: 64
   optim_batch_size: 1
   gradient_accumulation_steps: 1
-  mixed_precision: true
+  mixed_precision: false  # Disable mixed precision since we're not using it
   optimizer:
     name: AdamW
     lr: 1e-5

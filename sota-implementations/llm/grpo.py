@@ -50,9 +50,16 @@ def setup_environment() -> None:
     if not os.getenv("VLLM_USE_V1", "0"):
         raise RuntimeError("VLLM_USE_V1=0 must be set in environment")
 
+    # Set default dtype to bfloat16 for all tensors
     torch.set_default_dtype(torch.bfloat16)
     torch.set_default_device("cuda:0")
     set_list_to_stack(True).set()
+
+    # Ensure CUDA is using the correct dtype
+    if torch.cuda.is_available():
+        torch.cuda.set_device("cuda:0")
+        # Set default CUDA dtype to match global default
+        torch.cuda.set_default_tensor_type(f'torch.cuda.{torch.get_default_dtype().__str__().split(".")[-1]}')
 
 
 @hydra.main(version_base=None, config_path="config", config_name="grpo")
@@ -65,9 +72,6 @@ def train(cfg: DictConfig) -> None:
     import ray
 
     ray.init()
-
-    # Setup environment
-    setup_environment()
 
     # Setup devices
     train_devices, ref_device, vllm_devices = make_device_splits()
@@ -195,49 +199,42 @@ def train(cfg: DictConfig) -> None:
 
             for batch_idx, batch in enumerate(rb):
                 pbar.update(1)
-
-                # Forward pass
                 batch = batch.to(train_devices[0])
-                with autocast(enabled=cfg.train.mixed_precision):
-                    loss = loss_fn(batch)
-                    loss_val = loss.mean(reduce=True)
-                    loss_val = loss_val / cfg.train.gradient_accumulation_steps
+                
+                # Forward pass
+                loss = loss_fn(batch)
+                loss_val = loss.mean(reduce=True)
+                loss_val = loss_val / cfg.train.gradient_accumulation_steps
 
                 # Backward pass
-                scaler.scale(loss_val).backward()
+                loss_val.backward()
 
                 if (batch_idx + 1) % cfg.train.gradient_accumulation_steps == 0:
                     # Clip gradients
-                    scaler.unscale_(optim)
                     grad_norm = torch.nn.utils.clip_grad_norm_(
                         policy_training.model.parameters(),
                         cfg.train.optimizer.clip_grad_norm,
                     )
 
                     # Optimizer step
-                    scaler.step(optim)
-                    scaler.update()
+                    optim.step()
                     optim.zero_grad()
 
-                    # Log training metrics
+                    # Log metrics
                     wandb_logger.log_scalar("ESS", float(loss.ESS))
-                    wandb_logger.log_scalar(
-                        "loss_objective", float(loss.loss_objective)
-                    )
+                    wandb_logger.log_scalar("loss_objective", float(loss.loss_objective))
                     wandb_logger.log_scalar("clip_fraction", float(loss.clip_fraction))
                     wandb_logger.log_scalar("kl_approx", float(loss.kl_approx))
                     wandb_logger.log_scalar("grad_norm", float(grad_norm))
                     wandb_logger.log_scalar("entropy", float(loss.loss_entropy.mean()))
                     wandb_logger.log_scalar("kl_to_ref", float(loss.kl_to_ref.mean()))
-                    wandb_logger.log_scalar(
-                        "loss_kl_to_ref", float(loss.loss_kl_to_ref.mean())
-                    )
+                    wandb_logger.log_scalar("loss_kl_to_ref", float(loss.loss_kl_to_ref.mean()))
 
-                # Memory management
-                gc.collect()
-                torch.cuda.empty_cache()
+                    # Memory management
+                    gc.collect()
+                    torch.cuda.empty_cache()
 
-            pbar.close()
+                pbar.close()
 
         # Update policy weights
         torchrl_logger.info("Updating policy weights...")
@@ -259,4 +256,6 @@ def train(cfg: DictConfig) -> None:
 
 
 if __name__ == "__main__":
+      # Setup environment
+    setup_environment()
     train()

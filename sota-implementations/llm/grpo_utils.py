@@ -238,20 +238,16 @@ def get_hf_model(
     tokenizer.padding_side = "left"
 
     # Configure model settings for bfloat16 precision
-    if torch_dtype == torch.bfloat16:
-        # Store original dtype to restore it later
-        original_dtype = torch.get_default_dtype()
-        torch.set_default_dtype(torch_dtype)
-        
-        model_configs = {
-            "torch_dtype": torch_dtype,
-        }
-        if torch.cuda.is_available() and attn_implementation:
-            torchrl_logger.info(f"{attn_implementation} init")
-            model_configs["attn_implementation"] = attn_implementation
-    else:
-        original_dtype = None
-        model_configs = {}
+    # Store original dtype to restore it later
+    original_dtype = torch.get_default_dtype()
+    torch.set_default_dtype(torch_dtype)
+    
+    model_configs = {
+        "torch_dtype": torch_dtype,
+    }
+    if torch.cuda.is_available() and attn_implementation:
+        torchrl_logger.info(f"{attn_implementation} init")
+        model_configs["attn_implementation"] = attn_implementation
 
     try:
         if device_map:
@@ -308,22 +304,38 @@ def get_hf_model(
             except ImportError:
                 raise ImportError("Please install peft: pip install peft")
 
+            # Create LoRA config with explicit dtype setting
+            lora_config = LoraConfig(
+                r=lora_r,
+                lora_alpha=lora_alpha,
+                target_modules="all-linear",
+                lora_dropout=lora_dropout,
+                bias="none",
+                task_type="CAUSAL_LM",
+                inference_mode=False,
+                init_lora_weights=True,  # This ensures weights are initialized
+                dtype=torch_dtype,  # Explicitly set LoRA dtype
+            )
+
+            # Initialize LoRA model
             model = get_peft_model(
-                model,
-                LoraConfig(
-                    r=lora_r,
-                    lora_alpha=lora_alpha,
-                    target_modules="all-linear",
-                    lora_dropout=lora_dropout,
-                    bias="none",
-                    task_type="CAUSAL_LM",
-                    inference_mode=False,
-                ),
-            ).eval()
+                model, 
+                lora_config,
+                autocast_adapter_dtype=False  # Prevent automatic casting of adapter layers
+            )
+            
+            # Force LoRA layers to correct dtype
+            for n, p in model.named_parameters():
+                if "lora_" in n:  # Only convert LoRA parameters
+                    p.data = p.data.to(torch_dtype)
+
+        # Verify all parameters are in correct dtype
+        for n, p in model.named_parameters():
+            if p.dtype == torch.float32:
+                raise RuntimeError(f"Parameter {n} is still in float32")
 
         return model, tokenizer
 
     finally:
-        # Restore original dtype only if we changed it
-        if original_dtype is not None:
-            torch.set_default_dtype(original_dtype)
+        # Restore original dtype
+        torch.set_default_dtype(original_dtype)
