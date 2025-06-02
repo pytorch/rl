@@ -314,7 +314,6 @@ def get_hf_model(
                 task_type="CAUSAL_LM",
                 inference_mode=False,
                 init_lora_weights=True,  # This ensures weights are initialized
-                dtype=torch_dtype,  # Explicitly set LoRA dtype
             )
 
             # Initialize LoRA model
