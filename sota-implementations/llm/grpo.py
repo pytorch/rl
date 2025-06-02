@@ -2,157 +2,113 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""
+"""GRPO: Generalized Reward-Conditioned Policy Optimization
 
-# TODO: make sure VLLM_USE_V1=0
-
-$ python -m pip install peft
-$ python -m pip install bitsandbytes
-$ python -m pip install flash_attn
-$ python -m pip install datasets
-
+This module implements GRPO training for language models.
 """
 from __future__ import annotations
 
 import gc
 import os
-from argparse import ArgumentParser
+from pathlib import Path
 
+import hydra
 import torch
-
 import tqdm
 
 from grpo_utils import get_inference_model, get_ref_model, get_train_model
+from omegaconf import DictConfig
 from tensordict import set_list_to_stack
-from torchrl import logger as torchrl_logger
+from torch.cuda.amp import autocast, GradScaler
+from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors.llm import LLMCollector
 from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
 from torchrl.data import LazyStackStorage, ReplayBuffer, SamplerWithoutReplacement
-
 from torchrl.envs.llm import GSM8KEnv, KLRewardTransform
-
+from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
 from torchrl.objectives.llm.grpo import GRPOLoss, MCAdvantage
 from torchrl.record import WandbLogger
 
-if not os.getenv("VLLM_USE_V1", "0"):
-    raise ValueError("VLLM_USE_V1=0 not set")
 
-parser = ArgumentParser()
-parser.add_argument(
-    "--dataset",
-    type=str,
-    default="gsm8k",
-    choices=["gsm8k", "ifeval"],
-    help="Dataset to use. Currently, gsm8k and ifeval are supported.",
-)
-parser.add_argument(
-    "--epochs",
-    type=int,
-    default=1,
-    help="Number of epochs to train for every time a batch is collected.",
-)
-parser.add_argument(
-    "--repeats",
-    type=int,
-    default=16,
-    help="Number of times to repeat the same action in the same batch (for the GRPO objective).",
-)
-parser.add_argument(
-    "--num_envs",
-    type=int,
-    default=8,
-    help="Number of environments to run in parallel (within the LLMCollector).",
-)
-parser.add_argument(
-    "--steps_per_batch",
-    type=int,
-    default=64,
-    help="Number of steps to collect in each batch (within the LLMCollector).",
-)
-parser.add_argument(
-    "--optim_batch_size",
-    type=int,
-    default=4,
-    help="Number of elements in the batch to optimize.",
-)
-parser.add_argument(
-    "--model_name",
-    type=str,
-    default="Qwen/Qwen2.5-3B",
-    help="Model to use. Must be a HuggingFace model name.",
-)
-parser.add_argument("--compile", action="store_true", help="Compile the loss function.")
-parser.add_argument(
-    "--clip_grad_norm", type=float, default=0.5, help="Gradient norm clipping."
-)
-parser.add_argument("--lr", type=float, default=1e-5, help="Learning rate.")
-parser.add_argument("--kl_coef", type=float, default=1e-2, help="KL coefficient.")
+def make_device_splits() -> tuple[list[int], int, list[int]]:
+    """Determine device allocation for training."""
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA is required for training")
 
-
-parser.add_argument("--gpu_memory_utilization", type=float, default=0.5)
-
-torch.set_default_dtype(torch.bfloat16)
-
-torch.set_default_device("cuda:0")
-set_list_to_stack(True).set()
-
-if not os.getenv("VLLM_USE_V1", "0"):
-    raise ValueError("VLLM_USE_V1=0 not set")
-
-
-def make_device_splits():
-    # devices = list(range(torch.cuda.device_count()))
-    # train_devices = devices[1:-1]
-    # vllm_device = devices[0]
-    # ref_device = devices[-1]
     devices = list(range(torch.cuda.device_count()))
+    if len(devices) < 3:
+        raise RuntimeError("At least 3 GPUs are required")
+
     train_devices = devices[0:-2]
     vllm_devices = devices[-2:-1]
     ref_device = devices[-1]
     return train_devices, ref_device, vllm_devices
 
 
-if __name__ == "__main__":
+def setup_environment() -> None:
+    """Setup required environment variables and configurations."""
+    if not os.getenv("VLLM_USE_V1", "0"):
+        raise RuntimeError("VLLM_USE_V1=0 must be set in environment")
+
+    torch.set_default_dtype(torch.bfloat16)
+    torch.set_default_device("cuda:0")
+    set_list_to_stack(True).set()
+
+
+@hydra.main(version_base=None, config_path="config", config_name="grpo")
+def train(cfg: DictConfig) -> None:
+    """Main training loop.
+
+    Args:
+        cfg: Hydra configuration object
+    """
     import ray
 
     ray.init()
 
-    args = parser.parse_args()
+    # Setup environment
+    setup_environment()
 
+    # Setup devices
     train_devices, ref_device, vllm_devices = make_device_splits()
 
-    policy_training, train_tokenizer = get_train_model(args, train_devices)
+    # Initialize models
+    policy_training, train_tokenizer = get_train_model(cfg, train_devices)
+    policy = get_inference_model(cfg, vllm_devices)
+    ref_model = get_ref_model(cfg, train_tokenizer, ref_device)
 
-    # vLLM
-    policy = get_inference_model(args, vllm_devices)
+    # Setup environment
+    if cfg.env.dataset == "gsm8k":
+        env = GSM8KEnv(
+            repeats=cfg.env.repeats,
+            tokenizer=train_tokenizer,
+            num_envs=cfg.env.num_envs,
+        )
+    else:  # ifeval
+        env = IFEvalEnv(
+            repeats=cfg.env.repeats,
+            tokenizer=train_tokenizer,
+            num_envs=cfg.env.num_envs,
+        )
 
-    ref_model = get_ref_model(args, train_tokenizer, ref_device)
-
-    # Ref model
-
-    # Env
-    env = GSM8KEnv(
-        repeats=args.repeats, tokenizer=train_tokenizer, num_envs=args.num_envs
-    )
     env = env.append_transform(
         KLRewardTransform(
             actor=ref_model,
-            coef=args.kl_coef,
-            device=ref_device,
+            coef=cfg.policy.kl_coef,
+            device=torch.device(f"cuda:{ref_device}"),
             add_to_reward=False,
         )
     )
 
-    # replay buffer
+    # Setup replay buffer
     rb = ReplayBuffer(
-        storage=LazyStackStorage(args.steps_per_batch),
+        storage=LazyStackStorage(cfg.train.steps_per_batch),
         sampler=SamplerWithoutReplacement(),
-        batch_size=args.optim_batch_size,
+        batch_size=cfg.train.optim_batch_size,
     )
-    rb.append_transform(MCAdvantage(grpo_size=args.repeats))
+    rb.append_transform(MCAdvantage(grpo_size=cfg.env.repeats))
 
-    # Collector
-
+    # Setup collector
     model_metadata = {
         k: (v.dtype, v.shape)
         for k, v in policy_training.model.merge_and_unload().state_dict().items()
@@ -166,89 +122,141 @@ if __name__ == "__main__":
     collector = LLMCollector(
         env,
         policy=policy,
-        dialog_turns_per_batch=args.steps_per_batch,
+        dialog_turns_per_batch=cfg.train.steps_per_batch,
         total_dialog_turns=1_000_000,
         weight_updater=updater,
     )
     updater.maybe_init_group()
 
-    # Warmup
-    torchrl_logger.info("Init weights update...")
+    # Initialize weights
+    torchrl_logger.info("Initializing weights...")
     collector.update_policy_weights_(
         policy_training.model.merge_and_unload().state_dict(), worker_ids=[0]
     )
-    torchrl_logger.info("done\n")
 
-    # Loss module
-    loss_fn = GRPOLoss(actor_network=policy_training, kl_to_ref_coeff=args.kl_coef)
-
-    if args.compile:
+    # Setup loss and optimizer
+    loss_fn = GRPOLoss(
+        actor_network=policy_training, kl_to_ref_coeff=cfg.policy.kl_coef
+    )
+    if cfg.model.compile:
         loss_fn = torch.compile(loss_fn)
 
-    # TODO: foreach=False to avoid "Tensors of the same index must be on the same device" error due to "auto" device map
-    optim = torch.optim.AdamW(policy_training.model.parameters(), lr=args.lr)
-    logger = WandbLogger(exp_name=args.model_name)
+    optim = getattr(torch.optim, cfg.train.optimizer.name)(
+        policy_training.model.parameters(), lr=cfg.train.optimizer.lr
+    )
+    scaler = GradScaler(enabled=cfg.train.mixed_precision)
 
+    # Setup logging
+    experiment_name = (
+        cfg.logging.experiment_name
+        or f"{cfg.model.name.split('/')[-1]}_{cfg.env.dataset}"
+    )
+    wandb_logger = WandbLogger(exp_name=experiment_name, config=dict(cfg))
+
+    # Create checkpoint directory
+    checkpoint_dir = Path(cfg.logging.checkpoint_dir) / experiment_name
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+    # Training loop
     for i, trajs in enumerate(collector):
-        torchrl_logger.info(f"Collected batch {i}: {trajs=}")
+        torchrl_logger.info(f"Collected batch {i}: {len(trajs)} trajectories")
 
-        # rb.empty()
         trajs = trajs.reshape(-1)
         rb.extend(trajs)
 
-        # logging
-        reward = torch.cat(rb[:].get(("next", "reward"), as_list=True)).mean()
-        advantage = torch.cat(rb[:].get("advantage", as_list=True)).mean()
-        kl_penalty = torch.cat(rb[:].get(("next", "kl_penalty"), as_list=True)).mean()
-        seq_length = []
-        for t in rb[:].get("tokens_response", as_list=True):
-            seq_length.append(t.numel())
-        seq_length = torch.tensor(seq_length, dtype=torch.float).mean()
+        # Calculate metrics
+        with torch.no_grad():
+            reward = torch.cat(rb[:].get(("next", "reward"), as_list=True)).mean()
+            advantage = torch.cat(rb[:].get("advantage", as_list=True)).mean()
+            kl_penalty = torch.cat(
+                rb[:].get(("next", "kl_penalty"), as_list=True)
+            ).mean()
+            seq_length = torch.tensor(
+                [t.numel() for t in rb[:].get("tokens_response", as_list=True)],
+                dtype=torch.float,
+            ).mean()
 
         if not reward:
-            # no use in training a model without reward
-            torchrl_logger.info("no reward - skipping")
-            torch.cuda.empty_cache()  # TODO: Test if this is needed
+            torchrl_logger.info("No reward - skipping batch")
+            torch.cuda.empty_cache()
             continue
-        logger.log_scalar("reward", reward)
-        logger.log_scalar("advantage", advantage)
-        logger.log_scalar("kl_penalty", kl_penalty)
-        logger.log_scalar("seq_length", seq_length)
 
-        torchrl_logger.info(f"reward: {reward: 4.4f}")
-        for i in range(args.epochs):
-            torchrl_logger.info(f"epoch: {i}")
-            pbar = tqdm.tqdm(total=len(rb) // args.optim_batch_size)
-            for batch in rb:
+        # Log metrics
+        wandb_logger.log_scalar("reward", float(reward))
+        wandb_logger.log_scalar("advantage", float(advantage))
+        wandb_logger.log_scalar("kl_penalty", float(kl_penalty))
+        wandb_logger.log_scalar("seq_length", float(seq_length))
+        torchrl_logger.info(f"Reward: {float(reward):4.4f}")
+
+        # Training epochs
+        for epoch in range(cfg.train.epochs):
+            torchrl_logger.info(f"Epoch {epoch}")
+            pbar = tqdm.tqdm(total=len(rb) // cfg.train.optim_batch_size)
+
+            for batch_idx, batch in enumerate(rb):
                 pbar.update(1)
-                optim.zero_grad()
+
+                # Forward pass
                 batch = batch.to(train_devices[0])
-                loss = loss_fn(batch)
-                loss_val = loss.mean(reduce=True)
-                loss_val.backward()
-                gn = torch.nn.utils.clip_grad_norm_(
-                    policy_training.model.parameters(), args.clip_grad_norm
-                )
-                optim.step()
+                with autocast(enabled=cfg.train.mixed_precision):
+                    loss = loss_fn(batch)
+                    loss_val = loss.mean(reduce=True)
+                    loss_val = loss_val / cfg.train.gradient_accumulation_steps
 
-                logger.log_scalar("ESS", loss.ESS)
-                logger.log_scalar("loss_objective", loss.loss_objective)
-                logger.log_scalar("clip_fraction", loss.clip_fraction)
-                logger.log_scalar("kl_approx", loss.kl_approx)
-                logger.log_scalar("grad_norm", gn)
-                logger.log_scalar("entropy", loss.loss_entropy.mean())
-                logger.log_scalar("kl_to_ref", loss.kl_to_ref.mean())
-                logger.log_scalar("loss_kl_to_ref", loss.loss_kl_to_ref.mean())
+                # Backward pass
+                scaler.scale(loss_val).backward()
 
-                # scaler.update()
+                if (batch_idx + 1) % cfg.train.gradient_accumulation_steps == 0:
+                    # Clip gradients
+                    scaler.unscale_(optim)
+                    grad_norm = torch.nn.utils.clip_grad_norm_(
+                        policy_training.model.parameters(),
+                        cfg.train.optimizer.clip_grad_norm,
+                    )
 
+                    # Optimizer step
+                    scaler.step(optim)
+                    scaler.update()
+                    optim.zero_grad()
+
+                    # Log training metrics
+                    wandb_logger.log_scalar("ESS", float(loss.ESS))
+                    wandb_logger.log_scalar(
+                        "loss_objective", float(loss.loss_objective)
+                    )
+                    wandb_logger.log_scalar("clip_fraction", float(loss.clip_fraction))
+                    wandb_logger.log_scalar("kl_approx", float(loss.kl_approx))
+                    wandb_logger.log_scalar("grad_norm", float(grad_norm))
+                    wandb_logger.log_scalar("entropy", float(loss.loss_entropy.mean()))
+                    wandb_logger.log_scalar("kl_to_ref", float(loss.kl_to_ref.mean()))
+                    wandb_logger.log_scalar(
+                        "loss_kl_to_ref", float(loss.loss_kl_to_ref.mean())
+                    )
+
+                # Memory management
                 gc.collect()
                 torch.cuda.empty_cache()
 
-        torchrl_logger.info("Updating weights...")
+            pbar.close()
+
+        # Update policy weights
+        torchrl_logger.info("Updating policy weights...")
         collector.update_policy_weights_(
             policy_weights=policy_training.model.merge_and_unload().state_dict(),
             worker_ids=[0],
         )
-        gc.collect()
-        torch.cuda.empty_cache()
+
+        # Save checkpoint
+        if (i + 1) % cfg.logging.checkpoint_frequency == 0:
+            checkpoint = {
+                "batch": i,
+                "model_state_dict": policy_training.model.state_dict(),
+                "optimizer_state_dict": optim.state_dict(),
+                "scaler_state_dict": scaler.state_dict(),
+                "config": dict(cfg),
+            }
+            torch.save(checkpoint, checkpoint_dir / f"checkpoint_{i:04d}.pt")
+
+
+if __name__ == "__main__":
+    train()

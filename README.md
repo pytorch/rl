@@ -826,201 +826,68 @@ If you're using TorchRL, please refer to this BibTeX entry to cite this work:
 
 ## Installation
 
-Create a conda environment where the packages will be installed.
-
-```
-conda create --name torch_rl python=3.9
-conda activate torch_rl
-```
-
-**PyTorch**
-
-Depending on the use of functorch that you want to make, you may want to 
-install the latest (nightly) PyTorch release or the latest stable version of PyTorch.
-See [here](https://pytorch.org/get-started/locally/) for a detailed list of commands, 
-including `pip3` or other special installation instructions.
-
-**Torchrl**
-
-You can install the **latest stable release** by using
+1. Create a new virtual environment:
 ```bash
-pip3 install torchrl
-```
-This should work on linux, Windows 10 and OsX (Intel or Silicon chips).
-On certain Windows machines (Windows 11), one should install the library locally (see below).
-
-For AArch64 machines, the binaries are not yet stored on PyPI so you will need to download them directly from
-the [release page](https://github.com/pytorch/rl/releases/) or install the library via
-```
-pip3 install git+https://github.com/pytorch/rl@v0.8.0
+python -m venv venv
+source venv/bin/activate  # On Windows use: venv\Scripts\activate
 ```
 
-The **nightly build** can be installed via
+2. Install dependencies:
 ```bash
-pip3 install tensordict-nightly torchrl-nightly
+pip install -r requirements.txt
 ```
-which we currently only ship for Linux machines.
-Importantly, the nightly builds require the nightly builds of PyTorch too.
 
-To install extra dependencies, call
+3. Set required environment variables:
 ```bash
-pip3 install "torchrl[atari,dm_control,gym_continuous,rendering,tests,utils,marl,open_spiel,checkpointing]"
+export VLLM_USE_V1=0  # Required for vLLM compatibility
 ```
-or a subset of these.
 
-To install torchrl with the latest pytorch, use
+## Usage
+
+The main training script supports various datasets and models:
+
 ```bash
-pip3 install "torchrl[replay_buffer]"
-```
-since some features in the replay buffer require PyTorch 2.7.0 or above.
-
-One may also desire to install the library locally. Three main reasons can motivate this:
-- the nightly/stable release isn't available for one's platform (eg, Windows 11, nightlies for Apple Silicon etc.);
-- contributing to the code;
-- install torchrl with a previous version of PyTorch (any version >= 2.1) (note that this should also be doable via a regular install followed
-  by a downgrade to a previous pytorch version -- but the C++ binaries will not be available so some feature will not work,  
-  such as prioritized replay buffers and the like.)
-
-  **Disclaimer**: As of today, TorchRL is roughly compatible with any pytorch version >= 2.1 and installing it will not
-  directly require a newer version of pytorch to be installed. Indirectly though, tensordict still requires the latest
-  PyTorch to be installed and we are working hard to loosen that requirement. 
-  The C++ binaries of TorchRL (mainly for prioritized replay buffers) will only work with PyTorch 2.7.0 and above.
-  Some features (e.g., working with nested jagged tensors) may also
-  be limited with older versions of pytorch. It is recommended to use the latest TorchRL with the latest PyTorch version
-  unless there is a strong reason not to do so.
-
-To install the library locally, start by cloning the repo:
-```bash
-git clone https://github.com/pytorch/rl
-```
-and don't forget to check out the branch or tag you want to use for the build:
-```bash
-git checkout v0.8.0
+python sota-implementations/llm/grpo.py \
+    --dataset gsm8k \
+    --model_name Qwen/Qwen2.5-3B \
+    --num_envs 8 \
+    --steps_per_batch 64 \
+    --optim_batch_size 4 \
+    --epochs 1 \
+    --repeats 16 \
+    --lr 1e-5 \
+    --kl_coef 0.01
 ```
 
-Go to the directory where you have cloned the torchrl repo and install it (after
-installing `ninja`)
-```bash
-cd /path/to/torchrl/
-pip3 install ninja -U
-python setup.py develop
-```
+### Key Parameters
 
-One can also build the wheels to distribute to co-workers using
-```bash
-python setup.py bdist_wheel
-```
-Your wheels will be stored there `./dist/torchrl<name>.whl` and installable via
-```bash
-pip install torchrl<name>.whl
-```
+- `--dataset`: Currently supports 'gsm8k' and 'ifeval'
+- `--model_name`: Any HuggingFace model name
+- `--num_envs`: Number of parallel environments
+- `--steps_per_batch`: Steps to collect per batch
+- `--optim_batch_size`: Batch size for optimization
+- `--epochs`: Number of epochs per batch collection
+- `--repeats`: Number of action repeats for GRPO
+- `--lr`: Learning rate
+- `--kl_coef`: KL penalty coefficient
+- `--compile`: Enable torch.compile() for the loss function
+- `--clip_grad_norm`: Gradient norm clipping value
+- `--gpu_memory_utilization`: GPU memory utilization for vLLM
 
-**Warning**: Unfortunately, `pip3 install -e .` does not currently work. Contributions to help fix this are welcome!
+## Hardware Requirements
 
-On M1 machines, this should work out-of-the-box with the nightly build of PyTorch.
-If the generation of this artifact in MacOs M1 doesn't work correctly or in the execution the message
-`(mach-o file, but is an incompatible architecture (have 'x86_64', need 'arm64e'))` appears, then try
+- CUDA-capable GPU with at least 8GB VRAM
+- For multi-GPU setups, the script automatically manages device allocation
 
-```
-ARCHFLAGS="-arch arm64" python setup.py develop
-```
+## Monitoring
 
-To run a quick sanity check, leave that directory (e.g. by executing `cd ~/`)
-and try to import the library.
-```
-python -c "import torchrl"
-```
-This should not return any warning or error.
+The training progress is logged to Weights & Biases. Key metrics include:
+- Reward
+- Advantage
+- KL penalty
+- Sequence length
+- Loss metrics (ESS, objective, clip fraction, etc.)
 
-**Optional dependencies**
+## License
 
-The following libraries can be installed depending on the usage one wants to
-make of torchrl:
-```
-# diverse
-pip3 install tqdm tensorboard "hydra-core>=1.1" hydra-submitit-launcher
-
-# rendering
-pip3 install "moviepy<2.0.0"
-
-# deepmind control suite
-pip3 install dm_control
-
-# gym, atari games
-pip3 install "gym[atari]" "gym[accept-rom-license]" pygame
-
-# tests
-pip3 install pytest pyyaml pytest-instafail
-
-# tensorboard
-pip3 install tensorboard
-
-# wandb
-pip3 install wandb
-```
-
-**Troubleshooting**
-
-If a `ModuleNotFoundError: No module named ‘torchrl._torchrl` errors occurs (or
-a warning indicating that the C++ binaries could not be loaded),
-it means that the C++ extensions were not installed or not found.
-
-- One common reason might be that you are trying to import torchrl from within the
-  git repo location. The following code snippet should return an error if
-  torchrl has not been installed in `develop` mode:
-  ```
-  cd ~/path/to/rl/repo
-  python -c 'from torchrl.envs.libs.gym import GymEnv'
-  ```
-  If this is the case, consider executing torchrl from another location.
-- If you're not importing torchrl from within its repo location, it could be
-  caused by a problem during the local installation. Check the log after the
-  `python setup.py develop`. One common cause is a g++/C++ version discrepancy
-  and/or a problem with the `ninja` library.
-- If the problem persists, feel free to open an issue on the topic in the repo,
-  we'll make our best to help!
-- On **MacOs**, we recommend installing XCode first. 
-  With Apple Silicon M1 chips, make sure you are using the arm64-built python
-  (e.g. [here](https://betterprogramming.pub/how-to-install-pytorch-on-apple-m1-series-512b3ad9bc6)).
-  Running the following lines of code
-  ```
-  wget https://raw.githubusercontent.com/pytorch/pytorch/master/torch/utils/collect_env.py
-  python collect_env.py
-  ```
-  should display
-  ```
-  OS: macOS *** (arm64)
-  ```
-  and not
-  ```
-  OS: macOS **** (x86_64)
-  ```
-
-Versioning issues can cause error message of the type ```undefined symbol```
-and such. For these, refer to the [versioning issues document](https://github.com/pytorch/rl/blob/main/knowledge_base/VERSIONING_ISSUES.md)
-for a complete explanation and proposed workarounds.
-
-## Asking a question
-
-If you spot a bug in the library, please raise an issue in this repo.
-
-If you have a more generic question regarding RL in PyTorch, post it on
-the [PyTorch forum](https://discuss.pytorch.org/c/reinforcement-learning/6).
-
-## Contributing
-
-Internal collaborations to torchrl are welcome! Feel free to fork, submit issues and PRs.
-You can checkout the detailed contribution guide [here](https://github.com/pytorch/rl/blob/main/CONTRIBUTING.md).
-As mentioned above, a list of open contributions can be found in [here](https://github.com/pytorch/rl/issues/509).
-
-Contributors are recommended to install [pre-commit hooks](https://pre-commit.com/) (using `pre-commit install`). pre-commit will check for linting related issues when the code is committed locally. You can disable th check by appending `-n` to your commit command: `git commit -m <commit message> -n`
-
-
-## Disclaimer
-
-This library is released as a PyTorch beta feature.
-BC-breaking changes are likely to happen but they will be introduced with a deprecation
-warranty after a few release cycles.
-
-# License
-TorchRL is licensed under the MIT License. See [LICENSE](https://github.com/pytorch/rl/blob/main/LICENSE) for details.
+This project is licensed under the MIT License - see the LICENSE file for details.
