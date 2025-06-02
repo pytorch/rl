@@ -8,6 +8,7 @@ import contextlib
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
+from typing import Mapping
 
 import torch
 from tensordict import (
@@ -84,7 +85,9 @@ class PPOLoss(LossModule):
             ``samples_mc_entropy`` will control how many
             samples will be used to compute this estimate.
             Defaults to ``1``.
-        entropy_coef (scalar, optional): entropy multiplier when computing the total loss.
+        entropy_coef (scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.
+            * **Scalar**: one value applied to the summed entropy of every action head.
+            * **Mapping** ``{head_name: coef}`` gives an individual coefficient for each action-head's entropy.
             Defaults to ``0.01``.
         critic_coef (scalar, optional): critic loss multiplier when computing the total
             loss. Defaults to ``1.0``. Set ``critic_coef`` to ``None`` to exclude the value
@@ -330,7 +333,7 @@ class PPOLoss(LossModule):
         *,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
-        entropy_coef: float = 0.01,
+        entropy_coef: float | Mapping[str, float] = 0.01,
         critic_coef: float | None = None,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
@@ -408,7 +411,22 @@ class PPOLoss(LossModule):
                     torch, "get_default_device", lambda: torch.device("cpu")
                 )()
 
-        self.register_buffer("entropy_coef", torch.tensor(entropy_coef, device=device))
+        if isinstance(entropy_coef, Mapping):
+            # Store the mapping for per-head coefficients
+            self._entropy_coef_map = {str(k): float(v) for k, v in entropy_coef.items()}
+            # Register an empty buffer for compatibility
+            self.register_buffer("entropy_coef", torch.tensor(0.0))
+        elif isinstance(entropy_coef, (float, int, torch.Tensor)):
+            # Register the scalar entropy coefficient
+            coef = (
+                float(entropy_coef)
+                if not torch.is_tensor(entropy_coef)
+                else float(entropy_coef.item())
+            )
+            self.register_buffer("entropy_coef", torch.tensor(coef))
+            self._entropy_coef_map = None
+        else:
+            raise TypeError("entropy_coef must be a float or a Mapping[str, float]")
         if critic_coef is not None:
             self.register_buffer(
                 "critic_coef", torch.tensor(critic_coef, device=device)
@@ -540,7 +558,6 @@ class PPOLoss(LossModule):
         return entropy.unsqueeze(-1)
 
     def _get_cur_log_prob(self, tensordict):
-
         if isinstance(
             self.actor_network,
             (ProbabilisticTensorDictSequential, ProbabilisticTensorDictModule),
@@ -589,7 +606,6 @@ class PPOLoss(LossModule):
     def _log_weight(
         self, tensordict: TensorDictBase, adv_shape: torch.Size
     ) -> tuple[torch.Tensor, d.Distribution, torch.Tensor]:
-
         prev_log_prob = _maybe_get_or_select(
             tensordict,
             self.tensor_keys.sample_log_prob,
@@ -745,9 +761,12 @@ class PPOLoss(LossModule):
             if is_tensor_collection(entropy):
                 # Reports the entropy of each action head.
                 td_out.set("composite_entropy", entropy.detach())
-                entropy = _sum_td_features(entropy)
-            td_out.set("entropy", entropy.detach().mean())  # for logging
-            td_out.set("loss_entropy", -self.entropy_coef * entropy)
+                td_out.set(
+                    "entropy", _sum_td_features(entropy).detach().mean()
+                )  # for logging
+            else:
+                td_out.set("entropy", entropy.detach().mean())  # for logging
+            td_out.set("loss_entropy", self._weighted_loss_entropy(entropy))
         if self._has_critic:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
@@ -814,6 +833,35 @@ class PPOLoss(LossModule):
         }
         self._value_estimator.set_keys(**tensor_keys)
 
+    def _weighted_loss_entropy(
+        self, entropy: torch.Tensor | TensorDictBase
+    ) -> torch.Tensor:
+        """Compute the weighted entropy loss.
+
+        If `self._entropy_coef_map` is provided, apply per-head entropy coefficients.
+        Otherwise, use the scalar `self.entropy_coef`.
+        """
+        if self._entropy_coef_map is None:
+            if is_tensor_collection(entropy):
+                entropy = _sum_td_features(entropy)
+            return -self.entropy_coef * entropy
+
+        loss_term = None  # running sum over heads
+        for head_name, entropy_head in entropy.items():
+            try:
+                coeff = self._entropy_coef_map[head_name]
+            except KeyError as exc:
+                raise KeyError(f"Missing entropy coef for head '{head_name}'") from exc
+            coeff_t = torch.as_tensor(
+                coeff, dtype=entropy_head.dtype, device=entropy_head.device
+            )
+            head_loss_term = -coeff_t * _sum_td_features(entropy_head)
+            loss_term = (
+                head_loss_term if loss_term is None else loss_term + head_loss_term
+            )  # accumulate
+
+        return loss_term
+
 
 class ClipPPOLoss(PPOLoss):
     """Clipped PPO loss.
@@ -836,7 +884,9 @@ class ClipPPOLoss(PPOLoss):
             ``samples_mc_entropy`` will control how many
             samples will be used to compute this estimate.
             Defaults to ``1``.
-        entropy_coef (scalar, optional): entropy multiplier when computing the total loss.
+        entropy_coef (scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.
+            * **Scalar**: one value applied to the summed entropy of every action head.
+            * **Mapping** ``{head_name: coef}`` gives an individual coefficient for each action-head's entropy.
             Defaults to ``0.01``.
         critic_coef (scalar, optional): critic loss multiplier when computing the total
             loss. Defaults to ``1.0``. Set ``critic_coef`` to ``None`` to exclude the value
@@ -939,7 +989,7 @@ class ClipPPOLoss(PPOLoss):
         clip_epsilon: float = 0.2,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
-        entropy_coef: float = 0.01,
+        entropy_coef: float | Mapping[str, float] = 0.01,
         critic_coef: float | None = None,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
@@ -1064,9 +1114,12 @@ class ClipPPOLoss(PPOLoss):
             if is_tensor_collection(entropy):
                 # Reports the entropy of each action head.
                 td_out.set("composite_entropy", entropy.detach())
-                entropy = _sum_td_features(entropy)
-            td_out.set("entropy", entropy.detach().mean())  # for logging
-            td_out.set("loss_entropy", -self.entropy_coef * entropy)
+                td_out.set(
+                    "entropy", _sum_td_features(entropy).detach().mean()
+                )  # for logging
+            else:
+                td_out.set("entropy", entropy.detach().mean())  # for logging
+            td_out.set("loss_entropy", self._weighted_loss_entropy(entropy))
         if self._has_critic:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
@@ -1120,7 +1173,9 @@ class KLPENPPOLoss(PPOLoss):
             ``samples_mc_entropy`` will control how many
             samples will be used to compute this estimate.
             Defaults to ``1``.
-        entropy_coef (scalar, optional): entropy multiplier when computing the total loss.
+        entropy_coef (scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.
+            * **Scalar**: one value applied to the summed entropy of every action head.
+            * **Mapping** ``{head_name: coef}`` gives an individual coefficient for each action-head's entropy.
             Defaults to ``0.01``.
         critic_coef (scalar, optional): critic loss multiplier when computing the total
             loss. Defaults to ``1.0``.
@@ -1224,7 +1279,7 @@ class KLPENPPOLoss(PPOLoss):
         samples_mc_kl: int = 1,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
-        entropy_coef: float = 0.01,
+        entropy_coef: float | Mapping[str, float] = 0.01,
         critic_coef: float | None = None,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
@@ -1405,9 +1460,12 @@ class KLPENPPOLoss(PPOLoss):
             if is_tensor_collection(entropy):
                 # Reports the entropy of each action head.
                 td_out.set("composite_entropy", entropy.detach())
-                entropy = _sum_td_features(entropy)
-            td_out.set("entropy", entropy.detach().mean())  # for logging
-            td_out.set("loss_entropy", -self.entropy_coef * entropy)
+                td_out.set(
+                    "entropy", _sum_td_features(entropy).detach().mean()
+                )  # for logging
+            else:
+                td_out.set("entropy", entropy.detach().mean())  # for logging
+            td_out.set("loss_entropy", self._weighted_loss_entropy(entropy))
         if self._has_critic:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict_copy)
             td_out.set("loss_critic", loss_critic)
