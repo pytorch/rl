@@ -206,10 +206,6 @@ def get_hf_model(
 ) -> tuple[AutoModelForCausalLM, PreTrainedTokenizer]:
     """Creates and configures a HuggingFace model with optional optimizations.
 
-    This function provides a unified interface for creating HuggingFace models with
-    various optimizations like LoRA, quantization, gradient checkpointing, and
-    different attention implementations.
-
     Args:
         model_name (str): HuggingFace model identifier (e.g., "Qwen/Qwen2.5-3B")
         torch_dtype (torch.dtype, optional): Model precision. Default: torch.bfloat16
@@ -242,19 +238,23 @@ def get_hf_model(
     tokenizer.padding_side = "left"
 
     # Configure model settings for bfloat16 precision
-    # Setup flash_attention_2 for memory-efficient attention computation
-    model_configs = {}
-    if torch_dtype == torch.bfloat16:
-        model_configs["torch_dtype"] = torch_dtype
-        if torch.cuda.is_available() and attn_implementation:
-            torchrl_logger.info(f"{attn_implementation} init")
-            model_configs["attn_implementation"] = attn_implementation
+    model_configs = {
+        "torch_dtype": torch_dtype,
+    }
+
+    # Only use attention implementation if we're using bfloat16/float16
+    if (
+        torch_dtype in (torch.bfloat16, torch.float16)
+        and torch.cuda.is_available()
+        and attn_implementation
+    ):
+        torchrl_logger.info(f"{attn_implementation} init")
+        model_configs["attn_implementation"] = attn_implementation
 
     if device_map:
         model_configs["device_map"] = device_map
 
     # Configure training settings based on FSDP usage
-    # Set up trainer configurations for FSDP or standard training
     if fsdp != "" and fsdp_config is not None:
         torchrl_logger.info("Configurations for FSDP")
         bnb_config_params = {"bnb_4bit_quant_storage": torch_dtype}
@@ -263,7 +263,6 @@ def get_hf_model(
 
     # Enable Quantization
     if quantize:
-
         try:
             from transformers.utils.quantization_config import BitsAndBytesConfig
         except ImportError:
@@ -299,7 +298,6 @@ def get_hf_model(
             )
 
     if lora:
-
         try:
             from peft import get_peft_model, LoraConfig
         except ImportError:
