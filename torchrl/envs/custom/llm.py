@@ -43,7 +43,7 @@ class LLMHashingEnv(EnvBase):
         observation_key (NestedKey, optional): The key for the observation in the TensorDict.
             Defaults to "observation".
         text_output (bool, optional): Whether to include the text output in the observation.
-            Defaults to True.
+            Defaults to `True`.
         tokenizer (transformers.Tokenizer | None, optional):
             A tokenizer function that converts text to tensors.
             Only used when `text_output` is `True`.

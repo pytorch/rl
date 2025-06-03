@@ -34,6 +34,98 @@ _CHAT_TEMPLATES = {
 }
 
 
+# We need the 'shadow' flag to avoid having tensordict complaining about 'type'/'size' etc. fields
+class ContentBase(TensorClass["nocast", "shadow"]):
+    """Base class for all message content types.
+
+    Attributes:
+        type (str): The type of the content.
+        text (str, optional): The text content.
+        url (str, optional): The URL content.
+        data (str, optional): The data content.
+        mime_type (str, optional): The MIME type of the content.
+        name (str, optional): The name of the content.
+        size (int, optional): The size of the content.
+        function_name (str, optional): The name of the function.
+        function_args (dict, optional): The arguments of the function.
+
+    Examples:
+        >>> from tensordict import lazy_stack
+        >>> content1 = ContentBase(type="text", text="Hello, world!")
+        >>> print(content1)
+        ContentBase(
+            text=NonTensorData(data=Hello, world!, batch_size=torch.Size([]), device=None),
+            type=NonTensorData(data=text, batch_size=torch.Size([]), device=None),
+            url=None,
+            data=None,
+            mime_type=None,
+            name=None,
+            size=None,
+            function_name=None,
+            function_args=None,
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> content2 = ContentBase(type="image", url="https://example.com/image.jpg")
+        >>> print(content2)
+        ContentBase(
+            type=NonTensorData(data=image, batch_size=torch.Size([]), device=None),
+            url=NonTensorData(data=https://example.com/image.jpg, batch_size=torch.Size([]), device=None),
+            text=None,
+            data=None,
+            mime_type=None,
+            name=None,
+            size=None,
+            function_name=None,
+            function_args=None,
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> content = lazy_stack([content1, content2])
+        >>> print(content)
+        ContentBase(
+            type=NonTensorStack(
+                ['text', 'image'],
+                batch_size=torch.Size([2]),
+                device=None),
+            url=None,
+            data=None,
+            mime_type=None,
+            name=None,
+            size=None,
+            function_name=None,
+            function_args=None,
+            text=None,
+            batch_size=torch.Size([2]),
+            device=None,
+            is_shared=False)
+        >>> # A content is typically used in a History object. Usually, its batch dimension is
+        >>> #  one dimension greater than the History object.
+        >>> history = History(role="user", content=content)
+
+    """
+
+    type: Literal[
+        "text", "image", "audio", "video", "file", "function_call"
+    ]  # Required: "text", "image", "audio", "video", "file", "function_call"
+
+    # Text content
+    text: str | None = None
+
+    # Media/file content (either URL or data)
+    url: str | None = None  # HTTP URL to content
+    data: str | None = None  # Base64 encoded content
+
+    # Metadata
+    mime_type: str | None = None  # "image/jpeg", "audio/mp3", "application/pdf"
+    name: str | None = None  # Original filename or description
+    size: int | None = None  # File size in bytes
+
+    # Function calling (for AI agents)
+    function_name: str | None = None
+    function_args: dict | None = None
+
+
 class History(TensorClass["nocast"]):
     """A class representing a structured history of messages in a conversation, designed for efficient manipulation and integration with language models.
 
@@ -98,7 +190,7 @@ class History(TensorClass["nocast"]):
     """
 
     role: str
-    content: str
+    content: str | ContentBase
 
     def __post_init__(self):
         if not list_to_stack():
@@ -110,7 +202,7 @@ class History(TensorClass["nocast"]):
     def apply_chat_template(
         self,
         *,
-        tokenizer: transformers.AutoTokenizer,  # noqa
+        tokenizer: transformers.AutoTokenizer | transformers.AutoProcessor,  # noqa
         add_generation_prompt: bool = True,
         chat_template: str | None = None,
         continue_final_message: bool = False,
@@ -118,19 +210,21 @@ class History(TensorClass["nocast"]):
         padding: bool | str = False,
         truncation: bool | str = False,
         return_tensors: str | None = "pt",
+        return_dict: bool = False,
         **kwargs,
     ):
         """Applies a chat template to the history.
 
         Keyword Args:
-            tokenizer (transformers.PreTrainedTokenizer): The tokenizer to use.
-            add_generation_prompt (bool, optional): Whether to add a generation prompt. Defaults to True.
+            tokenizer (transformers.PreTrainedTokenizer | transformers.AutoProcessor): The tokenizer to use.
+            add_generation_prompt (bool, optional): Whether to add a generation prompt. Defaults to `True`.
             chat_template (str, optional): The chat template to use. Defaults to the tokenizer's default template.
-            continue_final_message (bool, optional): Whether to continue the final message. Defaults to False.
-            tokenize (bool, optional): Whether to tokenize the output. Defaults to False.
-            padding (bool | str, optional): The padding strategy to use. Defaults to False.
-            truncation (bool | str, optional): The truncation strategy to use. Defaults to False.
+            continue_final_message (bool, optional): Whether to continue the final message. Defaults to `False`.
+            tokenize (bool, optional): Whether to tokenize the output. Defaults to `False`.
+            padding (bool | str, optional): The padding strategy to use. Defaults to `False`.
+            truncation (bool | str, optional): The truncation strategy to use. Defaults to `False`.
             return_tensors (str | None, optional): The type of tensors to return. Defaults to "pt".
+            return_dict (bool, optional): Whether to return a dictionary. Defaults to `False`.
             **kwargs: Additional keyword arguments to pass to the tokenizer `apply_chat_template` method.
 
         Returns:
@@ -155,13 +249,16 @@ class History(TensorClass["nocast"]):
                     truncation=truncation,
                     return_tensors=return_tensors,
                     continue_final_message=continue_final_message,
+                    return_dict=return_dict,
                     **kwargs,
                 )
                 for i in range(self.batch_size[0])
             ]
-        self_flat = self.view(-1).tolist()
+        self_flat = self.view(-1)
+        # tolist_first=True is needed to avoid having a list of dict of dicts, but a list of dicts of lists of dicts
+        self_flat = self_flat.tolist(tolist_first=True)
         return tokenizer.apply_chat_template(
-            self_flat,
+            conversation=self_flat,
             add_generation_prompt=add_generation_prompt,
             chat_template=chat_template,
             tokenize=tokenize,
@@ -169,6 +266,7 @@ class History(TensorClass["nocast"]):
             truncation=truncation,
             return_tensors=return_tensors,
             continue_final_message=continue_final_message,
+            return_dict=return_dict,
         )
 
     @classmethod
@@ -275,7 +373,7 @@ class History(TensorClass["nocast"]):
 
         Args:
             history (History): The new history to append.
-            inplace (bool, optional): Whether to perform the operation in-place. Defaults to True.
+            inplace (bool, optional): Whether to perform the operation in-place. Defaults to `True`.
             dim (int, optional): The dimension to append along. Defaults to -1.
 
         Returns:

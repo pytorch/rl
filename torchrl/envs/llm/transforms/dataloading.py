@@ -234,7 +234,7 @@ class DataLoadingPrimer(TensorDictPrimer):
         ...         Args:
         ...             batch_size (int, optional): The batch size of the generated tensors. Defaults to 0.
         ...             max_length (int, optional): The maximum length of the generated tensors. Defaults to 10.
-        ...             padding (bool, optional): Whether to pad the tensors to the maximum length. Defaults to False.
+        ...             padding (bool, optional): Whether to pad the tensors to the maximum length. Defaults to `False`.
         ...         '''
         ...         self.batch_size = batch_size
         ...         self.max_length = max_length

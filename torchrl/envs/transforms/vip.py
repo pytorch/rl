@@ -186,7 +186,7 @@ class VIPTransform(Compose):
             If the torchvision weights are needed, there are two ways they can be
             obtained: :obj:`download=ResNet50_Weights.IMAGENET1K_V1` or :obj:`download="IMAGENET1K_V1"`
             where :obj:`ResNet50_Weights` can be imported via :obj:`from torchvision.models import resnet50, ResNet50_Weights`.
-            Defaults to False.
+            Defaults to `False`.
         download_path (str, optional): path where to download the models.
             Default is None (cache path determined by torch.hub utils).
         tensor_pixels_keys (list of str, optional): Optionally, one can keep the
