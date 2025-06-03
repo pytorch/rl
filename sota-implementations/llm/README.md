@@ -16,7 +16,10 @@ GRPO is a method for training language models using reinforcement learning, with
 
 1. Install dependencies:
 ```bash
-pip install -r requirements.txt
+# GSM8K deps
+pip install -r sota-implementations/llm/requirements_gsm8k.txt
+# IFEval deps
+pip install -r sota-implementations/llm/requirements_ifeval.txt
 ```
 
 2. Set required environment variables:
@@ -119,6 +122,18 @@ Checkpoints are saved every `logging.checkpoint_frequency` batches and contain:
 - Optimizer state
 - Gradient scaler state (for mixed precision)
 - Full configuration
+
+## Debugging
+
+### Out-of-memory issues
+
+- vLLM: Reduce `inference_model.gpu_memory_utilization=FRACTION` or number of environments run
+  in parallel (`env.num_envs=N`).
+- KL scoring: If the KL scoring is achieved on the batch of data,
+  reduce the number of environments (`env.num_envs=N`) run in parallel.
+- Training: Reduce batch size (`train.optim_batch_size`)
+
+### vLLM / Ray 
 
 ## Directory Structure
 

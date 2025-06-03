@@ -49,7 +49,7 @@ policy:
 # Training configuration
 train:
   epochs: 1
-  steps_per_batch: 64
+  steps_per_batch: 64  # Number of dialog turns per batch. This is passed to the collector and buffer.
   optim_batch_size: 1
   gradient_accumulation_steps: 1
   mixed_precision: false  # Disable mixed precision since we're not using it

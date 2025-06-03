@@ -47,7 +47,7 @@ def make_device_splits() -> tuple[list[int], int, list[int]]:
 
 def setup_environment() -> None:
     """Setup required environment variables and configurations."""
-    if not os.getenv("VLLM_USE_V1", "0"):
+    if os.getenv("VLLM_USE_V1", "1") != "0":
         raise RuntimeError("VLLM_USE_V1=0 must be set in environment")
 
     # Set default dtype to bfloat16 for all tensors

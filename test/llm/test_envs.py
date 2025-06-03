@@ -45,6 +45,15 @@ _has_ifeval = (
 )
 
 
+@pytest.fixture(scope="module", autouse=True)
+def list_to_stack_fixture():
+    import tensordict
+
+    with tensordict.set_list_to_stack(True):
+        yield
+    return
+
+
 class TestLLMEnv:
     @pytest.fixture(scope="class", autouse=True)
     def set_capture(self):
@@ -453,7 +462,7 @@ class TestGSM8K:
         tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
         model = OPTForCausalLM.from_pretrained("facebook/opt-125m").eval()
 
-        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.pad_token = "<|PAD|>"
         tokenizer.padding_side = "left"
 
         yield model, tokenizer
@@ -488,6 +497,7 @@ class TestGSM8K:
     @pytest.mark.skipif(not _has_transformers, reason="requires transformers library")
     @pytest.mark.parametrize("n_envs", [1, 4])
     def test_kl_bonus(self, n_envs, ref_model):
+        torch.manual_seed(0)
         ref_device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         with torch.device(ref_device):
@@ -506,6 +516,8 @@ class TestGSM8K:
                 generate=True,
                 from_text=True,
                 tokenizer=tokenizer,
+                generate_kwargs={"max_new_tokens": 20},
+                tokenizer_kwargs={"add_special_tokens": False},
             )
 
             env = make_gsm8k_env(num_envs=n_envs, tokenizer=tokenizer)
