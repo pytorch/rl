@@ -19,6 +19,21 @@ from torchrl._utils import logger as torchrl_logger
 
 from torchrl.modules.llm.utils import _cuda_visible_devices
 
+try:
+    from vllm import LLM
+    from vllm.utils import get_open_port
+    from vllm.worker.worker import Worker
+except ImportError:
+
+    class LLM:  # noqa
+        ...
+
+    class Worker:  # noqa
+        ...
+
+    class get_open_port:  # noqa
+        ...
+
 
 def stateless_init_process_group(
     master_address: str | None, master_port: str | None, rank, world_size, device
@@ -42,7 +57,6 @@ def stateless_init_process_group(
     """
     from vllm.distributed.device_communicators.pynccl import PyNcclCommunicator
     from vllm.distributed.utils import StatelessProcessGroup
-    from vllm.utils import get_open_port
 
     if master_address is None:
         master_address = "localhost"  # get_ip()
@@ -56,7 +70,7 @@ def stateless_init_process_group(
     return pynccl
 
 
-class vLLMWorker:
+class vLLMWorker(Worker):
     """vLLM worker for Ray.
 
     vLLMParameterServer will always take rank 0 in the stateless process group
@@ -67,12 +81,10 @@ class vLLMWorker:
     def __init__(self, *args, **kwargs):
         import os
 
-        from vllm.worker.worker import Worker
-
         torchrl_logger.info(f"=> in {type(self).__name__}.__init__")
         torchrl_logger.info(f"visible devices {os.getenv('CUDA_VISIBLE_DEVICES')}")
         torchrl_logger.info(f"device count {torch.cuda.device_count()}")
-        Worker.__init__(self, *args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def init_weight_update_group(
         self, master_address, master_port, rank_offset, world_size
@@ -120,12 +132,11 @@ class vLLMWorker:
         return weights_updated
 
 
-class LLMOnDevice:
+class LLMOnDevice(LLM):
     """A thin wrapper around `vllm.LLM` to control its placement devices."""
 
     def __init__(self, *args, **kwargs):
         import ray
-        from vllm import LLM
 
         gpu_ids = ray.get_gpu_ids()
         torchrl_logger.info(f"=> in {type(self)}.__init__: {gpu_ids=}")
@@ -134,7 +145,7 @@ class LLMOnDevice:
             str(int(gpu_id)) for gpu_id in gpu_ids
         )
         torch.cuda.set_device(0)  # Since only one GPU is visible, it's cuda:0
-        LLM.__init__(self, *args, device="cuda:0", **kwargs)
+        super().__init__(*args, device="cuda:0", **kwargs)
 
 
 def make_vllm_worker(
@@ -205,8 +216,6 @@ def make_vllm_worker(
             **kwargs,
         )
     else:
-        from vllm import LLM
-
         with _cuda_visible_devices(devices):
             return LLM(
                 model=model_name,

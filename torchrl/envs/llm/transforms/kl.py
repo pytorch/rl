@@ -156,13 +156,11 @@ class KLRewardTransform(Transform):
                 td_device = tensordict.to(self.device)
             else:
                 td_device = tensordict
-            print(f"{td_device.unbind(0)=}")
             ref_log_prob = self.actor.log_prob(
                 td_device, as_nested_tensor=True, layout=torch.strided
             )
         else:
             ref_log_prob_td = self.actor(tensordict)
-            print(f"{ref_log_prob_td=}")
             ref_log_prob = ref_log_prob_td.get(self.sample_log_prob_key)
 
         reward_key = self.in_keys[0]
