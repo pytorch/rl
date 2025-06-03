@@ -216,7 +216,7 @@ def make_dreamer(
         value_key (str, optional): Key to use for the value.
             Defaults to "state_value".
         use_decoder_in_env (bool, optional): Whether to use the decoder in the model based dreamer env.
-            Defaults to False.
+            Defaults to `False`.
         obs_norm_state_dict (dict, optional): the state_dict of the ObservationNorm transform used
             when proof_environment is missing. Defaults to None.
 

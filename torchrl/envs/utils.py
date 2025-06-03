@@ -704,7 +704,7 @@ def check_env_specs(
             return_contiguous=True. This will fail in some cases (e.g. heterogeneous shapes
             of inputs/outputs). Defaults to ``None`` (determined by the presence of dynamic specs).
         check_dtype (bool, optional): if False, dtype checks will be skipped.
-            Defaults to True.
+            Defaults to `True`.
         seed (int, optional): for reproducibility, a seed can be set.
             The seed will be set in pytorch temporarily, then the RNG state will
             be reverted to what it was before. For the env, we set the seed but since
