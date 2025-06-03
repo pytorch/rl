@@ -198,6 +198,8 @@ class History(TensorClass["nocast"]):
                 "Please set the list_to_stack to True using tensordict.set_list_to_stack(True).set() at the beginning of your script, "
                 "or the LIST_TO_STACK=1 environment variable."
             )
+        if self.batch_dims and not self._tensordict._lazy:
+            self.__dict__["_tensordict"] = lazy_stack(self.unbind(0))._tensordict
 
     def apply_chat_template(
         self,
@@ -272,7 +274,7 @@ class History(TensorClass["nocast"]):
     @classmethod
     def from_text(
         cls,
-        text: str,
+        text: str | list[str],
         chat_template_name: Literal["chatml_format"] = "chatml_format",
         chat_template: str | None = None,
     ) -> History:

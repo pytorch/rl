@@ -66,7 +66,7 @@ if TORCHRL_CONSOLE_STREAM:
     stream_handler = stream_handlers[TORCHRL_CONSOLE_STREAM]
 else:
     stream_handler = None
-console_handler = logging.StreamHandler(stream=stream_handler)
+
 
 # Create colored handler
 class _CustomFormatter(logging.Formatter):
@@ -85,7 +85,7 @@ class _CustomFormatter(logging.Formatter):
         return formatted_message
 
 
-console_handler = logging.StreamHandler(stream_handler)
+console_handler = logging.StreamHandler(stream=stream_handler)
 console_handler.setFormatter(_CustomFormatter())
 logger.addHandler(console_handler)
 console_handler.setLevel(logging.INFO)
