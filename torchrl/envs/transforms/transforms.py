@@ -5835,7 +5835,7 @@ class DiscreteActionProjection(Transform):
         action_key (NestedKey, optional): key name of the action. Defaults to "action".
         include_forward (bool, optional): if ``True``, a call to forward will also
             map the action from one domain to the other when the module is called
-            by a replay buffer or an nn.Module chain. Defaults to True.
+            by a replay buffer or an nn.Module chain. Defaults to `True`.
 
     Examples:
         >>> torch.manual_seed(0)

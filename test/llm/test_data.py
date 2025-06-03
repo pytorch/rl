@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+from typing import Mapping
 
 import pytest
 import torch
-from tensordict import set_list_to_stack
+from tensordict import lazy_stack, set_list_to_stack
 
 from torchrl.data import History
+from torchrl.data.llm.chat import ContentBase
 
 _has_transformers = importlib.util.find_spec("transformers")
 _has_vllm = importlib.util.find_spec("vllm")
@@ -215,6 +217,53 @@ class TestHistory:
         assert isinstance(r, History)
         assert spec.is_in(r)
         assert spec.is_in(history)
+
+    def test_content_base(self):
+        from transformers import AutoProcessor
+
+        processor = AutoProcessor.from_pretrained(
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf"
+        )
+
+        content_text = ContentBase(type="text", text="Hello, world!")
+        content_img = ContentBase(
+            type="image",
+            url="https://github.com/pytorch/rl/blob/main/docs/source/_static/img/icon.png?raw=true",
+        )
+        content = lazy_stack([content_text, content_img])
+        history0 = History(
+            role="assistant",
+            content=ContentBase(
+                type="text",
+                text="You are going to see an image and a hello world message. Ignore both.",
+                batch_size=1,
+            ),
+        )
+        history1 = History(role="user", content=content)
+        history = lazy_stack([history0, history1])
+        proc = history.apply_chat_template(
+            tokenizer=processor,
+            add_generation_prompt=False,
+            return_dict=True,
+            tokenize=False,
+        )
+        assert (
+            proc
+            == "<|im_start|>assistant \nYou are going to see an image and a hello world message. Ignore both.<|im_end|><|im_start|>user <image>\nHello, world!<|im_end|>"
+        )
+        proc = history.apply_chat_template(
+            tokenizer=processor,
+            add_generation_prompt=False,
+            return_dict=True,
+            tokenize=True,
+        )
+        assert isinstance(proc, Mapping)
+        assert proc["input_ids"].shape == (1, 7294)
+        assert proc["attention_mask"].shape == (1, 7294)
+        assert proc["pixel_values"].shape == (1, 37, 3, 384, 384), proc[
+            "pixel_values"
+        ].shape
+        assert (proc["image_sizes"] == torch.tensor([[2096, 2324]])).all()
 
 
 if __name__ == "__main__":
