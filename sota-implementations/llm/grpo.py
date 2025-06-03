@@ -236,7 +236,7 @@ def train(cfg: DictConfig) -> None:
                     gc.collect()
                     torch.cuda.empty_cache()
 
-                pbar.close()
+            pbar.close()
 
         # Update policy weights
         torchrl_logger.info("Updating policy weights...")
@@ -247,6 +247,9 @@ def train(cfg: DictConfig) -> None:
 
         # Save checkpoint
         if (i + 1) % cfg.logging.checkpoint_frequency == 0:
+            torchrl_logger.info(
+                f"Saving checkpoint {(i+1) // cfg.logging.checkpoint_frequency}..."
+            )
             checkpoint = {
                 "batch": i,
                 "model_state_dict": policy_training.model.state_dict(),
