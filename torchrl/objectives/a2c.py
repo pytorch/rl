@@ -236,6 +236,10 @@ class A2CLoss(LossModule):
             terminated (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is terminated. Will be used for the underlying value estimator.
                 Defaults to ``"terminated"``.
+            sample_log_prob (NestedKey or list of nested keys): The input tensordict key where the
+               sample log probability is expected.
+               Defaults to ``"sample_log_prob"`` when :func:`~tensordict.nn.composite_lp_aggregate` returns `True`,
+                `"action_log_prob"`  otherwise.
         """
 
         advantage: NestedKey = "advantage"
