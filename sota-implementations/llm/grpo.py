@@ -149,7 +149,9 @@ def train(cfg: DictConfig) -> None:
         loss_fn = torch.compile(loss_fn)
 
     optim = getattr(torch.optim, cfg.train.optimizer.name)(
-        policy_training.model.parameters(), lr=cfg.train.optimizer.lr
+        policy_training.model.parameters(),
+        lr=cfg.train.optimizer.lr,
+        foreach=len(train_devices) == 1,
     )
 
     # Only use GradScaler with float16, not with bfloat16

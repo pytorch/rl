@@ -73,12 +73,14 @@ def get_train_model(
 
     # Set model dtype explicitly
     model_dtype = getattr(torch, cfg.train_model.torch_dtype)
-    
+
     # Use cuda_visible_devices to restrict visible GPUs and let HF handle distribution
     with cuda_visible_devices(train_devices), torch.device(f"cuda:{train_devices[0]}"):
         train_model, train_tokenizer = get_hf_model(
             cfg.model.name,
-            device_map="balanced" if len(train_devices) > 1 else f"cuda:{train_devices[0]}",
+            device_map="balanced"
+            if len(train_devices) > 1
+            else f"cuda:{train_devices[0]}",
             lora=cfg.train_model.lora.enabled,
             lora_r=cfg.train_model.lora.r,
             lora_alpha=cfg.train_model.lora.alpha,
@@ -172,7 +174,7 @@ def get_ref_model(
     from tensordict import TensorDict
 
     torchrl_logger.info("Creating ref model")
-    
+
     # Use cuda_visible_devices to restrict to reference device
     with cuda_visible_devices([ref_device]), torch.device(f"cuda:{ref_device}"):
         model_name = cfg.model.name
