@@ -5,7 +5,7 @@ defaults:
 
 # Environment configuration
 env:
-  dataset: gsm8k  # choices: [gsm8k, ifeval]
+  dataset: ifeval  # choices: [gsm8k, ifeval]
   # Number of environments to run in parallel. This determines the batch size passed to vLLM.
   #  More envs consume more GPU memory.
   num_envs: 2
