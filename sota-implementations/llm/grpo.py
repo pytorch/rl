@@ -60,7 +60,7 @@ def setup_environment() -> None:
         torch.cuda.set_device("cuda:0")
 
 
-@hydra.main(version_base=None, config_path="config", config_name="grpo")
+@hydra.main(version_base=None, config_path="config", config_name="grpo_gsm8k")
 def train(cfg: DictConfig) -> None:
     """Main training loop.
 
