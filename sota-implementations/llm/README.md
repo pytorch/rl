@@ -79,6 +79,12 @@ logging:
 python grpo.py
 ```
 
+### Run with IFEval Config
+
+```bash
+python grpo.py --config-name grpo_ifeval
+```
+
 ### Override Config Values
 
 ```bash

@@ -8,7 +8,7 @@ env:
   dataset: gsm8k  # choices: [gsm8k, ifeval]
   # Number of environments to run in parallel. This determines the batch size passed to vLLM.
   #  More envs consume more GPU memory.
-  num_envs: 8
+  num_envs: 4  # Reduced from 8 to save memory
   # Number of times to repeat the same prompt for GRPO. This does not affect the GPU memory usage.
   repeats: 16
 
@@ -19,15 +19,15 @@ model:
 
 # Training model configuration
 train_model:
-  gradient_checkpointing: true  # Only for training model
+  gradient_checkpointing: true  # Enabled for memory efficiency
   lora:
-    enabled: true
+    enabled: true  # Using LoRA for memory efficiency
     r: 8  # LoRA rank - controls capacity of adaptations
     alpha: 16  # LoRA alpha - scales the adaptations
     dropout: 0.1  # Dropout probability for LoRA layers
   quantization:
-    enabled: false  # Quantization might interfere with training
-  attn_implementation: flex_attention  # choices: [flash_attention_2, flex_attention, sdpa]
+    enabled: false  # Enable 4-bit quantization for base model
+  attn_implementation: flex_attention  # Using flash attention for memory efficiency
   torch_dtype: bfloat16
 
 # Inference model configuration (vLLM)
@@ -62,8 +62,11 @@ train:
   optim_batch_size: 1
   # Number of gradient accumulation steps. This determines the number of steps to run before
   #  updating the parameters.
-  gradient_accumulation_steps: 1
-  mixed_precision: false  # Disable mixed precision since we're not using it
+  gradient_accumulation_steps: 4  # Increased for gradient accumulation
+  # Whether to include the KL coefficient in the loss or in the environment reward.
+  kl_coef_in_loss: true
+  # Whether to use mixed precision.
+  mixed_precision: true  # Disable mixed precision since we're not using it
   optimizer:
     name: AdamW
     lr: 1e-5

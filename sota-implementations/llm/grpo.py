@@ -202,22 +202,26 @@ def train(cfg: DictConfig) -> None:
                 batch = batch.to(train_devices[0])
 
                 # Forward pass
-                loss = loss_fn(batch)
-                loss_val = loss.mean(reduce=True)
-                loss_val = loss_val / cfg.train.gradient_accumulation_steps
+                with torch.cuda.amp.autocast(enabled=cfg.train.mixed_precision):
+                    loss = loss_fn(batch)
+                    loss_val = loss.mean(reduce=True)
+                    loss_val = loss_val / cfg.train.gradient_accumulation_steps
 
-                # Backward pass
-                loss_val.backward()
+                # Backward pass with gradient scaling
+                scaler.scale(loss_val).backward()
 
                 if (batch_idx + 1) % cfg.train.gradient_accumulation_steps == 0:
                     # Clip gradients
+                    if cfg.train.mixed_precision:
+                        scaler.unscale_(optim)
                     grad_norm = torch.nn.utils.clip_grad_norm_(
                         policy_training.model.parameters(),
                         cfg.train.optimizer.clip_grad_norm,
                     )
 
                     # Optimizer step
-                    optim.step()
+                    scaler.step(optim)
+                    scaler.update()
                     optim.zero_grad()
 
                     # Log metrics
