@@ -75,8 +75,8 @@ def train(cfg: DictConfig) -> None:
     train_devices, ref_device, vllm_devices = make_device_splits()
 
     # Initialize models
-    policy_training, train_tokenizer = get_train_model(cfg, train_devices)
     policy = get_inference_model(cfg, vllm_devices)
+    policy_training, train_tokenizer = get_train_model(cfg, train_devices)
     ref_model = get_ref_model(cfg, train_tokenizer, ref_device)
 
     # Setup environment
