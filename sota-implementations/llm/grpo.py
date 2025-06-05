@@ -169,6 +169,10 @@ def train(cfg: DictConfig) -> None:
     for i, trajs in enumerate(collector):
         torchrl_logger.info(f"Collected batch {i}: {len(trajs)} trajectories")
 
+        # Clear memory after collection
+        torch.cuda.empty_cache()
+        gc.collect()
+
         trajs = trajs.reshape(-1)
         rb.extend(trajs)
 
@@ -184,17 +188,15 @@ def train(cfg: DictConfig) -> None:
                 dtype=torch.float,
             ).mean()
 
+            # Clear memory after metrics calculation
+            del trajs
+            torch.cuda.empty_cache()
+            gc.collect()
+
         if not reward:
             torchrl_logger.info("No reward - skipping batch")
             torch.cuda.empty_cache()
             continue
-
-        # Log metrics
-        wandb_logger.log_scalar("reward", float(reward))
-        wandb_logger.log_scalar("advantage", float(advantage))
-        wandb_logger.log_scalar("kl_penalty", float(kl_penalty))
-        wandb_logger.log_scalar("seq_length", float(seq_length))
-        torchrl_logger.info(f"Reward: {float(reward):4.4f}")
 
         # Training epochs
         for epoch in range(cfg.train.epochs):
@@ -202,9 +204,9 @@ def train(cfg: DictConfig) -> None:
             pbar = tqdm.tqdm(total=len(rb) // cfg.train.optim_batch_size)
 
             for batch_idx, batch in enumerate(rb):
-                torchrl_logger.info(f"{batch=}")
-                pbar.update(1)
+                # Move batch to device and clear CPU memory
                 batch = batch.to(train_devices[0])
+                torch.cuda.empty_cache()
 
                 # Forward pass
                 with torch.amp.autocast(
@@ -215,6 +217,21 @@ def train(cfg: DictConfig) -> None:
                     loss = loss_fn(batch)
                     loss_val = loss.mean(reduce=True)
                     loss_val = loss_val / cfg.train.gradient_accumulation_steps
+                    
+                    # Store metrics before clearing memory
+                    metrics = {
+                        "ESS": float(loss.ESS),
+                        "loss_objective": float(loss.loss_objective),
+                        "clip_fraction": float(loss.clip_fraction),
+                        "kl_approx": float(loss.kl_approx),
+                        "entropy": float(loss.loss_entropy.mean()),
+                        "kl_to_ref": float(loss.kl_to_ref.mean()),
+                        "loss_kl_to_ref": float(loss.loss_kl_to_ref.mean()),
+                    }
+
+                # Clear intermediate tensors
+                del loss
+                torch.cuda.empty_cache()
 
                 # Backward pass with gradient scaling only for float16
                 if use_grad_scaling:
@@ -241,25 +258,20 @@ def train(cfg: DictConfig) -> None:
 
                     optim.zero_grad()
 
-                    # Log metrics
-                    wandb_logger.log_scalar("ESS", float(loss.ESS))
-                    wandb_logger.log_scalar(
-                        "loss_objective", float(loss.loss_objective)
-                    )
-                    wandb_logger.log_scalar("clip_fraction", float(loss.clip_fraction))
-                    wandb_logger.log_scalar("kl_approx", float(loss.kl_approx))
-                    wandb_logger.log_scalar("grad_norm", float(grad_norm))
-                    wandb_logger.log_scalar("entropy", float(loss.loss_entropy.mean()))
-                    wandb_logger.log_scalar("kl_to_ref", float(loss.kl_to_ref.mean()))
-                    wandb_logger.log_scalar(
-                        "loss_kl_to_ref", float(loss.loss_kl_to_ref.mean())
-                    )
-
-                    # Memory management
-                    gc.collect()
+                    # Clear memory after optimization step
+                    del loss_val
                     torch.cuda.empty_cache()
+                    gc.collect()
+
+                    # Log metrics
+                    for name, value in metrics.items():
+                        wandb_logger.log_scalar(name, value)
+                    wandb_logger.log_scalar("grad_norm", float(grad_norm))
 
             pbar.close()
+            # Clear memory after each epoch
+            torch.cuda.empty_cache()
+            gc.collect()
 
         # Update policy weights
         torchrl_logger.info("Updating policy weights...")
@@ -267,6 +279,10 @@ def train(cfg: DictConfig) -> None:
             policy_weights=policy_training.model.merge_and_unload().state_dict(),
             worker_ids=[0],
         )
+        
+        # Clear memory after weight update
+        torch.cuda.empty_cache()
+        gc.collect()
 
         # Save checkpoint
         if (i + 1) % cfg.logging.checkpoint_frequency == 0:
