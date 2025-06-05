@@ -9,6 +9,7 @@ This module implements GRPO training for language models.
 from __future__ import annotations
 
 import gc
+import logging
 import os
 from pathlib import Path
 
@@ -57,6 +58,11 @@ def setup_environment() -> None:
     # Ensure CUDA is using the correct dtype
     if torch.cuda.is_available():
         torch.cuda.set_device("cuda:0")
+
+    # Set all loggers to WARNING by default
+    logging.getLogger().setLevel(logging.WARNING)
+    # But keep torchrl at INFO
+    logging.getLogger("torchrl").setLevel(logging.INFO)
 
 
 @hydra.main(version_base=None, config_path="config", config_name="grpo_gsm8k")
@@ -185,7 +191,6 @@ def train(cfg: DictConfig) -> None:
         # Calculate metrics
         with torch.no_grad():
             reward = torch.cat(rb[:].get(("next", "reward"), as_list=True)).mean()
-            advantage = torch.cat(rb[:].get("advantage", as_list=True)).mean()
             kl_penalty = torch.cat(
                 rb[:].get(("next", "kl_penalty"), as_list=True)
             ).mean()
@@ -195,7 +200,6 @@ def train(cfg: DictConfig) -> None:
             ).mean()
             metrics = {
                 "reward": float(reward),
-                "advantage": float(advantage),
                 "kl_penalty": float(kl_penalty),
                 "seq_length": float(seq_length),
             }
@@ -219,6 +223,8 @@ def train(cfg: DictConfig) -> None:
                 # Move batch to device and clear CPU memory
                 batch = batch.to(train_devices[0])
                 torch.cuda.empty_cache()
+
+                pbar.update(1)
 
                 # Forward pass
                 with torch.amp.autocast(
