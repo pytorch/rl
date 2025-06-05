@@ -73,32 +73,40 @@ def get_train_model(
 
     # Set model dtype explicitly
     model_dtype = getattr(torch, cfg.train_model.torch_dtype)
-
-    with torch.device(f"cuda:{train_devices[0]}"):
+    
+    # Configure device map for multiple GPUs
+    if len(train_devices) > 1:
+        device_map = "balanced"  # Use balanced distribution across GPUs
+    else:
+        device_map = train_devices[0]  # Single GPU case
+        
+    # Use cuda_visible_devices to restrict model to only see specified devices
+    with cuda_visible_devices(train_devices), torch.device(f"cuda:{train_devices[0]}"):
         train_model, train_tokenizer = get_hf_model(
             cfg.model.name,
-            device_map=train_devices[0],
+            device_map=device_map,  # Pass the device map configuration
             lora=cfg.train_model.lora.enabled,
             lora_r=cfg.train_model.lora.r,
             lora_alpha=cfg.train_model.lora.alpha,
             lora_dropout=cfg.train_model.lora.dropout,
             gradient_checkpointing=cfg.train_model.gradient_checkpointing,
             quantize=cfg.train_model.quantization.enabled,
-            torch_dtype=model_dtype,  # Use explicit dtype
+            torch_dtype=model_dtype,
             attn_implementation=cfg.train_model.attn_implementation,
+            compile=cfg.model.compile,
         )
 
         # Force all model parameters to the same dtype
         for param in train_model.parameters():
             param.data = param.data.to(model_dtype)
 
-    policy_training = TransformersWrapper(
-        train_model,
-        tokenizer=train_tokenizer,
-        from_text=False,
-        generate=False,
-        return_log_probs=True,
-    )
+        policy_training = TransformersWrapper(
+            train_model,
+            tokenizer=train_tokenizer,
+            from_text=False,
+            generate=False,
+            return_log_probs=True,
+        )
     return policy_training, train_tokenizer
 
 
@@ -169,7 +177,8 @@ def get_ref_model(
     from tensordict import TensorDict
 
     torchrl_logger.info("Creating ref model")
-    with torch.device(f"cuda:{ref_device}"):
+    # Use cuda_visible_devices to restrict model to only see specified device
+    with cuda_visible_devices([ref_device]), torch.device(f"cuda:{ref_device}"):
         model_name = cfg.model.name
 
         ref_model = get_hf_model(
@@ -179,7 +188,7 @@ def get_ref_model(
             quantize=cfg.ref_model.quantization.enabled,
             gradient_checkpointing=cfg.ref_model.gradient_checkpointing,
             attn_implementation=cfg.ref_model.attn_implementation,
-            lora=False,  # Reference model doesn't need LoRA\
+            lora=False,  # Reference model doesn't need LoRA
             requires_grad=False,
         )[0].eval()
         # Detach weights
