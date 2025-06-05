@@ -98,7 +98,7 @@ def train(cfg: DictConfig) -> None:
             actor=ref_model,
             coef=cfg.policy.kl_coef,
             device=torch.device(f"cuda:{ref_device}"),
-            add_to_reward=False,
+            add_to_reward=not cfg.train.kl_coef_in_loss,
         )
     )
 
@@ -138,7 +138,8 @@ def train(cfg: DictConfig) -> None:
 
     # Setup loss and optimizer
     loss_fn = GRPOLoss(
-        actor_network=policy_training, kl_to_ref_coeff=cfg.policy.kl_coef
+        actor_network=policy_training,
+        kl_to_ref_coeff=cfg.policy.kl_coef if cfg.train.kl_coef_in_loss else 0.0,
     )
     if cfg.model.compile:
         loss_fn = torch.compile(loss_fn)
@@ -196,6 +197,7 @@ def train(cfg: DictConfig) -> None:
             pbar = tqdm.tqdm(total=len(rb) // cfg.train.optim_batch_size)
 
             for batch_idx, batch in enumerate(rb):
+                torchrl_logger.info(f"{batch=}")
                 pbar.update(1)
                 batch = batch.to(train_devices[0])
 
