@@ -73,62 +73,12 @@ def get_train_model(
 
     # Set model dtype explicitly
     model_dtype = getattr(torch, cfg.train_model.torch_dtype)
-
-    # Configure device map for multiple GPUs
-    if len(train_devices) > 1:
-        from transformers import AutoConfig
-
-        # Get model configuration to determine layer structure
-        config = AutoConfig.from_pretrained(cfg.model.name, trust_remote_code=True)
-
-        # Create device map based on model architecture
-        device_map = {}
-
-        # Map base layers (these are common across most transformer architectures)
-        device_map.update(
-            {
-                "model.embed_tokens": f"cuda:{train_devices[0]}",
-                "model.norm": f"cuda:{train_devices[0]}",
-                "lm_head": f"cuda:{train_devices[0]}",
-            }
-        )
-
-        # Map transformer layers - handle different model architectures
-        num_layers = (
-            getattr(config, "num_hidden_layers", None)
-            or getattr(config, "n_layer", None)
-            or getattr(config, "num_layers", None)
-        )
-        if num_layers is None:
-            # Fallback to auto if we can't determine layer count
-            device_map = "auto"
-            torchrl_logger.warning(
-                "Could not determine model layer count, falling back to auto device map"
-            )
-        else:
-            # Distribute layers across devices
-            for i in range(num_layers):
-                # Handle different model architectures' layer naming
-                if (
-                    hasattr(config, "architectures")
-                    and "Qwen" in config.architectures[0]
-                ):
-                    layer_name = f"model.layers.{i}"
-                elif (
-                    hasattr(config, "architectures")
-                    and "Llama" in config.architectures[0]
-                ):
-                    layer_name = f"model.layers.{i}"
-                else:
-                    layer_name = f"transformer.h.{i}"  # Default format
-                device_map[layer_name] = f"cuda:{train_devices[i % len(train_devices)]}"
-    else:
-        device_map = f"cuda:{train_devices[0]}"
-
-    with torch.device(f"cuda:{train_devices[0]}"):
+    
+    # Use cuda_visible_devices to restrict visible GPUs and let HF handle distribution
+    with cuda_visible_devices(train_devices), torch.device(f"cuda:{train_devices[0]}"):
         train_model, train_tokenizer = get_hf_model(
             cfg.model.name,
-            device_map=device_map,
+            device_map="balanced" if len(train_devices) > 1 else f"cuda:{train_devices[0]}",
             lora=cfg.train_model.lora.enabled,
             lora_r=cfg.train_model.lora.r,
             lora_alpha=cfg.train_model.lora.alpha,
@@ -222,14 +172,14 @@ def get_ref_model(
     from tensordict import TensorDict
 
     torchrl_logger.info("Creating ref model")
-    device_map = f"cuda:{ref_device}"  # Put entire model on reference device
-
-    with torch.device(f"cuda:{ref_device}"):
+    
+    # Use cuda_visible_devices to restrict to reference device
+    with cuda_visible_devices([ref_device]), torch.device(f"cuda:{ref_device}"):
         model_name = cfg.model.name
 
         ref_model = get_hf_model(
             model_name,
-            device_map=device_map,
+            device_map="auto",  # Let HF handle device mapping
             torch_dtype=getattr(torch, cfg.ref_model.torch_dtype),
             quantize=cfg.ref_model.quantization.enabled,
             gradient_checkpointing=cfg.ref_model.gradient_checkpointing,
