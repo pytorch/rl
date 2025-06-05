@@ -188,7 +188,7 @@ def get_ref_model(
 
 def get_hf_model(
     model_name: str,
-    torch_dtype: torch_dtype = torch.bfloat16,
+    torch_dtype: torch_dtype = torch.float32,
     lora_r: int = 8,
     lora_alpha: int = 16,
     lora_dropout: float = 0.1,
@@ -205,12 +205,13 @@ def get_hf_model(
     attn_implementation: Literal["flash_attention_2", "flex_attention", "sdpa"]
     | None = "flex_attention",
     requires_grad: bool = True,
+    compile: bool = False,
 ) -> tuple[AutoModelForCausalLM, PreTrainedTokenizer]:
     """Creates and configures a HuggingFace model with optional optimizations.
 
     Args:
         model_name (str): HuggingFace model identifier (e.g., "Qwen/Qwen2.5-3B")
-        torch_dtype (torch.dtype, optional): Model precision. Default: torch.bfloat16
+        torch_dtype (torch.dtype, optional): Model precision. Default: torch.float32
         lora_r (int, optional): LoRA rank - controls capacity of adaptations. Default: 8
         lora_alpha (int, optional): LoRA alpha - scales the adaptations. Default: 16
         lora_dropout (float, optional): Dropout probability for LoRA layers. Default: 0.1
@@ -223,6 +224,7 @@ def get_hf_model(
         attn_implementation (Literal["flash_attention_2", "flex_attention", "sdpa"] | None, optional):
             Attention implementation to use. Default: "flex_attention"
         requires_grad (bool, optional): Whether to enable gradient computation. Default: True
+        compile (bool, optional): Whether to enable model compilation. Default: False
 
     Returns:
         tuple[AutoModelForCausalLM, PreTrainedTokenizer]:
@@ -240,22 +242,20 @@ def get_hf_model(
         tokenizer.pad_token = "PAD"
     tokenizer.padding_side = "left"
 
-    # Configure model settings for bfloat16 precision
+    # Configure model settings for mixed precision
     # Store original dtype to restore it later
     original_dtype = torch.get_default_dtype()
     torch.set_default_dtype(torch_dtype)
 
     model_configs = {
         "torch_dtype": torch_dtype,
+        "device_map": device_map if device_map is not None else "auto",
     }
     if torch.cuda.is_available() and attn_implementation:
         torchrl_logger.info(f"{attn_implementation} init")
         model_configs["attn_implementation"] = attn_implementation
 
     try:
-        if device_map:
-            model_configs["device_map"] = device_map
-
         # Configure training settings based on FSDP usage
         if fsdp != "" and fsdp_config is not None:
             torchrl_logger.info("Configurations for FSDP")

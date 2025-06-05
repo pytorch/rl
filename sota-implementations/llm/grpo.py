@@ -50,8 +50,8 @@ def setup_environment() -> None:
     if os.getenv("VLLM_USE_V1", "1") != "0":
         raise RuntimeError("VLLM_USE_V1=0 must be set in environment")
 
-    # Set default dtype to bfloat16 for all tensors
-    torch.set_default_dtype(torch.bfloat16)
+    # Set default dtype to float32 for mixed precision training
+    torch.set_default_dtype(torch.float32)
     torch.set_default_device("cuda:0")
     set_list_to_stack(True).set()
 
@@ -202,7 +202,7 @@ def train(cfg: DictConfig) -> None:
                 batch = batch.to(train_devices[0])
 
                 # Forward pass
-                with torch.cuda.amp.autocast(enabled=cfg.train.mixed_precision):
+                with torch.cuda.amp.autocast(enabled=cfg.train.mixed_precision, dtype=torch.float16):
                     loss = loss_fn(batch)
                     loss_val = loss.mean(reduce=True)
                     loss_val = loss_val / cfg.train.gradient_accumulation_steps
