@@ -134,25 +134,25 @@ def get_inference_model(cfg: DictConfig, vllm_devices: Sequence[int]) -> vLLMWra
     torchrl_logger.info(f"Creating inference model on devices {vllm_devices}")
 
     model_name = cfg.model.name
-
-    inference_server = make_vllm_worker(
-        model_name,
-        gpu_memory_utilization=cfg.inference_model.gpu_memory_utilization,
-        devices=vllm_devices,
-        make_ray_worker=True,
-    )
-    assert inference_server is not None
-    policy = vLLMWrapper(
-        inference_server,
-        from_text=True,
-        return_log_probs=True,
-        generate_kwargs={
-            "max_tokens": cfg.inference_model.max_tokens,
-            "include_stop_str_in_output": cfg.inference_model.include_stop_str_in_output,
-            "temperature": cfg.inference_model.temperature,
-        },
-    )
-    assert policy.model is not None
+    with cuda_visible_devices(vllm_devices):
+        inference_server = make_vllm_worker(
+            model_name,
+            gpu_memory_utilization=cfg.inference_model.gpu_memory_utilization,
+            devices=list(vllm_devices),  # Convert to list for type compatibility
+            make_ray_worker=True,
+        )
+        assert inference_server is not None
+        policy = vLLMWrapper(
+            inference_server,
+            from_text=True,
+            return_log_probs=True,
+            generate_kwargs={
+                "max_tokens": cfg.inference_model.max_tokens,
+                "include_stop_str_in_output": cfg.inference_model.include_stop_str_in_output,
+                "temperature": cfg.inference_model.temperature,
+            },
+        )
+        assert policy.model is not None
     return policy
 
 
