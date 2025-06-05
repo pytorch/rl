@@ -15,10 +15,9 @@ from pathlib import Path
 import hydra
 import torch
 import tqdm
-
 from grpo_utils import get_inference_model, get_ref_model, get_train_model
 from omegaconf import DictConfig
-from tensordict import set_list_to_stack
+from tensordict import set_list_to_stack, TensorDict
 from torch.cuda.amp import GradScaler
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors.llm import LLMCollector
@@ -132,9 +131,11 @@ def train(cfg: DictConfig) -> None:
 
     # Initialize weights
     torchrl_logger.info("Initializing weights...")
-    collector.update_policy_weights_(
-        policy_training.model.merge_and_unload().state_dict(), worker_ids=[0]
+    # Ensure weights are on cuda:0 for vLLM
+    state_dict = TensorDict(policy_training.model.merge_and_unload().state_dict()).to(
+        "cuda:0"
     )
+    collector.update_policy_weights_(state_dict, worker_ids=[0])
 
     # Setup loss and optimizer
     loss_fn = GRPOLoss(
@@ -187,6 +188,12 @@ def train(cfg: DictConfig) -> None:
                 [t.numel() for t in rb[:].get("tokens_response", as_list=True)],
                 dtype=torch.float,
             ).mean()
+            metrics = {
+                "reward": float(reward),
+                "advantage": float(advantage),
+                "kl_penalty": float(kl_penalty),
+                "seq_length": float(seq_length),
+            }
 
             # Clear memory after metrics calculation
             del trajs
@@ -217,17 +224,19 @@ def train(cfg: DictConfig) -> None:
                     loss = loss_fn(batch)
                     loss_val = loss.mean(reduce=True)
                     loss_val = loss_val / cfg.train.gradient_accumulation_steps
-                    
+
                     # Store metrics before clearing memory
-                    metrics = {
-                        "ESS": float(loss.ESS),
-                        "loss_objective": float(loss.loss_objective),
-                        "clip_fraction": float(loss.clip_fraction),
-                        "kl_approx": float(loss.kl_approx),
-                        "entropy": float(loss.loss_entropy.mean()),
-                        "kl_to_ref": float(loss.kl_to_ref.mean()),
-                        "loss_kl_to_ref": float(loss.loss_kl_to_ref.mean()),
-                    }
+                    metrics.update(
+                        {
+                            "ESS": float(loss.ESS),
+                            "loss_objective": float(loss.loss_objective),
+                            "clip_fraction": float(loss.clip_fraction),
+                            "kl_approx": float(loss.kl_approx),
+                            "entropy": float(loss.loss_entropy.mean()),
+                            "kl_to_ref": float(loss.kl_to_ref.mean()),
+                            "loss_kl_to_ref": float(loss.loss_kl_to_ref.mean()),
+                        }
+                    )
 
                 # Clear intermediate tensors
                 del loss
@@ -275,11 +284,15 @@ def train(cfg: DictConfig) -> None:
 
         # Update policy weights
         torchrl_logger.info("Updating policy weights...")
+        # Ensure weights are on cuda:0 for vLLM
+        state_dict = TensorDict(
+            policy_training.model.merge_and_unload().state_dict()
+        ).to("cuda:0")
         collector.update_policy_weights_(
-            policy_weights=policy_training.model.merge_and_unload().state_dict(),
+            policy_weights=state_dict,
             worker_ids=[0],
         )
-        
+
         # Clear memory after weight update
         torch.cuda.empty_cache()
         gc.collect()

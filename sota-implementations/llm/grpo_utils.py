@@ -73,44 +73,58 @@ def get_train_model(
 
     # Set model dtype explicitly
     model_dtype = getattr(torch, cfg.train_model.torch_dtype)
-    
+
     # Configure device map for multiple GPUs
     if len(train_devices) > 1:
         from transformers import AutoConfig
-        
+
         # Get model configuration to determine layer structure
         config = AutoConfig.from_pretrained(cfg.model.name, trust_remote_code=True)
-        
+
         # Create device map based on model architecture
         device_map = {}
-        
+
         # Map base layers (these are common across most transformer architectures)
-        device_map.update({
-            "model.embed_tokens": f"cuda:{train_devices[0]}",
-            "model.norm": f"cuda:{train_devices[0]}",
-            "lm_head": f"cuda:{train_devices[0]}"
-        })
-        
+        device_map.update(
+            {
+                "model.embed_tokens": f"cuda:{train_devices[0]}",
+                "model.norm": f"cuda:{train_devices[0]}",
+                "lm_head": f"cuda:{train_devices[0]}",
+            }
+        )
+
         # Map transformer layers - handle different model architectures
-        num_layers = getattr(config, "num_hidden_layers", None) or getattr(config, "n_layer", None) or getattr(config, "num_layers", None)
+        num_layers = (
+            getattr(config, "num_hidden_layers", None)
+            or getattr(config, "n_layer", None)
+            or getattr(config, "num_layers", None)
+        )
         if num_layers is None:
             # Fallback to auto if we can't determine layer count
             device_map = "auto"
-            torchrl_logger.warning("Could not determine model layer count, falling back to auto device map")
+            torchrl_logger.warning(
+                "Could not determine model layer count, falling back to auto device map"
+            )
         else:
             # Distribute layers across devices
             for i in range(num_layers):
                 # Handle different model architectures' layer naming
-                if hasattr(config, "architectures") and "Qwen" in config.architectures[0]:
+                if (
+                    hasattr(config, "architectures")
+                    and "Qwen" in config.architectures[0]
+                ):
                     layer_name = f"model.layers.{i}"
-                elif hasattr(config, "architectures") and "Llama" in config.architectures[0]:
+                elif (
+                    hasattr(config, "architectures")
+                    and "Llama" in config.architectures[0]
+                ):
                     layer_name = f"model.layers.{i}"
                 else:
                     layer_name = f"transformer.h.{i}"  # Default format
                 device_map[layer_name] = f"cuda:{train_devices[i % len(train_devices)]}"
     else:
         device_map = f"cuda:{train_devices[0]}"
-        
+
     with torch.device(f"cuda:{train_devices[0]}"):
         train_model, train_tokenizer = get_hf_model(
             cfg.model.name,
@@ -164,7 +178,7 @@ def get_inference_model(cfg: DictConfig, vllm_devices: Sequence[int]) -> vLLMWra
     torchrl_logger.info(f"Creating inference model on devices {vllm_devices}")
 
     model_name = cfg.model.name
-    
+
     # vLLM handles device mapping internally
     inference_server = make_vllm_worker(
         model_name,
@@ -209,7 +223,7 @@ def get_ref_model(
 
     torchrl_logger.info("Creating ref model")
     device_map = f"cuda:{ref_device}"  # Put entire model on reference device
-    
+
     with torch.device(f"cuda:{ref_device}"):
         model_name = cfg.model.name
 
