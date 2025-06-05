@@ -6,7 +6,10 @@ defaults:
 # Environment configuration
 env:
   dataset: gsm8k  # choices: [gsm8k, ifeval]
+  # Number of environments to run in parallel. This determines the batch size passed to vLLM.
+  #  More envs consume more GPU memory.
   num_envs: 8
+  # Number of times to repeat the same prompt for GRPO. This does not affect the GPU memory usage.
   repeats: 16
 
 # Base model configuration
@@ -49,8 +52,16 @@ policy:
 # Training configuration
 train:
   epochs: 1
-  steps_per_batch: 64  # Number of dialog turns per batch. This is passed to the collector and buffer.
+   # Number of dialog turns per batch. This is passed to the collector and buffer.
+   #  More steps do not consume more GPU memory, but it does affect the inference speed in
+   #  that in sync contexts the training node will need to wait for a batch to be completed
+   #  before starting the next one.
+  steps_per_batch: 64
+  # Number of batches to run in parallel. This determines the batch size passed to the optimizer.
+  #  More batches consume more GPU memory.
   optim_batch_size: 1
+  # Number of gradient accumulation steps. This determines the number of steps to run before
+  #  updating the parameters.
   gradient_accumulation_steps: 1
   mixed_precision: false  # Disable mixed precision since we're not using it
   optimizer:
