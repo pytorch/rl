@@ -73,7 +73,7 @@ def get_train_model(
 
     # Set model dtype explicitly
     model_dtype = getattr(torch, cfg.train_model.torch_dtype)
-    
+
     with torch.device(f"cuda:{train_devices[0]}"):
         train_model, train_tokenizer = get_hf_model(
             cfg.model.name,
@@ -87,11 +87,11 @@ def get_train_model(
             torch_dtype=model_dtype,  # Use explicit dtype
             attn_implementation=cfg.train_model.attn_implementation,
         )
-        
+
         # Force all model parameters to the same dtype
         for param in train_model.parameters():
             param.data = param.data.to(model_dtype)
-            
+
     policy_training = TransformersWrapper(
         train_model,
         tokenizer=train_tokenizer,

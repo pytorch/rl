@@ -147,7 +147,12 @@ def train(cfg: DictConfig) -> None:
     optim = getattr(torch.optim, cfg.train.optimizer.name)(
         policy_training.model.parameters(), lr=cfg.train.optimizer.lr
     )
-    scaler = GradScaler(enabled=cfg.train.mixed_precision)
+
+    # Only use GradScaler with float16, not with bfloat16
+    use_grad_scaling = (
+        cfg.train.mixed_precision and cfg.train_model.torch_dtype == "float16"
+    )
+    scaler = GradScaler(enabled=use_grad_scaling)
 
     # Setup logging
     experiment_name = (
@@ -202,26 +207,38 @@ def train(cfg: DictConfig) -> None:
                 batch = batch.to(train_devices[0])
 
                 # Forward pass
-                with torch.cuda.amp.autocast(enabled=cfg.train.mixed_precision, dtype=getattr(torch, cfg.train_model.torch_dtype)):
+                with torch.amp.autocast(
+                    "cuda",
+                    enabled=cfg.train.mixed_precision,
+                    dtype=getattr(torch, cfg.train_model.torch_dtype),
+                ):
                     loss = loss_fn(batch)
                     loss_val = loss.mean(reduce=True)
                     loss_val = loss_val / cfg.train.gradient_accumulation_steps
 
-                # Backward pass with gradient scaling
-                scaler.scale(loss_val).backward()
+                # Backward pass with gradient scaling only for float16
+                if use_grad_scaling:
+                    scaler.scale(loss_val).backward()
+                else:
+                    loss_val.backward()
 
                 if (batch_idx + 1) % cfg.train.gradient_accumulation_steps == 0:
                     # Clip gradients
-                    if cfg.train.mixed_precision:
+                    if use_grad_scaling:
                         scaler.unscale_(optim)
+
                     grad_norm = torch.nn.utils.clip_grad_norm_(
                         policy_training.model.parameters(),
                         cfg.train.optimizer.clip_grad_norm,
                     )
 
-                    # Optimizer step with scaler
-                    scaler.step(optim)
-                    scaler.update()
+                    # Optimizer step with or without scaler
+                    if use_grad_scaling:
+                        scaler.step(optim)
+                        scaler.update()
+                    else:
+                        optim.step()
+
                     optim.zero_grad()
 
                     # Log metrics
