@@ -136,6 +136,9 @@ def train(cfg: DictConfig) -> None:
         "cuda:0"
     )
     collector.update_policy_weights_(state_dict, worker_ids=[0])
+    del state_dict
+    torch.cuda.empty_cache()
+    gc.collect()
 
     # Setup loss and optimizer
     loss_fn = GRPOLoss(
@@ -292,6 +295,7 @@ def train(cfg: DictConfig) -> None:
             policy_weights=state_dict,
             worker_ids=[0],
         )
+        del state_dict
 
         # Clear memory after weight update
         torch.cuda.empty_cache()
