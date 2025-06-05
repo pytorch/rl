@@ -202,7 +202,7 @@ def train(cfg: DictConfig) -> None:
                 batch = batch.to(train_devices[0])
 
                 # Forward pass
-                with torch.cuda.amp.autocast(enabled=cfg.train.mixed_precision, dtype=torch.float16):
+                with torch.cuda.amp.autocast(enabled=cfg.train.mixed_precision, dtype=getattr(torch, cfg.train_model.torch_dtype)):
                     loss = loss_fn(batch)
                     loss_val = loss.mean(reduce=True)
                     loss_val = loss_val / cfg.train.gradient_accumulation_steps
@@ -219,7 +219,7 @@ def train(cfg: DictConfig) -> None:
                         cfg.train.optimizer.clip_grad_norm,
                     )
 
-                    # Optimizer step
+                    # Optimizer step with scaler
                     scaler.step(optim)
                     scaler.update()
                     optim.zero_grad()
