@@ -74,9 +74,9 @@ def get_train_model(
 
     # Get configured devices or default to [0]
     train_devices = cfg.train_model.get("devices", [0])
-    
+
     # Use cuda_visible_devices to restrict visible GPUs and let HF handle distribution
-    with cuda_visible_devices(train_devices), torch.device(f"cuda:{train_devices[0]}"):
+    with cuda_visible_devices(train_devices):
         device_map = "balanced" if len(train_devices) > 1 else f"cuda:0"
         train_model, train_tokenizer = get_hf_model(
             cfg.model.name,
@@ -138,7 +138,9 @@ def get_inference_model(cfg: DictConfig) -> vLLMWrapper:
         inference_server = make_vllm_worker(
             model_name,
             gpu_memory_utilization=cfg.inference_model.gpu_memory_utilization,
-            devices=list(range(len(vllm_devices))),  # vLLM will see devices as [0, 1, ...]
+            devices=list(
+                range(len(vllm_devices))
+            ),  # vLLM will see devices as [0, 1, ...]
             make_ray_worker=True,
         )
         assert inference_server is not None

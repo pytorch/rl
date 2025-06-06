@@ -65,9 +65,14 @@ def train(cfg: DictConfig) -> None:
     ray.init()
 
     # Initialize models using config-based device allocation
+    torchrl_logger.info("Initializing models...")
+    torchrl_logger.info("Training model...")
     policy_training, train_tokenizer = get_train_model(cfg)
+    torchrl_logger.info("Inference model...")
     policy = get_inference_model(cfg)
+    torchrl_logger.info("Reference model...")
     ref_model = get_ref_model(cfg, train_tokenizer)
+    torchrl_logger.info("Done initializing models")
 
     # Get reference model device for KL transform
     ref_devices = cfg.ref_model.get("devices", [2])
