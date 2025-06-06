@@ -190,13 +190,14 @@ def make_vllm_worker(
         if not ray.is_initialized():
             ray.init()
 
-        pg = placement_group([{"GPU": 1, "CPU": 1}] * torch.cuda.device_count())
+        # Create a single bundle with all required GPUs for vLLM
+        pg = placement_group([{"GPU": len(devices), "CPU": 1}])
 
         ray.get(pg.ready())
         scheduling_inference = PlacementGroupSchedulingStrategy(
             placement_group=pg,
             placement_group_capture_child_tasks=True,
-            placement_group_bundle_index=devices[0] if devices else None,
+            placement_group_bundle_index=0,  # Always use first bundle since we only have one
         )
         torchrl_logger.info(
             f"Create vLLM worker with {devices=}, {scheduling_inference=}"
