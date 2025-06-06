@@ -13,7 +13,7 @@ from .collectors import (
     SyncDataCollector,
 )
 from .weight_update import (
-    MultiProcessedWeightUpdate,
+    MultiProcessedWeightUpdater,
     RayWeightUpdater,
     VanillaWeightUpdater,
     WeightUpdaterBase,
@@ -24,7 +24,7 @@ __all__ = [
     "WeightUpdaterBase",
     "VanillaWeightUpdater",
     "RayWeightUpdater",
-    "MultiProcessedWeightUpdate",
+    "MultiProcessedWeightUpdater",
     "aSyncDataCollector",
     "DataCollectorBase",
     "MultiaSyncDataCollector",

@@ -206,7 +206,7 @@ class VanillaWeightUpdater(WeightUpdaterBase):
         self.policy_weights.update_(server_weights)
 
 
-class MultiProcessedWeightUpdate(WeightUpdaterBase):
+class MultiProcessedWeightUpdater(WeightUpdaterBase):
     """A remote weight updater for synchronizing policy weights across multiple processes or devices.
 
     The `MultiProcessedWeightUpdater` class provides a mechanism for updating the weights
