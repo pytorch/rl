@@ -145,8 +145,8 @@ def get_inference_model(cfg: DictConfig) -> vLLMWrapper:
         inference_server = make_vllm_worker(
             model_name,
             gpu_memory_utilization=cfg.inference_model.gpu_memory_utilization,
-            devices=vllm_devices,  # Pass actual device indices
-            make_ray_worker=True,
+            devices=range(len(vllm_devices)),  # Pass actual device indices
+            make_ray_worker=len(vllm_devices) == 1,
         )
         assert inference_server is not None
         policy = vLLMWrapper(
