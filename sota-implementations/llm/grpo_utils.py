@@ -139,27 +139,24 @@ def get_inference_model(cfg: DictConfig) -> vLLMWrapper:
 
     model_name = cfg.model.name
 
-    # Use cuda_visible_devices to restrict visible GPUs for vLLM
-    with cuda_visible_devices(vllm_devices):
-        # Pass the actual devices to vLLM - it needs the real indices
-        inference_server = make_vllm_worker(
-            model_name,
-            gpu_memory_utilization=cfg.inference_model.gpu_memory_utilization,
-            devices=range(len(vllm_devices)),  # Pass actual device indices
-            make_ray_worker=True,
-        )
-        assert inference_server is not None
-        policy = vLLMWrapper(
-            inference_server,
-            from_text=True,
-            return_log_probs=True,
-            generate_kwargs={
-                "max_tokens": cfg.inference_model.max_tokens,
-                "include_stop_str_in_output": cfg.inference_model.include_stop_str_in_output,
-                "temperature": cfg.inference_model.temperature,
-            },
-        )
-        assert policy.model is not None
+    inference_server = make_vllm_worker(
+        model_name,
+        gpu_memory_utilization=cfg.inference_model.gpu_memory_utilization,
+        devices=vllm_devices,  # Pass actual device indices
+        make_ray_worker=True,
+    )
+    assert inference_server is not None
+    policy = vLLMWrapper(
+        inference_server,
+        from_text=True,
+        return_log_probs=True,
+        generate_kwargs={
+            "max_tokens": cfg.inference_model.max_tokens,
+            "include_stop_str_in_output": cfg.inference_model.include_stop_str_in_output,
+            "temperature": cfg.inference_model.temperature,
+        },
+    )
+    assert policy.model is not None
     return policy
 
 
