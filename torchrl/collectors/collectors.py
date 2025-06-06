@@ -630,7 +630,7 @@ class SyncDataCollector(DataCollectorBase):
         use_buffers: bool | None = None,
         replay_buffer: ReplayBuffer | None = None,
         extend_buffer: bool = False,
-        trust_policy: bool = None,
+        trust_policy: bool | None = None,
         compile_policy: bool | dict[str, Any] | None = None,
         cudagraph_policy: bool | dict[str, Any] | None = None,
         no_cuda_sync: bool = False,
@@ -2472,7 +2472,7 @@ also that the state dict is synchronised across processes if needed."""
                 if proc.is_alive():
                     proc.terminate()
 
-    def async_shutdown(self, timeout: float = None):
+    def async_shutdown(self, timeout: float | None = None):
         return self.shutdown(timeout=timeout)
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:

@@ -330,7 +330,7 @@ class SoftUpdate(TargetNetUpdater):
             | TD3Loss  # noqa: F821  # noqa: F821
         ),
         *,
-        eps: float = None,
+        eps: float | None = None,
         tau: float | None = None,
     ):
         if eps is None and tau is None:

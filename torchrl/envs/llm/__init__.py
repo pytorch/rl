@@ -19,6 +19,7 @@ from .transforms import (
     as_padded_tensor,
     DataLoadingPrimer,
     KLRewardTransform,
+    PythonInterpreter,
     TemplateTransform,
     Tokenizer,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "make_gsm8k_env",
     "GSM8KPrepareQuestion",
     "IFEvalEnv",
+    "PythonInterpreter",
     "IFEvalData",
     "LLMEnv",
     "LLMHashingEnv",

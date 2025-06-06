@@ -48,6 +48,8 @@ class ChatEnv(EnvBase):
             Defaults to `None`.
         template_kwargs (dict[str, any], optional): keyword arguments passed to :meth:`~torchrl.data.llm.History.apply_chat_template`.
             Defaults to `None`.
+        system_role (str, optional): the role of the system (at reset time). Defaults to `"system"`.
+        user_role (str, optional): the role of the user (at reset time). Defaults to `"user"`.
 
     Methods:
         reset (TensorDict): Resets the state of the environment. A tensordict or equivalent with a `"text"` entry must be passed.
@@ -116,6 +118,8 @@ class ChatEnv(EnvBase):
         apply_template: bool | None = None,
         tokenizer: transformers.AutoTokenizer | None = None,
         template_kwargs: dict[str, Any] | None = None,
+        system_role: str = "system",
+        user_role: str = "user",
     ):
         if batch_size is None:
             batch_size = (1,)
@@ -128,6 +132,9 @@ class ChatEnv(EnvBase):
             shape=batch_size,
         )
         self.full_state_spec = self.full_observation_spec.clone()
+        self.full_state_spec["text"] = NonTensor(
+            shape=self.batch_size, example_data="a string", device=self.device
+        )
         self.system_prompt = system_prompt
         self.apply_template = (
             apply_template or (template_kwargs is not None) or (tokenizer is not None)
@@ -148,6 +155,8 @@ class ChatEnv(EnvBase):
             ),
             batch_size=self.batch_size,
         )
+        self.system_role = system_role
+        self.user_role = user_role
 
     def _step(self, tensordict):
         # Expect action to be a "text_response" string
@@ -159,7 +168,12 @@ class ChatEnv(EnvBase):
             action = [action]
         text = [t + a for t, a in zip(text, action)]
         # Convert text to a history
-        history = History.from_text(text)
+        chat_template_name = None
+        if self.tokenizer is not None:
+            name_or_path = self.tokenizer.name_or_path
+            if "qwen" in name_or_path.lower():
+                chat_template_name = "qwen"
+        history = History.from_text(text, chat_template_name=chat_template_name)
         # Isolate last element, which should be our action
         local_history = history[..., -1]
         # Get previous history
@@ -192,12 +206,14 @@ class ChatEnv(EnvBase):
                 content = [content for _ in range(s)]
 
         # FIXME: Assume the text is not formatted and this is just content
-        content = TensorDict(role="user", content=content, batch_size=self.batch_size)
+        content = TensorDict(
+            role=self.user_role, content=content, batch_size=self.batch_size
+        )
         content["role"] = content.get("role").maybe_to_stack()
         if self.system_prompt is not None:
             history = TensorDict(
                 {
-                    "role": "system",
+                    "role": self.system_role,
                     "content": self.system_prompt,
                 }
             )

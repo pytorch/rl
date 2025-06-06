@@ -303,7 +303,7 @@ class OpenXExperienceReplay(BaseDatasetExperienceReplay):
         num_slices: int | None = None,
         slice_len: int | None = None,
         pad: float | bool | None = None,
-        replacement: bool = None,
+        replacement: bool | None = None,
         streaming: bool | None = None,
         root: str | Path | None = None,
         download: bool | None = None,

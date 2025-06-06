@@ -99,7 +99,7 @@ class GRPOLoss(ClipPPOLoss):
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
         entropy_coef: float = 0.01,
-        gamma: float = None,
+        gamma: float | None = None,
         reduction: str = None,
         clip_value: bool | float | None = None,
         kl_to_ref_coeff: float | None = None,
