@@ -191,21 +191,30 @@ def make_vllm_worker(
             ray.init()
 
         # Create bundles for each GPU - vLLM requires 1 GPU per bundle
-        bundles = [{"GPU": 1, "CPU": 1} for _ in range(len(devices))]
-        pg = placement_group(bundles)
+        bundles = []
+        for device_idx in devices:
+            # Each bundle specifies which specific GPU it wants
+            bundles.append({f"GPU_group_{device_idx}": 1, "CPU": 1})
 
+        # Create custom resources for each GPU we want to use
+        ray.init(resources={f"GPU_group_{idx}": 1 for idx in devices}, ignore_reinit_error=True)
+
+        pg = placement_group(bundles)
         ray.get(pg.ready())
+
         scheduling_inference = PlacementGroupSchedulingStrategy(
             placement_group=pg,
             placement_group_capture_child_tasks=True,
-            placement_group_bundle_index=devices[0],  # Use first device's bundle
+            placement_group_bundle_index=0,  # Use first bundle as entry point
         )
+
         torchrl_logger.info(
             f"Create vLLM worker with {devices=}, {scheduling_inference=}"
         )
-        # Request only 1 GPU in the Ray actor - vLLM will handle tensor parallelism internally
+
+        # Request the specific GPU resources we created
         return ray.remote(
-            num_gpus=1,  # Only request 1 GPU - vLLM handles multi-GPU internally
+            resources={f"GPU_group_{devices[0]}": 1},  # Request first GPU's resource
             num_cpus=1,
             scheduling_strategy=scheduling_inference,
         )(LLMOnDevice).remote(
