@@ -432,8 +432,8 @@ class LSTMModule(ModuleBase):
 
     def __init__(
         self,
-        input_size: int = None,
-        hidden_size: int = None,
+        input_size: int | None = None,
+        hidden_size: int | None = None,
         num_layers: int = 1,
         bias: bool = True,
         batch_first=True,
@@ -1233,8 +1233,8 @@ class GRUModule(ModuleBase):
 
     def __init__(
         self,
-        input_size: int = None,
-        hidden_size: int = None,
+        input_size: int | None = None,
+        hidden_size: int | None = None,
         num_layers: int = 1,
         bias: bool = True,
         batch_first=True,

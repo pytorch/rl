@@ -11,13 +11,7 @@ from typing import Literal
 
 import torch
 
-from tensordict import (
-    lazy_stack,
-    LazyStackedTensorDict,
-    list_to_stack,
-    TensorClass,
-    TensorDict,
-)
+from tensordict import lazy_stack, LazyStackedTensorDict, list_to_stack, TensorClass
 from tensordict.utils import _maybe_correct_neg_dim
 
 from torchrl._utils import logger as torchrl_logger
@@ -137,6 +131,11 @@ class History(TensorClass["nocast"]):
       trajectories, especially useful in reinforcement learning environments.
     - Interoperability with the `transformers` API, allowing for easy tokenization and preparation of input data.
 
+    .. note:: The `"<none>"` role is used to indicate that the element is a placeholder,
+        for example when the tool call was not executed but a stack requires a certain number of elements
+        per batch to have congruent shapes. The :meth:`~torchrl.data.llm.chat.History.apply_chat_template`
+        method will remove the `<none>` role from the history.
+
     Attributes:
         role (str): The role of the message sender.
         content (str): The content of the message.
@@ -191,6 +190,9 @@ class History(TensorClass["nocast"]):
 
     role: str
     content: str | ContentBase
+
+    tool_calls: list[dict] | None = None
+    tool_responses: list[str] | None = None
 
     def __post_init__(self):
         if not list_to_stack():
@@ -257,6 +259,8 @@ class History(TensorClass["nocast"]):
         self_flat = self.view(-1)
         # tolist_first=True is needed to avoid having a list of dict of dicts, but a list of dicts of lists of dicts
         self_flat = self_flat.tolist(tolist_first=True)
+        # Remove the "<none>" role
+        self_flat = [item for item in self_flat if item["role"] != "<none>"]
         return tokenizer.apply_chat_template(
             conversation=self_flat,
             add_generation_prompt=add_generation_prompt,
@@ -273,20 +277,19 @@ class History(TensorClass["nocast"]):
     def from_text(
         cls,
         text: str | list[str],
-        chat_template_name: Literal["chatml_format"] = "chatml_format",
+        chat_template_name: Literal["chatml_format", "qwen"] | None = None,
         chat_template: str | None = None,
     ) -> History:
-        if chat_template is None:
-            if chat_template_name == "chatml_format":
-                func = cls._inv_chatml
-            elif chat_template_name == "qwen":
-                func = cls._inv_qwen
-            else:
-                raise NotImplementedError(
-                    "chat_template_name must be one of ('chatml_format', 'qwen')"
-                )
+        if chat_template_name in ("chatml_format", None):
+            func = cls._inv_chatml
+        elif chat_template_name == "qwen":
+            func = cls._inv_qwen
+        else:
+            raise NotImplementedError(
+                "chat_template_name must be one of ('chatml_format', 'qwen')"
+            )
         if isinstance(text, list):
-            return torch.stack([func(text) for text in text])
+            return torch.stack([func(t) for t in text])
         return func(text)
 
     @classmethod
@@ -347,24 +350,26 @@ class History(TensorClass["nocast"]):
             message_dict = {
                 "role": role.strip(),
                 "content": content.strip(),
-                "tool_calls": [],
+                "tool_calls": None,
             }
             # Find tool calls within the message
             tool_calls = tool_call_pattern.findall(content)
             for tool_call in tool_calls:
                 try:
                     tool_call_dict = json.loads(tool_call)
-                    message_dict["tool_calls"].append(tool_call_dict)
+                    tool_calls_list = message_dict["tool_calls"]
+                    if tool_calls_list is None:
+                        tool_calls_list = []
+                    tool_calls_list.append(tool_call_dict)
+                    message_dict["tool_calls"] = tool_calls_list
                 except json.JSONDecodeError:
                     continue
             # Check for tool responses
             tool_responses = tool_response_pattern.findall(content)
             if tool_responses:
                 message_dict["tool_responses"] = tool_responses
-            parsed_messages.append(message_dict)
-        return cls.from_tensordict(
-            TensorDict(parsed_messages, batch_size=len(parsed_messages))
-        )
+            parsed_messages.append(cls(**message_dict))
+        return lazy_stack(parsed_messages)
 
     def append(
         self, history: History, *, inplace: bool = True, dim: int = -1

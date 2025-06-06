@@ -279,7 +279,7 @@ class A2CLoss(LossModule):
         entropy_coef: float = 0.01,
         critic_coef: float = 1.0,
         loss_critic_type: str = "smooth_l1",
-        gamma: float = None,
+        gamma: float | None = None,
         separate_losses: bool = False,
         advantage_key: str = None,
         value_target_key: str = None,

@@ -178,8 +178,8 @@ class TED2Flat:
 
     """
 
-    _shift: int = None
-    _is_full: bool = None
+    _shift: int | None = None
+    _is_full: bool | None = None
 
     def __init__(
         self,
@@ -609,8 +609,8 @@ class Flat2TED:
 class TED2Nested(TED2Flat):
     """Converts a TED-formatted dataset into a tensordict populated with nested tensors where each row is a trajectory."""
 
-    _shift: int = None
-    _is_full: bool = None
+    _shift: int | None = None
+    _is_full: bool | None = None
 
     def __init__(self, *args, **kwargs):
         if not hasattr(torch, "_nested_compute_contiguous_strides_offsets"):
@@ -720,8 +720,8 @@ class Nested2TED(Flat2TED):
 class H5Split(TED2Flat):
     """Splits a dataset prepared with TED2Nested into a TensorDict where each trajectory is stored as views on their parent nested tensors."""
 
-    _shift: int = None
-    _is_full: bool = None
+    _shift: int | None = None
+    _is_full: bool | None = None
 
     def __call__(self, data):
         nzeros = int(math.ceil(math.log10(data.shape[0])))

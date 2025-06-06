@@ -7,12 +7,14 @@ from __future__ import annotations
 import argparse
 import contextlib
 import importlib.util
+import re
 
 import pytest
 import torch
 from mocking_classes import DummyStrDataLoader, DummyTensorDataLoader
 
 from tensordict import (
+    lazy_stack,
     NonTensorData,
     NonTensorStack,
     set_capture_non_tensor_stack,
@@ -21,6 +23,7 @@ from tensordict import (
 )
 
 from torchrl._utils import logger as torchrl_logger
+from torchrl.data.llm.chat import History
 from torchrl.envs import StepCounter
 from torchrl.envs.llm import (
     as_padded_tensor,
@@ -50,6 +53,13 @@ def list_to_stack_fixture():
     import tensordict
 
     with tensordict.set_list_to_stack(True):
+        yield
+    return
+
+
+@pytest.fixture(scope="session", autouse=True)
+def set_list_to_stack_for_test():
+    with set_list_to_stack(True):
         yield
     return
 
@@ -633,6 +643,276 @@ By embracing such metaphors, we're encouraged to look beyond the obvious and app
 
         # TODO: To test this, we would need to pass a policy to check_env_specs()
         # env.check_env_specs()
+
+
+class TestTools:
+    @pytest.mark.skipif(not _has_transformers, reason="requires transformers")
+    def test_python_interpreter_single_batch(self):
+        from torchrl.envs.llm.transforms import PythonInterpreter
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B")
+        base_env = ChatEnv(
+            batch_size=(1,),
+            system_prompt="I'm the system, do as I say",
+            apply_template=True,
+            tokenizer=tokenizer,
+        )
+        env = base_env.append_transform(PythonInterpreter())
+        r = env.reset(TensorDict(text=["This is the user prompt"], batch_size=(1,)))
+        rc = r.clone()
+        h = r["history"]
+        history_from_text = h.apply_chat_template(tokenizer=tokenizer)
+        assert history_from_text == [
+            "<|im_start|>system\nI'm the system, do as I say<|im_end|>\n<|im_start|>user\nThis is the user prompt<|im_end|>\n<|im_start|>assistant\n"
+        ]
+        r["text_response"] = [
+            """Here is a python code to execute:
+```python
+print(1 + 1)
+```<|im_end|>\n
+"""
+        ]
+        s = env.step(r)
+        history_str = s["next", "history"].apply_chat_template(tokenizer=tokenizer)
+        assert history_str == [
+            "<|im_start|>system\n"
+            "I'm the system, do as I say<|im_end|>\n"
+            "<|im_start|>user\n"
+            "This is the user prompt<|im_end|>\n"
+            "<|im_start|>assistant\n"
+            "Here is a python code to execute:\n"
+            "```python\n"
+            "print(1 + 1)\n"
+            "```<|im_end|>\n"
+            "<|im_start|>user\n"
+            "<tool_response>\n"
+            "Code block 1 executed successfully:\n"
+            "2\n"
+            "\n"
+            "</tool_response><|im_end|>\n"
+            "<|im_start|>assistant\n"
+        ]
+        history_from_text = History.from_text(history_str, chat_template_name="qwen")
+        assert (
+            history_from_text
+            == lazy_stack(
+                [
+                    History(role="system", content="I'm the system, do as I say"),
+                    History(role="user", content="This is the user prompt"),
+                    History(
+                        role="assistant",
+                        content="Here is a python code to execute:\n```python\nprint(1 + 1)\n```",
+                    ),
+                    History(
+                        role="user",
+                        content="<tool_response>\nCode block 1 executed successfully:\n2\n\n</tool_response>",
+                        tool_responses=["Code block 1 executed successfully:\n2\n"],
+                    ),
+                ]
+            ).unsqueeze(0)
+        ).all()
+        # Check what happens if there is no tool response
+        r = rc.clone()
+        r["text_response"] = [
+            """Here is a response without a python code to execute.<|im_end|>"""
+        ]
+        s = env.step(r)
+        history_str = s["next", "history"].apply_chat_template(tokenizer=tokenizer)
+        assert history_str == [
+            "<|im_start|>system\n"
+            "I'm the system, do as I say<|im_end|>\n"
+            "<|im_start|>user\n"
+            "This is the user prompt<|im_end|>\n"
+            "<|im_start|>assistant\n"
+            "Here is a response without a python code to execute.<|im_end|>\n"
+            "<|im_start|>assistant\n"
+        ]
+
+    def test_python_interpreter_persistent(self):
+        from torchrl.envs.llm.transforms import PythonInterpreter
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B")
+        env = ChatEnv(
+            batch_size=(1,),
+            system_prompt="I'm the system, do as I say",
+            apply_template=True,
+            tokenizer=tokenizer,
+        )
+        env = env.append_transform(PythonInterpreter(persistent=True))
+        r = env.reset(TensorDict(text=["This is the user prompt"], batch_size=(1,)))
+        r["text_response"] = [
+            """Here is a python code to execute:
+```python
+a=1
+```<|im_end|>\n
+"""
+        ]
+        s, s_ = env.step_and_maybe_reset(r)
+        s_["text_response"] = [
+            """Here is a python code to execute:
+```python
+a+=1
+assert a == 2
+```<|im_end|>\n
+"""
+        ]
+        s, s_ = env.step_and_maybe_reset(s_)
+        assert s_["history"].apply_chat_template(tokenizer=tokenizer) == [
+            "<|im_start|>system\n"
+            "I'm the system, do as I say<|im_end|>\n"
+            "<|im_start|>user\n"
+            "This is the user prompt<|im_end|>\n"
+            "<|im_start|>assistant\n"
+            "Here is a python code to execute:\n"
+            "```python\n"
+            "a=1\n"
+            "```<|im_end|>\n"
+            "<|im_start|>user\n"
+            "<tool_response>\n"
+            "Code block 1 executed successfully:\n"
+            "\n"
+            "</tool_response><|im_end|>\n"
+            "<|im_start|>assistant\n"
+            "Here is a python code to execute:\n"
+            "```python\n"
+            "a+=1\n"
+            "assert a == 2\n"
+            "```<|im_end|>\n"
+            "<|im_start|>user\n"
+            "<tool_response>\n"
+            "Code block 1 executed successfully:\n"
+            "\n"
+            "</tool_response><|im_end|>\n"
+            "<|im_start|>assistant\n"
+        ]
+
+    def test_python_interpreter_persistent_error(self):
+        from torchrl.envs.llm.transforms import PythonInterpreter
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B")
+        env = ChatEnv(
+            batch_size=(1,),
+            system_prompt="I'm the system, do as I say",
+            apply_template=True,
+            tokenizer=tokenizer,
+        )
+        env = env.append_transform(PythonInterpreter(persistent=True))
+        r = env.reset(TensorDict(text=["This is the user prompt"], batch_size=(1,)))
+        r["text_response"] = [
+            """Here is a python code to execute:
+```python
+raise ValueError("This is an error")
+```<|im_end|>\n
+"""
+        ]
+        s, s_ = env.step_and_maybe_reset(r)
+        s_["text_response"] = [
+            """Here is a python code to execute:
+```python
+a=1
+assert a == 1
+```<|im_end|>\n
+"""
+        ]
+        s, s_ = env.step_and_maybe_reset(s_)
+        assert re.match(
+            s_["history"].apply_chat_template(tokenizer=tokenizer)[0],
+            r"<|im_start|>system\n"
+            "I'm the system, do as I say<|im_end|>\n"
+            "<|im_start|>user\n"
+            "This is the user prompt<|im_end|>\n"
+            "<|im_start|>assistant\n"
+            "Here is a python code to execute:\n"
+            "```python\n"
+            'raise ValueError("This is an error")\n'
+            "```<|im_end|>\n"
+            "<|im_start|>user\n"
+            "<tool_response>\n"
+            "Code block 1 failed:\n"
+            "Error: This is an error\n"
+            "Traceback:\n"
+            "Traceback (most recent call last):\n"
+            '  File "*.py", '
+            "line 12, in run_code\n"
+            "    exec(compiled, globals(), locals_dict)\n"
+            '  File "<string>", line 1, in <module>\n'
+            "ValueError: This is an error\n"
+            "\n"
+            "</tool_response><|im_end|>\n"
+            "<|im_start|>assistant\n"
+            "Here is a python code to execute:\n"
+            "```python\n"
+            "a=1\n"
+            "assert a == 1\n"
+            "```<|im_end|>\n"
+            "<|im_start|>user\n"
+            "<tool_response>\n"
+            "Code block 1 executed successfully:\n"
+            "\n"
+            "</tool_response><|im_end|>\n"
+            "<|im_start|>assistant\n",
+        )
+
+    def test_python_interpreter_persistent_reset(self):
+        from torchrl.envs.llm.transforms import PythonInterpreter
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B")
+        env = ChatEnv(
+            batch_size=(1,),
+            system_prompt="I'm the system, do as I say",
+            apply_template=True,
+            tokenizer=tokenizer,
+        )
+        env = env.append_transform(PythonInterpreter(persistent=True))
+        r = env.reset(TensorDict(text=["This is the user prompt"], batch_size=(1,)))
+        r["text_response"] = [
+            """Here is a python code to execute:
+```python
+a = [0]
+```<|im_end|>\n
+"""
+        ]
+        s, s_ = env.step_and_maybe_reset(r)
+        r = env.reset(TensorDict(text=["This is the user prompt"], batch_size=(1,)))
+        r["text_response"] = [
+            """Here is a python code to execute:
+```python
+# check if a is still defined
+if "a" in globals():
+    raise RuntimeError("a is still defined")
+else:
+    print("a is not defined")
+```<|im_end|>\n
+"""
+        ]
+        s, s_ = env.step_and_maybe_reset(r)
+        assert re.match(
+            s_["history"].apply_chat_template(tokenizer=tokenizer)[0],
+            "<|im_start|>system\n"
+            "I'm the system, do as I say<|im_end|>\n"
+            "<|im_start|>user\n"
+            "This is the user prompt<|im_end|>\n"
+            "<|im_start|>assistant\n"
+            "Here is a python code to execute:\n"
+            "```python\n"
+            "#\xa0check if a is still defined\n"
+            'if "a" in globals():\n'
+            '    raise RuntimeError("a is still defined")\n'
+            "else:\n"
+            '    print("a is not defined")\n'
+            "```<|im_end|>\n"
+            "<|im_start|>user\n"
+            "<tool_response>\n"
+            "Code block 1 executed successfully:\n"
+            "a is not defined\n"
+            "\n"
+            "</tool_response><|im_end|>\n"
+            "<|im_start|>assistant\n",
+        )
 
 
 if __name__ == "__main__":

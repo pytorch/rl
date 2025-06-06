@@ -430,7 +430,7 @@ class PixelRenderTransform(Transform):
         preproc: Callable[
             [np.ndarray | torch.Tensor], np.ndarray | torch.Tensor
         ] = None,
-        as_non_tensor: bool = None,
+        as_non_tensor: bool | None = None,
         render_method: str = "render",
         pass_tensordict: bool = False,
         **kwargs,

@@ -26,11 +26,13 @@ class Logger:
         ...
 
     @abc.abstractmethod
-    def log_scalar(self, name: str, value: float, step: int = None) -> None:
+    def log_scalar(self, name: str, value: float, step: int | None = None) -> None:
         ...
 
     @abc.abstractmethod
-    def log_video(self, name: str, video: Tensor, step: int = None, **kwargs) -> None:
+    def log_video(
+        self, name: str, video: Tensor, step: int | None = None, **kwargs
+    ) -> None:
         ...
 
     @abc.abstractmethod

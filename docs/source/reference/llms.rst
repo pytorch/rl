@@ -75,7 +75,6 @@ These components can be used to create customized environments tailored to speci
     GSM8KEnv
     make_gsm8k_env
     GSM8KPrepareQuestion
-    GSM8KEnv
     IFEvalEnv
     IfEvalScorer
     IFEvalScoreData
@@ -84,13 +83,23 @@ These components can be used to create customized environments tailored to speci
     make_mlgym
     MLGymWrapper
     GSM8KRewardParser
-    IfEvalScorer
-    as_nested_tensor
-    as_padded_tensor
+
+Transforms
+~~~~~~~~~~
+
+.. currentmodule:: torchrl.envs.llm.transforms
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
     DataLoadingPrimer
     KLRewardTransform
+    PythonInterpreter
     TemplateTransform
     Tokenizer
+    as_nested_tensor
+    as_padded_tensor
 
 Modules
 -------
