@@ -215,6 +215,7 @@ def make_vllm_worker(
             dtype="bfloat16",
             worker_cls="torchrl.modules.llm.backends.vllm.vLLMWorker",
             tensor_parallel_size=len(devices),
+            devices=devices,
             distributed_executor_backend="ray",
             enable_chunked_prefill=True,
             **kwargs,
