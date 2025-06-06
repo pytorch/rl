@@ -7,12 +7,13 @@ from .dataloading import as_nested_tensor, as_padded_tensor, DataLoadingPrimer
 from .format import TemplateTransform
 from .kl import KLRewardTransform
 from .tokenizer import Tokenizer
-from .tools import PythonInterpreter
+from .tools import MCPToolTransform, PythonInterpreter
 
 __all__ = [
     "DataLoadingPrimer",
     "Tokenizer",
     "PythonInterpreter",
+    "MCPToolTransform",
     "TemplateTransform",
     "KLRewardTransform",
     "as_nested_tensor",
