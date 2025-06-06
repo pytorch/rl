@@ -42,7 +42,6 @@ def cuda_visible_devices(devices: Sequence[int]):
     # Reset PyTorch's CUDA device cache
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
-        torch.cuda._reset_device_index()
         torch.cuda.empty_cache()
     
     yield
@@ -55,7 +54,6 @@ def cuda_visible_devices(devices: Sequence[int]):
     # Reset PyTorch's CUDA device cache again
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
-        torch.cuda._reset_device_index()
         torch.cuda.empty_cache()
 
 
@@ -90,7 +88,7 @@ def get_train_model(
     train_devices = cfg.train_model.get("devices", [0])
 
     # Use cuda_visible_devices to restrict visible GPUs and let HF handle distribution
-    with cuda_visible_devices(train_devices):
+    with torch.device(f"cuda:{train_devices[0]}"), cuda_visible_devices(train_devices):
         # Inside the context, devices are remapped to start from 0
         torchrl_logger.info(f"CUDA_VISIBLE_DEVICES: {os.getenv('CUDA_VISIBLE_DEVICES')}")
         torchrl_logger.info(f"Available devices: {torch.cuda.device_count()}")
