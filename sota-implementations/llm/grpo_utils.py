@@ -77,7 +77,12 @@ def get_train_model(
 
     # Use cuda_visible_devices to restrict visible GPUs and let HF handle distribution
     with cuda_visible_devices(train_devices):
-        device_map = "balanced" if len(train_devices) > 1 else f"cuda:0"
+        # Inside the context, devices are remapped to start from 0
+        device_map = (
+            {f"cuda:{i}": i for i in range(len(train_devices))}
+            if len(train_devices) > 1
+            else "cuda:0"
+        )
         train_model, train_tokenizer = get_hf_model(
             cfg.model.name,
             device_map=device_map,
@@ -134,13 +139,11 @@ def get_inference_model(cfg: DictConfig) -> vLLMWrapper:
 
     # Use cuda_visible_devices to restrict visible GPUs for vLLM
     with cuda_visible_devices(vllm_devices):
-        # vLLM handles device mapping internally - it will see the devices as [0, 1, ...]
+        # Pass the actual devices to vLLM - it needs the real indices
         inference_server = make_vllm_worker(
             model_name,
             gpu_memory_utilization=cfg.inference_model.gpu_memory_utilization,
-            devices=list(
-                range(len(vllm_devices))
-            ),  # vLLM will see devices as [0, 1, ...]
+            devices=vllm_devices,  # Pass actual device indices
             make_ray_worker=True,
         )
         assert inference_server is not None
@@ -183,8 +186,13 @@ def get_ref_model(
     ref_devices = cfg.ref_model.get("devices", [2])
 
     # Use cuda_visible_devices to restrict to reference device
-    with cuda_visible_devices(ref_devices), torch.device(f"cuda:{ref_devices[0]}"):
-        device_map = "balanced" if len(ref_devices) > 1 else f"cuda:0"
+    with cuda_visible_devices(ref_devices):
+        # Inside the context, devices are remapped to start from 0
+        device_map = (
+            {f"cuda:{i}": i for i in range(len(ref_devices))}
+            if len(ref_devices) > 1
+            else "cuda:0"
+        )
         model_name = cfg.model.name
 
         ref_model = get_hf_model(
