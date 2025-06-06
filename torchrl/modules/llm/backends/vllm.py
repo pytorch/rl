@@ -135,7 +135,7 @@ class vLLMWorker(Worker):
 class LLMOnDevice(LLM):
     """A thin wrapper around `vllm.LLM` to control its placement devices."""
 
-    def __init__(self, *args, devices: list[int], **kwargs):
+    def __init__(self, *args, **kwargs):
         import ray
 
         gpu_ids = ray.get_gpu_ids()
