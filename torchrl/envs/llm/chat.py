@@ -123,6 +123,10 @@ class ChatEnv(EnvBase):
     ):
         if batch_size is None:
             batch_size = (1,)
+        if isinstance(batch_size, int):
+            batch_size = (batch_size,)
+        if isinstance(batch_size, list):
+            batch_size = torch.Size(batch_size)
         if batch_size == ():
             raise ValueError(f"{type(self).__name__} must have at least one dimension")
 
