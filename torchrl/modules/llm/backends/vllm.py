@@ -203,8 +203,9 @@ def make_vllm_worker(
         torchrl_logger.info(
             f"Create vLLM worker with {devices=}, {scheduling_inference=}"
         )
+        # Request only 1 GPU in the Ray actor - vLLM will handle tensor parallelism internally
         return ray.remote(
-            num_gpus=len(devices),
+            num_gpus=1,  # Only request 1 GPU - vLLM handles multi-GPU internally
             num_cpus=1,
             scheduling_strategy=scheduling_inference,
         )(LLMOnDevice).remote(
