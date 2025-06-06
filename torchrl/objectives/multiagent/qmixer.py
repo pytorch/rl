@@ -193,7 +193,7 @@ class QMixerLoss(LossModule):
         *,
         loss_function: str | None = "l2",
         delay_value: bool = True,
-        gamma: float = None,
+        gamma: float | None = None,
         action_space: str | TensorSpec = None,
         priority_key: str = None,
     ) -> None:

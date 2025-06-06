@@ -466,7 +466,7 @@ def td1_return_estimate(
     reward: torch.Tensor,
     done: torch.Tensor,
     terminated: torch.Tensor | None = None,
-    rolling_gamma: bool = None,
+    rolling_gamma: bool | None = None,
     *,
     time_dim: int = -2,
 ) -> torch.Tensor:
@@ -567,7 +567,7 @@ def td1_advantage_estimate(
     reward: torch.Tensor,
     done: torch.Tensor,
     terminated: torch.Tensor | None = None,
-    rolling_gamma: bool = None,
+    rolling_gamma: bool | None = None,
     time_dim: int = -2,
 ) -> torch.Tensor:
     """TD(1) advantage estimate.
@@ -705,7 +705,7 @@ def vec_td1_advantage_estimate(
     reward,
     done: torch.Tensor,
     terminated: torch.Tensor | None = None,
-    rolling_gamma: bool = None,
+    rolling_gamma: bool | None = None,
     time_dim: int = -2,
 ):
     """Vectorized TD(1) advantage estimate.
@@ -786,7 +786,7 @@ def td_lambda_return_estimate(
     reward: torch.Tensor,
     done: torch.Tensor,
     terminated: torch.Tensor | None = None,
-    rolling_gamma: bool = None,
+    rolling_gamma: bool | None = None,
     *,
     time_dim: int = -2,
 ) -> torch.Tensor:
@@ -895,7 +895,7 @@ def td_lambda_advantage_estimate(
     reward: torch.Tensor,
     done: torch.Tensor,
     terminated: torch.Tensor | None = None,
-    rolling_gamma: bool = None,
+    rolling_gamma: bool | None = None,
     # not a kwarg because used directly
     time_dim: int = -2,
 ) -> torch.Tensor:
@@ -1189,7 +1189,7 @@ def vec_td_lambda_advantage_estimate(
     reward,
     done,
     terminated: torch.Tensor | None = None,
-    rolling_gamma: bool = None,
+    rolling_gamma: bool | None = None,
     # not a kwarg because used directly
     time_dim: int = -2,
 ):

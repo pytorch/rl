@@ -859,7 +859,7 @@ class TensorSpec(metaclass=abc.ABCMeta):
         super().__setattr__(key, value)
 
     def to_numpy(
-        self, val: torch.Tensor | TensorDictBase, safe: bool = None
+        self, val: torch.Tensor | TensorDictBase, safe: bool | None = None
     ) -> np.ndarray | dict:
         """Returns the ``np.ndarray`` correspondent of an input tensor.
 
@@ -1446,7 +1446,7 @@ class _LazyStackedMixin(Generic[T]):
             for spec in self._specs:
                 spec.make_neg_dim(dim - 1)
 
-    def squeeze(self, dim: int = None):
+    def squeeze(self, dim: int | None = None):
         if dim is None:
             size = self.shape
             if len(size) == 1 or size.count(1) == 0:
@@ -1545,7 +1545,7 @@ class Stacked(_LazyStackedMixin[TensorSpec], TensorSpec):
     def __len__(self):
         return self.shape[0]
 
-    def to_numpy(self, val: torch.Tensor, safe: bool = None) -> dict:
+    def to_numpy(self, val: torch.Tensor, safe: bool | None = None) -> dict:
         if safe is None:
             safe = _CHECK_SPEC_ENCODE
         if safe:
@@ -2071,7 +2071,7 @@ class OneHot(TensorSpec):
             )
         return self._encode_memo_dict[ignore_device](val_orig)
 
-    def to_numpy(self, val: torch.Tensor, safe: bool = None) -> np.ndarray:
+    def to_numpy(self, val: torch.Tensor, safe: bool | None = None) -> np.ndarray:
         if safe is None:
             safe = _CHECK_SPEC_ENCODE
         if safe:
@@ -2172,7 +2172,9 @@ class OneHot(TensorSpec):
             and mask_equal
         )
 
-    def to_categorical(self, val: torch.Tensor, safe: bool = None) -> torch.Tensor:
+    def to_categorical(
+        self, val: torch.Tensor, safe: bool | None = None
+    ) -> torch.Tensor:
         """Converts a given one-hot tensor in categorical format.
 
         Args:
@@ -2221,7 +2223,7 @@ class OneHot(TensorSpec):
             mask=self.mask,
         )
 
-    def to_one_hot(self, val: torch.Tensor, safe: bool = None) -> torch.Tensor:
+    def to_one_hot(self, val: torch.Tensor, safe: bool | None = None) -> torch.Tensor:
         """No-op for OneHot."""
         return val
 
@@ -2968,7 +2970,7 @@ class NonTensor(TensorSpec):
         )
 
     def to_numpy(
-        self, val: torch.Tensor | TensorDictBase, safe: bool = None
+        self, val: torch.Tensor | TensorDictBase, safe: bool | None = None
     ) -> np.ndarray | dict:
         return val
 
@@ -3569,7 +3571,9 @@ class MultiOneHot(OneHot):
             )
         return result
 
-    def to_categorical(self, val: torch.Tensor, safe: bool = None) -> torch.Tensor:
+    def to_categorical(
+        self, val: torch.Tensor, safe: bool | None = None
+    ) -> torch.Tensor:
         """Converts a given one-hot tensor in categorical format.
 
         Args:
@@ -3620,7 +3624,7 @@ class MultiOneHot(OneHot):
             mask=self.mask,
         )
 
-    def to_one_hot(self, val: torch.Tensor, safe: bool = None) -> torch.Tensor:
+    def to_one_hot(self, val: torch.Tensor, safe: bool | None = None) -> torch.Tensor:
         """No-op for MultiOneHot."""
         return val
 
@@ -3998,14 +4002,14 @@ class Categorical(TensorSpec):
             and mask_equal
         )
 
-    def to_numpy(self, val: torch.Tensor, safe: bool = None) -> dict:
+    def to_numpy(self, val: torch.Tensor, safe: bool | None = None) -> dict:
         if safe is None:
             safe = _CHECK_SPEC_ENCODE
         # if not val.shape and not safe:
         #     return val.item()
         return super().to_numpy(val, safe)
 
-    def to_one_hot(self, val: torch.Tensor, safe: bool = None) -> torch.Tensor:
+    def to_one_hot(self, val: torch.Tensor, safe: bool | None = None) -> torch.Tensor:
         """Encodes a discrete tensor from the spec domain into its one-hot correspondent.
 
         Args:
@@ -4032,7 +4036,9 @@ class Categorical(TensorSpec):
             self.assert_is_in(val)
         return torch.nn.functional.one_hot(val, self.space.n).bool()
 
-    def to_categorical(self, val: torch.Tensor, safe: bool = None) -> torch.Tensor:
+    def to_categorical(
+        self, val: torch.Tensor, safe: bool | None = None
+    ) -> torch.Tensor:
         """No-op for categorical."""
         return val
 
@@ -4774,7 +4780,7 @@ class MultiCategorical(Categorical):
         )
 
     def to_one_hot(
-        self, val: torch.Tensor, safe: bool = None
+        self, val: torch.Tensor, safe: bool | None = None
     ) -> MultiOneHot | torch.Tensor:
         """Encodes a discrete tensor from the spec domain into its one-hot correspondent.
 
@@ -4811,7 +4817,9 @@ class MultiCategorical(Categorical):
             mask=self.mask,
         )
 
-    def to_categorical(self, val: torch.Tensor, safe: bool = None) -> MultiCategorical:
+    def to_categorical(
+        self, val: torch.Tensor, safe: bool | None = None
+    ) -> MultiCategorical:
         """Not op for MultiCategorical."""
         return val
 
@@ -5033,7 +5041,7 @@ class Composite(TensorSpec):
     def __init__(
         self,
         *args,
-        shape: torch.Size | None = None,
+        shape: tuple | torch.Size | None = None,
         device: torch.device | None = None,
         data_cls: type | None = None,
         **kwargs,
@@ -5759,7 +5767,7 @@ class Composite(TensorSpec):
             data_cls=self.data_cls,
         )
 
-    def to_numpy(self, val: TensorDict, safe: bool = None) -> dict:
+    def to_numpy(self, val: TensorDict, safe: bool | None = None) -> dict:
         return {key: self[key].to_numpy(val) for key, val in val.items()}
 
     def zero(self, shape: torch.Size = None) -> TensorDictBase:
@@ -6178,7 +6186,7 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
                 return False
         return True
 
-    def to_numpy(self, val: TensorDict, safe: bool = None) -> dict:
+    def to_numpy(self, val: TensorDict, safe: bool | None = None) -> dict:
         if safe is None:
             safe = _CHECK_SPEC_ENCODE
         if safe:

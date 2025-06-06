@@ -13,6 +13,7 @@ import torch
 from mocking_classes import DummyStrDataLoader, DummyTensorDataLoader
 
 from tensordict import (
+    lazy_stack,
     NonTensorData,
     NonTensorStack,
     set_capture_non_tensor_stack,
@@ -21,6 +22,7 @@ from tensordict import (
 )
 
 from torchrl._utils import logger as torchrl_logger
+from torchrl.data.llm.chat import History
 from torchrl.envs import StepCounter
 from torchrl.envs.llm import (
     as_padded_tensor,
@@ -43,6 +45,13 @@ _has_ifeval = (
     and (importlib.util.find_spec("nltk") is not None)
     and (importlib.util.find_spec("immutabledict") is not None)
 )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def set_list_to_stack_for_test():
+    with set_list_to_stack(True):
+        yield
+    return
 
 
 class TestLLMEnv:
@@ -621,6 +630,91 @@ By embracing such metaphors, we're encouraged to look beyond the obvious and app
 
         # TODO: To test this, we would need to pass a policy to check_env_specs()
         # env.check_env_specs()
+
+
+class TestTools:
+    @pytest.mark.skipif(not _has_transformers, reason="requires transformers")
+    def test_python_interpreter_single_batch(self):
+        from torchrl.envs.llm.transforms import PythonInterpreter
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B")
+        base_env = ChatEnv(
+            batch_size=(1,),
+            system_prompt="I'm the system, do as I say",
+            apply_template=True,
+            tokenizer=tokenizer,
+        )
+        env = base_env.append_transform(PythonInterpreter())
+        r = env.reset(TensorDict(text=["This is the user prompt"], batch_size=(1,)))
+        rc = r.clone()
+        h = r["history"]
+        history_from_text = h.apply_chat_template(tokenizer=tokenizer)
+        assert history_from_text == [
+            "<|im_start|>system\nI'm the system, do as I say<|im_end|>\n<|im_start|>user\nThis is the user prompt<|im_end|>\n<|im_start|>assistant\n"
+        ]
+        r["text_response"] = [
+            """Here is a python code to execute:
+```python
+print(1 + 1)
+```<|im_end|>\n
+"""
+        ]
+        s = env.step(r)
+        history_str = s["next", "history"].apply_chat_template(tokenizer=tokenizer)
+        assert history_str == [
+            "<|im_start|>system\n"
+            "I'm the system, do as I say<|im_end|>\n"
+            "<|im_start|>user\n"
+            "This is the user prompt<|im_end|>\n"
+            "<|im_start|>assistant\n"
+            "Here is a python code to execute:\n"
+            "```python\n"
+            "print(1 + 1)\n"
+            "```<|im_end|>\n"
+            "<|im_start|>user\n"
+            "<tool_response>\n"
+            "Code block 1 executed successfully:\n"
+            "2\n"
+            "\n"
+            "</tool_response><|im_end|>\n"
+            "<|im_start|>assistant\n"
+        ]
+        history_from_text = History.from_text(history_str, chat_template_name="qwen")
+        assert (
+            history_from_text
+            == lazy_stack(
+                [
+                    History(role="system", content="I'm the system, do as I say"),
+                    History(role="user", content="This is the user prompt"),
+                    History(
+                        role="assistant",
+                        content="Here is a python code to execute:\n```python\nprint(1 + 1)\n```",
+                    ),
+                    History(
+                        role="user",
+                        content="<tool_response>\nCode block 1 executed successfully:\n2\n\n</tool_response>",
+                        tool_responses=["Code block 1 executed successfully:\n2\n"],
+                    ),
+                ]
+            ).unsqueeze(0)
+        ).all()
+        # Check what happens if there is no tool response
+        r = rc.clone()
+        r["text_response"] = [
+            """Here is a response without a python code to execute.<|im_end|>"""
+        ]
+        s = env.step(r)
+        history_str = s["next", "history"].apply_chat_template(tokenizer=tokenizer)
+        assert history_str == [
+            "<|im_start|>system\n"
+            "I'm the system, do as I say<|im_end|>\n"
+            "<|im_start|>user\n"
+            "This is the user prompt<|im_end|>\n"
+            "<|im_start|>assistant\n"
+            "Here is a response without a python code to execute.<|im_end|>\n"
+            "<|im_start|>assistant\n"
+        ]
 
 
 if __name__ == "__main__":

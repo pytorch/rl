@@ -2152,8 +2152,8 @@ class RewardClipping(Transform):
 
     def __init__(
         self,
-        clamp_min: float = None,
-        clamp_max: float = None,
+        clamp_min: float | None = None,
+        clamp_max: float | None = None,
         in_keys: Sequence[NestedKey] | None = None,
         out_keys: Sequence[NestedKey] | None = None,
     ):
@@ -2369,7 +2369,7 @@ class Crop(ObservationTransform):
     def __init__(
         self,
         w: int,
-        h: int = None,
+        h: int | None = None,
         top: int = 0,
         left: int = 0,
         in_keys: Sequence[NestedKey] | None = None,
@@ -2434,7 +2434,7 @@ class CenterCrop(ObservationTransform):
     def __init__(
         self,
         w: int,
-        h: int = None,
+        h: int | None = None,
         in_keys: Sequence[NestedKey] | None = None,
         out_keys: Sequence[NestedKey] | None = None,
     ):
@@ -2598,7 +2598,7 @@ class UnsqueezeTransform(Transform):
 
     def __init__(
         self,
-        dim: int = None,
+        dim: int | None = None,
         *,
         allow_positive_dim: bool = False,
         in_keys: Sequence[NestedKey] | None = None,
@@ -6199,7 +6199,7 @@ class TensorDictPrimer(Transform):
         | dict[NestedKey, float]
         | dict[NestedKey, Callable] = None,
         reset_key: NestedKey | None = None,
-        expand_specs: bool = None,
+        expand_specs: bool | None = None,
         single_default_value: bool = False,
         call_before_env_reset: bool = False,
         **kwargs,

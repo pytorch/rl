@@ -179,3 +179,5 @@ log
 # macOS
 .DS_Store
 Roms
+
+scratch/*.py

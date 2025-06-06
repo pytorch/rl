@@ -284,7 +284,7 @@ class NumberOfSentences(Instruction):
 class PlaceholderChecker(Instruction):
     """Check the placeholders in template writing."""
 
-    def build_description(self, *, num_placeholders: int = None):
+    def build_description(self, *, num_placeholders: int | None = None):
         """Build the instruction description.
 
         Args:
@@ -331,7 +331,7 @@ class PlaceholderChecker(Instruction):
 class BulletListChecker(Instruction):
     """Checks the bullet list in the prompt."""
 
-    def build_description(self, *, num_bullets: int = None):
+    def build_description(self, *, num_bullets: int | None = None):
         """Build the instruction description.
 
         Args:

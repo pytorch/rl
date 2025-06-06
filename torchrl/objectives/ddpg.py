@@ -199,7 +199,7 @@ class DDPGLoss(LossModule):
         loss_function: str = "l2",
         delay_actor: bool = False,
         delay_value: bool = True,
-        gamma: float = None,
+        gamma: float | None = None,
         separate_losses: bool = False,
         reduction: str = None,
     ) -> None:

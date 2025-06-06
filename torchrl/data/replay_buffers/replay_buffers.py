@@ -241,7 +241,7 @@ class ReplayBuffer:
         | None = None,  # noqa: F821
         generator: torch.Generator | None = None,
         shared: bool = False,
-        compilable: bool = None,
+        compilable: bool | None = None,
     ) -> None:
         self._storage = self._maybe_make_storage(storage, compilable=compilable)
         self._storage.attach(self)
@@ -1383,7 +1383,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
         self,
         batch_size: int | None = None,
         return_info: bool = False,
-        include_info: bool = None,
+        include_info: bool | None = None,
     ) -> TensorDictBase:
         """Samples a batch of data from the replay buffer.
 
@@ -1650,7 +1650,7 @@ class RemoteTensorDictReplayBuffer(TensorDictReplayBuffer):
     def sample(
         self,
         batch_size: int | None = None,
-        include_info: bool = None,
+        include_info: bool | None = None,
         return_info: bool = False,
     ) -> TensorDictBase:
         return super().sample(

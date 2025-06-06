@@ -96,7 +96,7 @@ class TokenizedDatasetLoader:
         root_dir=None,
         from_disk=False,
         valid_size: int = 2000,
-        num_workers: int = None,
+        num_workers: int | None = None,
         tokenizer_class=None,
         tokenizer_model_name=None,
     ):

@@ -128,7 +128,7 @@ class IsaacGymWrapper(GymWrapper):
 
     def read_done(
         self,
-        terminated: bool = None,
+        terminated: bool | None = None,
         truncated: bool | None = None,
         done: bool | None = None,
     ) -> tuple[bool, bool, bool]:
