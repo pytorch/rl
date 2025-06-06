@@ -167,7 +167,7 @@ class CSVLogger(Logger):
             log_dir, video_format=self.video_format, video_fps=self.video_fps
         )
 
-    def log_scalar(self, name: str, value: float, step: int = None) -> None:
+    def log_scalar(self, name: str, value: float, step: int | None = None) -> None:
         """Logs a scalar value to the tensorboard.
 
         Args:
@@ -177,7 +177,9 @@ class CSVLogger(Logger):
         """
         self.experiment.add_scalar(name, value, global_step=step)
 
-    def log_video(self, name: str, video: Tensor, step: int = None, **kwargs) -> None:
+    def log_video(
+        self, name: str, video: Tensor, step: int | None = None, **kwargs
+    ) -> None:
         """Log videos inputs to a .pt (or other format) file.
 
         Args:

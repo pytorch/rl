@@ -245,6 +245,9 @@ class Transform(nn.Module):
         self.__dict__["_container"] = None
         self.__dict__["_parent"] = None
 
+    def close(self):
+        """Close the transform."""
+
     @property
     def in_keys(self):
         in_keys = self.__dict__.get("_in_keys", None)
@@ -1240,6 +1243,7 @@ but got an object of type {type(transform)}."""
 
     def close(self, *, raise_if_closed: bool = True):
         self.base_env.close(raise_if_closed=raise_if_closed)
+        self.transform.close()
         self.is_closed = True
 
     def empty_cache(self):
@@ -1424,6 +1428,11 @@ class Compose(Transform):
         self.transforms = nn.ModuleList(transforms)
         for t in transforms:
             t.set_container(self)
+
+    def close(self):
+        """Close the transform."""
+        for t in self.transforms:
+            t.close()
 
     def to(self, *args, **kwargs):
         # because Module.to(...) does not call to(...) on sub-modules, we have
@@ -2152,8 +2161,8 @@ class RewardClipping(Transform):
 
     def __init__(
         self,
-        clamp_min: float = None,
-        clamp_max: float = None,
+        clamp_min: float | None = None,
+        clamp_max: float | None = None,
         in_keys: Sequence[NestedKey] | None = None,
         out_keys: Sequence[NestedKey] | None = None,
     ):
@@ -2369,7 +2378,7 @@ class Crop(ObservationTransform):
     def __init__(
         self,
         w: int,
-        h: int = None,
+        h: int | None = None,
         top: int = 0,
         left: int = 0,
         in_keys: Sequence[NestedKey] | None = None,
@@ -2434,7 +2443,7 @@ class CenterCrop(ObservationTransform):
     def __init__(
         self,
         w: int,
-        h: int = None,
+        h: int | None = None,
         in_keys: Sequence[NestedKey] | None = None,
         out_keys: Sequence[NestedKey] | None = None,
     ):
@@ -2598,7 +2607,7 @@ class UnsqueezeTransform(Transform):
 
     def __init__(
         self,
-        dim: int = None,
+        dim: int | None = None,
         *,
         allow_positive_dim: bool = False,
         in_keys: Sequence[NestedKey] | None = None,
@@ -6192,14 +6201,15 @@ class TensorDictPrimer(Transform):
 
     def __init__(
         self,
-        primers: dict | Composite = None,
+        primers: dict | Composite | None = None,
         random: bool | None = None,
         default_value: float
         | Callable
         | dict[NestedKey, float]
-        | dict[NestedKey, Callable] = None,
+        | dict[NestedKey, Callable]
+        | None = None,
         reset_key: NestedKey | None = None,
-        expand_specs: bool = None,
+        expand_specs: bool | None = None,
         single_default_value: bool = False,
         call_before_env_reset: bool = False,
         **kwargs,

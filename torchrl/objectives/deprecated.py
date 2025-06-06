@@ -162,7 +162,7 @@ class REDQLoss_deprecated(LossModule):
         target_entropy: str | Number = "auto",
         delay_qvalue: bool = True,
         gSDE: bool = False,
-        gamma: float = None,
+        gamma: float | None = None,
         priority_key: str = None,
         separate_losses: bool = False,
         reduction: str = None,

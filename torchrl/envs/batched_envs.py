@@ -303,12 +303,12 @@ class BatchedEnvBase(EnvBase):
         policy_proof: Callable | None = None,
         device: DEVICE_TYPING | None = None,
         allow_step_when_done: bool = False,
-        num_threads: int = None,
+        num_threads: int | None = None,
         num_sub_threads: int = 1,
         serial_for_single: bool = False,
         non_blocking: bool = False,
         mp_start_method: str = None,
-        use_buffers: bool = None,
+        use_buffers: bool | None = None,
         consolidate: bool = True,
     ):
         super().__init__(device=device)

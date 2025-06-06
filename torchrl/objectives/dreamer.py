@@ -255,8 +255,8 @@ class DreamerActorLoss(LossModule):
         *,
         imagination_horizon: int = 15,
         discount_loss: bool = True,  # for consistency with paper
-        gamma: int = None,
-        lmbda: int = None,
+        gamma: int | None = None,
+        lmbda: int | None = None,
     ):
         super().__init__()
         self.actor_model = actor_model

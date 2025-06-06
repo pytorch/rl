@@ -183,7 +183,7 @@ class MeltingpotWrapper(_EnvWrapper):
         categorical_actions: bool = True,
         group_map: MarlGroupMapType
         | dict[str, list[str]] = MarlGroupMapType.ALL_IN_ONE_GROUP,
-        max_steps: int = None,
+        max_steps: int | None = None,
         **kwargs,
     ):
         if env is not None:
