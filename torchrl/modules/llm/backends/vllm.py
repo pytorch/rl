@@ -19,9 +19,20 @@ from torchrl._utils import logger as torchrl_logger
 
 from torchrl.modules.llm.utils import _cuda_visible_devices
 
-from vllm import LLM
-from vllm.utils import get_open_port
-from vllm.worker.worker import Worker
+try:
+    from vllm import LLM
+    from vllm.utils import get_open_port
+    from vllm.worker.worker import Worker
+except ImportError:
+
+    class LLM:  # noqa
+        ...
+
+    class Worker:  # noqa
+        ...
+
+    class get_open_port:  # noqa
+        ...
 
 
 def stateless_init_process_group(

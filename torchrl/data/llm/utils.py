@@ -49,7 +49,7 @@ class ConstantKLController(KLControllerBase):
     def __init__(
         self,
         *,
-        kl_coef: float = None,
+        kl_coef: float | None = None,
         model: nn.Module | None = None,
     ):
         self.model = model

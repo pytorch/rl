@@ -248,7 +248,7 @@ class ReinforceLoss(LossModule):
         *,
         delay_value: bool = False,
         loss_critic_type: str = "smooth_l1",
-        gamma: float = None,
+        gamma: float | None = None,
         advantage_key: str = None,
         value_target_key: str = None,
         separate_losses: bool = False,

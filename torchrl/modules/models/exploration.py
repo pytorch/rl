@@ -319,7 +319,7 @@ class gSDEModule(nn.Module):
         self,
         action_dim: int,
         state_dim: int,
-        sigma_init: float = None,
+        sigma_init: float | None = None,
         scale_min: float = 0.01,
         scale_max: float = 10.0,
         learn_sigma: bool = True,
@@ -454,7 +454,7 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
 
     def __init__(
         self,
-        sigma_init: float = None,
+        sigma_init: float | None = None,
         scale_min: float = 0.01,
         scale_max: float = 10.0,
         learn_sigma: bool = True,

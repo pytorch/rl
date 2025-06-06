@@ -137,7 +137,7 @@ class GenDGRLExperienceReplay(BaseDatasetExperienceReplay):
     def __init__(
         self,
         dataset_id: str,
-        batch_size: int = None,
+        batch_size: int | None = None,
         *,
         download: bool = True,
         root: str | None = None,

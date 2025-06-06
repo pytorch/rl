@@ -478,8 +478,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def __init__(
         self,
         *,
-        device: DEVICE_TYPING = None,
-        batch_size: torch.Size | None = None,
+        device: DEVICE_TYPING | None = None,
+        batch_size: tuple | torch.Size | None = None,
         run_type_checks: bool = False,
         allow_done_after_reset: bool = False,
         spec_locked: bool = True,

@@ -51,7 +51,7 @@ class TensorboardLogger(Logger):
         log_dir = str(os.path.join(self.log_dir, self.exp_name))
         return SummaryWriter(log_dir=log_dir)
 
-    def log_scalar(self, name: str, value: float, step: int = None) -> None:
+    def log_scalar(self, name: str, value: float, step: int | None = None) -> None:
         """Logs a scalar value to the tensorboard.
 
         Args:
@@ -62,7 +62,9 @@ class TensorboardLogger(Logger):
         """
         self.experiment.add_scalar(name, value, global_step=step)
 
-    def log_video(self, name: str, video: Tensor, step: int = None, **kwargs) -> None:
+    def log_video(
+        self, name: str, video: Tensor, step: int | None = None, **kwargs
+    ) -> None:
         """Log videos inputs to the tensorboard.
 
         Args:

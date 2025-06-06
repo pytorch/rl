@@ -235,7 +235,7 @@ class TD3Loss(LossModule):
         loss_function: str = "smooth_l1",
         delay_actor: bool = True,
         delay_qvalue: bool = True,
-        gamma: float = None,
+        gamma: float | None = None,
         priority_key: str = None,
         separate_losses: bool = False,
         reduction: str = None,
