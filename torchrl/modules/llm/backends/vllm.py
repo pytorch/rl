@@ -141,9 +141,12 @@ class LLMOnDevice(LLM):
         gpu_ids = ray.get_gpu_ids()
         torchrl_logger.info(f"=> in {type(self)}.__init__: {gpu_ids=}")
         assert len(gpu_ids) > 0, "No visible cuda device"
-        os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(
-            str(int(gpu_id)) for gpu_id in gpu_ids
-        )
+        if os.getenv("CUDA_VISIBLE_DEVICES") is None or len(
+            os.getenv("CUDA_VISIBLE_DEVICES").split(",")
+        ) != len(gpu_ids):
+            os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(
+                str(int(gpu_id)) for gpu_id in gpu_ids
+            )
         torch.set_default_device("cuda:0")  # Since only one GPU is visible, it's cuda:0
         super().__init__(*args, device="cuda:0", **kwargs)
 
@@ -191,7 +194,10 @@ def make_vllm_worker(
             ray.init()
 
         # Create bundles only for the devices we want to use
-        pg = placement_group(bundles=[{"GPU": 1, "CPU": 1} for _ in range(len(devices))], strategy="STRICT_PACK")
+        pg = placement_group(
+            bundles=[{"GPU": 1, "CPU": 1} for _ in range(len(devices))],
+            strategy="STRICT_PACK",
+        )
 
         ray.get(pg.ready())
         scheduling_inference = PlacementGroupSchedulingStrategy(
