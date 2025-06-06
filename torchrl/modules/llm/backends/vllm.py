@@ -141,9 +141,6 @@ class LLMOnDevice(LLM):
         gpu_ids = ray.get_gpu_ids()
         torchrl_logger.info(f"=> in {type(self)}.__init__: {gpu_ids=}")
         assert len(gpu_ids) > 0, "No visible cuda device"
-        os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(
-                str(int(gpu_id)) for gpu_id in devices
-        )
         torch.set_default_device("cuda:0")  # Since only one GPU is visible, it's cuda:0
         super().__init__(*args, device="cuda:0", **kwargs)
 
@@ -205,21 +202,22 @@ def make_vllm_worker(
         torchrl_logger.info(
             f"Create vLLM worker with {devices=}, {scheduling_inference=}"
         )
-        return ray.remote(
-            num_gpus=1,
-            num_cpus=1,
-            scheduling_strategy=scheduling_inference,
-        )(LLMOnDevice).remote(
-            model=model_name,
-            # enforce_eager=True,
-            dtype="bfloat16",
-            worker_cls="torchrl.modules.llm.backends.vllm.vLLMWorker",
-            tensor_parallel_size=len(devices),
-            devices=devices,
-            distributed_executor_backend="ray",
-            enable_chunked_prefill=True,
-            **kwargs,
-        )
+        with _cuda_visible_devices(devices):
+            return ray.remote(
+                num_gpus=1,
+                num_cpus=1,
+                scheduling_strategy=scheduling_inference,
+            )(LLMOnDevice).remote(
+                model=model_name,
+                # enforce_eager=True,
+                dtype="bfloat16",
+                worker_cls="torchrl.modules.llm.backends.vllm.vLLMWorker",
+                tensor_parallel_size=len(devices),
+                devices=range(len(devices)),
+                distributed_executor_backend="ray",
+                enable_chunked_prefill=True,
+                **kwargs,
+            )
     else:
         with _cuda_visible_devices(devices):
             return LLM(
