@@ -237,6 +237,20 @@ def _main(argv):
         ],
         "marl": ["vmas>=1.2.10", "pettingzoo>=1.24.1", "dm-meltingpot"],
         "open_spiel": ["open_spiel>=1.5"],
+        "llm": [
+            "transformers",  # For tokenizer and model support
+            "vllm",  # For efficient inference
+            "playwright",  # For browser automation
+            "datasets",  # For data loading
+            "langdetect",  # For language detection in IFEval
+            "nltk",  # For text processing in IFEval
+            "immutabledict",  # For IFEval
+            "accelerate",  # For model loading and inference
+            "sentencepiece",  # For tokenization
+            "protobuf",  # Required by some models
+            "einops",  # For tensor operations
+            "safetensors",  # For model loading
+        ],
     }
     extra_requires["all"] = set()
     for key in list(extra_requires.keys()):

@@ -584,3 +584,226 @@ class PythonInterpreter(Transform):
                 for i, process in enumerate(self.processes)
             ]
         return tensordict_reset
+
+
+class MCPToolTransform(Transform):
+    r"""A transform that executes MCP-style tools in response to LLM actions.
+
+    This transform allows execution of tools following the Mission Control Protocol pattern,
+    where tools are defined with clear input/output schemas and executed in a controlled manner.
+
+    Args:
+        tools (dict[str, callable]): A dictionary mapping tool names to their implementation functions.
+            Each function should accept kwargs matching its schema and return a dict with results.
+        tool_schemas (dict[str, dict]): A dictionary mapping tool names to their JSON schemas.
+            Each schema should define the tool's parameters and return type.
+        tokenizer: The tokenizer to use. Defaults to `None` (no tokenizer).
+        tool_name: The name of the tool in the chat history. Defaults to `"tool"`.
+        timeout: The timeout for tool execution in seconds. Defaults to `10.0`.
+
+    Examples:
+        >>> from torchrl.envs.llm.transforms import MCPToolTransform
+        >>> from transformers import AutoTokenizer
+        >>> from tensordict import TensorDict, set_list_to_stack
+        >>> from torchrl.envs.llm import ChatEnv
+        >>> set_list_to_stack(True).set()
+        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B")
+        >>> # Define a simple tool
+        >>> def add_numbers(a: int, b: int) -> dict:
+        ...     return {"result": a + b}
+        >>> # Define its schema
+        >>> add_schema = {
+        ...     "name": "add_numbers",
+        ...     "description": "Add two numbers",
+        ...     "parameters": {
+        ...         "type": "object",
+        ...         "properties": {
+        ...             "a": {"type": "integer"},
+        ...             "b": {"type": "integer"}
+        ...         },
+        ...         "required": ["a", "b"]
+        ...     }
+        ... }
+        >>> tools = {"add_numbers": add_numbers}
+        >>> schemas = {"add_numbers": add_schema}
+        >>> env = ChatEnv(
+        ...     batch_size=(1,),
+        ...     system_prompt="I'm the system, do as I say",
+        ...     apply_template=True,
+        ...     tokenizer=tokenizer,
+        ... )
+        >>> env = env.append_transform(MCPToolTransform(tools, schemas))
+        >>> r = env.reset(TensorDict(text=["This is the user prompt"], batch_size=(1,)))
+        >>> r["text_response"] = ["Let me add two numbers:\n<tool>add_numbers\n{\"a\": 1, \"b\": 2}</tool>"]
+        >>> s = env.step(r)
+        >>> print(s['next', 'history'].apply_chat_template(tokenizer=tokenizer))
+        ['<|im_start|>system\n'
+         "I'm the system, do as I say<|im_end|>\n"
+         '<|im_start|>user\n'
+         'This is the user prompt<|im_end|>\n'
+         '<|im_start|>assistant\n'
+         'Let me add two numbers:\n'
+         '<tool>add_numbers\n'
+         '{"a": 1, "b": 2}</tool><|im_end|>\n'
+         '<|im_start|>user\n'
+         '<tool_response>\n'
+         'Tool add_numbers executed successfully:\n'
+         '{"result": 3}\n'
+         '</tool_response><|im_end|>\n'
+         '<|im_start|>assistant\n']
+    """
+
+    def __init__(
+        self,
+        tools: dict[str, callable],
+        tool_schemas: dict[str, dict],
+        tokenizer=None,  # type: ignore
+        tool_name: str = "tool",
+        timeout: float = 10.0,
+    ):
+        super().__init__()
+        self.tools = tools
+        self.tool_schemas = tool_schemas
+        self.tokenizer = tokenizer
+        self.tool_name = tool_name
+        self.timeout = timeout
+
+    def _extract_tool_calls(
+        self, text: str
+    ) -> list[tuple[str, str]]:  # noqa: D415, D301, D209, D205
+        """Extract tool calls from text in the format <tool>tool_name\nargs_json</tool>."""
+        import re
+
+        pattern = r"<tool>(.*?)\n(.*?)</tool>"
+        matches = re.findall(pattern, text, re.DOTALL)
+        return matches
+
+    def _execute_tool(self, tool_name: str, args_json: str) -> dict:
+        """Execute a tool with the given arguments."""
+        import json
+        import signal
+        from contextlib import contextmanager
+
+        @contextmanager
+        def timeout_context(seconds):
+            def signal_handler(signum, frame):
+                raise TimeoutError("Tool execution timed out")
+
+            # Set the signal handler and a timeout
+            signal.signal(signal.SIGALRM, signal_handler)
+            signal.alarm(int(seconds))
+            try:
+                yield
+            finally:
+                # Disable the alarm
+                signal.alarm(0)
+
+        try:
+            if tool_name not in self.tools:
+                return {
+                    "success": False,
+                    "error": f"Tool {tool_name} not found",
+                }
+
+            # Parse arguments
+            try:
+                args = json.loads(args_json)
+            except json.JSONDecodeError as e:
+                return {
+                    "success": False,
+                    "error": f"Failed to parse tool arguments: {str(e)}",
+                }
+
+            # Execute with timeout
+            with timeout_context(self.timeout):
+                result = self.tools[tool_name](**args)
+                return {
+                    "success": True,
+                    "result": result,
+                }
+
+        except TimeoutError:
+            return {
+                "success": False,
+                "error": f"Tool execution timed out after {self.timeout} seconds",
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Tool execution failed: {str(e)}",
+            }
+
+    def _process_llm_response(self, response: str) -> list[str]:
+        """Process LLM response and execute any tool calls found.
+
+        Args:
+            response (str): The response from the LLM.
+
+        Returns:
+            list[str]: A list of strings, each containing the result of a tool execution.
+        """
+        tool_calls = self._extract_tool_calls(response)
+
+        results = []
+        for tool_name, args_json in tool_calls:
+            result = self._execute_tool(tool_name, args_json)
+
+            if result["success"]:
+                results.append(
+                    f"Tool {tool_name} executed successfully:\n{result['result']}"
+                )
+            else:
+                results.append(f"Tool {tool_name} failed:\n{result['error']}")
+
+        return results
+
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+        if next_tensordict.batch_dims > 1:
+            with next_tensordict.view(-1) as next_tensordict_flat:
+                # Call the transform on the flattened tensordict
+                next_tensordict_flat = self._call(next_tensordict_flat)
+            return next_tensordict
+
+        # Convert text to a history
+        history = next_tensordict["history"]
+        # Isolate last element, which should be our action
+        local_history = history[..., -1]
+
+        procs = []
+        # Iterate over env batch-size
+        for t in local_history.content:
+            results = self._process_llm_response(t)
+            if len(results) == 0:
+                procs.append(None)
+                continue
+            procs.append(
+                [History(role=self.tool_name, content=result) for result in results]
+            )
+
+        # If there is no tool response, just skip entire batch
+        if all(p is None for p in procs):
+            return next_tensordict
+        if any(p is None for p in procs):
+            procs = [p if p is not None else [] for p in procs]
+        # We need to have the same number of items for each element in the batch
+        if len(procs) > 1 and not all(len(p) == len(procs[0]) for p in procs):
+
+            def fill_procs(proc: list[History], max_len: int) -> list[History]:
+                if len(proc) == max_len:
+                    return proc
+                return proc + [History(role="<none>", content="")] * (
+                    max_len - len(proc)
+                )
+
+            max_len = max(len(p) for p in procs)
+            procs = [fill_procs(p, max_len) for p in procs]
+        # Procs has the shape of the batch-size. We can cat along dim=-1
+        procs = lazy_stack([lazy_stack(p) for p in procs])
+        history.extend(procs, dim=-1)
+        next_tensordict["history"] = history
+        return next_tensordict
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return tensordict_reset

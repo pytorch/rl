@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import torch
 from tensordict import NestedKey, TensorDict, TensorDictBase
+from tensordict.utils import _zip_strict
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data import Composite, Unbounded
@@ -55,17 +56,19 @@ class GSM8KRewardParser(Transform):
     ) -> TensorDictBase:
         from xml.etree import ElementTree as ET
 
-        # Get the completion
+        if next_tensordict.batch_dims > 1:
+            with tensordict.view(-1) as td_view, next_tensordict.view(
+                -1
+            ) as next_td_view:
+                self._step(td_view, next_td_view)
+            # did update in place
+            return next_tensordict
 
+        # Get the completion
         responses = tensordict[self.in_keys[0]]  # batch_size, grpo_size, L
 
-        # if isinstance(prompts, str):
-        #     prompts = [prompts]
-
         if isinstance(responses, str):
-            responses = [responses]
-
-        # responses = [p + r for p, r in zip(prompts, responses)]
+            responses = [responses for _ in range(next_tensordict.batch_size[0])]
 
         if self.eos_token is not None:
             responses = [r.removesuffix(self.eos_token) for r in responses]
@@ -78,12 +81,14 @@ class GSM8KRewardParser(Transform):
         else:
             text_completion = responses
         if not isinstance(text_completion, list):
-            text_completion = [text_completion]
+            text_completion = [
+                text_completion for _ in range(next_tensordict.batch_size[0])
+            ]
         # Decomposed reward
         tds = []
         torchrl_logger.info(f"{answers=}")
         torchrl_logger.info(f"{text_completion=}")
-        for answer, compl in zip(answers, text_completion):
+        for answer, compl in _zip_strict(answers, text_completion):
             try:
                 if not compl.startswith("<think>"):
                     compl = "<think>" + compl
@@ -101,7 +106,7 @@ class GSM8KRewardParser(Transform):
             #  With tensorclass comparison should be easy
             cot_orig, answer = answer.split("#### ")
             tds.append(
-                self.single_shaped_correctness_reward(answer, potential_answer, cot)
+                self._single_shaped_correctness_reward(answer, potential_answer, cot)
             )
         tds = torch.stack(tds)
         if isinstance(responses, torch.Tensor) and responses.ndim == 3:
@@ -131,7 +136,7 @@ class GSM8KRewardParser(Transform):
         return reward_spec
 
     @classmethod
-    def single_shaped_correctness_reward(
+    def _single_shaped_correctness_reward(
         cls, true_answer: str, potential_answer: list[str], cot: list[str]
     ) -> TensorDict:
         # TODO: In tune, these end up being lists

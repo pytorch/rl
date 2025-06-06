@@ -7,7 +7,9 @@ from __future__ import annotations
 import argparse
 import contextlib
 import importlib.util
+import random
 import re
+import time
 
 import pytest
 import torch
@@ -434,7 +436,7 @@ class TestChatEnv:
             )
         )
         # Check history after reset
-        torchrl_logger.info('td_reset["history"].content', td_reset["history"].content)
+        torchrl_logger.info(f'{td_reset["history"].content=}')
         assert len(td_reset["history"][0].content) == 2
         assert td_reset["history"][0, 0].content == "I'm system, do what I want."
         assert td_reset["history"][0, 1].content.startswith("I'm the user.")
@@ -593,9 +595,10 @@ class TestIFEvalEnv:
         env = IFEvalEnv(apply_template=True, tokenizer=tokenizer)
         torchrl_logger.info(env.reset())
         r = env.reset()
-        r[0][
-            "text_response"
-        ] = """<think>
+        r.set(
+            "text_response",
+            [
+                """<think>
 The task requires crafting a riddle about a 'house' that's not traditionally considered one. The answer must be included, and the response should be at least 400 words with a title wrapped in double angular brackets. Let's start by brainstorming what could be considered a 'house' in a non-traditional sense. Ideas include natural shelters, abstract concepts, or objects that serve a similar purpose to a house.
 One potential concept is a "womb," as it provides shelter and housing for a developing being. However, we need to ensure our riddle is engaging, meets the word count requirement, and includes the necessary elements like a title.
 Let's construct a narrative around the chosen concept, ensuring it's detailed and follows the required structure.
@@ -637,6 +640,8 @@ The beauty of this concept lies in its universality and the depth of emotion it 
 By embracing such metaphors, we're encouraged to look beyond the obvious and appreciate the myriad ways 'shelter' manifests in our lives. And so, the riddle serves not just as a puzzle to be solved but as a reflection on the profound connections that bind us to the very essence of existence.
 </answer><|im_end|>
 """
+            ],
+        )
         td = env.step(r)
         assert td["next", "ifeval_score"].all()
         assert td.get(("next", "reward")) is not None
@@ -881,7 +886,7 @@ a = [0]
         r["text_response"] = [
             """Here is a python code to execute:
 ```python
-# check if a is still defined
+# check if a is still defined
 if "a" in globals():
     raise RuntimeError("a is still defined")
 else:
@@ -899,7 +904,7 @@ else:
             "<|im_start|>assistant\n"
             "Here is a python code to execute:\n"
             "```python\n"
-            "#\xa0check if a is still defined\n"
+            "# check if a is still defined\n"
             'if "a" in globals():\n'
             '    raise RuntimeError("a is still defined")\n'
             "else:\n"
@@ -913,6 +918,216 @@ else:
             "</tool_response><|im_end|>\n"
             "<|im_start|>assistant\n",
         )
+
+    @pytest.mark.skipif(not _has_transformers, reason="requires transformers")
+    def test_mcp_tool_transform(self):
+        """Test the MCPToolTransform with a simple calculator tool."""
+        from torchrl.envs.llm import ChatEnv
+        from torchrl.envs.llm.transforms.tools import MCPToolTransform
+        from transformers import AutoTokenizer
+
+        # Define a simple calculator tool
+        def calculator(operation: str, a: float, b: float) -> dict:
+            if operation == "add":
+                return {"result": a + b}
+            elif operation == "multiply":
+                return {"result": a * b}
+            else:
+                raise ValueError(f"Unknown operation: {operation}")
+
+        # Define the tool schema
+        calculator_schema = {
+            "name": "calculator",
+            "description": "A simple calculator that can add or multiply two numbers",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "operation": {"type": "string", "enum": ["add", "multiply"]},
+                    "a": {"type": "number"},
+                    "b": {"type": "number"},
+                },
+                "required": ["operation", "a", "b"],
+            },
+        }
+
+        # Create tools dictionary
+        tools = {"calculator": calculator}
+        schemas = {"calculator": calculator_schema}
+
+        # Create environment and transform
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B")
+        env = ChatEnv(
+            batch_size=(1,),
+            system_prompt="You are a helpful assistant that uses a calculator.",
+            apply_template=True,
+            tokenizer=tokenizer,
+        )
+        transform = MCPToolTransform(tools, schemas)
+        env = env.append_transform(transform)
+
+        # Test single tool call
+        td = TensorDict({"text": ["Let me calculate 2 + 3"]}, batch_size=(1,))
+        td = env.reset(td)
+        td["text_response"] = [
+            'I will help you calculate 2 + 3:\n<tool>calculator\n{"operation": "add", "a": 2, "b": 3}</tool><|im_end|>'
+        ]
+        result = env.step(td)
+
+        # Check that the tool was executed and returned correct result
+        history = result["next", "history"]
+        assert len(history[0]) == 4  # system, user, assistant, tool response
+        assert history[0, -1].role == "tool"
+        assert "result': 5" in history[0, -1].content
+
+        # Test multiple tool calls in one response
+        td = TensorDict({"text": ["Calculate 2 + 3 and 4 * 5"]}, batch_size=(1,))
+        td = env.reset(td)
+        td["text_response"] = [
+            "I will help you calculate both:\n"
+            '<tool>calculator\n{"operation": "add", "a": 2, "b": 3}</tool>\n'
+            '<tool>calculator\n{"operation": "multiply", "a": 4, "b": 5}</tool><|im_end|>'
+        ]
+        result = env.step(td)
+
+        # Check that both tools were executed and returned correct results
+        history = result["next", "history"]
+        assert (
+            len(history[0]) == 5
+        )  # system, user, assistant, tool response 1, tool response 2
+        assert history[0, -2].role == "tool"
+        assert history[0, -1].role == "tool"
+        assert "result': 5" in history[0, -2].content  # 2 + 3 = 5
+        assert "result': 20" in history[0, -1].content  # 4 * 5 = 20
+
+        # Test error handling
+        td = TensorDict({"text": ["Calculate 2 ? 3"]}, batch_size=(1,))
+        td = env.reset(td)
+        td["text_response"] = [
+            'I will try to calculate:\n<tool>calculator\n{"operation": "invalid", "a": 2, "b": 3}</tool><|im_end|>'
+        ]
+        result = env.step(td)
+
+        # Check that error was handled gracefully
+        history = result["next", "history"]
+        assert len(history[0]) == 4
+        assert history[0, -1].role == "tool"
+        assert "failed" in history[0, -1].content
+        assert "Unknown operation: invalid" in history[0, -1].content
+
+        # Test invalid JSON
+        td = TensorDict({"text": ["Calculate something"]}, batch_size=(1,))
+        td = env.reset(td)
+        td["text_response"] = [
+            "Let me calculate:\n<tool>calculator\ninvalid json</tool><|im_end|>"
+        ]
+        result = env.step(td)
+
+        # Check that JSON error was handled gracefully
+        history = result["next", "history"]
+        assert len(history[0]) == 4
+        assert history[0, -1].role == "tool"
+        assert "failed" in history[0, -1].content
+        assert "Failed to parse tool arguments" in history[0, -1].content
+
+    # Define a tool that waits for a random amount of time
+    @classmethod
+    def delayed_calculator(cls, operation: str, a: float, b: float) -> dict:
+        # Random delay between 100ms and 300ms
+        delay = random.uniform(0.1, 0.3)
+        time.sleep(delay)
+        if operation == "add":
+            return {"result": a + b, "delay": delay}
+        elif operation == "multiply":
+            return {"result": a * b, "delay": delay}
+        else:
+            raise ValueError(f"Unknown operation: {operation}")
+
+    # Define the tool schema
+    calculator_schema = {
+        "name": "delayed_calculator",
+        "description": "A calculator that introduces random delays",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "operation": {"type": "string", "enum": ["add", "multiply"]},
+                "a": {"type": "number"},
+                "b": {"type": "number"},
+            },
+            "required": ["operation", "a", "b"],
+        },
+    }
+
+    # Create environment factory
+    @classmethod
+    def make_env(cls):
+        from torchrl.envs.llm.transforms.tools import MCPToolTransform
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B")
+        env = ChatEnv(
+            batch_size=(1,),
+            system_prompt="I'm a calculator assistant",
+            apply_template=True,
+            tokenizer=tokenizer,
+        )
+        tools = {"calculator": cls.delayed_calculator}
+        schemas = {"calculator": cls.calculator_schema}
+        return env.append_transform(MCPToolTransform(tools, schemas))
+
+    @pytest.mark.skipif(not _has_transformers, reason="requires transformers")
+    def test_async_mcp_tools(self):
+        """Test async execution of MCP tools in an AsyncEnvPool."""
+        from tensordict import TensorDict
+        from torchrl.envs import AsyncEnvPool
+
+        # Create async env pool with 2 environments
+        env_pool = AsyncEnvPool(
+            [self.make_env, self.make_env], backend="multiprocessing"
+        )
+        try:
+            # Reset both environments
+            tdreset = TensorDict(
+                text=[["Let me calculate 2 + 3"], ["Let me calculate 4 * 5"]],
+                batch_size=(2, 1),
+            )
+            td = env_pool.reset(tdreset)
+
+            # Send async steps to both environments
+            td["text_response"] = [
+                [
+                    'Let me calculate 2 + 3:\n<tool>calculator\n{"operation": "add", "a": 2, "b": 3}</tool><|im_end|>'
+                ],
+                [
+                    'Let me calculate 4 * 5:\n<tool>calculator\n{"operation": "multiply", "a": 4, "b": 5}</tool><|im_end|>'
+                ],
+            ]
+            env_pool.async_step_send(td)
+
+            # Get results as they complete
+            results = env_pool.async_step_recv(min_get=1)  # Get at least one result
+            assert len(results) >= 1  # We should get at least one result
+
+            # Get remaining results
+            if len(results) < 2:
+                remaining = env_pool.async_step_recv()
+            else:
+                remaining = []
+
+            # Combine results
+            all_results = torch.stack(list(results) + list(remaining))
+
+            # Verify results
+            history = all_results["next", "history"]
+            assert len(history[0, 0]) == 4  # system, user, assistant, tool response
+            assert history[0, 0, -1].role == "tool"
+            assert any(
+                "result': 5" in c for c in history[:, 0, -1].content
+            )  # 2 + 3 = 5
+            assert any(
+                "result': 20" in c for c in history[:, 0, -1].content
+            )  # 4 * 5 = 20
+
+        finally:
+            env_pool.close()
 
 
 if __name__ == "__main__":
