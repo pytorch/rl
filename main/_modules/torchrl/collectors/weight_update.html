@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.8.0+1b9d2c1) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+023c965) &#x25BC</span></a>
     </div>
     
 
@@ -627,7 +627,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">server_weights</span><span class="p">)</span></div>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">MultiProcessedWeightUpdate</span><span class="p">(</span><span class="n">WeightUpdaterBase</span><span class="p">):</span>
+<div class="viewcode-block" id="MultiProcessedWeightUpdater"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiProcessedWeightUpdater.html#torchrl.collectors.MultiProcessedWeightUpdater">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">MultiProcessedWeightUpdater</span><span class="p">(</span><span class="n">WeightUpdaterBase</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A remote weight updater for synchronizing policy weights across multiple processes or devices.</span>
 
 <span class="sd">    The `MultiProcessedWeightUpdater` class provides a mechanism for updating the weights</span>
@@ -662,8 +662,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">weights_getter</span> <span class="o">=</span> <span class="n">get_server_weights</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_policy_weights</span> <span class="o">=</span> <span class="n">policy_weights</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">all_worker_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_policy_weights</span><span class="p">)</span>
+<div class="viewcode-block" id="MultiProcessedWeightUpdater.all_worker_ids"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiProcessedWeightUpdater.html#torchrl.collectors.MultiProcessedWeightUpdater.all_worker_ids">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">all_worker_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_policy_weights</span><span class="p">)</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_sync_weights_with_worker</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">worker_id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span>
@@ -682,7 +682,7 @@
         <span class="k">return</span> <span class="n">weights</span><span class="o">.</span><span class="n">data</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_map_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">server_weights</span>
+        <span class="k">return</span> <span class="n">server_weights</span></div>
 
 
 <div class="viewcode-block" id="RayWeightUpdater"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">RayWeightUpdater</span><span class="p">(</span><span class="n">WeightUpdaterBase</span><span class="p">):</span>

@@ -1,0 +1,1130 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>LLM interface &mdash; torchrl main documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sphinx-design.5ea377869091fd0449014c60fc090103.min.css" type="text/css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="vLLMUpdater" href="generated/torchrl.collectors.llm.vLLMUpdater.html" />
+    <link rel="prev" title="register_gym_spec_conversion" href="generated/torchrl.envs.register_gym_spec_conversion.html" />
+  <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','UA-117752657-2');</script>
+    <!-- End Google Tag Manager -->
+  
+
+  
+  <script src="../_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+
+          <li class="main-menu-item">
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Learn
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/get-started">
+                  <span class=dropdown-title>Get Started</span>
+                  <p>Run PyTorch locally or get started quickly with one of the supported cloud platforms</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials">
+                  <span class="dropdown-title">Tutorials</span>
+                  <p>Whats new in PyTorch tutorials</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/basics/intro.html">
+                  <span class="dropdown-title">Learn the Basics</span>
+                  <p>Familiarize yourself with PyTorch concepts and modules</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/recipes/recipes_index.html">
+                  <span class="dropdown-title">PyTorch Recipes</span>
+                  <p>Bite-size, ready-to-deploy PyTorch code examples</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/introyt.html">
+                  <span class="dropdown-title">Intro to PyTorch - YouTube Series</span>
+                  <p>Master PyTorch basics with our engaging YouTube tutorial series</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Ecosystem
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem">
+                  <span class="dropdown-title">Tools</span>
+                  <p>Learn about the tools and frameworks in the PyTorch Ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class=dropdown-title>Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class=dropdown-title>Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class=dropdown-title>Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem/contributor-awards-2024">
+                  <span class="dropdown-title">Contributor Awards - 2024</span>
+                  <p>Award winners announced at this year's PyTorch Conference</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Edge
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/edge">
+                  <span class="dropdown-title">About PyTorch Edge</span>
+                  <p>Build innovative and privacy-aware AI experiences for edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch-overview">
+                  <span class="dropdown-title">ExecuTorch</span>
+                  <p>End-to-end solution for enabling on-device inference capabilities across mobile and edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch/stable/index.html">
+                  <span class="dropdown-title">ExecuTorch Docs</span>
+                </a>
+              </div>
+            </div>  
+          </li>
+
+          <li class="main-menu-item">
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p>Explore the documentation for comprehensive guidance on how to use PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/pytorch-domains">
+                  <span class="dropdown-title">PyTorch Domains</span>
+                  <p>Read the PyTorch Domains documentation to learn more about domain-specific libraries</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Blogs & News 
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/blog/">
+                  <span class="dropdown-title">PyTorch Blog</span>
+                  <p>Catch up on the latest technical news and happenings</p>
+                </a>
+                 <a class="nav-dropdown-item" href="https://pytorch.org/community-blog">
+                  <span class="dropdown-title">Community Blog</span>
+                  <p>Stories from the PyTorch ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/videos">
+                  <span class="dropdown-title">Videos</span>
+                  <p>Learn about the latest PyTorch tutorials, new, and more </p>
+                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
+                  <span class="dropdown-title">Community Stories</span>
+                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/events">
+                  <span class="dropdown-title">Events</span>
+                  <p>Find events, webinars, and podcasts</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/newsletter">
+                  <span class="dropdown-title">Newsletter</span>
+                  <p>Stay up-to-date with the latest updates</p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                About
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
+                  <span class="dropdown-title">PyTorch Foundation</span>
+                  <p>Learn more about the PyTorch Foundation</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/governing-board">
+                  <span class="dropdown-title">Governing Board</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/credits">
+                  <span class="dropdown-title">Cloud Credit Program</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tac">
+                  <span class="dropdown-title">Technical Advisory Council</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/staff">
+                  <span class="dropdown-title">Staff</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/contact-us">
+                  <span class="dropdown-title">Contact Us</span>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li class="main-menu-item">
+            <div class="no-dropdown">
+              <a href="https://pytorch.org/join" data-cta="join">
+                Become a Member
+              </a>
+            </div>
+          </li>
+          <li>
+           <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="github-icon">
+             </a>
+           </div>
+          </li>
+          <!--- TODO: This block adds the search icon to the nav bar. We will enable it later. 
+          <li>
+            <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="search-icon">
+             </a>
+            </div>
+          </li>
+          --->
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../versions.html"><span style="font-size:110%">main (0.9.0+023c965) &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="index.html">API Reference</a> &gt;</li>
+        
+      <li>LLM interface</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/reference/llms.rst.txt" rel="nofollow"><img src="../_static/images/view-page-source-icon.svg"></a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+        
+    
+    
+          <!-- Google Tag Manager (noscript) -->
+          <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2"
+          height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+          <!-- End Google Tag Manager (noscript) -->
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <section id="llm-interface">
+<h1>LLM interface<a class="headerlink" href="#llm-interface" title="Permalink to this heading">¶</a></h1>
+<p id="ref-llms">TorchRL offers a set of tools for LLM post-training, as well as some examples for training or setup.</p>
+<section id="collectors">
+<h2>Collectors<a class="headerlink" href="#collectors" title="Permalink to this heading">¶</a></h2>
+<p>TorchRL offers a specialized collector class (<a class="reference internal" href="generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector" title="torchrl.collectors.llm.LLMCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">LLMCollector</span></code></a>) that is tailored for LLM
+use cases. We also provide dedicated updaters for some inference engines.</p>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater" title="torchrl.collectors.llm.vLLMUpdater"><code class="xref py py-obj docutils literal notranslate"><span class="pre">vLLMUpdater</span></code></a>(master_address, master_port, ...)</p></td>
+<td><p>A class that sends weights to vLLM workers.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector" title="torchrl.collectors.llm.LLMCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LLMCollector</span></code></a>(env, *[, policy, ...])</p></td>
+<td><p>A simplified version of SyncDataCollector for LLM inference.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="data-structures">
+<h2>Data structures<a class="headerlink" href="#data-structures" title="Permalink to this heading">¶</a></h2>
+<p>To handle text-based data structures (such as conversations etc.), we offer a few data structures dedicated to carrying
+data for LLM post-training.</p>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.llm.History.html#torchrl.data.llm.History" title="torchrl.data.llm.History"><code class="xref py py-obj docutils literal notranslate"><span class="pre">History</span></code></a>(role, content[, tool_calls, ...])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.llm.LLMData.html#torchrl.data.llm.LLMData" title="torchrl.data.llm.LLMData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LLMData</span></code></a>([tokens, tokens_response, ...])</p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="environments">
+<h2>Environments<a class="headerlink" href="#environments" title="Permalink to this heading">¶</a></h2>
+<p>When fine-tuning an LLM using TorchRL, the environment is a crucial component of the inference pipeline, alongside the
+policy and collector. Environments manage operations that are not handled by the LLM itself, such as interacting with
+tools, loading prompts from datasets, computing rewards (when necessary), and formatting data.</p>
+<p>Therefore, the fundamental structure of an LLM post-training pipeline is:</p>
+<ul class="simple">
+<li><p>A policy that wraps the LLM and the LLM only</p></li>
+<li><dl class="simple">
+<dt>An environment that handles the world around the LLM:</dt><dd><ul>
+<li><p>Loading data (through <a class="reference internal" href="generated/torchrl.envs.llm.transforms.DataLoadingPrimer.html#torchrl.envs.llm.transforms.DataLoadingPrimer" title="torchrl.envs.llm.transforms.DataLoadingPrimer"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoadingPrimer</span></code></a>)</p></li>
+<li><p>Formatting data (through <a class="reference internal" href="generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform" title="torchrl.envs.llm.transforms.TemplateTransform"><code class="xref py py-class docutils literal notranslate"><span class="pre">TemplateTransform</span></code></a>)</p></li>
+<li><p>Executing tools (through <a class="reference internal" href="generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter" title="torchrl.envs.llm.transforms.PythonInterpreter"><code class="xref py py-class docutils literal notranslate"><span class="pre">PythonInterpreter</span></code></a>)</p></li>
+<li><p>Computing rewards online, if needed (through <a class="reference internal" href="generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform" title="torchrl.envs.llm.transforms.KLRewardTransform"><code class="xref py py-class docutils literal notranslate"><span class="pre">KLRewardTransform</span></code></a>)</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt>A data collector that takes the policy (the LLM) and the environment, and handles the inference part of the pipeline:</dt><dd><ul>
+<li><p>Running reset, step and gathering actions;</p></li>
+<li><p>Yielding the data in a consistent format - or populating a buffer;</p></li>
+<li><p>Updating the policy weights (through <a class="reference internal" href="generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase" title="torchrl.collectors.WeightUpdaterBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">WeightUpdaterBase</span></code></a> classes)</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><p>A replay buffer that stores the data collected using the collector</p></li>
+<li><p>A loss that takes the LLM’s output and returns a loss (through <a class="reference internal" href="generated/torchrl.objectives.llm.GRPOLoss.html#torchrl.objectives.llm.GRPOLoss" title="torchrl.objectives.llm.GRPOLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">GRPOLoss</span></code></a> for example)</p></li>
+</ul>
+<p>These elements are presented in the GRPO scripts in the <cite>sota-implementations/llm</cite> directory.</p>
+<p>The design of environments in TorchRL allows for flexibility and modularity. By framing tasks as environments, users can
+easily extend or modify existing environments using transforms. This approach enables the isolation of individual
+components within specific <a class="reference internal" href="generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnvBase</span></code></a> or <code class="xref py py-class docutils literal notranslate"><span class="pre">Transform</span></code> subclasses, making it
+simpler to augment or alter the environment logic.</p>
+<section id="available-environment-classes-and-utilities">
+<h3>Available Environment Classes and Utilities<a class="headerlink" href="#available-environment-classes-and-utilities" title="Permalink to this heading">¶</a></h3>
+<p>TorchRL provides various environment classes and utilities for working with LLMs, including:</p>
+<ul class="simple">
+<li><p>Various environment classes (<a class="reference internal" href="generated/torchrl.envs.llm.ChatEnv.html#torchrl.envs.llm.ChatEnv" title="torchrl.envs.llm.ChatEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ChatEnv</span></code></a>, <a class="reference internal" href="generated/torchrl.envs.llm.DatasetChatEnv.html#torchrl.envs.llm.DatasetChatEnv" title="torchrl.envs.llm.DatasetChatEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">DatasetChatEnv</span></code></a>,
+<a class="reference internal" href="generated/torchrl.envs.llm.GSM8KEnv.html#torchrl.envs.llm.GSM8KEnv" title="torchrl.envs.llm.GSM8KEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">GSM8KEnv</span></code></a>, etc.)</p></li>
+<li><p>Utility functions (<code class="xref py py-class docutils literal notranslate"><span class="pre">make_gsm8k_env</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">make_mlgym</span></code>, etc.)</p></li>
+<li><p>Transforms and other supporting classes (<code class="xref py py-class docutils literal notranslate"><span class="pre">KLRewardTransform</span></code>,
+<code class="xref py py-class docutils literal notranslate"><span class="pre">TemplateTransform</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">Tokenizer</span></code>, etc.)</p></li>
+</ul>
+<p>These components can be used to create customized environments tailored to specific use cases and requirements.</p>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.ChatEnv.html#torchrl.envs.llm.ChatEnv" title="torchrl.envs.llm.ChatEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ChatEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A chat-based environment.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.DatasetChatEnv.html#torchrl.envs.llm.DatasetChatEnv" title="torchrl.envs.llm.DatasetChatEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DatasetChatEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Base class for chat environment with queries pulled from a dataset.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.GSM8KEnv.html#torchrl.envs.llm.GSM8KEnv" title="torchrl.envs.llm.GSM8KEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GSM8KEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>GSM8K dataset environment.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.make_gsm8k_env.html#torchrl.envs.llm.make_gsm8k_env" title="torchrl.envs.llm.make_gsm8k_env"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_gsm8k_env</span></code></a>([dataset, num_envs, repeats, ...])</p></td>
+<td><p>A builder for an LLMEnv-based GSM8K environment.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.GSM8KPrepareQuestion.html#torchrl.envs.llm.GSM8KPrepareQuestion" title="torchrl.envs.llm.GSM8KPrepareQuestion"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GSM8KPrepareQuestion</span></code></a>([in_keys, out_keys])</p></td>
+<td><p>A transform to prepare the prompt when using GSM8k within an LLMEnv.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.IFEvalEnv.html#torchrl.envs.llm.IFEvalEnv" title="torchrl.envs.llm.IFEvalEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IFEvalEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A chat environment based on the IFEval dataset.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.IfEvalScorer.html#torchrl.envs.llm.IfEvalScorer" title="torchrl.envs.llm.IfEvalScorer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IfEvalScorer</span></code></a>(*[, instruction_ids_key, ...])</p></td>
+<td><p>Scorer for the IF-Eval task.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData" title="torchrl.envs.llm.IFEvalScoreData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IFEvalScoreData</span></code></a>(prompt_level_strict_acc, ...)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.LLMEnv.html#torchrl.envs.llm.LLMEnv" title="torchrl.envs.llm.LLMEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LLMEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A text generation environment for language models.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.LLMHashingEnv.html#torchrl.envs.llm.LLMHashingEnv" title="torchrl.envs.llm.LLMHashingEnv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LLMHashingEnv</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A text generation environment that uses a hashing module to identify unique observations.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.make_mlgym.html#torchrl.envs.llm.make_mlgym" title="torchrl.envs.llm.make_mlgym"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_mlgym</span></code></a>(*[, task, tasks, tokenizer, ...])</p></td>
+<td><p>Wraps an MLGymEnv in a TorchRL Environment.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.MLGymWrapper.html#torchrl.envs.llm.MLGymWrapper" title="torchrl.envs.llm.MLGymWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MLGymWrapper</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A thin wrapper for MLGym environments.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.GSM8KRewardParser.html#torchrl.envs.llm.GSM8KRewardParser" title="torchrl.envs.llm.GSM8KRewardParser"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GSM8KRewardParser</span></code></a>(tokenizer[, in_keys, ...])</p></td>
+<td><p>Reward parser for GSM8KEnv or make_gsm8k_env.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="transforms">
+<h3>Transforms<a class="headerlink" href="#transforms" title="Permalink to this heading">¶</a></h3>
+<p>Transforms are used to modify the data before it is passed to the LLM.
+Tools are usually implemented as transforms, and appended to a base environment
+such as <a class="reference internal" href="generated/torchrl.envs.llm.ChatEnv.html#torchrl.envs.llm.ChatEnv" title="torchrl.envs.llm.ChatEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ChatEnv</span></code></a>.</p>
+<p>An example of a tool transform is the <a class="reference internal" href="generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter" title="torchrl.envs.llm.transforms.PythonInterpreter"><code class="xref py py-class docutils literal notranslate"><span class="pre">PythonInterpreter</span></code></a> transform, which is used
+to execute Python code in the context of the LLM.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.llm.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">PythonInterpreter</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChatEnv</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">set_list_to_stack</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutoTokenizer</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pprint</span><span class="w"> </span><span class="kn">import</span> <span class="n">pprint</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">set_list_to_stack</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="s2">&quot;Qwen/Qwen2.5-7B-Instruct&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">base_env</span> <span class="o">=</span> <span class="n">ChatEnv</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">system_prompt</span><span class="o">=</span><span class="s2">&quot;You are an assistant that can execute Python code. Decorate your code with ```python``` tags.&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">user_role</span><span class="o">=</span><span class="s2">&quot;user&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">system_role</span><span class="o">=</span><span class="s2">&quot;system&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">base_env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">PythonInterpreter</span><span class="p">())</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span><span class="o">.</span><span class="n">set_seed</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Pass the reset data - the prompt - to the environment</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">reset_data</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">text</span><span class="o">=</span><span class="s2">&quot;Let&#39;s write a Python function that returns the square of a number.&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Simulate an action - i.e., a response from the LLM (as if we were an LLM)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">action</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;Here is a block of code to be executed in python:</span>
+<span class="gp">... </span><span class="s2">```python</span>
+<span class="gp">... </span><span class="s2">def square(x):</span>
+<span class="gp">... </span><span class="s2">    return x * x</span>
+<span class="gp">... </span><span class="s2">print(&#39;testing the square function with input 2:&#39;, square(2))</span>
+<span class="gp">... </span><span class="s2">```</span>
+<span class="gp">... </span><span class="s2">&lt;|im_end|&gt;</span>
+<span class="gp">... </span><span class="s2">&quot;&quot;&quot;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">step_data</span> <span class="o">=</span> <span class="n">reset_data</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;text_response&quot;</span><span class="p">,</span> <span class="p">[</span><span class="n">action</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">s</span><span class="p">,</span> <span class="n">s_</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">step_and_maybe_reset</span><span class="p">(</span><span class="n">reset_data</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># The history is a stack of chat messages.</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1">#  The python interpreter transform has executed the code in the last message.</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">pprint</span><span class="p">(</span><span class="n">s_</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span><span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">))</span>
+<span class="go">[&#39;&lt;|im_start|&gt;system\n&#39;</span>
+<span class="go"> &#39;You are an assistant that can execute Python code. Decorate your code with &#39;</span>
+<span class="go"> &#39;```python``` tags.&lt;|im_end|&gt;\n&#39;</span>
+<span class="go"> &#39;&lt;|im_start|&gt;user\n&#39;</span>
+<span class="go"> &quot;Let&#39;s write a Python function that returns the square of a &quot;</span>
+<span class="go"> &#39;number.&lt;|im_end|&gt;\n&#39;</span>
+<span class="go"> &#39;&lt;|im_start|&gt;assistant\n&#39;</span>
+<span class="go"> &#39;Here is a block of code to be executed in python:\n&#39;</span>
+<span class="go"> &#39;```python\n&#39;</span>
+<span class="go"> &#39;def square(x):\n&#39;</span>
+<span class="go"> &#39;    return x * x\n&#39;</span>
+<span class="go"> &quot;print(&#39;testing the square function with input 2:&#39;, square(2))\n&quot;</span>
+<span class="go"> &#39;```&lt;|im_end|&gt;\n&#39;</span>
+<span class="go"> &#39;&lt;|im_start|&gt;user\n&#39;</span>
+<span class="go"> &#39;&lt;tool_response&gt;\n&#39;</span>
+<span class="go"> &#39;Code block 1 executed successfully:\n&#39;</span>
+<span class="go"> &#39;testing the square function with input 2: 4\n&#39;</span>
+<span class="go"> &#39;\n&#39;</span>
+<span class="go"> &#39;&lt;/tool_response&gt;&lt;|im_end|&gt;\n&#39;</span>
+<span class="go"> &#39;&lt;|im_start|&gt;assistant\n&#39;]</span>
+</pre></div>
+</div>
+<p>Similarly, environments that load data from a dataset are just special instances of the <a class="reference internal" href="generated/torchrl.envs.llm.ChatEnv.html#torchrl.envs.llm.ChatEnv" title="torchrl.envs.llm.ChatEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ChatEnv</span></code></a>
+augmented with a <a class="reference internal" href="generated/torchrl.envs.llm.transforms.DataLoadingPrimer.html#torchrl.envs.llm.transforms.DataLoadingPrimer" title="torchrl.envs.llm.transforms.DataLoadingPrimer"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoadingPrimer</span></code></a> transforms (and some dedicated reward parsing
+transforms).</p>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.DataLoadingPrimer.html#torchrl.envs.llm.transforms.DataLoadingPrimer" title="torchrl.envs.llm.transforms.DataLoadingPrimer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DataLoadingPrimer</span></code></a>(dataloader, *[, primers, ...])</p></td>
+<td><p>A primer that loads data from a dataloader and converts it into a tensordict using <code class="docutils literal notranslate"><span class="pre">stack_method</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform" title="torchrl.envs.llm.transforms.KLRewardTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KLRewardTransform</span></code></a>(actor[, coef, in_keys, ...])</p></td>
+<td><p>A transform to add a KL[pi_current||pi_0] correction term to the reward.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter" title="torchrl.envs.llm.transforms.PythonInterpreter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PythonInterpreter</span></code></a>([tokenizer, tool_name, ...])</p></td>
+<td><p>A transform that executes Python code in the LLM response.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform" title="torchrl.envs.llm.transforms.TemplateTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TemplateTransform</span></code></a>(tokenizer[, chat_template])</p></td>
+<td><p>A transform that maps applies a chat template to an input string during the forward pass, and parses the strings to the template during backward.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.Tokenizer.html#torchrl.envs.llm.transforms.Tokenizer" title="torchrl.envs.llm.transforms.Tokenizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Tokenizer</span></code></a>([in_keys, out_keys, in_keys_inv, ...])</p></td>
+<td><p>Applies a tokenization operation on the specified inputs.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.as_nested_tensor.html#torchrl.envs.llm.transforms.as_nested_tensor" title="torchrl.envs.llm.transforms.as_nested_tensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_nested_tensor</span></code></a>(list_of_tensordicts)</p></td>
+<td><p>Stacks a list of tensordicts into a single tensordict with nested tensors.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.as_padded_tensor.html#torchrl.envs.llm.transforms.as_padded_tensor" title="torchrl.envs.llm.transforms.as_padded_tensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_padded_tensor</span></code></a>(list_of_tensordicts[, dim, ...])</p></td>
+<td><p>Stacks a list of tensordicts into a single tensordict with padded tensors.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="modules">
+<h2>Modules<a class="headerlink" href="#modules" title="Permalink to this heading">¶</a></h2>
+<p>The <span class="xref std std-ref">~torchrl.modules.llm</span> section provides a set of wrappers and utility functions for popular training and
+inference backends. The main goal of these primitives is to:</p>
+<ul class="simple">
+<li><p>Unify the input / output data format across training and inference pipelines;</p></li>
+<li><p>Unify the input / output data format across backends (to be able to use different backends across losses and
+collectors, for instance)</p></li>
+<li><p>Give appropriate tooling to construct these objects in typical RL settings (resource allocation, async execution,
+weight update, etc.)</p></li>
+</ul>
+<section id="wrappers">
+<h3>Wrappers<a class="headerlink" href="#wrappers" title="Permalink to this heading">¶</a></h3>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.TransformersWrapper.html#torchrl.modules.llm.TransformersWrapper" title="torchrl.modules.llm.TransformersWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TransformersWrapper</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A wrapper class for Hugging Face Transformers models, providing a consistent interface for text generation and log probability computation.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.vLLMWrapper.html#torchrl.modules.llm.vLLMWrapper" title="torchrl.modules.llm.vLLMWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">vLLMWrapper</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A wrapper class for vLLM models, providing a consistent interface for text generation and log probability computation, similar to the Hugging Face Transformers interface.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="utils">
+<h3>Utils<a class="headerlink" href="#utils" title="Permalink to this heading">¶</a></h3>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.CategoricalSequential.html#torchrl.modules.llm.CategoricalSequential" title="torchrl.modules.llm.CategoricalSequential"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CategoricalSequential</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A ProbabilisticTensorDictSequential subclass meant to work with LLMs.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.LLMOnDevice.html#torchrl.modules.llm.LLMOnDevice" title="torchrl.modules.llm.LLMOnDevice"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LLMOnDevice</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A thin wrapper around <cite>vllm.LLM</cite> to control its placement devices.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.make_vllm_worker.html#torchrl.modules.llm.make_vllm_worker" title="torchrl.modules.llm.make_vllm_worker"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_vllm_worker</span></code></a>(model_name, devices[, ...])</p></td>
+<td><p>Launches the vLLM inference engine.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.stateless_init_process_group.html#torchrl.modules.llm.stateless_init_process_group" title="torchrl.modules.llm.stateless_init_process_group"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stateless_init_process_group</span></code></a>(master_address, ...)</p></td>
+<td><p>Initializes a stateless process group for distributed communication.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.vLLMWorker.html#torchrl.modules.llm.vLLMWorker" title="torchrl.modules.llm.vLLMWorker"><code class="xref py py-obj docutils literal notranslate"><span class="pre">vLLMWorker</span></code></a>(*args, **kwargs)</p></td>
+<td><p>vLLM worker for Ray.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="objectives">
+<h2>Objectives<a class="headerlink" href="#objectives" title="Permalink to this heading">¶</a></h2>
+<p>LLM post training require some appropriate versions of the losses implemented in TorchRL.</p>
+<section id="grpo">
+<h3>GRPO<a class="headerlink" href="#grpo" title="Permalink to this heading">¶</a></h3>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.llm.GRPOLoss.html#torchrl.objectives.llm.GRPOLoss" title="torchrl.objectives.llm.GRPOLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GRPOLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>GRPO loss.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.llm.GRPOLossOutput.html#torchrl.objectives.llm.GRPOLossOutput" title="torchrl.objectives.llm.GRPOLossOutput"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GRPOLossOutput</span></code></a>(loss_objective, ...[, ...])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.llm.MCAdvantage.html#torchrl.objectives.llm.MCAdvantage" title="torchrl.objectives.llm.MCAdvantage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MCAdvantage</span></code></a>(grpo_size[, prompt_key, ...])</p></td>
+<td><p>Monte-Carlo advantage computation engine.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+</section>
+
+
+             </article>
+             
+            </div>
+            <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="generated/torchrl.collectors.llm.vLLMUpdater.html" class="btn btn-neutral float-right" title="vLLMUpdater" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
+      
+      
+        <a href="generated/torchrl.envs.register_gym_spec_conversion.html" class="btn btn-neutral" title="register_gym_spec_conversion" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+      
+    </div>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              <ul>
+<li><a class="reference internal" href="#">LLM interface</a><ul>
+<li><a class="reference internal" href="#collectors">Collectors</a></li>
+<li><a class="reference internal" href="#data-structures">Data structures</a></li>
+<li><a class="reference internal" href="#environments">Environments</a><ul>
+<li><a class="reference internal" href="#available-environment-classes-and-utilities">Available Environment Classes and Utilities</a></li>
+<li><a class="reference internal" href="#transforms">Transforms</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#modules">Modules</a><ul>
+<li><a class="reference internal" href="#wrappers">Wrappers</a></li>
+<li><a class="reference internal" href="#utils">Utils</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#objectives">Objectives</a><ul>
+<li><a class="reference internal" href="#grpo">GRPO</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+         <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+         <script src="../_static/jquery.js"></script>
+         <script src="../_static/underscore.js"></script>
+         <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="../_static/doctools.js"></script>
+         <script src="../_static/design-tabs.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">Stay up to date</li>
+            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
+            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
+            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
+            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
+          </ul>  
+          </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">PyTorch Podcasts</li>
+            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
+            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
+            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
+            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
+          </ul>
+         </div>
+        </div>
+        
+        <div class="privacy-policy">
+          <ul>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
+            <li class="privacy-policy-links">|</li>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
+          </ul>
+        </div>
+        <div class="copyright">
+        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
+          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
+          <a href="https://www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
+          please see <a href="https://www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+      </div>
+     </div>
+
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+           <li class="resources-mobile-menu-title">
+             <a>Learn</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/get-started">Get Started</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials">Tutorials</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/basics/intro.html">Learn the Basics</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/recipes/recipes_index.html">PyTorch Recipes</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/introyt.html">Introduction to PyTorch - YouTube Series</a>
+             </li>
+           </ul>
+           <li class="resources-mobile-menu-title">
+             <a>Ecosystem</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/ecosystem">Tools</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/#community-module">Community</a>
+             </li>
+             <li>
+               <a href="https://discuss.pytorch.org/">Forums</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/resources">Developer Resources</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/ecosystem/contributor-awards-2023">Contributor Awards - 2024</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Edge</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/edge">About PyTorch Edge</a>
+             </li>
+             
+             <li>
+               <a href="https://pytorch.org/executorch-overview">ExecuTorch</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/executorch/stable/index.html">ExecuTorch Documentation</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Docs</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/pytorch-domains">PyTorch Domains</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            <a>Blog & News</a>
+          </li>
+            
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/blog/">PyTorch Blog</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/community-blog">Community Blog</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/videos">Videos</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/community-stories">Community Stories</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/events">Events</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/newsletter">Newsletter</a>
+             </li>
+          </ul>
+          
+          <li class="resources-mobile-menu-title">
+            <a>About</a>
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/governing-board">Governing Board</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/credits">Cloud Credit Program</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/tac">Technical Advisory Council</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/staff">Staff</a>
+            </li>
+            <li>
+               <a href="https://pytorch.org/contact-us">Contact Us</a>
+            </li>
+          </ul>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>

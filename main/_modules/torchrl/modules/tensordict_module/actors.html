@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.8.0+1b9d2c1) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+023c965) &#x25BC</span></a>
     </div>
     
 
@@ -2589,7 +2589,7 @@
             <span class="n">TensorDictModule</span><span class="p">(</span>
                 <span class="n">base_model</span><span class="o">.</span><span class="n">transformer</span><span class="p">,</span>
                 <span class="n">in_keys</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;input_ids&quot;</span><span class="p">:</span> <span class="s2">&quot;input_ids&quot;</span><span class="p">,</span> <span class="s2">&quot;attention_mask&quot;</span><span class="p">:</span> <span class="s2">&quot;attention_mask&quot;</span><span class="p">},</span>
-                <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;x&quot;</span><span class="p">],</span>
+                <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;x&quot;</span><span class="p">,</span> <span class="s2">&quot;_&quot;</span><span class="p">],</span>
             <span class="p">),</span>
             <span class="n">TensorDictModule</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[:,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="p">:],</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;x&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;x&quot;</span><span class="p">]),</span>
         <span class="p">)</span>

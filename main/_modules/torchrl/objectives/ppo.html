@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.8.0+1b9d2c1) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+023c965) &#x25BC</span></a>
     </div>
     
 
@@ -429,6 +429,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">deepcopy</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
@@ -505,7 +506,9 @@
 <span class="sd">            ``samples_mc_entropy`` will control how many</span>
 <span class="sd">            samples will be used to compute this estimate.</span>
 <span class="sd">            Defaults to ``1``.</span>
-<span class="sd">        entropy_coef (scalar, optional): entropy multiplier when computing the total loss.</span>
+<span class="sd">        entropy_coef (scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.</span>
+<span class="sd">            * **Scalar**: one value applied to the summed entropy of every action head.</span>
+<span class="sd">            * **Mapping** ``{head_name: coef}`` gives an individual coefficient for each action-head&#39;s entropy.</span>
 <span class="sd">            Defaults to ``0.01``.</span>
 <span class="sd">        critic_coef (scalar, optional): critic loss multiplier when computing the total</span>
 <span class="sd">            loss. Defaults to ``1.0``. Set ``critic_coef`` to ``None`` to exclude the value</span>
@@ -543,6 +546,10 @@
 <span class="sd">            The purpose of clipping is to limit the impact of extreme value predictions, helping stabilize training</span>
 <span class="sd">            and preventing large updates. However, it will have no impact if the value estimate was done by the current</span>
 <span class="sd">            version of the value estimator. Defaults to ``None``.</span>
+<span class="sd">        device (torch.device, optional): device of the buffers. Defaults to ``None``.</span>
+
+<span class="sd">            .. note:: Parameters and buffers from the policy / critic will not be cast to that device to ensure that</span>
+<span class="sd">                the storages match the ones that are passed to other components, such as data collectors.</span>
 
 <span class="sd">    .. note::</span>
 <span class="sd">      The advantage (typically GAE) can be computed by the loss function or</span>
@@ -747,12 +754,12 @@
         <span class="o">*</span><span class="p">,</span>
         <span class="n">entropy_bonus</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">samples_mc_entropy</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
-        <span class="n">entropy_coef</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.01</span><span class="p">,</span>
+        <span class="n">entropy_coef</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.01</span><span class="p">,</span>
         <span class="n">critic_coef</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">loss_critic_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;smooth_l1&quot;</span><span class="p">,</span>
         <span class="n">normalize_advantage</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">normalize_advantage_exclude_dims</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
-        <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">separate_losses</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">advantage_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">value_target_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -762,6 +769,7 @@
         <span class="n">critic</span><span class="p">:</span> <span class="n">ProbabilisticTensorDictSequential</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">reduction</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">clip_value</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="k">if</span> <span class="n">actor</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -816,12 +824,30 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">separate_losses</span> <span class="o">=</span> <span class="n">separate_losses</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">reduction</span> <span class="o">=</span> <span class="n">reduction</span>
 
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">device</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span><span class="o">.</span><span class="n">device</span>
-        <span class="k">except</span> <span class="p">(</span><span class="ne">AttributeError</span><span class="p">,</span> <span class="ne">StopIteration</span><span class="p">):</span>
-            <span class="n">device</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">torch</span><span class="p">,</span> <span class="s2">&quot;get_default_device&quot;</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">))()</span>
+        <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">device</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span><span class="o">.</span><span class="n">device</span>
+            <span class="k">except</span> <span class="p">(</span><span class="ne">AttributeError</span><span class="p">,</span> <span class="ne">StopIteration</span><span class="p">):</span>
+                <span class="n">device</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span>
+                    <span class="n">torch</span><span class="p">,</span> <span class="s2">&quot;get_default_device&quot;</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+                <span class="p">)()</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;entropy_coef&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">entropy_coef</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">))</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entropy_coef</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="c1"># Store the mapping for per-head coefficients</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_entropy_coef_map</span> <span class="o">=</span> <span class="p">{</span><span class="nb">str</span><span class="p">(</span><span class="n">k</span><span class="p">):</span> <span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">entropy_coef</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+            <span class="c1"># Register an empty buffer for compatibility</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;entropy_coef&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mf">0.0</span><span class="p">))</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entropy_coef</span><span class="p">,</span> <span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)):</span>
+            <span class="c1"># Register the scalar entropy coefficient</span>
+            <span class="n">coef</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="nb">float</span><span class="p">(</span><span class="n">entropy_coef</span><span class="p">)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">is_tensor</span><span class="p">(</span><span class="n">entropy_coef</span><span class="p">)</span>
+                <span class="k">else</span> <span class="nb">float</span><span class="p">(</span><span class="n">entropy_coef</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;entropy_coef&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">coef</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_entropy_coef_map</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;entropy_coef must be a float or a Mapping[str, float]&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">critic_coef</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
                 <span class="s2">&quot;critic_coef&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">critic_coef</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
@@ -843,7 +869,7 @@
 
         <span class="k">if</span> <span class="n">clip_value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">clip_value</span><span class="p">,</span> <span class="nb">float</span><span class="p">):</span>
-                <span class="n">clip_value</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">clip_value</span><span class="p">)</span>
+                <span class="n">clip_value</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">clip_value</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
             <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">clip_value</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
                 <span class="k">if</span> <span class="n">clip_value</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -853,7 +879,9 @@
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;clip_value must be a float or a scalar tensor, got </span><span class="si">{</span><span class="n">clip_value</span><span class="si">}</span><span class="s2">.&quot;</span>
                 <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;clip_value&quot;</span><span class="p">,</span> <span class="n">clip_value</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;clip_value&quot;</span><span class="p">,</span> <span class="n">clip_value</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">clip_value</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">log_prob_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">log_prob_keys</span>
             <span class="n">action_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">dist_sample_keys</span>
@@ -951,7 +979,6 @@
         <span class="k">return</span> <span class="n">entropy</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_get_cur_log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
-
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="p">,</span>
             <span class="p">(</span><span class="n">ProbabilisticTensorDictSequential</span><span class="p">,</span> <span class="n">ProbabilisticTensorDictModule</span><span class="p">),</span>
@@ -1000,7 +1027,6 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_log_weight</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">adv_shape</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">d</span><span class="o">.</span><span class="n">Distribution</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
-
         <span class="n">prev_log_prob</span> <span class="o">=</span> <span class="n">_maybe_get_or_select</span><span class="p">(</span>
             <span class="n">tensordict</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">sample_log_prob</span><span class="p">,</span>
@@ -1156,9 +1182,12 @@
             <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">entropy</span><span class="p">):</span>
                 <span class="c1"># Reports the entropy of each action head.</span>
                 <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;composite_entropy&quot;</span><span class="p">,</span> <span class="n">entropy</span><span class="o">.</span><span class="n">detach</span><span class="p">())</span>
-                <span class="n">entropy</span> <span class="o">=</span> <span class="n">_sum_td_features</span><span class="p">(</span><span class="n">entropy</span><span class="p">)</span>
-            <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;entropy&quot;</span><span class="p">,</span> <span class="n">entropy</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>  <span class="c1"># for logging</span>
-            <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;loss_entropy&quot;</span><span class="p">,</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">entropy_coef</span> <span class="o">*</span> <span class="n">entropy</span><span class="p">)</span>
+                <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                    <span class="s2">&quot;entropy&quot;</span><span class="p">,</span> <span class="n">_sum_td_features</span><span class="p">(</span><span class="n">entropy</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+                <span class="p">)</span>  <span class="c1"># for logging</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;entropy&quot;</span><span class="p">,</span> <span class="n">entropy</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>  <span class="c1"># for logging</span>
+            <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;loss_entropy&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weighted_loss_entropy</span><span class="p">(</span><span class="n">entropy</span><span class="p">))</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_has_critic</span><span class="p">:</span>
             <span class="n">loss_critic</span><span class="p">,</span> <span class="n">value_clip_fraction</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_critic</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
             <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;loss_critic&quot;</span><span class="p">,</span> <span class="n">loss_critic</span><span class="p">)</span>
@@ -1223,7 +1252,36 @@
             <span class="s2">&quot;terminated&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">terminated</span><span class="p">,</span>
             <span class="s2">&quot;sample_log_prob&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">sample_log_prob</span><span class="p">,</span>
         <span class="p">}</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_value_estimator</span><span class="o">.</span><span class="n">set_keys</span><span class="p">(</span><span class="o">**</span><span class="n">tensor_keys</span><span class="p">)</span></div></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_value_estimator</span><span class="o">.</span><span class="n">set_keys</span><span class="p">(</span><span class="o">**</span><span class="n">tensor_keys</span><span class="p">)</span></div>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_weighted_loss_entropy</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">entropy</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute the weighted entropy loss.</span>
+
+<span class="sd">        If `self._entropy_coef_map` is provided, apply per-head entropy coefficients.</span>
+<span class="sd">        Otherwise, use the scalar `self.entropy_coef`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_entropy_coef_map</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">entropy</span><span class="p">):</span>
+                <span class="n">entropy</span> <span class="o">=</span> <span class="n">_sum_td_features</span><span class="p">(</span><span class="n">entropy</span><span class="p">)</span>
+            <span class="k">return</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">entropy_coef</span> <span class="o">*</span> <span class="n">entropy</span>
+
+        <span class="n">loss_term</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># running sum over heads</span>
+        <span class="k">for</span> <span class="n">head_name</span><span class="p">,</span> <span class="n">entropy_head</span> <span class="ow">in</span> <span class="n">entropy</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">coeff</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_entropy_coef_map</span><span class="p">[</span><span class="n">head_name</span><span class="p">]</span>
+            <span class="k">except</span> <span class="ne">KeyError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Missing entropy coef for head &#39;</span><span class="si">{</span><span class="n">head_name</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+            <span class="n">coeff_t</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span>
+                <span class="n">coeff</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">entropy_head</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">entropy_head</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">)</span>
+            <span class="n">head_loss_term</span> <span class="o">=</span> <span class="o">-</span><span class="n">coeff_t</span> <span class="o">*</span> <span class="n">_sum_td_features</span><span class="p">(</span><span class="n">entropy_head</span><span class="p">)</span>
+            <span class="n">loss_term</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">head_loss_term</span> <span class="k">if</span> <span class="n">loss_term</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">loss_term</span> <span class="o">+</span> <span class="n">head_loss_term</span>
+            <span class="p">)</span>  <span class="c1"># accumulate</span>
+
+        <span class="k">return</span> <span class="n">loss_term</span></div>
 
 
 <div class="viewcode-block" id="ClipPPOLoss"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.ClipPPOLoss.html#torchrl.objectives.ClipPPOLoss">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">ClipPPOLoss</span><span class="p">(</span><span class="n">PPOLoss</span><span class="p">):</span>
@@ -1247,7 +1305,9 @@
 <span class="sd">            ``samples_mc_entropy`` will control how many</span>
 <span class="sd">            samples will be used to compute this estimate.</span>
 <span class="sd">            Defaults to ``1``.</span>
-<span class="sd">        entropy_coef (scalar, optional): entropy multiplier when computing the total loss.</span>
+<span class="sd">        entropy_coef (scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.</span>
+<span class="sd">            * **Scalar**: one value applied to the summed entropy of every action head.</span>
+<span class="sd">            * **Mapping** ``{head_name: coef}`` gives an individual coefficient for each action-head&#39;s entropy.</span>
 <span class="sd">            Defaults to ``0.01``.</span>
 <span class="sd">        critic_coef (scalar, optional): critic loss multiplier when computing the total</span>
 <span class="sd">            loss. Defaults to ``1.0``. Set ``critic_coef`` to ``None`` to exclude the value</span>
@@ -1287,6 +1347,10 @@
 <span class="sd">            estimate was done by the current version of the value estimator. If instead ``True`` is provided, the</span>
 <span class="sd">            ``clip_epsilon`` parameter will be used as the clipping threshold. If not provided or ``False``, no</span>
 <span class="sd">            clipping will be performed. Defaults to ``False``.</span>
+<span class="sd">        device (torch.device, optional): device of the buffers. Defaults to ``None``.</span>
+
+<span class="sd">            .. note:: Parameters and buffers from the policy / critic will not be cast to that device to ensure that</span>
+<span class="sd">                the storages match the ones that are passed to other components, such as data collectors.</span>
 
 <span class="sd">    .. note:</span>
 <span class="sd">      The advantage (typically GAE) can be computed by the loss function or</span>
@@ -1346,15 +1410,16 @@
         <span class="n">clip_epsilon</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.2</span><span class="p">,</span>
         <span class="n">entropy_bonus</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">samples_mc_entropy</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
-        <span class="n">entropy_coef</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.01</span><span class="p">,</span>
+        <span class="n">entropy_coef</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.01</span><span class="p">,</span>
         <span class="n">critic_coef</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">loss_critic_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;smooth_l1&quot;</span><span class="p">,</span>
         <span class="n">normalize_advantage</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">normalize_advantage_exclude_dims</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
-        <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">separate_losses</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">reduction</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">clip_value</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="c1"># Define clipping of the value loss</span>
@@ -1375,13 +1440,16 @@
             <span class="n">separate_losses</span><span class="o">=</span><span class="n">separate_losses</span><span class="p">,</span>
             <span class="n">reduction</span><span class="o">=</span><span class="n">reduction</span><span class="p">,</span>
             <span class="n">clip_value</span><span class="o">=</span><span class="n">clip_value</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameters</span><span class="p">():</span>
-            <span class="n">device</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">device</span>
-            <span class="k">break</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">device</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">device</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span><span class="o">.</span><span class="n">device</span>
+            <span class="k">except</span> <span class="p">(</span><span class="ne">AttributeError</span><span class="p">,</span> <span class="ne">StopIteration</span><span class="p">):</span>
+                <span class="n">device</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span>
+                    <span class="n">torch</span><span class="p">,</span> <span class="s2">&quot;get_default_device&quot;</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+                <span class="p">)()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;clip_epsilon&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">clip_epsilon</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">))</span>
 
     <span class="nd">@property</span>
@@ -1467,9 +1535,12 @@
             <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">entropy</span><span class="p">):</span>
                 <span class="c1"># Reports the entropy of each action head.</span>
                 <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;composite_entropy&quot;</span><span class="p">,</span> <span class="n">entropy</span><span class="o">.</span><span class="n">detach</span><span class="p">())</span>
-                <span class="n">entropy</span> <span class="o">=</span> <span class="n">_sum_td_features</span><span class="p">(</span><span class="n">entropy</span><span class="p">)</span>
-            <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;entropy&quot;</span><span class="p">,</span> <span class="n">entropy</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>  <span class="c1"># for logging</span>
-            <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;loss_entropy&quot;</span><span class="p">,</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">entropy_coef</span> <span class="o">*</span> <span class="n">entropy</span><span class="p">)</span>
+                <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                    <span class="s2">&quot;entropy&quot;</span><span class="p">,</span> <span class="n">_sum_td_features</span><span class="p">(</span><span class="n">entropy</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+                <span class="p">)</span>  <span class="c1"># for logging</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;entropy&quot;</span><span class="p">,</span> <span class="n">entropy</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>  <span class="c1"># for logging</span>
+            <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;loss_entropy&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weighted_loss_entropy</span><span class="p">(</span><span class="n">entropy</span><span class="p">))</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_has_critic</span><span class="p">:</span>
             <span class="n">loss_critic</span><span class="p">,</span> <span class="n">value_clip_fraction</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_critic</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
             <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;loss_critic&quot;</span><span class="p">,</span> <span class="n">loss_critic</span><span class="p">)</span>
@@ -1523,7 +1594,9 @@
 <span class="sd">            ``samples_mc_entropy`` will control how many</span>
 <span class="sd">            samples will be used to compute this estimate.</span>
 <span class="sd">            Defaults to ``1``.</span>
-<span class="sd">        entropy_coef (scalar, optional): entropy multiplier when computing the total loss.</span>
+<span class="sd">        entropy_coef (scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.</span>
+<span class="sd">            * **Scalar**: one value applied to the summed entropy of every action head.</span>
+<span class="sd">            * **Mapping** ``{head_name: coef}`` gives an individual coefficient for each action-head&#39;s entropy.</span>
 <span class="sd">            Defaults to ``0.01``.</span>
 <span class="sd">        critic_coef (scalar, optional): critic loss multiplier when computing the total</span>
 <span class="sd">            loss. Defaults to ``1.0``.</span>
@@ -1560,6 +1633,10 @@
 <span class="sd">            The purpose of clipping is to limit the impact of extreme value predictions, helping stabilize training</span>
 <span class="sd">            and preventing large updates. However, it will have no impact if the value estimate was done by the current</span>
 <span class="sd">            version of the value estimator. Defaults to ``None``.</span>
+<span class="sd">        device (torch.device, optional): device of the buffers. Defaults to ``None``.</span>
+
+<span class="sd">            .. note:: Parameters and buffers from the policy / critic will not be cast to that device to ensure that</span>
+<span class="sd">                the storages match the ones that are passed to other components, such as data collectors.</span>
 
 <span class="sd">    .. note:</span>
 <span class="sd">      The advantage (typically GAE) can be computed by the loss function or</span>
@@ -1623,15 +1700,16 @@
         <span class="n">samples_mc_kl</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">entropy_bonus</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">samples_mc_entropy</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
-        <span class="n">entropy_coef</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.01</span><span class="p">,</span>
+        <span class="n">entropy_coef</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.01</span><span class="p">,</span>
         <span class="n">critic_coef</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">loss_critic_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;smooth_l1&quot;</span><span class="p">,</span>
         <span class="n">normalize_advantage</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">normalize_advantage_exclude_dims</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
-        <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">separate_losses</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">reduction</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">clip_value</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
@@ -1648,12 +1726,21 @@
             <span class="n">separate_losses</span><span class="o">=</span><span class="n">separate_losses</span><span class="p">,</span>
             <span class="n">reduction</span><span class="o">=</span><span class="n">reduction</span><span class="p">,</span>
             <span class="n">clip_value</span><span class="o">=</span><span class="n">clip_value</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span>
 
+        <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">device</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span><span class="o">.</span><span class="n">device</span>
+            <span class="k">except</span> <span class="p">(</span><span class="ne">AttributeError</span><span class="p">,</span> <span class="ne">StopIteration</span><span class="p">):</span>
+                <span class="n">device</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span>
+                    <span class="n">torch</span><span class="p">,</span> <span class="s2">&quot;get_default_device&quot;</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+                <span class="p">)()</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">dtarg</span> <span class="o">=</span> <span class="n">dtarg</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_beta_init</span> <span class="o">=</span> <span class="n">beta</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;beta&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">beta</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;beta&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">beta</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">))</span>
 
         <span class="k">if</span> <span class="n">increment</span> <span class="o">&lt;</span> <span class="mf">1.0</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -1794,9 +1881,12 @@
             <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">entropy</span><span class="p">):</span>
                 <span class="c1"># Reports the entropy of each action head.</span>
                 <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;composite_entropy&quot;</span><span class="p">,</span> <span class="n">entropy</span><span class="o">.</span><span class="n">detach</span><span class="p">())</span>
-                <span class="n">entropy</span> <span class="o">=</span> <span class="n">_sum_td_features</span><span class="p">(</span><span class="n">entropy</span><span class="p">)</span>
-            <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;entropy&quot;</span><span class="p">,</span> <span class="n">entropy</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>  <span class="c1"># for logging</span>
-            <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;loss_entropy&quot;</span><span class="p">,</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">entropy_coef</span> <span class="o">*</span> <span class="n">entropy</span><span class="p">)</span>
+                <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                    <span class="s2">&quot;entropy&quot;</span><span class="p">,</span> <span class="n">_sum_td_features</span><span class="p">(</span><span class="n">entropy</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+                <span class="p">)</span>  <span class="c1"># for logging</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;entropy&quot;</span><span class="p">,</span> <span class="n">entropy</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>  <span class="c1"># for logging</span>
+            <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;loss_entropy&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weighted_loss_entropy</span><span class="p">(</span><span class="n">entropy</span><span class="p">))</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_has_critic</span><span class="p">:</span>
             <span class="n">loss_critic</span><span class="p">,</span> <span class="n">value_clip_fraction</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_critic</span><span class="p">(</span><span class="n">tensordict_copy</span><span class="p">)</span>
             <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;loss_critic&quot;</span><span class="p">,</span> <span class="n">loss_critic</span><span class="p">)</span>

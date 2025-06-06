@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.8.0+1b9d2c1) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+023c965) &#x25BC</span></a>
     </div>
     
 
@@ -700,7 +700,7 @@ crashes.
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>weight_updater</strong> (<a class="reference internal" href="torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase" title="torchrl.collectors.WeightUpdaterBase"><em>WeightUpdaterBase</em></a><em> or </em><em>constructor</em><em>, </em><em>optional</em>) – An instance of <a class="reference internal" href="torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase" title="torchrl.collectors.WeightUpdaterBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">WeightUpdaterBase</span></code></a>
 or its subclass, responsible for updating the policy weights on remote inference workers.
-If not provided, a <code class="xref py py-class docutils literal notranslate"><span class="pre">MultiProcessedWeightUpdater</span></code> will be used by default,
+If not provided, a <a class="reference internal" href="torchrl.collectors.MultiProcessedWeightUpdater.html#torchrl.collectors.MultiProcessedWeightUpdater" title="torchrl.collectors.MultiProcessedWeightUpdater"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiProcessedWeightUpdater</span></code></a> will be used by default,
 which handles weight synchronization across multiple processes.
 Consider using a constructor if the updater needs to be serialized.</p></li>
 </ul>
@@ -708,7 +708,7 @@ Consider using a constructor if the updater needs to be serialized.</p></li>
 </dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.collectors.MultiSyncDataCollector.async_shutdown">
-<span class="sig-name descname"><span class="pre">async_shutdown</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.collectors.MultiSyncDataCollector.async_shutdown" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">async_shutdown</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.collectors.MultiSyncDataCollector.async_shutdown" title="Permalink to this definition">¶</a></dt>
 <dd><p>Shuts down the collector when started asynchronously with the <cite>start</cite> method.</p>
 <dl>
 <dt>Arg:</dt><dd><p>timeout (float, optional): The maximum time to wait for the collector to shutdown.

@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.modules.llm
+
+
+CategoricalSequential
+=====================
+
+.. autoclass:: CategoricalSequential
+    :members:
+    :inherited-members:

@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.8.0+1b9d2c1) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+023c965) &#x25BC</span></a>
     </div>
     
 
@@ -429,7 +429,6 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span>
 
@@ -904,17 +903,7 @@
 
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">mode</span> <span class="o">=</span> <span class="n">_composite_lp_aggregate</span><span class="o">.</span><span class="n">get_mode</span><span class="p">()</span>
-    <span class="k">if</span> <span class="n">mode</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">nowarn</span><span class="p">:</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="s2">&quot;Composite log-prob aggregation wasn&#39;t defined explicitly and ``composite_lp_aggregate()`` will &quot;</span>
-                <span class="s2">&quot;currently return ``True``. However, from v0.9, this behavior will change and ``composite_lp_aggregate`` will &quot;</span>
-                <span class="s2">&quot;return ``False``. Please change your code accordingly by specifying the aggregation strategy via &quot;</span>
-                <span class="s2">&quot;`tensordict.nn.set_composite_lp_aggregate` or via the `COMPOSITE_LP_AGGREGATE` environment variable.&quot;</span><span class="p">,</span>
-                <span class="n">category</span><span class="o">=</span><span class="ne">DeprecationWarning</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="k">return</span> <span class="kc">True</span>
-    <span class="k">return</span> <span class="n">mode</span>
+    <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="n">mode</span><span class="p">)</span>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">set_composite_lp_aggregate</span><span class="p">(</span><span class="n">_DecoratorContextManager</span><span class="p">):</span>

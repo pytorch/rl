@@ -159,8 +159,15 @@ transformed, and applied, ensuring seamless integration with their existing infr
     VanillaWeightUpdater
     MultiProcessedWeightUpdater
     RayWeightUpdater
-    DistributedWeightUpdater
+
+.. currentmodule:: torchrl.collectors.distributed
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
     RPCWeightUpdater
+    DistributedWeightUpdater
 
 Collectors and replay buffers interoperability
 ----------------------------------------------
