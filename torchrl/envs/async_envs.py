@@ -24,7 +24,7 @@ from tensordict import (
 )
 
 from tensordict.tensorclass import NonTensorData, NonTensorStack
-from tensordict.utils import _zip_strict
+from tensordict.utils import _zip_strict, expand_as_right
 
 from torchrl.data.tensor_specs import NonTensor
 from torchrl.envs.common import _EnvPostInit, EnvBase
@@ -240,7 +240,7 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
                 )
             else:
                 tensordict = TensorDict(batch_size=self.num_envs)
-        tensordict.set(self._env_idx_key, torch.arange(tensordict.shape[0]))
+        tensordict[self._env_idx_key] = NonTensorStack(*range(tensordict.shape[0]))
         self._async_private_reset_send(tensordict)
         tensordict = self._async_private_reset_recv(min_get=self.num_envs)
         return tensordict
@@ -289,7 +289,10 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
                 )
             else:
                 tensordict = TensorDict(batch_size=self.num_envs)
-        tensordict.set(self._env_idx_key, torch.arange(tensordict.shape[0]))
+        indices = NonTensorStack(*range(tensordict.shape[0]))
+        if indices.shape != tensordict.shape:
+            indices = expand_as_right(indices, tensordict)
+        tensordict[self._env_idx_key] = indices
         self.async_reset_send(tensordict)
         tensordict = self.async_reset_recv(min_get=self.num_envs)
         return tensordict
@@ -314,7 +317,7 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
 
     def _maybe_make_tensordict(self, tensordict, env_index, make_if_none):
         if env_index is None:
-            env_idx = tensordict[self._env_idx_key]
+            env_idx = tensordict.view(-1)[self._env_idx_key]
             if isinstance(env_idx, torch.Tensor):
                 env_idx = env_idx.tolist()
             if isinstance(env_idx, int):
@@ -746,7 +749,6 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
         self, tensordict: TensorDictBase, env_index: int | list[int] | None = None
     ) -> None:
         tensordict, env_idx = self._maybe_make_tensordict(tensordict, env_index, False)
-
         if self._busy.intersection(env_idx):
             raise RuntimeError(
                 f"Some envs are still processing a step: envs that are busy: {self._busy}, queried: {env_idx}."
