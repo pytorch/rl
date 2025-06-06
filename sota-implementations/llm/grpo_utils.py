@@ -79,7 +79,8 @@ def get_train_model(
     with cuda_visible_devices(train_devices):
         # Inside the context, devices are remapped to start from 0
         device_map = (
-            {f"cuda:{i}": i for i in range(len(train_devices))}
+            {"": "cuda:0"}  # Default device for unmapped parameters
+            | {f"cuda:{i}": i for i in range(len(train_devices))}
             if len(train_devices) > 1
             else "cuda:0"
         )
@@ -189,7 +190,8 @@ def get_ref_model(
     with cuda_visible_devices(ref_devices):
         # Inside the context, devices are remapped to start from 0
         device_map = (
-            {f"cuda:{i}": i for i in range(len(ref_devices))}
+            {"": "cuda:0"}  # Default device for unmapped parameters
+            | {f"cuda:{i}": i for i in range(len(ref_devices))}
             if len(ref_devices) > 1
             else "cuda:0"
         )
