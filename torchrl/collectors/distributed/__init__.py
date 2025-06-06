@@ -9,7 +9,7 @@ from .generic import (
     DistributedWeightUpdater,
 )
 from .ray import RayCollector
-from .rpc import RPCDataCollector
+from .rpc import RPCDataCollector, RPCWeightUpdater
 from .sync import DistributedSyncDataCollector
 from .utils import submitit_delayed_launcher
 
@@ -19,7 +19,7 @@ __all__ = [
     "DistributedWeightUpdater",
     "DistributedSyncDataCollector",
     "RPCDataCollector",
-    "RPCDataCollector",
+    "RPCWeightUpdater",
     "RayCollector",
     "submitit_delayed_launcher",
 ]

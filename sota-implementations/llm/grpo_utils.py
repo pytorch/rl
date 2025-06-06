@@ -46,7 +46,7 @@ def cuda_visible_devices(devices: Sequence[int]):
 
 
 def get_train_model(
-    cfg: DictConfig, train_devices: Sequence[int]
+    cfg: DictConfig,
 ) -> tuple[TransformersWrapper, PreTrainedTokenizer]:
     """Creates and configures the training model with LoRA adapters.
 
@@ -58,8 +58,6 @@ def get_train_model(
         cfg (DictConfig): The hydra configuration object containing model and training settings.
             Expected to have train_model section with LoRA, quantization, and other
             training-specific parameters.
-        train_devices (Sequence[int]): List of CUDA device indices to use for training.
-            The first device will be used as the primary training device.
 
     Returns:
         tuple[TransformersWrapper, PreTrainedTokenizer]:
@@ -74,13 +72,15 @@ def get_train_model(
     # Set model dtype explicitly
     model_dtype = getattr(torch, cfg.train_model.torch_dtype)
 
+    # Get configured devices or default to [0]
+    train_devices = cfg.train_model.get("devices", [0])
+    
     # Use cuda_visible_devices to restrict visible GPUs and let HF handle distribution
     with cuda_visible_devices(train_devices), torch.device(f"cuda:{train_devices[0]}"):
+        device_map = "balanced" if len(train_devices) > 1 else f"cuda:0"
         train_model, train_tokenizer = get_hf_model(
             cfg.model.name,
-            device_map="balanced"
-            if len(train_devices) > 1
-            else f"cuda:{train_devices[0]}",
+            device_map=device_map,
             lora=cfg.train_model.lora.enabled,
             lora_r=cfg.train_model.lora.r,
             lora_alpha=cfg.train_model.lora.alpha,
@@ -106,7 +106,7 @@ def get_train_model(
     return policy_training, train_tokenizer
 
 
-def get_inference_model(cfg: DictConfig, vllm_devices: Sequence[int]) -> vLLMWrapper:
+def get_inference_model(cfg: DictConfig) -> vLLMWrapper:
     """Creates the vLLM-based inference model for fast generation.
 
     This function initializes a vLLM model server for efficient inference and wraps
@@ -117,7 +117,6 @@ def get_inference_model(cfg: DictConfig, vllm_devices: Sequence[int]) -> vLLMWra
         cfg (DictConfig): The hydra configuration object containing model settings.
             Expected to have inference_model section with vLLM-specific parameters
             like gpu_memory_utilization and generation settings.
-        vllm_devices (Sequence[int]): List of CUDA device indices to use for vLLM inference.
 
     Returns:
         vLLMWrapper: The wrapped vLLM model ready for inference.
@@ -127,34 +126,38 @@ def get_inference_model(cfg: DictConfig, vllm_devices: Sequence[int]) -> vLLMWra
     """
     from torchrl.modules.llm.backends.vllm import make_vllm_worker
 
+    # Get configured devices or default to [1]
+    vllm_devices = cfg.inference_model.get("devices", [1])
     torchrl_logger.info(f"Creating inference model on devices {vllm_devices}")
 
     model_name = cfg.model.name
 
-    # vLLM handles device mapping internally
-    inference_server = make_vllm_worker(
-        model_name,
-        gpu_memory_utilization=cfg.inference_model.gpu_memory_utilization,
-        devices=list(vllm_devices),  # Convert to list for type compatibility
-        make_ray_worker=True,
-    )
-    assert inference_server is not None
-    policy = vLLMWrapper(
-        inference_server,
-        from_text=True,
-        return_log_probs=True,
-        generate_kwargs={
-            "max_tokens": cfg.inference_model.max_tokens,
-            "include_stop_str_in_output": cfg.inference_model.include_stop_str_in_output,
-            "temperature": cfg.inference_model.temperature,
-        },
-    )
-    assert policy.model is not None
+    # Use cuda_visible_devices to restrict visible GPUs for vLLM
+    with cuda_visible_devices(vllm_devices):
+        # vLLM handles device mapping internally - it will see the devices as [0, 1, ...]
+        inference_server = make_vllm_worker(
+            model_name,
+            gpu_memory_utilization=cfg.inference_model.gpu_memory_utilization,
+            devices=list(range(len(vllm_devices))),  # vLLM will see devices as [0, 1, ...]
+            make_ray_worker=True,
+        )
+        assert inference_server is not None
+        policy = vLLMWrapper(
+            inference_server,
+            from_text=True,
+            return_log_probs=True,
+            generate_kwargs={
+                "max_tokens": cfg.inference_model.max_tokens,
+                "include_stop_str_in_output": cfg.inference_model.include_stop_str_in_output,
+                "temperature": cfg.inference_model.temperature,
+            },
+        )
+        assert policy.model is not None
     return policy
 
 
 def get_ref_model(
-    cfg: DictConfig, tokenizer: PreTrainedTokenizer, ref_device: int
+    cfg: DictConfig, tokenizer: PreTrainedTokenizer
 ) -> TransformersWrapper:
     """Creates the reference model for KL penalty computation.
 
@@ -166,7 +169,6 @@ def get_ref_model(
         cfg (DictConfig): The hydra configuration object containing model settings.
             Expected to have ref_model section with quantization and attention settings.
         tokenizer (PreTrainedTokenizer): The tokenizer to use with the reference model.
-        ref_device (int): CUDA device index to place the reference model on.
 
     Returns:
         TransformersWrapper: The wrapped reference model in eval mode with detached weights.
@@ -175,13 +177,17 @@ def get_ref_model(
 
     torchrl_logger.info("Creating ref model")
 
+    # Get configured devices or default to [2]
+    ref_devices = cfg.ref_model.get("devices", [2])
+
     # Use cuda_visible_devices to restrict to reference device
-    with cuda_visible_devices([ref_device]), torch.device(f"cuda:{ref_device}"):
+    with cuda_visible_devices(ref_devices), torch.device(f"cuda:{ref_devices[0]}"):
+        device_map = "balanced" if len(ref_devices) > 1 else f"cuda:0"
         model_name = cfg.model.name
 
         ref_model = get_hf_model(
             model_name,
-            device_map="auto",  # Let HF handle device mapping
+            device_map=device_map,
             torch_dtype=getattr(torch, cfg.ref_model.torch_dtype),
             quantize=cfg.ref_model.quantization.enabled,
             gradient_checkpointing=cfg.ref_model.gradient_checkpointing,

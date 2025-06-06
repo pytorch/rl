@@ -6,10 +6,10 @@ defaults:
 # Environment configuration
 env:
   dataset: gsm8k  # choices: [gsm8k, ifeval]
-  # Number of environments to run in parallel. This determines the batch size passed to vLLM.
+  # Number of environments to run in parallel. This determines the batch size passed to vLLM.
   #  More envs consume more GPU memory.
   num_envs: 4  # Reduced from 8 to save memory
-  # Number of times to repeat the same prompt for GRPO. This does not affect the GPU memory usage.
+  # Number of times to repeat the same prompt for GRPO. This does not affect the GPU memory usage.
   repeats: 16
 
 # Base model configuration
@@ -20,6 +20,7 @@ model:
 # Training model configuration
 train_model:
   gradient_checkpointing: true  # Enabled for memory efficiency
+  devices: [0]  # List of GPU devices to use for training
   lora:
     enabled: true  # Using LoRA for memory efficiency
     r: 8  # LoRA rank - controls capacity of adaptations
@@ -27,11 +28,12 @@ train_model:
     dropout: 0.1  # Dropout probability for LoRA layers
   quantization:
     enabled: false  # Enable 4-bit quantization for base model
-  attn_implementation: flex_attention  # Using flash attention for memory efficiency
+  attn_implementation: sdpa  # Using flash attention for memory efficiency
   torch_dtype: bfloat16
 
 # Inference model configuration (vLLM)
 inference_model:
+  devices: [1]  # List of GPU devices to use for inference
   gpu_memory_utilization: 0.5
   temperature: 0.8
   max_tokens: 1024
@@ -39,6 +41,7 @@ inference_model:
 
 # Reference model configuration
 ref_model:
+  devices: [2]  # List of GPU devices to use for reference model
   quantization:
     enabled: false  # Enable quantization for memory efficiency
   gradient_checkpointing: false  # Not needed for reference model
@@ -57,10 +60,10 @@ train:
    #  that in sync contexts the training node will need to wait for a batch to be completed
    #  before starting the next one.
   steps_per_batch: 64
-  # Number of batches to run in parallel. This determines the batch size passed to the optimizer.
+  # Number of batches to run in parallel. This determines the batch size passed to the optimizer.
   #  More batches consume more GPU memory.
   optim_batch_size: 1
-  # Number of gradient accumulation steps. This determines the number of steps to run before
+  # Number of gradient accumulation steps. This determines the number of steps to run before
   #  updating the parameters.
   gradient_accumulation_steps: 4  # Increased for gradient accumulation
   # Whether to include the KL coefficient in the loss or in the environment reward.

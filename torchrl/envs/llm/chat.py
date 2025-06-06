@@ -7,7 +7,6 @@ from __future__ import annotations
 from typing import Any, Callable, Literal
 
 import torch
-import transformers
 from tensordict import lazy_stack, TensorDict, TensorDictBase
 from torch.utils.data import DataLoader
 from torchrl.data import Composite, NonTensor
@@ -116,13 +115,17 @@ class ChatEnv(EnvBase):
         batch_size: tuple | torch.Size | None = None,
         system_prompt: str | None = None,
         apply_template: bool | None = None,
-        tokenizer: transformers.AutoTokenizer | None = None,
+        tokenizer: transformers.AutoTokenizer | None = None,  # noqa: F821
         template_kwargs: dict[str, Any] | None = None,
         system_role: str = "system",
         user_role: str = "user",
     ):
         if batch_size is None:
             batch_size = (1,)
+        if isinstance(batch_size, int):
+            batch_size = (batch_size,)
+        if isinstance(batch_size, list):
+            batch_size = torch.Size(batch_size)
         if batch_size == ():
             raise ValueError(f"{type(self).__name__} must have at least one dimension")
 
@@ -293,7 +296,7 @@ class DatasetChatEnv(TransformedEnv):
         batch_size_dl: int = 1,
         seed: int | None = None,
         group_repeats: bool = False,
-        tokenizer: transformers.AutoTokenizer | None = None,
+        tokenizer: transformers.AutoTokenizer | None = None,  # noqa: F821
         device: torch.device | None = None,
         template_kwargs: dict[str, Any] | None = None,
         apply_template: bool | None = None,

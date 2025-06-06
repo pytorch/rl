@@ -30,25 +30,13 @@ from torchrl.objectives.llm.grpo import GRPOLoss, MCAdvantage
 from torchrl.record import WandbLogger
 
 
-def make_device_splits() -> tuple[list[int], int, list[int]]:
-    """Determine device allocation for training."""
-    if not torch.cuda.is_available():
-        raise RuntimeError("CUDA is required for training")
-
-    devices = list(range(torch.cuda.device_count()))
-    if len(devices) < 3:
-        raise RuntimeError("At least 3 GPUs are required")
-
-    train_devices = devices[0:-2]
-    vllm_devices = devices[-2:-1]
-    ref_device = devices[-1]
-    return train_devices, ref_device, vllm_devices
-
-
 def setup_environment() -> None:
     """Setup required environment variables and configurations."""
     if os.getenv("VLLM_USE_V1", "1") != "0":
         raise RuntimeError("VLLM_USE_V1=0 must be set in environment")
+
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA is required for training")
 
     # Set default dtype to float32 for mixed precision training
     torch.set_default_dtype(torch.float32)
@@ -76,13 +64,14 @@ def train(cfg: DictConfig) -> None:
 
     ray.init()
 
-    # Setup devices
-    train_devices, ref_device, vllm_devices = make_device_splits()
+    # Initialize models using config-based device allocation
+    policy_training, train_tokenizer = get_train_model(cfg)
+    policy = get_inference_model(cfg)
+    ref_model = get_ref_model(cfg, train_tokenizer)
 
-    # Initialize models
-    policy_training, train_tokenizer = get_train_model(cfg, train_devices)
-    policy = get_inference_model(cfg, vllm_devices)
-    ref_model = get_ref_model(cfg, train_tokenizer, ref_device)
+    # Get reference model device for KL transform
+    ref_devices = cfg.ref_model.get("devices", [2])
+    ref_device = ref_devices[0]  # Use first device for KL transform
 
     # Setup environment
     if cfg.env.dataset == "gsm8k":
@@ -135,16 +124,9 @@ def train(cfg: DictConfig) -> None:
     )
     updater.maybe_init_group()
 
-    # Initialize weights
-    torchrl_logger.info("Initializing weights...")
-    # Ensure weights are on cuda:0 for vLLM
-    state_dict = TensorDict(policy_training.model.merge_and_unload().state_dict()).to(
-        "cuda:0"
-    )
-    collector.update_policy_weights_(state_dict, worker_ids=[0])
-    del state_dict
-    torch.cuda.empty_cache()
-    gc.collect()
+    # Get training device for batch processing
+    train_devices = cfg.train_model.get("devices", [0])
+    train_device = train_devices[0]  # Use first device for batch processing
 
     # Setup loss and optimizer
     loss_fn = GRPOLoss(
@@ -176,6 +158,17 @@ def train(cfg: DictConfig) -> None:
     # Create checkpoint directory
     checkpoint_dir = Path(cfg.logging.checkpoint_dir) / experiment_name
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+    # Initialize weights
+    torchrl_logger.info("Initializing weights...")
+    # Ensure weights are on the first training device for vLLM
+    state_dict = TensorDict(policy_training.model.merge_and_unload().state_dict()).to(
+        f"cuda:{train_device}"
+    )
+    collector.update_policy_weights_(state_dict, worker_ids=[0])
+    del state_dict
+    torch.cuda.empty_cache()
+    gc.collect()
 
     # Training loop
     for i, trajs in enumerate(collector):
@@ -221,7 +214,7 @@ def train(cfg: DictConfig) -> None:
 
             for batch_idx, batch in enumerate(rb):
                 # Move batch to device and clear CPU memory
-                batch = batch.to(train_devices[0])
+                batch = batch.to(train_device)
                 torch.cuda.empty_cache()
 
                 pbar.update(1)
@@ -295,10 +288,10 @@ def train(cfg: DictConfig) -> None:
 
         # Update policy weights
         torchrl_logger.info("Updating policy weights...")
-        # Ensure weights are on cuda:0 for vLLM
+        # Ensure weights are on the first training device for vLLM
         state_dict = TensorDict(
             policy_training.model.merge_and_unload().state_dict()
-        ).to("cuda:0")
+        ).to(f"cuda:{train_device}")
         collector.update_policy_weights_(
             policy_weights=state_dict,
             worker_ids=[0],

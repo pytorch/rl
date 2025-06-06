@@ -6,10 +6,10 @@ defaults:
 # Environment configuration
 env:
   dataset: ifeval  # choices: [gsm8k, ifeval]
-  # Number of environments to run in parallel. This determines the batch size passed to vLLM.
-  #  More envs consume more GPU memory.
+  # Number of environments to run in parallel. This determines the batch size passed to vLLM.
+  # More envs consume more GPU memory.
   num_envs: 2
-  # Number of times to repeat the same prompt for GRPO. This does not affect the GPU memory usage.
+  # Number of times to repeat the same prompt for GRPO. This does not affect the GPU memory usage.
   repeats: 16
 
 # Base model configuration
@@ -20,6 +20,7 @@ model:
 # Training model configuration
 train_model:
   gradient_checkpointing: true  # Only for training model
+  devices: [0]  # List of GPU devices to use for training
   lora:
     enabled: true
     r: 8  # LoRA rank - controls capacity of adaptations
@@ -27,11 +28,12 @@ train_model:
     dropout: 0.1  # Dropout probability for LoRA layers
   quantization:
     enabled: false  # Quantization might interfere with training
-  attn_implementation: flex_attention  # choices: [flash_attention_2, flex_attention, sdpa]
+  attn_implementation: sdpa  # choices: [flash_attention_2, flex_attention, sdpa]
   torch_dtype: bfloat16
 
 # Inference model configuration (vLLM)
 inference_model:
+  devices: [1]  # List of GPU devices to use for inference
   gpu_memory_utilization: 0.5
   temperature: 0.8
   max_tokens: 2048
@@ -39,6 +41,7 @@ inference_model:
 
 # Reference model configuration
 ref_model:
+  devices: [2]  # List of GPU devices to use for reference model
   quantization:
     enabled: false  # Enable quantization for memory efficiency
   gradient_checkpointing: false  # Not needed for reference model
@@ -52,16 +55,16 @@ policy:
 # Training configuration
 train:
   epochs: 1
-   # Number of dialog turns per batch. This is passed to the collector and buffer.
-   #  More steps do not consume more GPU memory, but it does affect the inference speed in
-   #  that in sync contexts the training node will need to wait for a batch to be completed
-   #  before starting the next one.
+  # Number of dialog turns per batch. This is passed to the collector and buffer.
+  # More steps do not consume more GPU memory, but it does affect the inference speed in
+  # that in sync contexts the training node will need to wait for a batch to be completed
+  # before starting the next one.
   steps_per_batch: 16
-  # Number of batches to run in parallel. This determines the batch size passed to the optimizer.
-  #  More batches consume more GPU memory.
+  # Number of batches to run in parallel. This determines the batch size passed to the optimizer.
+  # More batches consume more GPU memory.
   optim_batch_size: 1
-  # Number of gradient accumulation steps. This determines the number of steps to run before
-  #  updating the parameters.
+  # Number of gradient accumulation steps. This determines the number of steps to run before
+  # updating the parameters.
   gradient_accumulation_steps: 4
   # Whether to include the KL coefficient in the loss or in the environment reward.
   kl_coef_in_loss: true

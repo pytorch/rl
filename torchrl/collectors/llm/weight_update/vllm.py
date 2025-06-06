@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import importlib.util
+
 import torch
 import torch.cuda
 import torch.distributed
@@ -13,7 +15,16 @@ from torchrl._utils import logger as torchrl_logger
 
 from torchrl.collectors import WeightUpdaterBase
 from torchrl.modules.llm.backends.vllm import stateless_init_process_group
-from vllm.utils import get_open_port
+
+_has_vllm = importlib.util.find_spec("vllm") is not None
+if _has_vllm:
+    from vllm.utils import get_open_port
+else:
+
+    def get_open_port():  # noqa: D103
+        raise ImportError(
+            "vllm is not installed. Please install it with `pip install vllm`."
+        )
 
 
 class vLLMUpdater(WeightUpdaterBase):
