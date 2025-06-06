@@ -51,7 +51,7 @@ from torchrl._utils import (
 )
 from torchrl.collectors.utils import split_trajectories
 from torchrl.collectors.weight_update import (
-    MultiProcessedWeightUpdate,
+    MultiProcessedWeightUpdater,
     VanillaWeightUpdater,
     WeightUpdaterBase,
 )
@@ -2010,7 +2010,7 @@ class _MultiDataCollector(DataCollectorBase):
                 self._policy_weights_dict[policy_device] = weights
             self._get_weights_fn = get_weights_fn
             if weight_updater is None:
-                weight_updater = MultiProcessedWeightUpdate(
+                weight_updater = MultiProcessedWeightUpdater(
                     get_server_weights=self._get_weights_fn,
                     policy_weights=self._policy_weights_dict,
                 )

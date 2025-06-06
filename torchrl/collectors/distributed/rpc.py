@@ -412,7 +412,7 @@ class RPCDataCollector(DataCollectorBase):
             )
         self._init()
         if weight_updater is None:
-            weight_updater = RPCWeightUpdaterBase(
+            weight_updater = RPCWeightUpdater(
                 collector_infos=self.collector_infos,
                 collector_class=self.collector_class,
                 collector_rrefs=self.collector_rrefs,
@@ -810,7 +810,7 @@ class RPCDataCollector(DataCollectorBase):
         self._shutdown = True
 
 
-class RPCWeightUpdaterBase(WeightUpdaterBase):
+class RPCWeightUpdater(WeightUpdaterBase):
     """A remote weight updater for synchronizing policy weights across remote workers using RPC.
 
     The `RPCWeightUpdater` class provides a mechanism for updating the weights of a policy
