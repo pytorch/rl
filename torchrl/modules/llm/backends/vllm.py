@@ -197,7 +197,10 @@ def make_vllm_worker(
             bundles.append({f"GPU_group_{device_idx}": 1, "CPU": 1})
 
         # Create custom resources for each GPU we want to use
-        ray.init(resources={f"GPU_group_{idx}": 1 for idx in devices}, ignore_reinit_error=True)
+        ray.init(
+            resources={f"GPU_group_{idx}": 1 for idx in devices},
+            ignore_reinit_error=True,
+        )
 
         pg = placement_group(bundles)
         ray.get(pg.ready())

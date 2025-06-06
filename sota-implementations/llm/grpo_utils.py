@@ -38,23 +38,13 @@ def cuda_visible_devices(devices: Sequence[int]):
     """
     CUDA_VISIBLE_DEVICES = os.getenv("CUDA_VISIBLE_DEVICES")
     os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, devices))
-    
-    # Reset PyTorch's CUDA device cache
-    if torch.cuda.is_available():
-        torch.cuda.reset_peak_memory_stats()
-        torch.cuda.empty_cache()
-    
+
     yield
-    
+
     if CUDA_VISIBLE_DEVICES:
         os.environ["CUDA_VISIBLE_DEVICES"] = CUDA_VISIBLE_DEVICES
     else:
         os.unsetenv("CUDA_VISIBLE_DEVICES")
-    
-    # Reset PyTorch's CUDA device cache again
-    if torch.cuda.is_available():
-        torch.cuda.reset_peak_memory_stats()
-        torch.cuda.empty_cache()
 
 
 def get_train_model(
@@ -90,7 +80,9 @@ def get_train_model(
     # Use cuda_visible_devices to restrict visible GPUs and let HF handle distribution
     with torch.device(f"cuda:{train_devices[0]}"), cuda_visible_devices(train_devices):
         # Inside the context, devices are remapped to start from 0
-        torchrl_logger.info(f"CUDA_VISIBLE_DEVICES: {os.getenv('CUDA_VISIBLE_DEVICES')}")
+        torchrl_logger.info(
+            f"CUDA_VISIBLE_DEVICES: {os.getenv('CUDA_VISIBLE_DEVICES')}"
+        )
         torchrl_logger.info(f"Available devices: {torch.cuda.device_count()}")
         device_map = "balanced" if len(train_devices) > 1 else f"cuda:0"
         train_model, train_tokenizer = get_hf_model(
@@ -198,7 +190,9 @@ def get_ref_model(
     # Use cuda_visible_devices to restrict to reference device
     with cuda_visible_devices(ref_devices):
         # Inside the context, devices are remapped to start from 0
-        torchrl_logger.info(f"CUDA_VISIBLE_DEVICES: {os.getenv('CUDA_VISIBLE_DEVICES')}")
+        torchrl_logger.info(
+            f"CUDA_VISIBLE_DEVICES: {os.getenv('CUDA_VISIBLE_DEVICES')}"
+        )
         torchrl_logger.info(f"Available devices: {torch.cuda.device_count()}")
         device_map = "balanced" if len(ref_devices) > 1 else f"cuda:0"
         model_name = cfg.model.name
