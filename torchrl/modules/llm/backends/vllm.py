@@ -218,7 +218,8 @@ def make_vllm_worker(
             num_gpus=1,
             num_cpus=1,
             scheduling_strategy=scheduling_inference,
-        )(LLMOnDevice).remote(
+        )(LLMOnDevice)
+        worker_init = worker.remote(
             model=model_name,
             dtype="bfloat16",
             worker_cls="torchrl.modules.llm.backends.vllm.vLLMWorker",
@@ -228,10 +229,9 @@ def make_vllm_worker(
             enable_chunked_prefill=True,
             **kwargs,
         )
-        
         # Wait for worker to be fully initialized before returning
-        ray.get(worker.remote())
-        return worker
+        ray.get(worker_init)
+        return worker_init
     else:
         with _cuda_visible_devices(devices):
             return LLM(
