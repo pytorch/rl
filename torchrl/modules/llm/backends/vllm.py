@@ -136,9 +136,11 @@ class LLMOnDevice(LLM):
 
     def __init__(self, *args, **kwargs):
         import ray
+        import os
 
         gpu_ids = ray.get_gpu_ids()
         torchrl_logger.info(f"=> in {type(self)}.__init__: {gpu_ids=}")
+        torchrl_logger.info(f"=> CUDA_VISIBLE_DEVICES: {os.getenv('CUDA_VISIBLE_DEVICES')}")
         assert len(gpu_ids) > 0, "No visible cuda device"
         # CUDA_VISIBLE_DEVICES is now set by Ray's runtime_env
         # torch.cuda.set_device(0)  # Since only one GPU is visible, it's cuda:0
