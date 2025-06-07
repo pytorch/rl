@@ -221,12 +221,12 @@ def make_vllm_worker(
             num_cpus=1,
             scheduling_strategy=scheduling_inference,
             runtime_env=runtime_env,
-            devices=devices,  # Pass environment configuration to the worker
         )(LLMOnDevice).remote(
             model=model_name,
             dtype="bfloat16",
             worker_cls="torchrl.modules.llm.backends.vllm.vLLMWorker",
             tensor_parallel_size=len(devices),
+            devices=devices,  # Pass environment configuration to the worker
             distributed_executor_backend="ray",
             enable_chunked_prefill=True,
             **kwargs,
