@@ -152,6 +152,11 @@ class LLMOnDevice(LLM):
             )
         # torch.cuda.set_device(0)  # Since only one GPU is visible, it's cuda:0
         super().__init__(*args, device="cuda:0", **kwargs)
+        self._initialized = True
+        
+    def initialized(self):
+        """Returns True once the LLM is fully initialized. Used by Ray to wait for initialization."""
+        return True
 
 
 def make_vllm_worker(
@@ -225,7 +230,7 @@ def make_vllm_worker(
         )
         
         # Wait for worker to be fully initialized before returning
-        ray.get(worker.initialized.remote())
+        ray.get(worker.remote())
         return worker
     else:
         with _cuda_visible_devices(devices):
