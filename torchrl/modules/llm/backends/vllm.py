@@ -209,7 +209,7 @@ def make_vllm_worker(
             f"Create vLLM worker with {devices=}, {scheduling_inference=}"
         )
 
-        return ray.remote(
+        worker = ray.remote(
             num_gpus=1,
             num_cpus=1,
             scheduling_strategy=scheduling_inference,
@@ -223,6 +223,10 @@ def make_vllm_worker(
             enable_chunked_prefill=True,
             **kwargs,
         )
+        
+        # Wait for worker to be fully initialized before returning
+        ray.get(worker.initialized.remote())
+        return worker
     else:
         with _cuda_visible_devices(devices):
             return LLM(
