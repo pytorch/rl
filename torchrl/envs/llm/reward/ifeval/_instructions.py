@@ -38,7 +38,6 @@ import re
 import string
 from typing import Any, Dict, Literal, Optional, Sequence, Union
 
-import langdetect
 from torchrl._utils import logger as torchrl_logger
 
 from ._instructions_util import (
@@ -192,9 +191,11 @@ class ResponseLanguageChecker(Instruction):
         Returns:
             `True` if the language of `value` follows instruction; otherwise False.
         """
+        import langdetect
+
         try:
             return langdetect.detect(value) == self._language
-        except langdetect.LangDetectException as e:
+        except (langdetect.LangDetectException, ImportError) as e:
             # Count as instruction is followed.
             torchrl_logger.error(
                 "Unable to detect language for text %s due to %s", value, e
@@ -1500,7 +1501,7 @@ class CapitalLettersEnglishChecker(Instruction):
         )
         return self._description_pattern
 
-    def get_instruction_args(self) -> dict[str, Any]:
+    def get_instruction_args(self) -> dict[str, Any] | None:
         return None
 
     def get_instruction_args_keys(self) -> list[str]:
@@ -1509,9 +1510,11 @@ class CapitalLettersEnglishChecker(Instruction):
 
     def check_following(self, value: str) -> bool:
         """Checks that the response is in English and in all capital letters."""
+        import langdetect
+
         try:
             return value.isupper() and langdetect.detect(value) == "en"
-        except langdetect.LangDetectException as e:
+        except (langdetect.LangDetectException, ImportError) as e:
             # Count as instruction is followed.
             torchrl_logger.error(
                 "Unable to detect language for text %s due to %s", value, e
@@ -1539,9 +1542,11 @@ class LowercaseLettersEnglishChecker(Instruction):
 
     def check_following(self, value: str) -> bool:
         """Checks that the response is in English and in all lowercase letters."""
+        import langdetect
+
         try:
             return value.islower() and langdetect.detect(value) == "en"
-        except langdetect.LangDetectException as e:
+        except (langdetect.LangDetectException, ImportError) as e:
             # Count as instruction is followed.
             torchrl_logger.error(
                 "Unable to detect language for text %s due to %s", value, e

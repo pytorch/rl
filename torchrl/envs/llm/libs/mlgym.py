@@ -26,7 +26,6 @@ from torchrl.data import Choice, Composite, NonTensor
 from torchrl.data.llm import History
 from torchrl.envs import ConditionalSkip, GymWrapper, Transform, TransformedEnv
 
-
 # Inv transforms:
 #  Transforms to apply prior to pass the model output to the env
 
@@ -860,4 +859,7 @@ def make_mlgym(
         env.append_transform(MessageToHistory())
         env.append_transform(TemplateTransform(tokenizer=tokenizer))
         env.append_transform(MLGymRewardAssignment())
+        # # We want the env to have a batch-size of (1,) because it will be easier to interact with
+        # #  LLMs
+        # env.append_transform(BatchSizeTransform(batch_size=(1,)))
         return env

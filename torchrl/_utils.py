@@ -62,7 +62,10 @@ stream_handlers = {
     "stderr": sys.stderr,
 }
 TORCHRL_CONSOLE_STREAM = os.getenv("TORCHRL_CONSOLE_STREAM")
-stream_handler = stream_handlers.get(TORCHRL_CONSOLE_STREAM, sys.stdout)
+if TORCHRL_CONSOLE_STREAM:
+    stream_handler = stream_handlers[TORCHRL_CONSOLE_STREAM]
+else:
+    stream_handler = None
 
 
 # Create colored handler
@@ -82,9 +85,10 @@ class _CustomFormatter(logging.Formatter):
         return formatted_message
 
 
-console_handler = logging.StreamHandler(stream_handler)
+console_handler = logging.StreamHandler(stream=stream_handler)
 console_handler.setFormatter(_CustomFormatter())
 logger.addHandler(console_handler)
+console_handler.setLevel(logging.INFO)
 
 VERBOSE = strtobool(os.environ.get("VERBOSE", str(logger.isEnabledFor(logging.DEBUG))))
 _os_is_windows = sys.platform == "win32"

@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import warnings
+
 from copy import copy, deepcopy
 
 import torch
@@ -95,6 +97,10 @@ class KLRewardTransform(Transform):
         functional: bool | None = None,
         device: torch.device | None = None,
     ):
+        warnings.warn(
+            "This class is to be deprecated in favour of torchrl.envs.llm.KLRewardTransform. The two will be fused in v0.10 and this version will be removed in v0.11.",
+            category=DeprecationWarning,
+        )
         if in_keys is None:
             in_keys = self.DEFAULT_IN_KEYS
         if out_keys is None:
