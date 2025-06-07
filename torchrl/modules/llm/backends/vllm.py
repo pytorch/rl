@@ -132,10 +132,15 @@ class vLLMWorker(Worker):
         return weights_updated
 
 
-class LLMOnDevice:
+class LLMOnDevice(LLM):
     """A thin wrapper around `vllm.LLM` to control its placement devices."""
 
     def __init__(self, *args, devices: list[int]|None=None, **kwargs):
+        # Store initialization args before parent init
+        self.args = args
+        self.kwargs = kwargs
+        self.devices = devices
+
         import ray
         import os
 
@@ -143,15 +148,6 @@ class LLMOnDevice:
         torchrl_logger.info(f"=> in {type(self)}.__init__: {gpu_ids=}")
         torchrl_logger.info(f"=> CUDA_VISIBLE_DEVICES: {os.getenv('CUDA_VISIBLE_DEVICES')}")
         assert len(gpu_ids) > 0, "No visible cuda device"
-        
-        # Store initialization args
-        self.args = args
-        self.kwargs = kwargs
-        self.devices = devices
-        
-    def initialize(self):
-        """Initialize the LLM. This method can be waited on with ray.get()"""
-        import os
         
         # Set CUDA_VISIBLE_DEVICES if devices were specified
         if self.devices is not None:
@@ -165,7 +161,12 @@ class LLMOnDevice:
             self.kwargs["distributed_init_method"] = "env://"  # Use environment variables for distributed setup
             self.kwargs["disable_custom_ray_init"] = True  # Prevent vLLM from initializing Ray
             
-        super().__init__(*self.args, device="cuda:0", **self.kwargs)
+        # Initialize parent class
+        super().__init__(*args, device="cuda:0", **kwargs)
+        
+    def initialize(self):
+        """Initialize the LLM. This method can be waited on with ray.get()"""
+        # Nothing to do here anymore since initialization is done in __init__
         return True
 
 
