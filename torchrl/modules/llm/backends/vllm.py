@@ -207,7 +207,7 @@ def make_vllm_worker(
             }
 
             return ray.remote(
-                num_gpus=len(devices),
+                num_gpus=1,
                 num_cpus=1,
                 scheduling_strategy=scheduling_inference,
                 runtime_env=runtime_env,  # Pass environment configuration to the worker
