@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .chat import History
+from .chat import ContentBase, History
 from .common import LLMData
 from .dataset import (
     create_infinite_iterator,
@@ -17,8 +17,9 @@ from .utils import AdaptiveKLController, ConstantKLController, RolloutFromModel
 
 __all__ = [
     "AdaptiveKLController",
-    "History",
     "ConstantKLController",
+    "ContentBase",
+    "History",
     "LLMData",
     "PairwiseDataset",
     "PromptData",

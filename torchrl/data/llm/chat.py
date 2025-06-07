@@ -276,7 +276,7 @@ class History(TensorClass["nocast"]):
     @classmethod
     def from_text(
         cls,
-        text: str,
+        text: str | list[str],
         chat_template_name: Literal["chatml_format", "qwen"] | None = None,
         chat_template: str | None = None,
     ) -> History:
