@@ -134,7 +134,7 @@ class vLLMWorker(Worker):
 class LLMOnDevice(LLM):
     """A thin wrapper around `vllm.LLM` to control its placement devices."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, devices: list[int]|None=None, **kwargs):
         import ray
         import os
 
@@ -142,6 +142,8 @@ class LLMOnDevice(LLM):
         torchrl_logger.info(f"=> in {type(self)}.__init__: {gpu_ids=}")
         torchrl_logger.info(f"=> CUDA_VISIBLE_DEVICES: {os.getenv('CUDA_VISIBLE_DEVICES')}")
         assert len(gpu_ids) > 0, "No visible cuda device"
+        if devices is not None:
+            os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(d) for d in devices)
         # CUDA_VISIBLE_DEVICES is now set by Ray's runtime_env
         # torch.cuda.set_device(0)  # Since only one GPU is visible, it's cuda:0
         self.args = args
@@ -218,7 +220,8 @@ def make_vllm_worker(
             num_gpus=1,
             num_cpus=1,
             scheduling_strategy=scheduling_inference,
-            runtime_env=runtime_env,  # Pass environment configuration to the worker
+            runtime_env=runtime_env,
+            devices=devices,  # Pass environment configuration to the worker
         )(LLMOnDevice).remote(
             model=model_name,
             dtype="bfloat16",
