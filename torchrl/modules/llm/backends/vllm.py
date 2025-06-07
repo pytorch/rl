@@ -136,58 +136,50 @@ class LLMOnDevice(LLM):
     """A thin wrapper around `vllm.LLM` to control its placement devices."""
 
     def __init__(self, *args, devices: list[int]|None=None, **kwargs):
-        # Store initialization args before parent init
-        self.args = args
-        self.kwargs = kwargs
-        self.devices = devices
-
         import ray
         import os
 
         gpu_ids = ray.get_gpu_ids()
         torchrl_logger.info(f"=> in {type(self)}.__init__: {gpu_ids=}")
-        torchrl_logger.info(f"=> CUDA_VISIBLE_DEVICES: {os.getenv('CUDA_VISIBLE_DEVICES')}")
         assert len(gpu_ids) > 0, "No visible cuda device"
-        
-        # Set CUDA_VISIBLE_DEVICES if devices were specified
-        if self.devices is not None:
-            os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(d) for d in self.devices)
-        
-        # Check if we're using vLLM v1
-        using_vllm_v1 = os.getenv("VLLM_USE_V1") == "1"
-        
-        if using_vllm_v1:
-            # For vLLM v1, we need to avoid Ray initialization inside the worker
-            self.kwargs["distributed_init_method"] = "env://"  # Use environment variables for distributed setup
-            self.kwargs["disable_custom_ray_init"] = True  # Prevent vLLM from initializing Ray
-            
-        # Initialize parent class
+        if devices is not None:
+            os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(
+                str(int(gpu_id)) for gpu_id in devices
+            )
+        else:
+            os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(
+                str(int(gpu_id)) for gpu_id in gpu_ids
+            )
+        # torch.cuda.set_device(0)  # Since only one GPU is visible, it's cuda:0
         super().__init__(*args, device="cuda:0", **kwargs)
-        
-    def initialize(self):
-        """Initialize the LLM. This method can be waited on with ray.get()"""
-        # Nothing to do here anymore since initialization is done in __init__
-        return True
 
 
 def make_vllm_worker(
-    model: str,
-    gpu_memory_utilization: float = 0.9,
-    devices: list[int] | None = None,
-    make_ray_worker: bool = False,
+    model_name,
+    devices: list[torch.device | int],
+    make_ray_worker: bool = True,
     **kwargs,
-) -> LLMOnDevice | ray.ObjectRef:
-    """Create a vLLM worker on specified devices.
+) -> LLM | ray.actor.ActorClass:  # noqa
+    """Launches the vLLM inference engine.
 
     Args:
-        model (str): Name or path of the model to load
-        gpu_memory_utilization (float, optional): Fraction of GPU memory to use. Defaults to 0.9.
-        devices (list[int] | None, optional): List of GPU devices to use. Defaults to None.
-        make_ray_worker (bool, optional): Whether to create a Ray worker. Defaults to False.
-        **kwargs: Additional arguments to pass to vLLM
+        model_name (str): a model name to pass to `vllm.LLM`.
+        devices (list[torch.device | int]): a list of devices to use.
+        make_ray_worker (bool, optional): whether to use ray's worker, or just a plain
+            `LLM` instance. Defaults to `True`.
+        **kwargs: keyword arguments to pass to `vllm.LLM.__init__`.
 
-    Returns:
-        LLMOnDevice | ray.ObjectRef: The vLLM worker, either directly or as a Ray reference
+    Update weights example:
+        >>> # simulate training, modify the weights of the model.
+        >>> for name, p in train_model.named_parameters():
+        ...     p.data.zero_()
+        >>>
+        >>> # sync weight from the training process to the inference engine.
+        >>> for name, p in train_model.named_parameters():
+        ...     handle = inference_server .collective_rpc.remote("update_weight_broadcast",
+        ...                                        args=(name, p.dtype, p.shape))
+        ...     model_update_group.broadcast(p, src=0, stream=torch.cuda.current_stream())
+        ...     ray.get(handle)
     """
     if make_ray_worker:
         import ray
@@ -196,7 +188,7 @@ def make_vllm_worker(
 
         devices = [
             torch.device(device).index if not isinstance(device, int) else device
-            for device in (devices or [0])
+            for device in devices
         ]
         for d in devices:
             assert d < torch.cuda.device_count()
@@ -217,18 +209,12 @@ def make_vllm_worker(
             f"Create vLLM worker with {devices=}, {scheduling_inference=}"
         )
 
-        # Set CUDA_VISIBLE_DEVICES in the worker's environment
-        runtime_env = {
-            "env_vars": {"CUDA_VISIBLE_DEVICES": ",".join(str(d) for d in devices)}
-        }
-
-        worker = ray.remote(
+        return ray.remote(
             num_gpus=1,
             num_cpus=1,
             scheduling_strategy=scheduling_inference,
-            runtime_env=runtime_env,
         )(LLMOnDevice).remote(
-            model=model,
+            model=model_name,
             dtype="bfloat16",
             worker_cls="torchrl.modules.llm.backends.vllm.vLLMWorker",
             tensor_parallel_size=len(devices),
@@ -237,20 +223,10 @@ def make_vllm_worker(
             enable_chunked_prefill=True,
             **kwargs,
         )
-        
-        # Wait for worker to be fully initialized
-        ray.get(worker.initialize.remote())
-        return worker
     else:
         with _cuda_visible_devices(devices):
             return LLM(
-                model=model,
-                # enforce_eager=True,
+                model=model_name,
                 dtype="bfloat16",
-                # worker_cls="torchrl.modules.llm.backends.vllm.VLLMWorker",
-                worker_cls=vLLMWorker,
-                tensor_parallel_size=len(devices),
-                # distributed_executor_backend="ray",
-                enable_chunked_prefill=True,
                 **kwargs,
             )
