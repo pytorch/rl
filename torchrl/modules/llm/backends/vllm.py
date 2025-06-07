@@ -11,11 +11,11 @@ From https://docs.vllm.ai/en/v0.7.0/getting_started/examples/rlhf.html
 
 from __future__ import annotations
 
+import os
 
 import torch
-import ray
 
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.modules.llm.utils import _cuda_visible_devices
 
@@ -135,32 +135,22 @@ class vLLMWorker(Worker):
 class LLMOnDevice(LLM):
     """A thin wrapper around `vllm.LLM` to control its placement devices."""
 
-    def __init__(self):
-        # Just record Ray GPU IDs on actor creation
+    def __init__(self, *args, **kwargs):
         import ray
-        import os
 
-        self.gpu_ids = ray.get_gpu_ids()
-        torchrl_logger.info(f"=> in {type(self)}.__init__: {self.gpu_ids=}")
-        assert len(self.gpu_ids) > 0, "No visible cuda device"
-        
-    def initialize(self, *args, devices: list[int]|None=None, **kwargs):
-        """Initialize the LLM. This can be waited on with ray.get()"""
-        import os
-        
-        # Set CUDA_VISIBLE_DEVICES based on provided devices or Ray GPU IDs
-        if devices is not None:
-            os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(
-                str(int(gpu_id)) for gpu_id in devices
-            )
-        else:
-            os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(
-                str(int(gpu_id)) for gpu_id in self.gpu_ids
-            )
-            
-        # Initialize the vLLM model
-        super().__init__(*args, device="cuda:0", **kwargs)
-        return True  # Signal successful initialization
+        gpu_ids = ray.get_gpu_ids()
+        torchrl_logger.info(f"=> in {type(self)}.__init__: {gpu_ids=}")
+        assert len(gpu_ids) > 0, "No visible cuda device"
+        os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(
+            str(int(gpu_id)) for gpu_id in gpu_ids
+        )
+        torch.cuda.set_device(0)  # Since only one GPU is visible, it's cuda:0
+        self.args = args
+        self.kwargs = kwargs
+
+    def initialize(self):
+        super().__init__(*self.args, device="cuda:0", **self.kwargs)
+        return True
 
 
 def make_vllm_worker(
@@ -191,10 +181,6 @@ def make_vllm_worker(
         ...     ray.get(handle)
     """
     if make_ray_worker:
-        import ray
-        from ray.util.placement_group import placement_group
-        from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
-
         devices = [
             torch.device(device).index if not isinstance(device, int) else device
             for device in devices
@@ -202,49 +188,52 @@ def make_vllm_worker(
         for d in devices:
             assert d < torch.cuda.device_count()
 
+        import ray
+        from ray.util.placement_group import placement_group
+        from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
+
         if not ray.is_initialized():
             ray.init()
 
-        # Create bundles for all devices
-        pg = placement_group([{"GPU": 1, "CPU": 1}] * len(devices))
+        pg = placement_group([{"GPU": 1, "CPU": 1}] * torch.cuda.device_count())
 
         ray.get(pg.ready())
         scheduling_inference = PlacementGroupSchedulingStrategy(
             placement_group=pg,
             placement_group_capture_child_tasks=True,
-            placement_group_bundle_index=0,  # Always use first bundle
+            placement_group_bundle_index=devices[0] if devices else None,
         )
         torchrl_logger.info(
             f"Create vLLM worker with {devices=}, {scheduling_inference=}"
         )
-
-        # Create the actor class with the right configuration
         worker_cls = ray.remote(
-            num_gpus=1,
+            num_gpus=len(devices),
             num_cpus=1,
             scheduling_strategy=scheduling_inference,
         )(LLMOnDevice)
-        
-        # Create an instance of the actor
-        worker = worker_cls.remote()
-        
-        # Initialize the worker and wait for completion
-        init_ref = worker.initialize.remote(
+        worker = worker_cls.remote(
             model=model_name,
+            # enforce_eager=True,
             dtype="bfloat16",
             worker_cls="torchrl.modules.llm.backends.vllm.vLLMWorker",
             tensor_parallel_size=len(devices),
-            devices=devices,
             distributed_executor_backend="ray",
             enable_chunked_prefill=True,
             **kwargs,
         )
-        ray.get(init_ref)  # Wait for initialization to complete
+        ray.get(worker.initialize.remote())
         return worker
+
     else:
         with _cuda_visible_devices(devices):
             return LLM(
                 model=model_name,
+                # enforce_eager=True,
                 dtype="bfloat16",
+                # worker_cls="torchrl.modules.llm.backends.vllm.VLLMWorker",
+                worker_cls=vLLMWorker,
+                tensor_parallel_size=len(devices),
+                # distributed_executor_backend="ray",
+                enable_chunked_prefill=True,
                 **kwargs,
             )

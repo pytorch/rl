@@ -126,17 +126,16 @@ def get_inference_model(cfg: DictConfig) -> vLLMWrapper:
     """
     from torchrl.modules.llm.backends.vllm import make_vllm_worker
 
-    # Get configured devices or default to [1]
     vllm_devices = cfg.inference_model.get("devices", [1])
     torchrl_logger.info(f"Creating inference model on devices {vllm_devices}")
 
     model_name = cfg.model.name
 
-    # Use cuda_visible_devices to restrict visible GPUs for vLLM
+    # vLLM handles device mapping internally
     inference_server = make_vllm_worker(
         model_name,
         gpu_memory_utilization=cfg.inference_model.gpu_memory_utilization,
-        devices=vllm_devices,
+        devices=list(vllm_devices),  # Convert to list for type compatibility
         make_ray_worker=True,
     )
     assert inference_server is not None
