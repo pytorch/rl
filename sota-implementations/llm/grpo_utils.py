@@ -38,9 +38,7 @@ def cuda_visible_devices(devices: Sequence[int]):
     """
     CUDA_VISIBLE_DEVICES = os.getenv("CUDA_VISIBLE_DEVICES")
     os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, devices))
-
     yield
-
     if CUDA_VISIBLE_DEVICES:
         os.environ["CUDA_VISIBLE_DEVICES"] = CUDA_VISIBLE_DEVICES
     else:
@@ -78,12 +76,7 @@ def get_train_model(
     train_devices = cfg.train_model.get("devices", [0])
 
     # Use cuda_visible_devices to restrict visible GPUs and let HF handle distribution
-    with torch.device(f"cuda:{train_devices[0]}"), cuda_visible_devices(train_devices):
-        # Inside the context, devices are remapped to start from 0
-        torchrl_logger.info(
-            f"CUDA_VISIBLE_DEVICES: {os.getenv('CUDA_VISIBLE_DEVICES')}"
-        )
-        torchrl_logger.info(f"Available devices: {torch.cuda.device_count()}")
+    with cuda_visible_devices(train_devices):
         device_map = "balanced" if len(train_devices) > 1 else f"cuda:0"
         train_model, train_tokenizer = get_hf_model(
             cfg.model.name,
@@ -139,10 +132,11 @@ def get_inference_model(cfg: DictConfig) -> vLLMWrapper:
 
     model_name = cfg.model.name
 
+    # Use cuda_visible_devices to restrict visible GPUs for vLLM
     inference_server = make_vllm_worker(
         model_name,
         gpu_memory_utilization=cfg.inference_model.gpu_memory_utilization,
-        devices=vllm_devices,  # Pass actual device indices
+        devices=vllm_devices,
         make_ray_worker=True,
     )
     assert inference_server is not None
@@ -186,11 +180,6 @@ def get_ref_model(
 
     # Use cuda_visible_devices to restrict to reference device
     with cuda_visible_devices(ref_devices):
-        # Inside the context, devices are remapped to start from 0
-        torchrl_logger.info(
-            f"CUDA_VISIBLE_DEVICES: {os.getenv('CUDA_VISIBLE_DEVICES')}"
-        )
-        torchrl_logger.info(f"Available devices: {torch.cuda.device_count()}")
         device_map = "balanced" if len(ref_devices) > 1 else f"cuda:0"
         model_name = cfg.model.name
 
