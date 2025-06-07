@@ -77,7 +77,7 @@ def get_train_model(
 
     # Use cuda_visible_devices to restrict visible GPUs and let HF handle distribution
     with cuda_visible_devices(train_devices):
-        device_map = "balanced" if len(train_devices) > 1 else f"cuda:0"
+        device_map = "balanced" if len(train_devices) > 1 else "cuda:0"
         train_model, train_tokenizer = get_hf_model(
             cfg.model.name,
             device_map=device_map,
@@ -179,7 +179,7 @@ def get_ref_model(
 
     # Use cuda_visible_devices to restrict to reference device
     with cuda_visible_devices(ref_devices):
-        device_map = "balanced" if len(ref_devices) > 1 else f"cuda:0"
+        device_map = "balanced" if len(ref_devices) > 1 else "cuda:0"
         model_name = cfg.model.name
 
         ref_model = get_hf_model(

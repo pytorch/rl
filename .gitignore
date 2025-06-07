@@ -180,4 +180,4 @@ log
 .DS_Store
 Roms
 
-scratch/*.py
+scratch/*

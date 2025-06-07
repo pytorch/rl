@@ -195,7 +195,15 @@ def make_vllm_worker(
         if not ray.is_initialized():
             ray.init()
 
-        pg = placement_group([{"GPU": 1, "CPU": 1}] * torch.cuda.device_count())
+        pipeline_parallel_size = 1
+        node_id = 0
+        pg = placement_group(
+            [{"CPU": 1}] + [{"GPU": 1}] * torch.cuda.device_count(),
+            strategy="SPREAD"
+            if (pipeline_parallel_size and pipeline_parallel_size > 1)
+            else "STRICT_PACK",
+            _soft_target_node_id=node_id if pipeline_parallel_size is None else None,
+        )
 
         ray.get(pg.ready())
         scheduling_inference = PlacementGroupSchedulingStrategy(
@@ -207,7 +215,7 @@ def make_vllm_worker(
             f"Create vLLM worker with {devices=}, {scheduling_inference=}"
         )
         worker_cls = ray.remote(
-            num_gpus=len(devices),
+            num_gpus=1,
             num_cpus=1,
             scheduling_strategy=scheduling_inference,
         )(LLMOnDevice)
