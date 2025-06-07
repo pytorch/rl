@@ -175,6 +175,11 @@ def make_vllm_worker(
         ...     ray.get(handle)
     """
     if make_ray_worker:
+
+        import ray
+        from ray.util.placement_group import placement_group
+        from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
+
         devices = [
             torch.device(device).index if not isinstance(device, int) else device
             for device in devices
@@ -182,46 +187,41 @@ def make_vllm_worker(
         for d in devices:
             assert d < torch.cuda.device_count()
 
-        import ray
-        from ray.util.placement_group import placement_group
-        from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
+        if not ray.is_initialized():
+            ray.init()
 
-        with _cuda_visible_devices(devices):
-            if not ray.is_initialized():
-                ray.init()
+        # Create bundles for all devices
+        pg = placement_group([{"GPU": 1, "CPU": 1}] * len(devices))
 
-            # Create bundles for all devices
-            pg = placement_group([{"GPU": 1, "CPU": 1}] * len(devices))
+        ray.get(pg.ready())
+        scheduling_inference = PlacementGroupSchedulingStrategy(
+            placement_group=pg,
+            placement_group_capture_child_tasks=True,
+            placement_group_bundle_index=0,  # Always use first bundle
+        )
+        torchrl_logger.info(
+            f"Create vLLM worker with {devices=}, {scheduling_inference=}"
+        )
 
-            ray.get(pg.ready())
-            scheduling_inference = PlacementGroupSchedulingStrategy(
-                placement_group=pg,
-                placement_group_capture_child_tasks=True,
-                placement_group_bundle_index=0,  # Always use first bundle
-            )
-            torchrl_logger.info(
-                f"Create vLLM worker with {devices=}, {scheduling_inference=}"
-            )
+        # Set CUDA_VISIBLE_DEVICES in the worker's environment
+        runtime_env = {
+            "env_vars": {"CUDA_VISIBLE_DEVICES": ",".join(str(d) for d in devices)}
+        }
 
-            # Set CUDA_VISIBLE_DEVICES in the worker's environment
-            runtime_env = {
-                "env_vars": {"CUDA_VISIBLE_DEVICES": ",".join(str(d) for d in devices)}
-            }
-
-            return ray.remote(
-                num_gpus=1,
-                num_cpus=1,
-                scheduling_strategy=scheduling_inference,
-                runtime_env=runtime_env,  # Pass environment configuration to the worker
-            )(LLMOnDevice).remote(
-                model=model_name,
-                dtype="bfloat16",
-                worker_cls="torchrl.modules.llm.backends.vllm.vLLMWorker",
-                tensor_parallel_size=len(devices),
-                distributed_executor_backend="ray",
-                enable_chunked_prefill=True,
-                **kwargs,
-            )
+        return ray.remote(
+            num_gpus=1,
+            num_cpus=1,
+            scheduling_strategy=scheduling_inference,
+            runtime_env=runtime_env,  # Pass environment configuration to the worker
+        )(LLMOnDevice).remote(
+            model=model_name,
+            dtype="bfloat16",
+            worker_cls="torchrl.modules.llm.backends.vllm.vLLMWorker",
+            tensor_parallel_size=len(devices),
+            distributed_executor_backend="ray",
+            enable_chunked_prefill=True,
+            **kwargs,
+        )
     else:
         with _cuda_visible_devices(devices):
             return LLM(
