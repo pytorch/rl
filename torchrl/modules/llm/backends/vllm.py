@@ -144,7 +144,13 @@ class LLMOnDevice(LLM):
         assert len(gpu_ids) > 0, "No visible cuda device"
         # CUDA_VISIBLE_DEVICES is now set by Ray's runtime_env
         # torch.cuda.set_device(0)  # Since only one GPU is visible, it's cuda:0
-        super().__init__(*args, device="cuda:0", **kwargs)
+        self.args = args
+        self.kwargs = kwargs
+        
+    def initialize(self):
+        """Initialize the LLM. This method can be waited on with ray.get()"""
+        super().__init__(*self.args, device="cuda:0", **self.kwargs)
+        return True
 
 
 def make_vllm_worker(
@@ -208,7 +214,7 @@ def make_vllm_worker(
             "env_vars": {"CUDA_VISIBLE_DEVICES": ",".join(str(d) for d in devices)}
         }
 
-        return ray.remote(
+        worker = ray.remote(
             num_gpus=1,
             num_cpus=1,
             scheduling_strategy=scheduling_inference,
@@ -222,6 +228,10 @@ def make_vllm_worker(
             enable_chunked_prefill=True,
             **kwargs,
         )
+        
+        # Wait for worker to be fully initialized
+        ray.get(worker.initialize.remote())
+        return worker
     else:
         with _cuda_visible_devices(devices):
             return LLM(
