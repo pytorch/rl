@@ -203,8 +203,8 @@ class ChatEnv(EnvBase):
         if tensordict is None:
             raise RuntimeError(f"{type(self).__name__} expects a tensordict as input")
         # Find the total text
-        content = tensordict["text"]
-        if isinstance(content, str):
+        content = tensordict.get("text")
+        if content.batch_size != self.batch_size:
             for s in reversed(self.batch_size):
                 content = [content for _ in range(s)]
 
@@ -212,31 +212,27 @@ class ChatEnv(EnvBase):
         role = self.user_role
         for s in reversed(self.batch_size):
             role = [role for _ in range(s)]
-        content = History(role=role, content=content, batch_size=self.batch_size)
+        history = History(role=role, content=content, batch_size=self.batch_size)
         if self.system_prompt is not None:
-            role = self.system_role
-            system_prompt = self.system_prompt
+            system_role = self.system_role
+            history_system = History(
+                role=system_role,
+                content=self.system_prompt,
+            )
             for s in reversed(self.batch_size):
-                role = [role for _ in range(s)]
-                system_prompt = [self.system_prompt for _ in range(s)]
-            history = History(
-                role=role,
-                content=system_prompt,
-                batch_size=self.batch_size,
-            )
-            history = lazy_stack([history, content], -1)
+                history_system = lazy_stack([history_system for _ in range(s)])
+            history = lazy_stack([history_system, history], -1)
         else:
-            history = content.unsqueeze(-1)
-        # Extract history
-        result = lazy_stack(
-            list(
-                TensorDict(
-                    history=history,
-                    done=torch.zeros(tensordict.shape + (1,), dtype=torch.bool),
-                    batch_size=self.batch_size,
-                ).unbind(0)
-            )
-        ).update(tensordict)
+            history = history.unsqueeze(-1)
+        result = TensorDict(
+            history=history,
+            done=torch.zeros(tensordict.shape + (1,), dtype=torch.bool),
+            batch_size=self.batch_size,
+        )
+        if tensordict._lazy:
+            result = result.unbind(0)
+            result = lazy_stack(list(result))
+        result.update(tensordict.exclude(*result.keys(True)))
         if self.apply_template:
             template = history.apply_chat_template(
                 tokenizer=self.tokenizer, **self.template_kwargs

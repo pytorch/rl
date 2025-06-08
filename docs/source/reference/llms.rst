@@ -52,7 +52,7 @@ Therefore, the fundamental structure of an LLM post-training pipeline is:
 - An environment that handles the world around the LLM:
     - Loading data (through :class:`~torchrl.envs.llm.transforms.DataLoadingPrimer`)
     - Formatting data (through :class:`~torchrl.envs.llm.transforms.TemplateTransform`)
-    - Executing tools (through :class:`~torchrl.envs.llm.transforms.PythonInterpreter`)
+    - Executing tools (through :class:`~torchrl.envs.llm.transforms.PythonInterpreter` or :class:`~torchrl.envs.llm.transforms.MCPToolTransform`)
     - Computing rewards online, if needed (through :class:`~torchrl.envs.llm.transforms.KLRewardTransform`)
 - A data collector that takes the policy (the LLM) and the environment, and handles the inference part of the pipeline:
     - Running reset, step and gathering actions;
@@ -179,6 +179,8 @@ transforms).
 
     DataLoadingPrimer
     KLRewardTransform
+    MCPToolTransform
+    BrowserTransform
     PythonInterpreter
     TemplateTransform
     Tokenizer

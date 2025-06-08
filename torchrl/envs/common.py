@@ -16,6 +16,7 @@ import torch
 import torch.nn as nn
 from tensordict import (
     is_tensor_collection,
+    lazy_stack,
     LazyStackedTensorDict,
     TensorDictBase,
     unravel_key,
@@ -3325,9 +3326,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     )
                 raise
         else:
-            out_td = LazyStackedTensorDict.maybe_dense_stack(
-                tensordicts, len(batch_size), out=out
-            )
+            out_td = lazy_stack(tensordicts, len(batch_size), out=out)
         if set_truncated:
             found_truncated = False
             for key in self.done_keys:

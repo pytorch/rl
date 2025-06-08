@@ -105,6 +105,7 @@ Intermediate
    tutorials/dqn_with_rnn
    tutorials/rb_tutorial
    tutorials/export
+   tutorials/llm_browser
 
 Advanced
 --------
