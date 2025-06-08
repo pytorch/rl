@@ -162,9 +162,9 @@ def get_ref_model(
     max_memory = {}
     for i in range(torch.cuda.device_count()):
         if i in ref_devices:
-            max_memory[f"cuda:{i}"] = "24GiB"  # Allow max memory for devices we want to use
+            max_memory[i] = "24GiB"  # Allow max memory for devices we want to use
         else:
-            max_memory[f"cuda:{i}"] = "0GiB"  # No memory for other devices
+            max_memory[i] = "0GiB"  # No memory for other devices
     max_memory["cpu"] = "24GiB"  # Allow CPU memory as fallback
 
     # Let HF handle distribution with max_memory
