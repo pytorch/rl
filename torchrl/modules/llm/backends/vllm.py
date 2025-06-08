@@ -202,7 +202,7 @@ def make_vllm_worker(
         pipeline_parallel_size = 1
         node_id = 0
         pg = placement_group(
-            [{"CPU": 1}, {"GPU": 1}] * torch.cuda.device_count(),
+            [{"CPU": 1, "GPU": 1}] * torch.cuda.device_count(),
             strategy="SPREAD"
             if (pipeline_parallel_size and pipeline_parallel_size > 1)
             else "STRICT_PACK",
