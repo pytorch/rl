@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+023c965) &#x25BC</span></a>
+      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+c6440df) &#x25BC</span></a>
     </div>
     
 
@@ -446,7 +446,6 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Choice</span><span class="p">,</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">NonTensor</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConditionalSkip</span><span class="p">,</span> <span class="n">GymWrapper</span><span class="p">,</span> <span class="n">Transform</span><span class="p">,</span> <span class="n">TransformedEnv</span>
-
 
 <span class="c1"># Inv transforms:</span>
 <span class="c1">#  Transforms to apply prior to pass the model output to the env</span>
@@ -1281,6 +1280,9 @@
         <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">MessageToHistory</span><span class="p">())</span>
         <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">TemplateTransform</span><span class="p">(</span><span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">))</span>
         <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">MLGymRewardAssignment</span><span class="p">())</span>
+        <span class="c1"># # We want the env to have a batch-size of (1,) because it will be easier to interact with</span>
+        <span class="c1"># #  LLMs</span>
+        <span class="c1"># env.append_transform(BatchSizeTransform(batch_size=(1,)))</span>
         <span class="k">return</span> <span class="n">env</span></div>
 </pre></div>
 

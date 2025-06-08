@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+023c965) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+c6440df) &#x25BC</span></a>
     </div>
     
 
@@ -450,7 +450,7 @@
 
 
 <span class="c1"># We need the &#39;shadow&#39; flag to avoid having tensordict complaining about &#39;type&#39;/&#39;size&#39; etc. fields</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">ContentBase</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;nocast&quot;</span><span class="p">,</span> <span class="s2">&quot;shadow&quot;</span><span class="p">]):</span>
+<div class="viewcode-block" id="ContentBase"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">ContentBase</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;nocast&quot;</span><span class="p">,</span> <span class="s2">&quot;shadow&quot;</span><span class="p">]):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Base class for all message content types.</span>
 
 <span class="sd">    Attributes:</span>
@@ -538,7 +538,7 @@
 
     <span class="c1"># Function calling (for AI agents)</span>
     <span class="n">function_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">function_args</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">function_args</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
 
 
 <div class="viewcode-block" id="History"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">History</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;nocast&quot;</span><span class="p">]):</span>
@@ -697,7 +697,7 @@
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">from_text</span><span class="p">(</span>
         <span class="bp">cls</span><span class="p">,</span>
-        <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">text</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
         <span class="n">chat_template_name</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;chatml_format&quot;</span><span class="p">,</span> <span class="s2">&quot;qwen&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">chat_template</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">History</span><span class="p">:</span>

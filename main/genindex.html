@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../versions.html"><span style="font-size:110%">main (0.9.0+023c965) &#x25BC</span></a>
+      <a href="../versions.html"><span style="font-size:110%">main (0.9.0+c6440df) &#x25BC</span></a>
     </div>
     
 
@@ -2159,6 +2159,8 @@
       </ul></li>
       <li><a href="reference/generated/torchrl.data.contains_lazy_spec.html#torchrl.data.contains_lazy_spec">contains_lazy_spec (class in torchrl.data)</a>
 </li>
+      <li><a href="reference/generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase">ContentBase (class in torchrl.data.llm)</a>
+</li>
       <li><a href="reference/generated/torchrl.modules.Conv3dNet.html#torchrl.modules.Conv3dNet">Conv3dNet (class in torchrl.modules)</a>
 </li>
       <li><a href="reference/generated/torchrl.objectives.llm.GRPOLoss.html#torchrl.objectives.llm.GRPOLoss.convert_to_functional">convert_to_functional() (torchrl.objectives.llm.GRPOLoss method)</a>
@@ -2571,6 +2573,8 @@
         <li><a href="reference/generated/torchrl.data.LazyStackedCompositeSpec.html#torchrl.data.LazyStackedCompositeSpec.device">(torchrl.data.LazyStackedCompositeSpec property)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.LazyStackedTensorSpec.html#torchrl.data.LazyStackedTensorSpec.device">(torchrl.data.LazyStackedTensorSpec property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.device">(torchrl.data.llm.ContentBase property)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.device">(torchrl.data.llm.History property)</a>
 </li>
@@ -2987,9 +2991,11 @@
         <li><a href="reference/generated/torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer.dump">(torchrl.data.TensorDictReplayBuffer method)</a>
 </li>
       </ul></li>
-      <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.dumps">dumps() (torchrl.data.llm.History method)</a>
+      <li><a href="reference/generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.dumps">dumps() (torchrl.data.llm.ContentBase method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.dumps">(torchrl.data.llm.History method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.llm.LLMData.html#torchrl.data.llm.LLMData.dumps">(torchrl.data.llm.LLMData method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset.dumps">(torchrl.data.PairwiseDataset method)</a>
@@ -3203,6 +3209,14 @@
         <li><a href="reference/generated/torchrl.data.UnboundedDiscrete.html#torchrl.data.UnboundedDiscrete.enumerate">(torchrl.data.UnboundedDiscrete method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.UnboundedDiscreteTensorSpec.html#torchrl.data.UnboundedDiscreteTensorSpec.enumerate">(torchrl.data.UnboundedDiscreteTensorSpec method)</a>
+</li>
+      </ul></li>
+      <li><a href="reference/generated/torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool.env_batch_sizes">env_batch_sizes (torchrl.envs.AsyncEnvPool property)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.envs.ProcessorAsyncEnvPool.html#torchrl.envs.ProcessorAsyncEnvPool.env_batch_sizes">(torchrl.envs.ProcessorAsyncEnvPool property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.ThreadingAsyncEnvPool.html#torchrl.envs.ThreadingAsyncEnvPool.env_batch_sizes">(torchrl.envs.ThreadingAsyncEnvPool property)</a>
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase">EnvBase (class in torchrl.envs)</a>
@@ -3575,9 +3589,11 @@
         <li><a href="reference/generated/torchrl.envs.llm.MLGymWrapper.html#torchrl.envs.llm.MLGymWrapper.fast_encoding">(torchrl.envs.llm.MLGymWrapper method)</a>
 </li>
       </ul></li>
-      <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.fields">fields() (torchrl.data.llm.History class method)</a>
+      <li><a href="reference/generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.fields">fields() (torchrl.data.llm.ContentBase class method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.fields">(torchrl.data.llm.History class method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.llm.LLMData.html#torchrl.data.llm.LLMData.fields">(torchrl.data.llm.LLMData class method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset.fields">(torchrl.data.PairwiseDataset class method)</a>
@@ -4067,9 +4083,11 @@
         <li><a href="reference/generated/torchrl.objectives.LossModule.html#torchrl.objectives.LossModule.from_stateful_net">(torchrl.objectives.LossModule method)</a>
 </li>
       </ul></li>
-      <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.from_tensordict">from_tensordict() (torchrl.data.llm.History class method)</a>
+      <li><a href="reference/generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.from_tensordict">from_tensordict() (torchrl.data.llm.ContentBase class method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.from_tensordict">(torchrl.data.llm.History class method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.llm.LLMData.html#torchrl.data.llm.LLMData.from_tensordict">(torchrl.data.llm.LLMData class method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset.from_tensordict">(torchrl.data.PairwiseDataset class method)</a>
@@ -4483,6 +4501,8 @@
         <li><a href="reference/generated/torchrl.data.CompositeSpec.html#torchrl.data.CompositeSpec.get">(torchrl.data.CompositeSpec method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.LazyStackedCompositeSpec.html#torchrl.data.LazyStackedCompositeSpec.get">(torchrl.data.LazyStackedCompositeSpec method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.get">(torchrl.data.llm.ContentBase method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.get">(torchrl.data.llm.History method)</a>
 </li>
@@ -5649,9 +5669,11 @@
 </li>
       <li><a href="reference/generated/torchrl.modules.tensordict_module.LMHeadActorValueOperator.html#torchrl.modules.tensordict_module.LMHeadActorValueOperator">LMHeadActorValueOperator (class in torchrl.modules.tensordict_module)</a>
 </li>
-      <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.load">load() (torchrl.data.llm.History class method)</a>
+      <li><a href="reference/generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.load">load() (torchrl.data.llm.ContentBase class method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.load">(torchrl.data.llm.History class method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.llm.LLMData.html#torchrl.data.llm.LLMData.load">(torchrl.data.llm.LLMData class method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset.load">(torchrl.data.PairwiseDataset class method)</a>
@@ -5697,9 +5719,11 @@
         <li><a href="reference/generated/torchrl.objectives.llm.GRPOLossOutput.html#torchrl.objectives.llm.GRPOLossOutput.load">(torchrl.objectives.llm.GRPOLossOutput class method)</a>
 </li>
       </ul></li>
-      <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.load_">load_() (torchrl.data.llm.History method)</a>
+      <li><a href="reference/generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.load_">load_() (torchrl.data.llm.ContentBase method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.load_">(torchrl.data.llm.History method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.llm.LLMData.html#torchrl.data.llm.LLMData.load_">(torchrl.data.llm.LLMData method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset.load_">(torchrl.data.PairwiseDataset method)</a>
@@ -5717,9 +5741,11 @@
       </ul></li>
       <li><a href="reference/generated/torchrl.trainers.Trainer.html#torchrl.trainers.Trainer.load_from_file">load_from_file() (torchrl.trainers.Trainer method)</a>
 </li>
-      <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.load_memmap">load_memmap() (torchrl.data.llm.History class method)</a>
+      <li><a href="reference/generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.load_memmap">load_memmap() (torchrl.data.llm.ContentBase class method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.load_memmap">(torchrl.data.llm.History class method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.llm.LLMData.html#torchrl.data.llm.LLMData.load_memmap">(torchrl.data.llm.LLMData class method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset.load_memmap">(torchrl.data.PairwiseDataset class method)</a>
@@ -5753,6 +5779,8 @@
         <li><a href="reference/generated/torchrl.data.DensifyReward.html#torchrl.data.DensifyReward.load_state_dict">(torchrl.data.DensifyReward method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.HashToInt.html#torchrl.data.HashToInt.load_state_dict">(torchrl.data.HashToInt method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.load_state_dict">(torchrl.data.llm.ContentBase method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.load_state_dict">(torchrl.data.llm.History method)</a>
 </li>
@@ -6151,9 +6179,11 @@
 </li>
       <li><a href="reference/generated/torchrl.envs.MeltingpotWrapper.html#torchrl.envs.MeltingpotWrapper">MeltingpotWrapper() (in module torchrl.envs)</a>
 </li>
-      <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.memmap">memmap() (torchrl.data.llm.History method)</a>
+      <li><a href="reference/generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.memmap">memmap() (torchrl.data.llm.ContentBase method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.memmap">(torchrl.data.llm.History method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.llm.LLMData.html#torchrl.data.llm.LLMData.memmap">(torchrl.data.llm.LLMData method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset.memmap">(torchrl.data.PairwiseDataset method)</a>
@@ -6169,9 +6199,11 @@
         <li><a href="reference/generated/torchrl.objectives.llm.GRPOLossOutput.html#torchrl.objectives.llm.GRPOLossOutput.memmap">(torchrl.objectives.llm.GRPOLossOutput method)</a>
 </li>
       </ul></li>
-      <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.memmap_">memmap_() (torchrl.data.llm.History method)</a>
+      <li><a href="reference/generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.memmap_">memmap_() (torchrl.data.llm.ContentBase method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.memmap_">(torchrl.data.llm.History method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.llm.LLMData.html#torchrl.data.llm.LLMData.memmap_">(torchrl.data.llm.LLMData method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset.memmap_">(torchrl.data.PairwiseDataset method)</a>
@@ -6187,9 +6219,11 @@
         <li><a href="reference/generated/torchrl.objectives.llm.GRPOLossOutput.html#torchrl.objectives.llm.GRPOLossOutput.memmap_">(torchrl.objectives.llm.GRPOLossOutput method)</a>
 </li>
       </ul></li>
-      <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.memmap_like">memmap_like() (torchrl.data.llm.History method)</a>
+      <li><a href="reference/generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.memmap_like">memmap_like() (torchrl.data.llm.ContentBase method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.memmap_like">(torchrl.data.llm.History method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.llm.LLMData.html#torchrl.data.llm.LLMData.memmap_like">(torchrl.data.llm.LLMData method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset.memmap_like">(torchrl.data.PairwiseDataset method)</a>
@@ -6205,9 +6239,11 @@
         <li><a href="reference/generated/torchrl.objectives.llm.GRPOLossOutput.html#torchrl.objectives.llm.GRPOLossOutput.memmap_like">(torchrl.objectives.llm.GRPOLossOutput method)</a>
 </li>
       </ul></li>
-      <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.memmap_refresh_">memmap_refresh_() (torchrl.data.llm.History method)</a>
+      <li><a href="reference/generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.memmap_refresh_">memmap_refresh_() (torchrl.data.llm.ContentBase method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.memmap_refresh_">(torchrl.data.llm.History method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.llm.LLMData.html#torchrl.data.llm.LLMData.memmap_refresh_">(torchrl.data.llm.LLMData method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset.memmap_refresh_">(torchrl.data.PairwiseDataset method)</a>
@@ -9555,9 +9591,11 @@
 </li>
       <li><a href="reference/generated/torchrl.data.replay_buffers.SamplerWithoutReplacement.html#torchrl.data.replay_buffers.SamplerWithoutReplacement">SamplerWithoutReplacement (class in torchrl.data.replay_buffers)</a>
 </li>
-      <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.save">save() (torchrl.data.llm.History method)</a>
+      <li><a href="reference/generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.save">save() (torchrl.data.llm.ContentBase method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.save">(torchrl.data.llm.History method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.llm.LLMData.html#torchrl.data.llm.LLMData.save">(torchrl.data.llm.LLMData method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset.save">(torchrl.data.PairwiseDataset method)</a>
@@ -9649,6 +9687,8 @@
         <li><a href="reference/generated/torchrl.data.CompositeSpec.html#torchrl.data.CompositeSpec.set">(torchrl.data.CompositeSpec method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.LazyStackedCompositeSpec.html#torchrl.data.LazyStackedCompositeSpec.set">(torchrl.data.LazyStackedCompositeSpec method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.set">(torchrl.data.llm.ContentBase method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.set">(torchrl.data.llm.History method)</a>
 </li>
@@ -10343,6 +10383,8 @@
         <li><a href="reference/generated/torchrl.data.DensifyReward.html#torchrl.data.DensifyReward.state_dict">(torchrl.data.DensifyReward method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.HashToInt.html#torchrl.data.HashToInt.state_dict">(torchrl.data.HashToInt method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.state_dict">(torchrl.data.llm.ContentBase method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.state_dict">(torchrl.data.llm.History method)</a>
 </li>
@@ -11189,9 +11231,11 @@
         <li><a href="reference/generated/torchrl.data.Tree.html#torchrl.data.Tree.to_string">(torchrl.data.Tree method)</a>
 </li>
       </ul></li>
-      <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.to_tensordict">to_tensordict() (torchrl.data.llm.History method)</a>
+      <li><a href="reference/generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.to_tensordict">to_tensordict() (torchrl.data.llm.ContentBase method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.to_tensordict">(torchrl.data.llm.History method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.llm.LLMData.html#torchrl.data.llm.LLMData.to_tensordict">(torchrl.data.llm.LLMData method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset.to_tensordict">(torchrl.data.PairwiseDataset method)</a>
@@ -11873,9 +11917,11 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.envs.transforms.UnaryTransform.html#torchrl.envs.transforms.UnaryTransform">UnaryTransform (class in torchrl.envs.transforms)</a>
 </li>
-      <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.unbind">unbind() (torchrl.data.llm.History method)</a>
+      <li><a href="reference/generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.unbind">unbind() (torchrl.data.llm.ContentBase method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.unbind">(torchrl.data.llm.History method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.llm.LLMData.html#torchrl.data.llm.LLMData.unbind">(torchrl.data.llm.LLMData method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset.unbind">(torchrl.data.PairwiseDataset method)</a>

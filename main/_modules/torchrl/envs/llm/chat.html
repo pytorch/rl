@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+023c965) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+c6440df) &#x25BC</span></a>
     </div>
     
 
@@ -630,37 +630,25 @@
                 <span class="n">content</span> <span class="o">=</span> <span class="p">[</span><span class="n">content</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">s</span><span class="p">)]</span>
 
         <span class="c1"># FIXME: Assume the text is not formatted and this is just content</span>
-        <span class="n">content</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
-            <span class="n">role</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">user_role</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span>
-        <span class="p">)</span>
-        <span class="n">content</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">content</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;role&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">maybe_to_stack</span><span class="p">()</span>
+        <span class="n">role</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">user_role</span>
+        <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="nb">reversed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">):</span>
+            <span class="n">role</span> <span class="o">=</span> <span class="p">[</span><span class="n">role</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">s</span><span class="p">)]</span>
+        <span class="n">content</span> <span class="o">=</span> <span class="n">History</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="n">role</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">system_prompt</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">history</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
-                <span class="p">{</span>
-                    <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">system_role</span><span class="p">,</span>
-                    <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">system_prompt</span><span class="p">,</span>
-                <span class="p">}</span>
-            <span class="p">)</span>
+            <span class="n">role</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system_role</span>
+            <span class="n">system_prompt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system_prompt</span>
             <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="nb">reversed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">):</span>
-                <span class="n">history</span> <span class="o">=</span> <span class="p">[</span><span class="n">history</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">s</span><span class="p">)]</span>
-            <span class="n">history</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">history</span><span class="o">=</span><span class="n">history</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span>
-        <span class="n">role</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">(</span>
-            <span class="p">[</span>
-                <span class="n">history</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="s2">&quot;role&quot;</span><span class="p">)),</span>
-                <span class="n">content</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;role&quot;</span><span class="p">),</span>
-            <span class="p">],</span>
-            <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">content</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">(</span>
-            <span class="p">[</span>
-                <span class="n">history</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">)),</span>
-                <span class="n">content</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;content&quot;</span><span class="p">),</span>
-            <span class="p">],</span>
-            <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="n">role</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">+</span> <span class="p">(</span><span class="mi">2</span><span class="p">,))</span>
+                <span class="n">role</span> <span class="o">=</span> <span class="p">[</span><span class="n">role</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">s</span><span class="p">)]</span>
+                <span class="n">system_prompt</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">system_prompt</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">s</span><span class="p">)]</span>
+            <span class="n">history</span> <span class="o">=</span> <span class="n">History</span><span class="p">(</span>
+                <span class="n">role</span><span class="o">=</span><span class="n">role</span><span class="p">,</span>
+                <span class="n">content</span><span class="o">=</span><span class="n">system_prompt</span><span class="p">,</span>
+                <span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">history</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">([</span><span class="n">history</span><span class="p">,</span> <span class="n">content</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">history</span> <span class="o">=</span> <span class="n">content</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
         <span class="c1"># Extract history</span>
-        <span class="n">history</span> <span class="o">=</span> <span class="n">History</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
         <span class="n">result</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">(</span>
             <span class="nb">list</span><span class="p">(</span>
                 <span class="n">TensorDict</span><span class="p">(</span>

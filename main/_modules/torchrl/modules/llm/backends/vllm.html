@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+023c965) &#x25BC</span></a>
+      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+c6440df) &#x25BC</span></a>
     </div>
     
 
@@ -566,7 +566,12 @@
             <span class="nb">str</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">gpu_id</span><span class="p">))</span> <span class="k">for</span> <span class="n">gpu_id</span> <span class="ow">in</span> <span class="n">gpu_ids</span>
         <span class="p">)</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">set_device</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># Since only one GPU is visible, it&#39;s cuda:0</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">args</span> <span class="o">=</span> <span class="n">args</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kwargs</span> <span class="o">=</span> <span class="n">kwargs</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">initialize</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span></div>
 
 
 <div class="viewcode-block" id="make_vllm_worker"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.make_vllm_worker.html#torchrl.modules.llm.make_vllm_worker">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">make_vllm_worker</span><span class="p">(</span>
@@ -597,6 +602,10 @@
 <span class="sd">        ...     ray.get(handle)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">make_ray_worker</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">devices</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;ray-based instantiation of vLLM does not support multiple devices at the moment.&quot;</span>
+            <span class="p">)</span>
         <span class="n">devices</span> <span class="o">=</span> <span class="p">[</span>
             <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">index</span> <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="k">else</span> <span class="n">device</span>
             <span class="k">for</span> <span class="n">device</span> <span class="ow">in</span> <span class="n">devices</span>
@@ -611,7 +620,15 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="n">ray</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
             <span class="n">ray</span><span class="o">.</span><span class="n">init</span><span class="p">()</span>
 
-        <span class="n">pg</span> <span class="o">=</span> <span class="n">placement_group</span><span class="p">([{</span><span class="s2">&quot;GPU&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;CPU&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">}]</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device_count</span><span class="p">())</span>
+        <span class="n">pipeline_parallel_size</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">node_id</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">pg</span> <span class="o">=</span> <span class="n">placement_group</span><span class="p">(</span>
+            <span class="p">[{</span><span class="s2">&quot;CPU&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;GPU&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">}]</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device_count</span><span class="p">(),</span>
+            <span class="n">strategy</span><span class="o">=</span><span class="s2">&quot;SPREAD&quot;</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">pipeline_parallel_size</span> <span class="ow">and</span> <span class="n">pipeline_parallel_size</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="k">else</span> <span class="s2">&quot;STRICT_PACK&quot;</span><span class="p">,</span>
+            <span class="n">_soft_target_node_id</span><span class="o">=</span><span class="n">node_id</span> <span class="k">if</span> <span class="n">pipeline_parallel_size</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="p">)</span>
 
         <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">pg</span><span class="o">.</span><span class="n">ready</span><span class="p">())</span>
         <span class="n">scheduling_inference</span> <span class="o">=</span> <span class="n">PlacementGroupSchedulingStrategy</span><span class="p">(</span>
@@ -622,11 +639,12 @@
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;Create vLLM worker with </span><span class="si">{</span><span class="n">devices</span><span class="si">=}</span><span class="s2">, </span><span class="si">{</span><span class="n">scheduling_inference</span><span class="si">=}</span><span class="s2">&quot;</span>
         <span class="p">)</span>
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
-            <span class="n">num_gpus</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">devices</span><span class="p">),</span>
+        <span class="n">worker_cls</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
+            <span class="n">num_gpus</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
             <span class="n">num_cpus</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
             <span class="n">scheduling_strategy</span><span class="o">=</span><span class="n">scheduling_inference</span><span class="p">,</span>
-        <span class="p">)(</span><span class="n">LLMOnDevice</span><span class="p">)</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
+        <span class="p">)(</span><span class="n">LLMOnDevice</span><span class="p">)</span>
+        <span class="n">worker</span> <span class="o">=</span> <span class="n">worker_cls</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
             <span class="n">model</span><span class="o">=</span><span class="n">model_name</span><span class="p">,</span>
             <span class="c1"># enforce_eager=True,</span>
             <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;bfloat16&quot;</span><span class="p">,</span>
@@ -636,6 +654,9 @@
             <span class="n">enable_chunked_prefill</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span>
+        <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">worker</span><span class="o">.</span><span class="n">initialize</span><span class="o">.</span><span class="n">remote</span><span class="p">())</span>
+        <span class="k">return</span> <span class="n">worker</span>
+
     <span class="k">else</span><span class="p">:</span>
         <span class="k">with</span> <span class="n">_cuda_visible_devices</span><span class="p">(</span><span class="n">devices</span><span class="p">):</span>
             <span class="k">return</span> <span class="n">LLM</span><span class="p">(</span>

@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+023c965) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+c6440df) &#x25BC</span></a>
     </div>
     
 
@@ -647,6 +647,11 @@
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">])</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_busy</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
 
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">env_batch_sizes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the batch-sizes of every env.&quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
     <span class="k">def</span><span class="w"> </span><span class="nf">_reset</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -657,10 +662,15 @@
         <span class="k">if</span> <span class="n">tensordict</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stack_func</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;lazy_stack&quot;</span><span class="p">,</span> <span class="s2">&quot;maybe_dense&quot;</span><span class="p">):</span>
                 <span class="n">tensordict</span> <span class="o">=</span> <span class="n">LazyStackedTensorDict</span><span class="p">(</span>
-                    <span class="o">*</span><span class="p">[</span><span class="n">TensorDict</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">)]</span>
+                    <span class="o">*</span><span class="p">[</span>
+                        <span class="n">TensorDict</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">env_batch_sizes</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+                        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">)</span>
+                    <span class="p">]</span>
                 <span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">tensordict</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">)</span>
+                <span class="n">tensordict</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+                    <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">,)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">env_batch_sizes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="p">)</span>
         <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_env_idx_key</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_async_private_reset_send</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
         <span class="n">tensordict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_private_reset_recv</span><span class="p">(</span><span class="n">min_get</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">)</span>
@@ -706,10 +716,15 @@
         <span class="k">if</span> <span class="n">tensordict</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stack_func</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;lazy_stack&quot;</span><span class="p">,</span> <span class="s2">&quot;maybe_dense&quot;</span><span class="p">):</span>
                 <span class="n">tensordict</span> <span class="o">=</span> <span class="n">LazyStackedTensorDict</span><span class="p">(</span>
-                    <span class="o">*</span><span class="p">[</span><span class="n">TensorDict</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">)]</span>
+                    <span class="o">*</span><span class="p">[</span>
+                        <span class="n">TensorDict</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">env_batch_sizes</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+                        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">)</span>
+                    <span class="p">]</span>
                 <span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">tensordict</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">)</span>
+                <span class="n">tensordict</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+                    <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">,)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">env_batch_sizes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="p">)</span>
         <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_env_idx_key</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">async_reset_send</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
         <span class="n">tensordict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_reset_recv</span><span class="p">(</span><span class="n">min_get</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">)</span>
@@ -739,23 +754,30 @@
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env_idx</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
                 <span class="n">env_idx</span> <span class="o">=</span> <span class="n">env_idx</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env_idx</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+                <span class="c1"># If we squeezed a td with shape (1,) and got a NonTensorStack -&gt; NonTensorData, then</span>
+                <span class="c1">#  unsqueezed the NonTensorData, we&#39;d still have a NonTensorData with shape (1,)</span>
+                <span class="c1">#  This will give us an integer now, but we don&#39;t want to unsqueeze the full td because then</span>
+                <span class="c1">#  we&#39;d have a td with shape (1, 1)</span>
+                <span class="k">if</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">env_batch_sizes</span><span class="p">[</span><span class="n">env_idx</span><span class="p">]):</span>
+                    <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
                 <span class="n">env_idx</span> <span class="o">=</span> <span class="p">[</span><span class="n">env_idx</span><span class="p">]</span>
-                <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
         <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env_index</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
             <span class="k">if</span> <span class="n">make_if_none</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">tensordict</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="n">tensordict</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">(),</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+                    <span class="n">tensordict</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+                        <span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">env_batch_sizes</span><span class="p">[</span><span class="n">env_index</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+                    <span class="p">)</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;lazy_stack&quot;</span><span class="p">,</span> <span class="s2">&quot;maybe_dense&quot;</span><span class="p">):</span>
                     <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>
-                    <span class="n">tensordict</span> <span class="o">=</span> <span class="n">LazyStackedTensorDict</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+                    <span class="n">tensordict</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">([</span><span class="n">tensordict</span><span class="p">])</span>
             <span class="n">tensordict</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_env_idx_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">NonTensorStack</span><span class="p">(</span><span class="n">env_index</span><span class="p">)</span>
             <span class="n">env_idx</span> <span class="o">=</span> <span class="p">[</span><span class="n">env_index</span><span class="p">]</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">make_if_none</span> <span class="ow">and</span> <span class="n">tensordict</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;lazy_stack&quot;</span><span class="p">,</span> <span class="s2">&quot;maybe_dense&quot;</span><span class="p">):</span>
-                    <span class="n">tensordict</span> <span class="o">=</span> <span class="n">LazyStackedTensorDict</span><span class="p">(</span>
-                        <span class="o">*</span><span class="p">[</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">env_index</span><span class="p">]</span>
+                    <span class="n">tensordict</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">(</span>
+                        <span class="p">[</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">env_index</span><span class="p">]</span>
                     <span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">tensordict</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
@@ -882,6 +904,16 @@
         <span class="n">output_spec</span> <span class="o">=</span> <span class="n">specs</span><span class="p">[</span><span class="s2">&quot;output_spec&quot;</span><span class="p">]</span>
         <span class="n">input_spec</span> <span class="o">=</span> <span class="n">specs</span><span class="p">[</span><span class="s2">&quot;input_spec&quot;</span><span class="p">]</span>
         <span class="k">return</span> <span class="n">output_spec</span><span class="p">,</span> <span class="n">input_spec</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">env_batch_sizes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">]:</span>
+        <span class="n">batch_sizes</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_env_batch_sizes&quot;</span><span class="p">,</span> <span class="p">[])</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">batch_sizes</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">_env_idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">input_queue</span><span class="p">[</span><span class="n">_env_idx</span><span class="p">]</span><span class="o">.</span><span class="n">put</span><span class="p">((</span><span class="s2">&quot;batch_size&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
+                <span class="n">batch_sizes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">output_queue</span><span class="p">[</span><span class="n">_env_idx</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">())</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_env_batch_sizes</span> <span class="o">=</span> <span class="n">batch_sizes</span>
+        <span class="k">return</span> <span class="n">batch_sizes</span>
 
 <div class="viewcode-block" id="ProcessorAsyncEnvPool.async_step_send"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.ProcessorAsyncEnvPool.html#torchrl.envs.ProcessorAsyncEnvPool.async_step_send">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">async_step_send</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">env_index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
@@ -1062,6 +1094,8 @@
             <span class="n">msg</span><span class="p">,</span> <span class="n">data</span> <span class="o">=</span> <span class="n">msg_data</span>
             <span class="k">if</span> <span class="n">msg</span> <span class="o">==</span> <span class="s2">&quot;get_specs&quot;</span><span class="p">:</span>
                 <span class="n">output_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">specs</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">msg</span> <span class="o">==</span> <span class="s2">&quot;batch_size&quot;</span><span class="p">:</span>
+                <span class="n">output_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span>
             <span class="k">elif</span> <span class="n">msg</span> <span class="o">==</span> <span class="s2">&quot;reset&quot;</span><span class="p">:</span>
                 <span class="n">data</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
                 <span class="n">data</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">_env_idx_key</span><span class="p">,</span> <span class="n">NonTensorData</span><span class="p">(</span><span class="n">i</span><span class="p">))</span>
@@ -1131,6 +1165,10 @@
         <span class="c1"># get specs</span>
         <span class="n">specs</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">env</span><span class="o">.</span><span class="n">specs</span> <span class="k">for</span> <span class="n">env</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">envs</span><span class="p">])</span>
         <span class="k">return</span> <span class="n">specs</span><span class="p">[</span><span class="s2">&quot;output_spec&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span> <span class="n">specs</span><span class="p">[</span><span class="s2">&quot;input_spec&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">env_batch_sizes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">env</span><span class="o">.</span><span class="n">batch_size</span> <span class="k">for</span> <span class="n">env</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">envs</span><span class="p">]</span>
 
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_get_specs</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">env</span><span class="p">:</span> <span class="n">EnvBase</span><span class="p">):</span>

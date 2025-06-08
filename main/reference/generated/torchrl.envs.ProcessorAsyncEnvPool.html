@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+023c965) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+c6440df) &#x25BC</span></a>
     </div>
     
 
@@ -1040,6 +1040,12 @@ this function will return the whole spec.</p>
 <dd><p>Erases all the cached values.</p>
 <p>For regular envs, the key lists (reward, done etc) are cached, but in some cases
 they may change during the execution of the code (eg, when adding a transform).</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.envs.ProcessorAsyncEnvPool.env_batch_sizes">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">env_batch_sizes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.7)"><span class="pre">torch.Size</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrl.envs.ProcessorAsyncEnvPool.env_batch_sizes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the batch-sizes of every env.</p>
 </dd></dl>
 
 <dl class="py method">
