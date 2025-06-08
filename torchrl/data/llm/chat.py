@@ -430,7 +430,7 @@ class History(TensorClass["nocast"]):
                 history = history.copy().clear_device_()
             else:
                 history = history.to(self.device)
-        return torch.stack(list(self.unbind(dim)) + [history], dim=dim)
+        return lazy_stack(list(self.unbind(dim)) + [history], dim=dim)
 
     def extend(
         self, history: History, *, inplace: bool = True, dim: int = 0

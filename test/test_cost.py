@@ -14328,6 +14328,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
 
 
 class TestValues:
+    @pytest.mark.skipif(not _has_gym, reason="requires gym")
     def test_gae_multi_done(self):
 
         # constants

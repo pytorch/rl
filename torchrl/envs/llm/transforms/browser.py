@@ -8,17 +8,11 @@
 from __future__ import annotations
 
 import asyncio
-import json
-import re
-import signal
-from contextlib import asynccontextmanager
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urlparse
 
-from playwright.async_api import async_playwright
 from tensordict import TensorDictBase
 
-from torchrl.data.llm import History
 from torchrl.envs.llm.transforms.tools import MCPToolTransform
 
 # Schema for the browser tool
@@ -147,6 +141,8 @@ class BrowserTransform(MCPToolTransform):
 
     async def _init_browser(self):
         """Initialize the browser if not already initialized."""
+        from playwright.async_api import async_playwright
+
         if self.browser is None:
             playwright = await async_playwright().start()
             self.browser = await playwright.chromium.launch(headless=self.headless)
@@ -213,7 +209,7 @@ class BrowserTransform(MCPToolTransform):
             return {"success": False, "error": str(e)}
 
     async def _extract(
-        self, selector: str, extract_type: str, attribute: Optional[str] = None
+        self, selector: str, extract_type: str, attribute: str | None = None
     ) -> dict[str, Any]:
         """Extract content from the page."""
         try:
