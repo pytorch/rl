@@ -124,7 +124,7 @@ def train(cfg: DictConfig) -> None:
         env,
         policy=policy,
         dialog_turns_per_batch=cfg.train.steps_per_batch,
-        total_dialog_turns=1_000_000,
+        total_dialog_turns=cfg.train.total_dialog_turns,
         weight_updater=updater,
     )
     updater.maybe_init_group()

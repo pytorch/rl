@@ -4,9 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import contextlib
 import os
-from typing import Any, Literal, Sequence
+from typing import Any, Literal
 
 import torch
 from omegaconf import DictConfig
@@ -16,33 +15,6 @@ from torchrl import logger as torchrl_logger
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from transformers.tokenization_utils import PreTrainedTokenizer
-
-
-@contextlib.contextmanager
-def cuda_visible_devices(devices: Sequence[int]):
-    """Context manager for temporarily setting CUDA_VISIBLE_DEVICES.
-
-    This utility function allows temporary modification of CUDA device visibility,
-    useful for controlling which GPUs are accessible to different model components.
-
-    Args:
-        devices (Sequence[int]): List of CUDA device indices to make visible
-
-    Yields:
-        None: Use as a context manager
-
-    Example:
-        >>> with cuda_visible_devices([0, 1]):
-        ...     # Only GPUs 0 and 1 will be visible here
-        ...     model = create_model()
-    """
-    CUDA_VISIBLE_DEVICES = os.getenv("CUDA_VISIBLE_DEVICES")
-    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, devices))
-    yield
-    if CUDA_VISIBLE_DEVICES:
-        os.environ["CUDA_VISIBLE_DEVICES"] = CUDA_VISIBLE_DEVICES
-    else:
-        os.unsetenv("CUDA_VISIBLE_DEVICES")
 
 
 def get_train_model(
@@ -75,34 +47,43 @@ def get_train_model(
     # Get configured devices or default to [0]
     train_devices = cfg.train_model.get("devices", [0])
 
-    # Use cuda_visible_devices to restrict visible GPUs and let HF handle distribution
-    with cuda_visible_devices(train_devices):
-        device_map = "balanced" if len(train_devices) > 1 else "cuda:0"
-        train_model, train_tokenizer = get_hf_model(
-            cfg.model.name,
-            device_map=device_map,
-            lora=cfg.train_model.lora.enabled,
-            lora_r=cfg.train_model.lora.r,
-            lora_alpha=cfg.train_model.lora.alpha,
-            lora_dropout=cfg.train_model.lora.dropout,
-            gradient_checkpointing=cfg.train_model.gradient_checkpointing,
-            quantize=cfg.train_model.quantization.enabled,
-            torch_dtype=model_dtype,
-            attn_implementation=cfg.train_model.attn_implementation,
-            compile=cfg.model.compile,
-        )
+    # Create max_memory dict - set 0 memory for GPUs we don't want to use
+    max_memory = {}
+    for i in range(torch.cuda.device_count()):
+        if i in train_devices:
+            max_memory[f"cuda:{i}"] = "24GiB"  # Allow max memory for devices we want to use
+        else:
+            max_memory[f"cuda:{i}"] = "0GiB"  # No memory for other devices
+    max_memory["cpu"] = "24GiB"  # Allow CPU memory as fallback
 
-        # Force all model parameters to the same dtype
-        for param in train_model.parameters():
-            param.data = param.data.to(model_dtype)
+    # Let HF handle distribution with max_memory
+    device_map = "balanced" if len(train_devices) > 1 else f"cuda:{train_devices[0]}"
+    train_model, train_tokenizer = get_hf_model(
+        cfg.model.name,
+        device_map=device_map,
+        max_memory=max_memory,
+        lora=cfg.train_model.lora.enabled,
+        lora_r=cfg.train_model.lora.r,
+        lora_alpha=cfg.train_model.lora.alpha,
+        lora_dropout=cfg.train_model.lora.dropout,
+        gradient_checkpointing=cfg.train_model.gradient_checkpointing,
+        quantize=cfg.train_model.quantization.enabled,
+        torch_dtype=model_dtype,
+        attn_implementation=cfg.train_model.attn_implementation,
+        compile=cfg.model.compile,
+    )
 
-        policy_training = TransformersWrapper(
-            train_model,
-            tokenizer=train_tokenizer,
-            from_text=False,
-            generate=False,
-            return_log_probs=True,
-        )
+    # Force all model parameters to the same dtype
+    for param in train_model.parameters():
+        param.data = param.data.to(model_dtype)
+
+    policy_training = TransformersWrapper(
+        train_model,
+        tokenizer=train_tokenizer,
+        from_text=False,
+        generate=False,
+        return_log_probs=True,
+    )
     return policy_training, train_tokenizer
 
 
@@ -177,30 +158,39 @@ def get_ref_model(
     # Get configured devices or default to [2]
     ref_devices = cfg.ref_model.get("devices", [2])
 
-    # Use cuda_visible_devices to restrict to reference device
-    with cuda_visible_devices(ref_devices):
-        device_map = "balanced" if len(ref_devices) > 1 else "cuda:0"
-        model_name = cfg.model.name
+    # Create max_memory dict - set 0 memory for GPUs we don't want to use
+    max_memory = {}
+    for i in range(torch.cuda.device_count()):
+        if i in ref_devices:
+            max_memory[f"cuda:{i}"] = "24GiB"  # Allow max memory for devices we want to use
+        else:
+            max_memory[f"cuda:{i}"] = "0GiB"  # No memory for other devices
+    max_memory["cpu"] = "24GiB"  # Allow CPU memory as fallback
 
-        ref_model = get_hf_model(
-            model_name,
-            device_map=device_map,
-            torch_dtype=getattr(torch, cfg.ref_model.torch_dtype),
-            quantize=cfg.ref_model.quantization.enabled,
-            gradient_checkpointing=cfg.ref_model.gradient_checkpointing,
-            attn_implementation=cfg.ref_model.attn_implementation,
-            lora=False,  # Reference model doesn't need LoRA
-            requires_grad=False,
-        )[0].eval()
-        # Detach weights
-        TensorDict.from_module(ref_model).data.to_module(ref_model)
-        ref_model = TransformersWrapper(
-            ref_model,
-            tokenizer=tokenizer,
-            from_text=False,
-            generate=False,
-            return_log_probs=True,
-        )
+    # Let HF handle distribution with max_memory
+    device_map = "balanced" if len(ref_devices) > 1 else f"cuda:{ref_devices[0]}"
+    model_name = cfg.model.name
+
+    ref_model = get_hf_model(
+        model_name,
+        device_map=device_map,
+        max_memory=max_memory,
+        torch_dtype=getattr(torch, cfg.ref_model.torch_dtype),
+        quantize=cfg.ref_model.quantization.enabled,
+        gradient_checkpointing=cfg.ref_model.gradient_checkpointing,
+        attn_implementation=cfg.ref_model.attn_implementation,
+        lora=False,  # Reference model doesn't need LoRA
+        requires_grad=False,
+    )[0].eval()
+    # Detach weights
+    TensorDict.from_module(ref_model).data.to_module(ref_model)
+    ref_model = TransformersWrapper(
+        ref_model,
+        tokenizer=tokenizer,
+        from_text=False,
+        generate=False,
+        return_log_probs=True,
+    )
     return ref_model
 
 
@@ -224,6 +214,7 @@ def get_hf_model(
     | None = "flex_attention",
     requires_grad: bool = True,
     compile: bool = False,
+    max_memory: dict[str, str] | None = None,
 ) -> tuple[AutoModelForCausalLM, PreTrainedTokenizer]:
     """Creates and configures a HuggingFace model with optional optimizations.
 
@@ -243,6 +234,7 @@ def get_hf_model(
             Attention implementation to use. Default: "flex_attention"
         requires_grad (bool, optional): Whether to enable gradient computation. Default: True
         compile (bool, optional): Whether to enable model compilation. Default: False
+        max_memory (dict[str, str], optional): Memory configuration for distributed training. Default: {}
 
     Returns:
         tuple[AutoModelForCausalLM, PreTrainedTokenizer]:
@@ -254,6 +246,9 @@ def get_hf_model(
         RuntimeError: If model initialization fails
     """
     from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    if max_memory is None:
+        max_memory = {}
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     if tokenizer.pad_token == tokenizer.eos_token:
@@ -268,6 +263,7 @@ def get_hf_model(
     model_configs = {
         "torch_dtype": torch_dtype,
         "device_map": device_map if device_map is not None else "auto",
+        "max_memory": max_memory,
     }
     if torch.cuda.is_available() and attn_implementation:
         torchrl_logger.info(f"{attn_implementation} init")

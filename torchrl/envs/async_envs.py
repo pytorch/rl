@@ -747,7 +747,7 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
 
     @property
     def env_batch_sizes(self) -> list[torch.Size]:
-        return [env.batch_sizes for env in self.envs]
+        return [env.batch_size for env in self.envs]
 
     @classmethod
     def _get_specs(cls, env: EnvBase):

@@ -62,10 +62,7 @@ stream_handlers = {
     "stderr": sys.stderr,
 }
 TORCHRL_CONSOLE_STREAM = os.getenv("TORCHRL_CONSOLE_STREAM")
-if TORCHRL_CONSOLE_STREAM:
-    stream_handler = stream_handlers[TORCHRL_CONSOLE_STREAM]
-else:
-    stream_handler = None
+stream_handler = stream_handlers.get(TORCHRL_CONSOLE_STREAM, sys.stdout)
 
 
 # Create colored handler

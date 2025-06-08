@@ -17,9 +17,9 @@ GRPO is a method for training language models using reinforcement learning, with
 1. Install dependencies:
 ```bash
 # GSM8K deps
-pip install -r sota-implementations/llm/requirements_gsm8k.txt
+pip install -r sota-implementations/grpo/requirements_gsm8k.txt
 # IFEval deps
-pip install -r sota-implementations/llm/requirements_ifeval.txt
+pip install -r sota-implementations/grpo/requirements_ifeval.txt
 ```
 
 2. Set required environment variables:
@@ -34,42 +34,13 @@ export VLLM_USE_V1=0  # Required for vLLM compatibility
   - vLLM inference device
   - Reference model device
 
+Devices can be controlled via the `training_model.devices`, `inference_model.devices` and `ref_model.devices` arguments.
+
 ## Configuration
 
-The training configuration is managed through Hydra. The main config file is `config/grpo.yaml`:
-
-```yaml
-env:
-  dataset: gsm8k  # choices: [gsm8k, ifeval]
-  num_envs: 8     # number of parallel environments
-  repeats: 16     # action repeats for GRPO
-
-model:
-  name: Qwen/Qwen2.5-3B  # HuggingFace model name
-  compile: false         # enable torch.compile
-
-policy:
-  kl_coef: 1e-2  # KL penalty coefficient
-
-train:
-  epochs: 1
-  steps_per_batch: 64
-  optim_batch_size: 4
-  gradient_accumulation_steps: 1
-  mixed_precision: true
-  optimizer:
-    name: AdamW
-    lr: 1e-5
-    clip_grad_norm: 0.5
-
-system:
-  gpu_memory_utilization: 0.5
-
-logging:
-  checkpoint_dir: checkpoints
-  experiment_name: null  # auto-generated if null
-  checkpoint_frequency: 10  # save every N batches
-```
+The training configuration is managed through Hydra. There are two main configuration files:
+- `config/grpo_gsm8k.yaml`: Default configuration for GSM8K tasks (default)
+- `config/grpo_ifeval.yaml`: Configuration optimized for IFEval tasks
 
 ## Usage
 
@@ -129,9 +100,7 @@ Checkpoints are saved every `logging.checkpoint_frequency` batches and contain:
 - Gradient scaler state (for mixed precision)
 - Full configuration
 
-## Debugging
-
-### Out-of-memory issues
+## Debugging Out-of-memory issues
 
 - vLLM: Reduce `inference_model.gpu_memory_utilization=FRACTION` or number of environments run
   in parallel (`env.num_envs=N`).
@@ -139,14 +108,13 @@ Checkpoints are saved every `logging.checkpoint_frequency` batches and contain:
   reduce the number of environments (`env.num_envs=N`) run in parallel.
 - Training: Reduce batch size (`train.optim_batch_size`)
 
-### vLLM / Ray 
-
 ## Directory Structure
 
 ```
-sota-implementations/llm/
+sota-implementations/grpo/
 ├── config/
-│   └── grpo.yaml       # Main configuration file
+│   └── grpo_gsm8k.yaml       # Main configuration file
+│   └── grpo_ifeval.yaml       # config file for IFEval task
 ├── grpo.py            # Training script
 ├── grpo_utils.py      # Utility functions
 └── README.md          # This file
@@ -166,18 +134,3 @@ outputs/
 ```
 
 For hyperparameter sweeps, outputs are stored under `multirun/`.
-
-## Citation
-
-If you use this implementation in your research, please cite:
-```bibtex
-@misc{grpo2024,
-  title={GRPO: Generalized Reward-Conditioned Policy Optimization},
-  author={[Authors]},
-  year={2024}
-}
-```
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details. 

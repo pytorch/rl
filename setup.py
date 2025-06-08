@@ -195,13 +195,7 @@ def _main(argv):
     sys.argv = [sys.argv[0]] + unknown
 
     extra_requires = {
-        "atari": [
-            "gym",
-            "atari-py",
-            "ale-py",
-            "gym[accept-rom-license]",
-            "pygame",
-        ],
+        "atari": ["gymnasium[atari]"],
         "dm_control": ["dm_control"],
         "replay_buffer": ["torch>=2.7.0"],
         "gym_continuous": ["gymnasium<1.0", "mujoco"],

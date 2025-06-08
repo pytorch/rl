@@ -60,6 +60,8 @@ train:
   # that in sync contexts the training node will need to wait for a batch to be completed
   # before starting the next one.
   steps_per_batch: 16
+  # Total number of dialog turns to collect during training
+  total_dialog_turns: 1_000_000
   # Number of batches to run in parallel. This determines the batch size passed to the optimizer.
   # More batches consume more GPU memory.
   optim_batch_size: 1
