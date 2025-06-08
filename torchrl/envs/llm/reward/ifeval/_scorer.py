@@ -17,12 +17,14 @@ from __future__ import annotations
 
 import importlib.util
 import re
+from typing import Callable
 
 import torch
-from jedi.inference.gradual.typing import Callable
 
 from tensordict import NestedKey, NonTensorData, TensorClass, TensorDict, TensorDictBase
 from tensordict.tensorclass import is_non_tensor
+
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.data.tensor_specs import Composite, TensorSpec, Unbounded
 from torchrl.envs import Transform
@@ -147,6 +149,7 @@ class IfEvalScorer(Transform):
         response = tensordict.get(self.response_key)
         if is_non_tensor(response):
             response = response.data
+        torchrl_logger.info(f"{response=}")
 
         # TODO: This should be a distinct module
         # Regular expression patterns to match think and answer blocks

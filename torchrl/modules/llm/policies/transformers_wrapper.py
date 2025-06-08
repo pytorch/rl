@@ -216,11 +216,14 @@ class TransformersWrapper(CategoricalSequential):
         if not tensordict.ndim:
             # unsqueeze - squeeze the input
             try:
-                return self(lazy_stack([tensordict]))[0]
+                return self(lazy_stack([tensordict])).squeeze(0)
             except Exception as e:
                 raise RuntimeError(
                     f"Unsqueeze/squeeze failed. Inputs to {type(self).__name__} should ideally be 1 dimensional."
                 ) from e
+        elif tensordict.ndim > 1:
+            return self(tensordict.reshape(-1)).view(tensordict.shape)
+
         _source_device = None
         if self._device:
             _source_device = tensordict.device
@@ -323,7 +326,10 @@ class TransformersWrapper(CategoricalSequential):
             _unpad_tensors(attention_mask, attention_mask, as_nested=False),
         )
         if self.return_log_probs:
-            out.set(self.log_prob_key, log_probs)
+            out.set(
+                self.log_prob_key,
+                _unpad_tensors(log_probs, mask_sequences, as_nested=False),
+            )
             out.set("logits", _unpad_tensors(logits, mask_sequences, as_nested=False))
         return out
 
@@ -376,7 +382,10 @@ class TransformersWrapper(CategoricalSequential):
             _unpad_tensors(attention_mask, attention_mask, as_nested=False),
         )
         if self.return_log_probs:
-            out.set(self.log_prob_key, log_probs)
+            out.set(
+                self.log_prob_key,
+                _unpad_tensors(log_probs, mask_sequences, as_nested=False),
+            )
             out.set("logits", _unpad_tensors(logits, mask_sequences, as_nested=False))
         return out
 
@@ -483,6 +492,8 @@ class TransformersWrapper(CategoricalSequential):
         log_probs, logits = self._log_probs_from_logits(
             total_tokens_out, response_input_ids, pad_val=pad_val
         )
+        # for i in range(log_probs.size(0)):
+        #     assert log_probs[i].shape[-1] == response_input_ids[i].shape[-1]
 
         out.set("logits", logits)
         out.set(self.log_prob_key, log_probs)

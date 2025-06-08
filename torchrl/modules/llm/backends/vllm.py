@@ -145,7 +145,12 @@ class LLMOnDevice(LLM):
             str(int(gpu_id)) for gpu_id in gpu_ids
         )
         torch.cuda.set_device(0)  # Since only one GPU is visible, it's cuda:0
-        super().__init__(*args, device="cuda:0", **kwargs)
+        self.args = args
+        self.kwargs = kwargs
+
+    def initialize(self):
+        super().__init__(*self.args, device="cuda:0", **self.kwargs)
+        return True
 
 
 def make_vllm_worker(
@@ -176,6 +181,10 @@ def make_vllm_worker(
         ...     ray.get(handle)
     """
     if make_ray_worker:
+        if len(devices) > 1:
+            raise ValueError(
+                "ray-based instantiation of vLLM does not support multiple devices at the moment."
+            )
         devices = [
             torch.device(device).index if not isinstance(device, int) else device
             for device in devices
@@ -190,7 +199,15 @@ def make_vllm_worker(
         if not ray.is_initialized():
             ray.init()
 
-        pg = placement_group([{"GPU": 1, "CPU": 1}] * torch.cuda.device_count())
+        pipeline_parallel_size = 1
+        node_id = 0
+        pg = placement_group(
+            [{"CPU": 1, "GPU": 1}] * torch.cuda.device_count(),
+            strategy="SPREAD"
+            if (pipeline_parallel_size and pipeline_parallel_size > 1)
+            else "STRICT_PACK",
+            _soft_target_node_id=node_id if pipeline_parallel_size is None else None,
+        )
 
         ray.get(pg.ready())
         scheduling_inference = PlacementGroupSchedulingStrategy(
@@ -201,11 +218,12 @@ def make_vllm_worker(
         torchrl_logger.info(
             f"Create vLLM worker with {devices=}, {scheduling_inference=}"
         )
-        return ray.remote(
-            num_gpus=len(devices),
+        worker_cls = ray.remote(
+            num_gpus=1,
             num_cpus=1,
             scheduling_strategy=scheduling_inference,
-        )(LLMOnDevice).remote(
+        )(LLMOnDevice)
+        worker = worker_cls.remote(
             model=model_name,
             # enforce_eager=True,
             dtype="bfloat16",
@@ -215,6 +233,9 @@ def make_vllm_worker(
             enable_chunked_prefill=True,
             **kwargs,
         )
+        ray.get(worker.initialize.remote())
+        return worker
+
     else:
         with _cuda_visible_devices(devices):
             return LLM(

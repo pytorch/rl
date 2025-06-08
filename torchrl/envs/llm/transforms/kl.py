@@ -160,7 +160,8 @@ class KLRewardTransform(Transform):
                 td_device, as_nested_tensor=True, layout=torch.strided
             )
         else:
-            ref_log_prob = self.actor(tensordict).get(self.sample_log_prob_key)
+            ref_log_prob_td = self.actor(tensordict)
+            ref_log_prob = ref_log_prob_td.get(self.sample_log_prob_key)
 
         reward_key = self.in_keys[0]
         reward = next_tensordict.get(reward_key)
@@ -178,13 +179,14 @@ class KLRewardTransform(Transform):
                 [rew.expand(lp.shape) for rew, lp in zip(reward, ref_log_prob)],
                 layout=torch.strided,
             )
-        if ref_log_prob[0].shape != curr_log_prob[0].shape:
-            # Don't check shapes if nested
-            raise ValueError(
-                f"the log-probability tensor shapes must match, got cur_log_prob.shape={curr_log_prob[0].shape} and log_prob.shape={ref_log_prob[0].shape}. "
-                f"One possible reason is that the padding token is identical to the eos token, which means that the eos_token log_prob is truncated from the "
-                f"reference model output."
-            )
+        for i in range(ref_log_prob.size(0)):
+            if ref_log_prob[i].shape != curr_log_prob[i].shape:
+                # Don't check shapes if nested
+                raise ValueError(
+                    f"the log-probability tensor shapes must match, got cur_log_prob.shape={curr_log_prob[i].shape} and log_prob.shape={ref_log_prob[i].shape}. "
+                    f"One possible reason is that the padding token is identical to the eos token, which means that the eos_token log_prob is truncated from the "
+                    f"reference model output."
+                )
         if reward is not None and reward.ndim != curr_log_prob.ndim:
             raise ValueError(
                 "The number of dimensions of reward must be the same as the number of dimensions of the KL "

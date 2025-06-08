@@ -209,37 +209,25 @@ class ChatEnv(EnvBase):
                 content = [content for _ in range(s)]
 
         # FIXME: Assume the text is not formatted and this is just content
-        content = TensorDict(
-            role=self.user_role, content=content, batch_size=self.batch_size
-        )
-        content["role"] = content.get("role").maybe_to_stack()
+        role = self.user_role
+        for s in reversed(self.batch_size):
+            role = [role for _ in range(s)]
+        content = History(role=role, content=content, batch_size=self.batch_size)
         if self.system_prompt is not None:
-            history = TensorDict(
-                {
-                    "role": self.system_role,
-                    "content": self.system_prompt,
-                }
-            )
+            role = self.system_role
+            system_prompt = self.system_prompt
             for s in reversed(self.batch_size):
-                history = [history for _ in range(s)]
-            history = TensorDict(history=history, batch_size=self.batch_size)
-        role = lazy_stack(
-            [
-                history.get(("history", "role")),
-                content.get("role"),
-            ],
-            -1,
-        )
-        content = lazy_stack(
-            [
-                history.get(("history", "content")),
-                content.get("content"),
-            ],
-            -1,
-        )
-        td = TensorDict(role=role, content=content, batch_size=self.batch_size + (2,))
+                role = [role for _ in range(s)]
+                system_prompt = [self.system_prompt for _ in range(s)]
+            history = History(
+                role=role,
+                content=system_prompt,
+                batch_size=self.batch_size,
+            )
+            history = lazy_stack([history, content], -1)
+        else:
+            history = content.unsqueeze(-1)
         # Extract history
-        history = History.from_tensordict(td)
         result = lazy_stack(
             list(
                 TensorDict(

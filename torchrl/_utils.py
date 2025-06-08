@@ -82,9 +82,10 @@ class _CustomFormatter(logging.Formatter):
         return formatted_message
 
 
-console_handler = logging.StreamHandler(stream_handler)
+console_handler = logging.StreamHandler(stream=stream_handler)
 console_handler.setFormatter(_CustomFormatter())
 logger.addHandler(console_handler)
+console_handler.setLevel(logging.INFO)
 
 VERBOSE = strtobool(os.environ.get("VERBOSE", str(logger.isEnabledFor(logging.DEBUG))))
 _os_is_windows = sys.platform == "win32"

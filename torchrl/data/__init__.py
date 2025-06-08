@@ -6,6 +6,7 @@
 from .llm import (
     AdaptiveKLController,
     ConstantKLController,
+    ContentBase,
     create_infinite_iterator,
     get_dataloader,
     History,
@@ -114,6 +115,7 @@ __all__ = [
     "BoundedTensorSpec",
     "Categorical",
     "Choice",
+    "ContentBase",
     "Composite",
     "CompositeSpec",
     "ConstantKLController",
