@@ -182,7 +182,7 @@ def get_available_devices():
 def get_default_devices():
     num_cuda = torch.cuda.device_count()
     if num_cuda == 0:
-        # if torch.mps.is_available():
+        # if getattr(torch.mps, "is_available", lambda: False)():
         #     return [torch.device("mps:0")]
         return [torch.device("cpu")]
     elif num_cuda == 1:
