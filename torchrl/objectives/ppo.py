@@ -76,6 +76,21 @@ class PPOLoss(LossModule):
         critic_network (ValueOperator): value operator. The critic will usually take the observations as input
             and return a scalar value (``state_value`` by default) in the output keys.
 
+    .. note::
+        While this loss module does not enforce any specific model mode (train/eval), it is highly recommended
+        to keep your model in eval mode during RL training to ensure deterministic behavior.
+        A failure to learn due to a train/eval mode mismatch is often observed when the Effective Sample Size (ESS)
+        drops or increases significantly (see note below).
+
+    .. note::
+        The PPO loss exposes a couple of additional metrics that can be used to monitor the training process:
+
+        - The clip fraction is the ratio of the number of clipped weights in the PPO loss (i.e. the ratio of the number of weights that were clipped to the total number of weights).
+        - The Effective Sample Size (ESS) is a measure of the effective number of samples in the batch, computed as the inverse of the sum of the squared importance weights.
+          A value of 1 indicates that the importance weights are all equal to 1 (i.e., the samples are equally weighted).
+          Any value below 1 indicates that the samples are not equally weighted, and the ESS is a measure of the effective number of samples.
+          If the value drops or increases significantly, it often indicates issues with the model configuration (such as a train/eval mode mismatch, or a large policy update).
+
     Keyword Args:
         entropy_bonus (bool, optional): if ``True``, an entropy bonus will be added to the
             loss to favour exploratory policies.
@@ -872,6 +887,21 @@ class ClipPPOLoss(PPOLoss):
     Args:
         actor_network (ProbabilisticTensorDictSequential): policy operator.
         critic_network (ValueOperator): value operator.
+
+    .. note::
+        While this loss module does not enforce any specific model mode (train/eval), it is highly recommended
+        to keep your model in eval mode during RL training to ensure deterministic behavior.
+        A failure to learn due to a train/eval mode mismatch is often observed when the Effective Sample Size (ESS)
+        drops or increases significantly (see note below).
+
+    .. note::
+        The PPO loss exposes a couple of additional metrics that can be used to monitor the training process:
+
+        - The clip fraction is the ratio of the number of clipped weights in the PPO loss (i.e. the ratio of the number of weights that were clipped to the total number of weights).
+        - The Effective Sample Size (ESS) is a measure of the effective number of samples in the batch, computed as the inverse of the sum of the squared importance weights.
+          A value of 1 indicates that the importance weights are all equal to 1 (i.e., the samples are equally weighted).
+          Any value below 1 indicates that the samples are not equally weighted, and the ESS is a measure of the effective number of samples.
+          If the value drops or increases significantly, it often indicates issues with the model configuration (such as a train/eval mode mismatch, or a large policy update).
 
     Keyword Args:
         clip_epsilon (scalar, optional): weight clipping threshold in the clipped PPO loss equation.

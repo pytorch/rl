@@ -118,7 +118,7 @@ class WandbLogger(Logger):
 
         Args:
             name (str): The name of the scalar.
-            value (:obj:`float`): The value of the scalar.
+            value (float): The value of the scalar.
             step (int, optional): The step at which the scalar is logged.
                 Defaults to None.
         """
@@ -205,7 +205,7 @@ class WandbLogger(Logger):
 
         Keyword Args:
             step (int): Global step value to record
-            bins (str): One of {‘tensorflow’,’auto’, ‘fd’, …}. This determines how the bins are made. You can find other options in: https://docs.scipy.org/doc/numpy/reference/generated/numpy.histogram.html
+            bins (str): One of {'tensorflow','auto', 'fd', …}. This determines how the bins are made. You can find other options in: https://docs.scipy.org/doc/numpy/reference/generated/numpy.histogram.html
 
         """
         import wandb
@@ -218,3 +218,22 @@ class WandbLogger(Logger):
         self.experiment.log(
             {name: wandb.Histogram(data, num_bins=num_bins), **extra_kwargs}
         )
+
+    def log_str(self, name: str, value: str, step: int | None = None) -> None:
+        """Logs a string value to wandb using a table format for better visualization.
+
+        Args:
+            name (str): The name of the string data.
+            value (str): The string value to log.
+            step (int, optional): The step at which the string is logged.
+                Defaults to None.
+        """
+        import wandb
+
+        # Create a table with a single row
+        table = wandb.Table(columns=["text"], data=[[value]])
+
+        if step is not None:
+            self.experiment.log({name: table, "trainer/step": step})
+        else:
+            self.experiment.log({name: table})

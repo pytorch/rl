@@ -49,6 +49,17 @@ class GRPOLoss(ClipPPOLoss):
     Args:
         actor_network (ProbabilisticTensorDictSequential): policy operator.
 
+    .. note::
+        It is critical to keep your model in eval mode during GRPO training to ensure deterministic behavior and correct
+        importance sampling. A mismatch between train and eval modes is a common cause of instability or failure to learn
+        in RL post-training.
+
+    .. note::
+        The Effective Sample Size (ESS) is a key diagnostic metric in GRPO. ESS measures the effective number of samples
+        in the batch, computed as the inverse of the sum of the squared importance weights.
+        A value of 1 indicates that all importance weights are equal (ideal case). If ESS drops or increases significantly,
+        it usually indicates a problem with the model configuration, such as a train/eval mode mismatch or a large policy update.
+
     Keyword Args:
         clip_epsilon (scalar, optional): weight clipping threshold in the clipped PPO loss equation.
             default: 0.2

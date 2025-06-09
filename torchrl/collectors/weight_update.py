@@ -6,11 +6,10 @@ from __future__ import annotations
 
 import abc
 import weakref
-from abc import abstractmethod
 from typing import Any, Callable, TypeVar
 
 import torch
-from tensordict import TensorDictBase
+from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 from torchrl._utils import logger as torchrl_logger
 
@@ -28,19 +27,23 @@ class WeightUpdaterBase(metaclass=abc.ABCMeta):
 
     In a collector, the updater is called within :meth:`~torchrl.collector.DataCollectorBase.update_policy_weights_`.`
 
-    The main method of this class is the :meth:`~.push_weights` method, which updates the policy weights in the worker /
-    policy.
+    The main method of this class is the :meth:`~._push_weights` method, which updates the policy weights in the worker /
+    policy. This method is called by :meth:`~.push_weights`, which also calls the post-hooks: only `_push_weights` should
+    be implemented by child classes.
 
     To extend this class, implement the following abstract methods:
 
     - `_get_server_weights` (optional): Define how to retrieve the weights from the server if they are not passed to
-        the updater directly. This method is only called if the weights (hanlde) is not passed directly.
+        the updater directly. This method is only called if the weights (handle) is not passed directly.
     - `_sync_weights_with_worker`: Define how to synchronize weights with a specific worker.
         This method must be implemented by child classes.
     - `_maybe_map_weights`: Optionally transform the server weights before distribution.
         By default, this method returns the weights unchanged.
     - `all_worker_ids`: Provide a list of all worker identifiers.
         Returns `None` by default (no worker id).
+    - `from_policy` (optional classmethod): Define how to create an instance of the weight updater from a policy.
+        If implemented, this method will be called before falling back to the default constructor when initializing
+        a weight updater in a collector.
 
     Attributes:
         collector: The collector (or any container) of the weight receiver. The collector is registered via
@@ -51,12 +54,45 @@ class WeightUpdaterBase(metaclass=abc.ABCMeta):
             The `__call__` method is a proxy to `push_weights`.
         register_collector: Registers the collector (or any container) in the receiver through a weakref.
             This will be called automatically by the collector upon registration of the updater.
+        from_policy: Optional classmethod to create an instance from a policy.
+
+    Post-hooks:
+        - `register_post_hook`: Registers a post-hook to be called after the weights are updated.
+            The post-hook must be a callable that takes no arguments.
+            The post-hook will be called after the weights are updated.
+            The post-hook will be called in the same process as the weight updater.
+            The post-hook will be called in the same order as the post-hooks were registered.
 
     .. seealso:: :meth:`~torchrl.collectors.DataCollectorBase.update_policy_weights_`.
 
     """
 
     _collector_wr: Any = None
+    _post_hooks: list[Callable[[], Any]] | None = None
+
+    @property
+    def post_hooks(self) -> list[Callable[[], None]]:
+        """The list of post-hooks registered to the weight updater."""
+        if self._post_hooks is None:
+            self._post_hooks = []
+        return self._post_hooks
+
+    @classmethod
+    def from_policy(cls, policy: TensorDictModuleBase) -> WeightUpdaterBase | None:
+        """Optional classmethod to create a weight updater instance from a policy.
+
+        This method can be implemented by subclasses to provide custom initialization logic
+        based on the policy. If implemented, this method will be called before falling back
+        to the default constructor when initializing a weight updater in a collector.
+
+        Args:
+            policy (TensorDictModuleBase): The policy to create the weight updater from.
+
+        Returns:
+            WeightUpdaterBase | None: An instance of the weight updater, or None if the policy
+                cannot be used to create an instance.
+        """
+        return None
 
     def register_collector(self, collector: DataCollectorBase):  # noqa
         """Register a collector in the updater.
@@ -79,66 +115,31 @@ class WeightUpdaterBase(metaclass=abc.ABCMeta):
         """
         return self._collector_wr() if self._collector_wr is not None else None
 
-    def _get_server_weights(self) -> Any:
-        """An optional method to gather weights from the server.
-
-        This method is called only if the weights (handle) are not passed directly to the update method.
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def _sync_weights_with_worker(
-        self, *, worker_id: int | torch.device | None = None, server_weights: Any
-    ) -> Any:
-        """An abstract method that updates the weights on specified workers.
-
-        The worker id can be `None` if there are no workers associated with the sender.
-        """
-        ...
-
-    def _maybe_map_weights(self, server_weights: Any) -> Any:
-        """Optionally transforms the server weights to match the local weights."""
-        return server_weights
-
-    def all_worker_ids(self) -> list[int] | list[torch.device] | None:
-        """Returns a list of all worker identifiers or `None` if there are no workers associated."""
-        return
-
-    def _skip_update(self, worker_id: int | torch.device) -> bool:
-        """A method to determine if a worker should be skipped."""
-        return False
-
-    def __call__(
-        self,
-        weights: Any = None,
-        worker_ids: torch.device | int | list[int] | list[torch.device] | None = None,
-    ):
-        """A proxy to :meth:`~.push_weights`."""
-        return self.push_weights(weights=weights, worker_ids=worker_ids)
-
-    def push_weights(
+    def _push_weights(
         self,
         *,
-        weights: Any | None = None,
+        policy_or_weights: TensorDictModuleBase | TensorDictBase | dict | None = None,
         worker_ids: torch.device | int | list[int] | list[torch.device] | None = None,
     ):
         """Updates the weights of the policy, or on specified / all remote workers.
 
         Args:
-            weights (Any): The source weights to push to the policy / workers.
-            worker_ids (torch.device | int | list[int] | list[torch.device] | None = None): an optional list of
-                workers to update.
+            policy_or_weights: The source to get weights from. Can be:
+                - TensorDictModuleBase: A policy module whose weights will be extracted
+                - TensorDictBase: A TensorDict containing weights
+                - dict: A regular dict containing weights
+                - None: Will try to get weights from server using _get_server_weights()
+            worker_ids: An optional list of workers to update.
 
         Returns: nothing.
-
         """
-        if weights is None:
+        if policy_or_weights is None:
             # Get the weights on server (local)
             server_weights = self._get_server_weights()
         else:
-            server_weights = weights
+            server_weights = policy_or_weights
 
-        self._maybe_map_weights(server_weights)
+        server_weights = self._maybe_map_weights(server_weights)
 
         # Get the remote weights (inference workers)
         if isinstance(worker_ids, (int, torch.device)):
@@ -154,6 +155,154 @@ class WeightUpdaterBase(metaclass=abc.ABCMeta):
             self._sync_weights_with_worker(
                 worker_id=worker, server_weights=server_weights
             )
+
+    def push_weights(
+        self,
+        policy_or_weights: TensorDictModuleBase | TensorDictBase | dict | None = None,
+        worker_ids: torch.device | int | list[int] | list[torch.device] | None = None,
+    ):
+        """Updates the weights of the policy, or on specified / all remote workers.
+
+        Args:
+            policy_or_weights: The source to get weights from. Can be:
+                - TensorDictModuleBase: A policy module whose weights will be extracted
+                - TensorDictBase: A TensorDict containing weights
+                - dict: A regular dict containing weights
+                - None: Will try to get weights from server using _get_server_weights()
+            worker_ids: An optional list of workers to update.
+
+        Returns: nothing.
+        """
+        self._push_weights(policy_or_weights=policy_or_weights, worker_ids=worker_ids)
+        self._call_post_hooks()
+
+    def init(self, *args, **kwargs):
+        """Initialize the weight updater with custom arguments.
+
+        This method can be overridden by subclasses to handle custom initialization.
+        By default, this is a no-op.
+
+        Args:
+            *args: Positional arguments for initialization
+            **kwargs: Keyword arguments for initialization
+        """
+        return
+
+    def register_post_hook(self, hook: Callable[[], None]):
+        """Registers a post-hook to be called after weights are updated.
+
+        Args:
+            hook (Callable[[], None]): The post-hook to register.
+        """
+        self.post_hooks.append(hook)
+
+    def _call_post_hooks(self):
+        """Calls all registered post-hooks in order."""
+        for hook in self.post_hooks:
+            hook()
+
+    def _skip_update(self, worker_id: int | torch.device) -> bool:
+        """Whether to skip updating weights for a worker.
+
+        By default, never skips updates. Subclasses can override this to implement
+        custom update frequency logic.
+
+        Args:
+            worker_id (int | torch.device): The worker ID to check.
+
+        Returns:
+            bool: Whether to skip the update.
+        """
+        return False
+
+    @abc.abstractmethod
+    def _sync_weights_with_worker(
+        self,
+        *,
+        worker_id: int | torch.device | None = None,
+        server_weights: TensorDictBase,
+    ) -> None:
+        """Synchronizes weights with a specific worker.
+
+        This method must be implemented by child classes to define how weights are
+        synchronized with workers.
+
+        Args:
+            worker_id (int | torch.device | None): The worker to sync with, if applicable.
+            server_weights (TensorDictBase): The weights from the server to sync.
+        """
+        raise NotImplementedError
+
+    def _get_server_weights(self) -> TensorDictBase | None:
+        """Gets the weights from the server.
+
+        This method is called when no weights are passed to push_weights().
+        By default returns None. Subclasses can override to implement custom
+        weight retrieval logic.
+
+        Returns:
+            TensorDictBase | None: The server weights, or None.
+        """
+        return None
+
+    def _maybe_map_weights(self, policy_or_weights: TensorDictBase) -> TensorDictBase:
+        """Optionally transforms server weights before distribution.
+
+        By default returns weights unchanged. Subclasses can override to implement
+        custom weight mapping logic.
+
+        Args:
+            policy_or_weights (Any): The weights - or any container or handler - to potentially transform, query or extract.
+
+        Returns:
+            TensorDictBase: The transformed weights.
+        """
+        if isinstance(policy_or_weights, TensorDictModuleBase):
+            # Extract weights from policy module
+            server_weights = TensorDict.from_module(policy_or_weights).data
+        elif isinstance(policy_or_weights, (TensorDictBase, dict)):
+            # Use weights directly
+            server_weights = policy_or_weights
+        else:
+            raise TypeError(
+                f"policy_or_weights must be None, TensorDictModuleBase, TensorDictBase or dict, got {type(policy_or_weights)}"
+            )
+        return server_weights
+
+    def all_worker_ids(self) -> list[int] | list[torch.device] | None:
+        """Gets list of all worker IDs.
+
+        Returns None by default. Subclasses should override to return actual worker IDs.
+
+        Returns:
+            list[int] | list[torch.device] | None: List of worker IDs or None.
+        """
+        return None
+
+    def __call__(
+        self,
+        policy_or_weights: TensorDictModuleBase | TensorDictBase | dict | None = None,
+        worker_ids: torch.device | int | list[int] | list[torch.device] | None = None,
+    ):
+        """Updates the weights of the policy, or on specified / all remote workers.
+
+        Args:
+            policy_or_weights: The source to get weights from. Can be:
+                - TensorDictModuleBase: A policy module whose weights will be extracted
+                - TensorDictBase: A TensorDict containing weights
+                - dict: A regular dict containing weights
+                - None: Will try to get weights from server using _get_server_weights()
+            worker_ids: An optional list of workers to update.
+
+        Returns: nothing.
+        """
+        return self.push_weights(
+            policy_or_weights=policy_or_weights, worker_ids=worker_ids
+        )
+
+    def increment_version(self):
+        """Increment the policy version."""
+        self.collector.increment_version()
 
 
 # Specialized classes
@@ -176,6 +325,23 @@ class VanillaWeightUpdater(WeightUpdaterBase):
         policy_weights (TensorDictBase): a TensorDictBase containing the policy weights to be updated
             in-place.
     """
+
+    @classmethod
+    def from_policy(cls, policy: TensorDictModuleBase) -> WeightUpdaterBase | None:
+        """Creates a VanillaWeightUpdater instance from a policy.
+
+        This method creates a weight updater that will update the policy's weights directly
+        using its state dict.
+
+        Args:
+            policy (TensorDictModuleBase): The policy to create the weight updater from.
+
+        Returns:
+            VanillaWeightUpdater: An instance of the weight updater configured to update
+                the policy's weights.
+        """
+        policy_weights = TensorDict.from_module(policy)
+        return cls(policy_weights=policy_weights.lock_())
 
     def __init__(
         self,

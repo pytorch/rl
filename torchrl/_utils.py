@@ -129,14 +129,28 @@ _DTYPE2STRDTYPE = _STR_DTYPE_TO_DTYPE
 
 
 class timeit:
-    """A dirty but easy to use decorator for profiling code."""
+    """A dirty but easy to use decorator for profiling code.
+
+    Args:
+        name (str): The name of the timer.
+
+    Examples:
+        >>> from torchrl import timeit
+        >>> @timeit("my_function")
+        >>> def my_function():
+            ...
+        >>> my_function()
+        >>> with timeit("my_other_function"):
+        ...     my_other_function()
+        >>> timeit.print()  # prints the state of the timer for each function
+    """
 
     _REG = {}
 
     def __init__(self, name):
         self.name = name
 
-    def __call__(self, fn):
+    def __call__(self, fn: Callable) -> Callable:
         @wraps(fn)
         def decorated_fn(*args, **kwargs):
             with self:
@@ -145,10 +159,10 @@ class timeit:
 
         return decorated_fn
 
-    def __enter__(self):
+    def __enter__(self) -> None:
         self.t0 = time.time()
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         t = time.time() - self.t0
         val = self._REG.setdefault(self.name, [0.0, 0.0, 0])
 
@@ -159,8 +173,11 @@ class timeit:
         val[2] = N
 
     @staticmethod
-    def print(prefix: str = None) -> str:  # noqa: T202
+    def print(prefix: str | None = None) -> str:  # noqa: T202
         """Prints the state of the timer.
+
+        Args:
+            prefix (str): The prefix to add to the keys. If `None`, no prefix is added.
 
         Returns:
             the string printed using the logger.
@@ -173,7 +190,7 @@ class timeit:
             if prefix:
                 strings.append(prefix)
             strings.append(
-                f"{name} took {timeit._REG[name][0] * 1000:4.4} msec (total = {timeit._REG[name][1]} sec)"
+                f"{name} took {timeit._REG[name][0] * 1000:4.4f} msec (total = {timeit._REG[name][1]: 4.4f} sec since last reset)."
             )
             string.append(" -- ".join(strings))
             logger.info(string[-1])
@@ -187,10 +204,18 @@ class timeit:
         num_prints: int,
         total_count: int,
         *,
-        prefix: str = None,
+        prefix: str | None = None,
         erase: bool = False,
     ) -> None:
-        """Prints the state of the timer at regular intervals."""
+        """Prints the state of the timer at regular intervals.
+
+        Args:
+            num_prints (int): The number of times to print the state of the timer, given the total_count.
+            total_count (int): The total number of times to print the state of the timer.
+            prefix (str): The prefix to add to the keys. If `None`, no prefix is added.
+            erase (bool): If True, erase the timer after printing. Default is `False`.
+
+        """
         interval = max(1, total_count // num_prints)
         if cls._printevery_count % interval == 0:
             cls.print(prefix=prefix)
@@ -199,7 +224,16 @@ class timeit:
         cls._printevery_count += 1
 
     @classmethod
-    def todict(cls, percall=True, prefix=None):
+    def todict(
+        cls, percall: bool = True, prefix: str | None = None
+    ) -> dict[str, float]:
+        """Convert the timer to a dictionary.
+
+        Args:
+            percall (bool): If True, return the average time per call.
+            prefix (str): The prefix to add to the keys.
+        """
+
         def _make_key(key):
             if prefix:
                 return f"{prefix}/{key}"
@@ -211,8 +245,20 @@ class timeit:
 
     @staticmethod
     def erase():
+        """Erase the timer.
+
+        .. seealso:: :meth:`reset`
+        """
         for k in timeit._REG:
             timeit._REG[k] = [0.0, 0.0, 0]
+
+    @classmethod
+    def reset(cls):
+        """Reset the timer.
+
+        .. seealso:: :meth:`erase`
+        """
+        cls.erase()
 
 
 def _check_for_faulty_process(processes):
@@ -1150,3 +1196,24 @@ def safe_is_current_stream_capturing():
             f"Returning False by default."
         )
         return False
+
+
+@classmethod
+def as_remote(cls, remote_config: dict[str, Any] | None = None):
+    """Creates an instance of a remote ray class.
+
+    Args:
+        cls (Python Class): class to be remotely instantiated.
+        remote_config (dict): the quantity of CPU cores to reserve for this class.
+
+    Returns:
+        A function that creates ray remote class instances.
+    """
+    import ray
+
+    if remote_config is None:
+        remote_config = {}
+
+    remote_collector = ray.remote(**remote_config)(cls)
+    remote_collector.is_remote = True
+    return remote_collector

@@ -13,7 +13,7 @@ import time
 
 import pytest
 import torch
-from mocking_classes import DummyStrDataLoader, DummyTensorDataLoader
+from mocking_classes_llm import DummyStrDataLoader, DummyTensorDataLoader
 
 from tensordict import (
     lazy_stack,

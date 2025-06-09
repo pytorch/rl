@@ -152,10 +152,10 @@ class KLRewardTransform(Transform):
                 next_tensordict.set(self.out_keys[0], self.parent.reward_spec.zero())
             return next_tensordict
         if hasattr(self.actor, "log_prob"):
-            if self.device is not None:
+            if self.device is not None and tensordict.device != self.device:
                 td_device = tensordict.to(self.device)
             else:
-                td_device = tensordict
+                td_device = tensordict.copy()
             ref_log_prob = self.actor.log_prob(
                 td_device, as_nested_tensor=True, layout=torch.strided
             )
@@ -224,20 +224,15 @@ class KLRewardTransform(Transform):
             reward_keys = parent.reward_keys
             if len(reward_keys) == 1:
                 reward_key = reward_keys[0]
-                shape = output_spec["full_reward_spec"][reward_key].shape
-                if len(shape) > 2:
-                    # For LLMs, the shape of the reward is (batch, -1, 1)
-                    shape = (*shape[:-2], -1, 1)
+                shape = output_spec["full_reward_spec"].shape
             elif "reward" in reward_keys:
                 reward_key = "reward"
-                shape = output_spec["full_reward_spec"][reward_key].shape
-                if len(shape) > 2:
-                    # For LLMs, the shape of the reward is (batch, -1, 1)
-                    shape = (*shape[:-2], -1, 1)
+                shape = output_spec["full_reward_spec"].shape
             else:
                 shape = output_spec.shape
-                shape = (*shape, -1, 1)
                 reward_key = "reward"
+            # For LLMs, the shape of the reward is (batch, -1, 1)
+            shape = (*shape, -1, 1)
             reward_spec = Unbounded(
                 device=output_spec.device,
                 shape=shape,
@@ -251,10 +246,9 @@ class KLRewardTransform(Transform):
             parent = self.parent
             reward_spec = output_spec["full_reward_spec"][parent.reward_key]
 
-            shape = reward_spec.shape
-            if len(shape) > 2:
-                # For LLMs, the shape of the reward is (batch, -1, 1)
-                shape = (*shape[:-2], -1, 1)
+            shape = output_spec["full_reward_spec"].shape
+            # For LLMs, the shape of the reward is (batch, -1, 1)
+            shape = (*shape, -1, 1)
             reward_spec = reward_spec.clone()
             reward_spec.shape = torch.Size(shape)
 
@@ -264,8 +258,8 @@ class KLRewardTransform(Transform):
             observation_spec = output_spec["full_observation_spec"]
             reward_spec = observation_spec[in_key]
 
-            shape = reward_spec.shape
-            shape = (*shape[:-2], -1, 1)
+            shape = observation_spec.shape
+            shape = (*shape, -1, 1)
             reward_spec = reward_spec.clone()
             reward_spec.shape = torch.Size(shape)
 
