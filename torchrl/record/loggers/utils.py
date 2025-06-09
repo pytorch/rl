@@ -31,11 +31,11 @@ def get_logger(
     """Get a logger instance of the provided `logger_type`.
 
     Args:
-        logger_type (str): One of tensorboard / csv / wandb / mlflow.
+        logger_type (str): One of tensorboard / csv / wandb / mlflow / neptune.
             If empty, ``None`` is returned.
         logger_name (str): Name to be used as a log_dir
         experiment_name (str): Name of the experiment
-        kwargs (dict[str]): might contain either `wandb_kwargs` or `mlflow_kwargs`
+        kwargs (dict[str]): might contain either `wandb_kwargs`, `mlflow_kwargs` or `neptune_kwargs`
     """
     if logger_type == "tensorboard":
         from torchrl.record.loggers.tensorboard import TensorboardLogger
@@ -62,6 +62,13 @@ def get_logger(
             tracking_uri=pathlib.Path(os.path.abspath(logger_name)).as_uri(),
             exp_name=experiment_name,
             **mlflow_kwargs,
+        )
+    elif logger_type == "neptune":
+        from torchrl.record.loggers.neptune import NeptuneLogger
+
+        neptune_kwargs = kwargs.get("neptune_kwargs", {})
+        logger = NeptuneLogger(
+            log_dir=logger_name, exp_name=experiment_name, **neptune_kwargs
         )
     elif logger_type in ("", None):
         return None
