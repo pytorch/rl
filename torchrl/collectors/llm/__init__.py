@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from .base import LLMCollector
+from .ray_collector import RayLLMCollector
 from .weight_update import vLLMUpdater
 
-__all__ = ["vLLMUpdater", "LLMCollector"]
+__all__ = ["vLLMUpdater", "LLMCollector", "RayLLMCollector"]

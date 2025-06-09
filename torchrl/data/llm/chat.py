@@ -139,6 +139,9 @@ class History(TensorClass["nocast"]):
     Attributes:
         role (str): The role of the message sender.
         content (str): The content of the message.
+        is_complete (bool): Whether the message was properly terminated with an end token. Defaults to `True`.
+        tool_calls (list[dict] | None): Optional list of tool calls in the message.
+        tool_responses (list[str] | None): Optional list of tool responses.
 
     Methods:
         apply_chat_template: converts the `History` object to str / tokens.
@@ -190,7 +193,7 @@ class History(TensorClass["nocast"]):
 
     role: str
     content: str | ContentBase
-
+    is_complete: bool = True
     tool_calls: list[dict] | None = None
     tool_responses: list[str] | None = None
 
@@ -289,7 +292,13 @@ class History(TensorClass["nocast"]):
                 "chat_template_name must be one of ('chatml_format', 'qwen')"
             )
         if isinstance(text, list):
-            return torch.stack([func(t) for t in text])
+            list_of_histories = [func(t) for t in text]
+            try:
+                return lazy_stack(list_of_histories)
+            except RuntimeError as e:
+                raise RuntimeError(
+                    f"Failed to stack histories: {list_of_histories=}"
+                ) from e
         return func(text)
 
     @classmethod
@@ -302,73 +311,159 @@ class History(TensorClass["nocast"]):
         Returns:
             History: The inverted History object.
         """
+        import json
+
         torchrl_logger.debug(f"Inverting chatml:\n{text}")
-        pattern = r"<\|im_start\|>(.*?)\n(.*?)<\|im_end\|>"
-        matches = re.findall(pattern, text, flags=re.DOTALL)
-        roles = []
-        contents = []
+        # Find all complete blocks (ending with im_end or endoftext)
+        complete_pattern = r"<\|im_start\|>(.*?)\n(.*?)<\|(im_end|endoftext)\|>"
+        complete_matches = re.findall(complete_pattern, text, flags=re.DOTALL)
+
+        # Find any incomplete block at the end
+        incomplete_pattern = r"<\|im_start\|>(.*?)\n(.*?)$"
+        incomplete_matches = []
+        if complete_matches:
+            # Look for incomplete block after the last complete one
+            last_complete = complete_matches[-1]
+            last_complete_text = f"<|im_start|>{last_complete[0]}\n{last_complete[1]}<|{last_complete[2]}|>"
+            remaining_text = text[
+                text.rindex(last_complete_text) + len(last_complete_text) :
+            ]
+            if remaining_text.strip():
+                incomplete_match = re.search(
+                    incomplete_pattern, remaining_text, flags=re.DOTALL
+                )
+                if incomplete_match:
+                    incomplete_matches = [
+                        (incomplete_match.group(1), incomplete_match.group(2), None)
+                    ]
+        else:
+            # No complete blocks, check entire text for incomplete block
+            incomplete_match = re.search(incomplete_pattern, text, flags=re.DOTALL)
+            if incomplete_match:
+                incomplete_matches = [
+                    (incomplete_match.group(1), incomplete_match.group(2), None)
+                ]
+
+        # Combine complete and incomplete matches
+        matches = complete_matches + incomplete_matches
+
+        # Define tool patterns - same as Qwen for consistency
+        tool_call_pattern = re.compile(r"<tool_call>\n(.*?)\n</tool_call>", re.DOTALL)
+        tool_response_pattern = re.compile(
+            r"<tool_response>\n(.*?)\n</tool_response>", re.DOTALL
+        )
+
+        parsed_messages = []
         for match in matches:
             role = match[0].strip()
-
-            # Override role
-            # role = "assistant"
             content = match[1].strip()
-            roles.append(role)
-            contents.append(content)
-        if not roles:
+            is_complete = match[2] is not None  # None indicates incomplete
+
+            # Initialize message dict
+            message_dict = {
+                "role": role,
+                "content": content,
+                "is_complete": is_complete,
+                "tool_calls": None,
+                "tool_responses": None,
+            }
+
+            # Find tool calls within the message
+            tool_calls = tool_call_pattern.findall(content)
+            if tool_calls:
+                tool_calls_list = []
+                for tool_call in tool_calls:
+                    try:
+                        tool_call_dict = json.loads(tool_call)
+                        tool_calls_list.append(tool_call_dict)
+                    except json.JSONDecodeError:
+                        continue
+                if tool_calls_list:
+                    message_dict["tool_calls"] = tool_calls_list
+
+            # Check for tool responses
+            tool_responses = tool_response_pattern.findall(content)
+            if tool_responses:
+                message_dict["tool_responses"] = tool_responses
+
+            parsed_messages.append(cls(**message_dict))
+
+        if not parsed_messages:
             raise RuntimeError(
                 f"Couldn't get a single item out of text {text}. A common cause "
                 f"if that special tokens should not be ommitted, did you set include_stop_str_in_output/skip_special_tokens=False?"
             )
 
-        return cls(
-            role=roles,
-            content=contents,
-            batch_size=len(roles),
-        )
+        return lazy_stack(parsed_messages)
 
     @classmethod
     def _inv_qwen(cls, template):
         import json
 
         # Define regex patterns for different parts of the template
-        message_pattern = re.compile(r"<\|im_start\|>(.*?)<\|im_end\|>", re.DOTALL)
+        message_pattern = re.compile(
+            r"<\|im_start\|>(.*?)(?:<\|(im_end|endoftext)\|>|$)", re.DOTALL
+        )
         tool_call_pattern = re.compile(r"<tool_call>\n(.*?)\n</tool_call>", re.DOTALL)
         tool_response_pattern = re.compile(
             r"<tool_response>\n(.*?)\n</tool_response>", re.DOTALL
         )
-        # Find all messages
-        messages = message_pattern.findall(template)
+
+        # Find all messages and track if they end with a proper token
+        messages = []
+        is_complete_list = []
+        for match in message_pattern.finditer(template):
+            full_match = match.group(0)
+            messages.append(match.group(1))
+            # Check if the message ends with a proper token
+            is_complete_list.append(
+                full_match.endswith("<|im_end|>")
+                or full_match.endswith("<|endoftext|>")
+            )
+
         parsed_messages = []
-        for message in messages:
+        for message, is_complete in zip(messages, is_complete_list):
             # Split the message into role and content
             parts = message.split("\n", 1)
             if len(parts) < 2:
                 continue
             role, content = parts[0], parts[1]
-            # Initialize a dictionary for the message
+
+            # Initialize message dict
             message_dict = {
                 "role": role.strip(),
                 "content": content.strip(),
+                "is_complete": is_complete,
                 "tool_calls": None,
+                "tool_responses": None,
             }
+
             # Find tool calls within the message
             tool_calls = tool_call_pattern.findall(content)
-            for tool_call in tool_calls:
-                try:
-                    tool_call_dict = json.loads(tool_call)
-                    tool_calls_list = message_dict["tool_calls"]
-                    if tool_calls_list is None:
-                        tool_calls_list = []
-                    tool_calls_list.append(tool_call_dict)
+            if tool_calls:
+                tool_calls_list = []
+                for tool_call in tool_calls:
+                    try:
+                        tool_call_dict = json.loads(tool_call)
+                        tool_calls_list.append(tool_call_dict)
+                    except json.JSONDecodeError:
+                        continue
+                if tool_calls_list:
                     message_dict["tool_calls"] = tool_calls_list
-                except json.JSONDecodeError:
-                    continue
+
             # Check for tool responses
             tool_responses = tool_response_pattern.findall(content)
             if tool_responses:
                 message_dict["tool_responses"] = tool_responses
+
             parsed_messages.append(cls(**message_dict))
+
+        if not parsed_messages:
+            raise RuntimeError(
+                f"Couldn't get a single item out of text {template}. A common cause "
+                f"if that special tokens should not be ommitted, did you set include_stop_str_in_output/skip_special_tokens=False?"
+            )
+
         return lazy_stack(parsed_messages)
 
     def append(

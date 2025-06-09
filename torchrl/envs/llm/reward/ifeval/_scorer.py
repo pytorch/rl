@@ -198,13 +198,13 @@ class IfEvalScorer(Transform):
             self.response_key,
         ]
 
-    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+    def transform_reward_spec(self, reward_spec: Composite) -> Composite:
         reward_spec["reward"] = Unbounded(
             reward_spec.shape + (1,), dtype=torch.get_default_dtype()
         )
         return reward_spec
 
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+    def transform_observation_spec(self, observation_spec: Composite) -> Composite:
         observation_spec[self.score_key] = Composite(
             prompt_level_strict_acc=Unbounded(
                 shape=observation_spec.shape, dtype=torch.bool

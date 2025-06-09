@@ -10,8 +10,28 @@ TorchRL offers a set of tools for LLM post-training, as well as some examples fo
 Collectors
 ----------
 
-TorchRL offers a specialized collector class (:class:`~torchrl.collectors.llm.LLMCollector`) that is tailored for LLM
+TorchRL offers specialized collector classes (:class:`~torchrl.collectors.llm.LLMCollector` and :class:`~torchrl.collectors.llm.RayLLMCollector`) that are tailored for LLM
 use cases. We also provide dedicated updaters for some inference engines.
+
+LLM Collectors allow to track the version of the policy, which is useful for some use cases.
+This is done by adding a :class:`~torchrl.envs.llm.transforms.PolicyVersion` transform to the environment, which is
+then incremented by the collector after each weight update. To do this, one either provides the stateful version of the
+transform, or a boolean to the collector constructor.
+
+    >>> from torchrl.envs.llm.transforms import PolicyVersion
+    >>> from torchrl.collectors.llm import LLMCollector
+    >>> from torchrl.collectors.llm.weight_update import vLLMUpdater
+    >>> env = make_env() # place your code here
+    >>> policy = make_policy() # place your code here
+    >>> collector = LLMCollector(env, policy=policy, weight_updater=vLLMUpdater(), track_policy_version=True)
+    >>> # init the updater
+    >>> collector.weight_updater.init(...)
+    >>> # the version is incremented after each weight update
+    >>> collector.update_policy_weights_(state_dict=...)
+    >>> print(collector.policy_version_tracker.version)
+    >>> # the policy version is written in the data
+    >>> for data in collector:
+    ...     print(data["policy_version"])
 
 .. currentmodule:: torchrl.collectors.llm
 
@@ -21,6 +41,7 @@ use cases. We also provide dedicated updaters for some inference engines.
 
     vLLMUpdater
     LLMCollector
+    RayLLMCollector
 
 
 Data structures
@@ -182,6 +203,7 @@ transforms).
     MCPToolTransform
     BrowserTransform
     PythonInterpreter
+    PolicyVersion
     TemplateTransform
     Tokenizer
     as_nested_tensor

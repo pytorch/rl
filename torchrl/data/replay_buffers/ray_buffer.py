@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import contextlib
+
 from typing import Any, Callable
 
 import torch
@@ -132,6 +134,14 @@ class RayReplayBuffer(ReplayBuffer):
         remote_cls = ReplayBuffer.as_remote(remote_config).remote
         self._rb = remote_cls(*args, **kwargs)
 
+    @property
+    def _replay_lock(self):
+        """Placeholder for the replay lock.
+
+        Replay-lock is not supported yet by RayReplayBuffer.
+        """
+        return contextlib.nullcontext()
+
     def sample(self, *args, **kwargs):
         pending_task = self._rb.sample.remote(*args, **kwargs)
         return ray.get(pending_task)
@@ -163,6 +173,12 @@ class RayReplayBuffer(ReplayBuffer):
 
     def empty(self):
         return ray.get(self._rb.empty.remote())
+
+    def __getitem__(self, index):
+        return ray.get(self._rb.__getitem__.remote(index))
+
+    def __iter__(self):
+        return ray.get(self._rb.__iter__.remote())
 
     def insert_transform(
         self,
@@ -215,3 +231,17 @@ class RayReplayBuffer(ReplayBuffer):
     @property
     def dim_extend(self):
         return ray.get(self._rb._getattr.remote("dim_extend"))
+
+    @dim_extend.setter
+    def dim_extend(self, value):
+        return ray.get(self._rb._setattr.remote("dim_extend", value))
+
+    def __setitem__(self, index, value) -> None:
+        return ray.get(self._rb.__setitem__.remote(index, value))
+
+    def __repr__(self) -> str:
+        rb_repr = ray.get(self._rb.__repr__.remote())
+        return f"RayReplayBuffer(\n    remote_buffer={rb_repr}\n)"
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        return ray.get(self._rb.load_state_dict.remote(state_dict))

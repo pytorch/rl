@@ -13,7 +13,6 @@ import time
 
 import pytest
 import torch
-from mocking_classes import DummyStrDataLoader, DummyTensorDataLoader
 
 from tensordict import (
     lazy_stack,
@@ -23,6 +22,7 @@ from tensordict import (
     set_list_to_stack,
     TensorDict,
 )
+from mocking_classes_llm import DummyStrDataLoader, DummyTensorDataLoader
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.llm.chat import History

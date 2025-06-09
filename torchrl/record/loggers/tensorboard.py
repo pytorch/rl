@@ -56,7 +56,7 @@ class TensorboardLogger(Logger):
 
         Args:
             name (str): The name of the scalar.
-            value (:obj:`float`): The value of the scalar.
+            value (float): The value of the scalar.
             step (int, optional): The step at which the scalar is logged. Defaults to None.
 
         """

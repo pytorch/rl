@@ -30,7 +30,7 @@ import torch.nn as nn
 
 from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 from tensordict.base import NO_DEFAULT
-from tensordict.nn import CudaGraphModule, TensorDictModule
+from tensordict.nn import CudaGraphModule, TensorDictModule, TensorDictModuleBase
 from tensordict.utils import _zip_strict, Buffer
 from torch import multiprocessing as mp
 from torch.nn import Parameter
@@ -163,8 +163,9 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     @weight_updater.setter
     def weight_updater(self, value: WeightUpdaterBase | None):
         if value is not None:
-            if not isinstance(value, WeightUpdaterBase) and callable(value):
-                # then it's a constructor
+            if not isinstance(value, WeightUpdaterBase) and callable(
+                value
+            ):  # Fall back to default constructor
                 value = value()
             value.register_collector(self)
             if value.collector is not self:
@@ -294,7 +295,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
 
     def update_policy_weights_(
         self,
-        policy_weights: TensorDictBase | None = None,
+        policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,
         *,
         worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
         **kwargs,
@@ -307,9 +308,11 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         can be transferred to the children workers from a server.
 
         Args:
-            policy_weights (TensorDictBase, optional): A TensorDict containing the weights of the policy to be used
-                for the update. If not provided, the method will attempt to fetch the weights using the configured
-                weight updater.
+            policy_or_weights (TensorDictBase | TensorDictModuleBase | dict | None): The weights to update with. Can be:
+                - TensorDictModuleBase: A policy module whose weights will be extracted
+                - TensorDictBase: A TensorDict containing weights
+                - dict: A regular dict containing weights
+                - None: Will try to get weights from server using _get_server_weights()
             worker_ids (int | List[int] | torch.device | List[torch.device] | None, optional): Identifiers for the
                 workers that need to be updated. This is relevant when the collector has more than one worker associated
                 with it.
@@ -324,7 +327,16 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             :meth:`~torchrl.collectors.RemoteWeightsUpdaterBase`.
 
         """
-        self.weight_updater(policy_weights, worker_ids=worker_ids, **kwargs)
+        if "policy_weights" in kwargs:
+            warnings.warn(
+                "`policy_weights` is deprecated. Use `policy_or_weights` instead.",
+                DeprecationWarning,
+            )
+            policy_or_weights = kwargs.pop("policy_weights")
+
+        self.weight_updater(
+            policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
+        )
 
     def __iter__(self) -> Iterator[TensorDictBase]:
         try:
@@ -386,6 +398,19 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         if self.total_frames > 0:
             return -(self.total_frames // -self.requested_frames_per_batch)
         raise RuntimeError("Non-terminating collectors do not have a length")
+
+    def init_updater(self, *args, **kwargs):
+        """Initialize the weight updater with custom arguments.
+
+        This method passes the arguments to the weight updater's init method.
+        If no weight updater is set, this is a no-op.
+
+        Args:
+            *args: Positional arguments for weight updater initialization
+            **kwargs: Keyword arguments for weight updater initialization
+        """
+        if self.weight_updater is not None:
+            self.weight_updater.init(*args, **kwargs)
 
 
 @accept_remote_rref_udf_invocation
@@ -900,7 +925,9 @@ class SyncDataCollector(DataCollectorBase):
                 weight_getter=self.get_weights_fn, policy_weights=self.policy_weights
             )
         elif not isinstance(weight_updater, WeightUpdaterBase):
-            raise TypeError("weight_updater must be a subclass of WeightUpdaterBase")
+            raise TypeError(
+                f"weight_updater must be a subclass of WeightUpdaterBase. Got {type(weight_updater)} instead."
+            )
 
         self.weight_updater = weight_updater
 
@@ -1115,12 +1142,20 @@ class SyncDataCollector(DataCollectorBase):
     # for RPC
     def update_policy_weights_(
         self,
-        policy_weights: TensorDictBase | None = None,
+        policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,
         *,
         worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
+        **kwargs,
     ) -> None:
+        if "policy_weights" in kwargs:
+            warnings.warn(
+                "`policy_weights` is deprecated. Use `policy_or_weights` instead.",
+                DeprecationWarning,
+            )
+            policy_or_weights = kwargs.pop("policy_weights")
+
         super().update_policy_weights_(
-            policy_weights=policy_weights, worker_ids=worker_ids
+            policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
         )
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
@@ -2712,12 +2747,20 @@ class MultiSyncDataCollector(_MultiDataCollector):
     # for RPC
     def update_policy_weights_(
         self,
-        policy_weights: TensorDictBase | None = None,
+        policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,
         *,
         worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
+        **kwargs,
     ) -> None:
+        if "policy_weights" in kwargs:
+            warnings.warn(
+                "`policy_weights` is deprecated. Use `policy_or_weights` instead.",
+                DeprecationWarning,
+            )
+            policy_or_weights = kwargs.pop("policy_weights")
+
         super().update_policy_weights_(
-            policy_weights=policy_weights, worker_ids=worker_ids
+            policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
         )
 
     @property
@@ -3087,12 +3130,20 @@ class MultiaSyncDataCollector(_MultiDataCollector):
     # for RPC
     def update_policy_weights_(
         self,
-        policy_weights: TensorDictBase | None = None,
+        policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,
         *,
         worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
+        **kwargs,
     ) -> None:
+        if "policy_weights" in kwargs:
+            warnings.warn(
+                "`policy_weights` is deprecated. Use `policy_or_weights` instead.",
+                DeprecationWarning,
+            )
+            policy_or_weights = kwargs.pop("policy_weights")
+
         super().update_policy_weights_(
-            policy_weights=policy_weights, worker_ids=worker_ids
+            policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
         )
 
     @property

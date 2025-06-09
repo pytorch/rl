@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import warnings
+
 from typing import Any, Callable, Literal
 
 import torch
@@ -41,14 +43,22 @@ class ChatEnv(EnvBase):
         system_prompt (str, optional): an optional `"system"` prompt string to use during reset calls.
             Defaults to `None`.
         apply_template (bool, optional): if `True` (and a tokenizer is passed), the history will be parsed to a string
-            in the `"text"` entry of the output tensordict at reset time. Defaults to `False` if no tokenizer or
-            `template_kwargs` is passed, otherwise `True`.
+            in the `"text"` entry of the output tensordict at reset time. Defaults to `False`.
+
+            .. note:: If transforms are appended to the environment, the template will be applied to the history before the transform is applied.
+                As transforms can encode tools, this means that the text returned by the environment may be incomplete.
+                The :class:`~torchrl.modules.llm.vLLMWrapper` and :class:`~torchrl.modules.llm.TransformersWrapper`
+                will apply the template to the history when queried if no `"text"` input is provided.
+
         tokenizer (transformers.PreTrainedTokenizer, *optional*): A tokenizer that will be used to tokenize the text.
             Defaults to `None`.
         template_kwargs (dict[str, any], optional): keyword arguments passed to :meth:`~torchrl.data.llm.History.apply_chat_template`.
             Defaults to `None`.
         system_role (str, optional): the role of the system (at reset time). Defaults to `"system"`.
         user_role (str, optional): the role of the user (at reset time). Defaults to `"user"`.
+        make_lazy (bool, optional): if `True`, the environment will return a lazy stack of tensordicts. This is the recommended setting
+            for training, since it allows for efficient batching of environment outputs that may have different shapes or contents.
+            Defaults to `True`.
 
     Methods:
         reset (TensorDict): Resets the state of the environment. A tensordict or equivalent with a `"text"` entry must be passed.
@@ -119,6 +129,8 @@ class ChatEnv(EnvBase):
         template_kwargs: dict[str, Any] | None = None,
         system_role: str = "system",
         user_role: str = "user",
+        policy_role: str | None = "assistant",
+        make_lazy: bool = True,
     ):
         if batch_size is None:
             batch_size = (1,)
@@ -160,6 +172,8 @@ class ChatEnv(EnvBase):
         )
         self.system_role = system_role
         self.user_role = user_role
+        self.policy_role = policy_role
+        self.make_lazy = make_lazy
 
     def _step(self, tensordict):
         # Expect action to be a "text_response" string
@@ -176,11 +190,24 @@ class ChatEnv(EnvBase):
             name_or_path = self.tokenizer.name_or_path
             if "qwen" in name_or_path.lower():
                 chat_template_name = "qwen"
-        history = History.from_text(text, chat_template_name=chat_template_name)
+        parsed_history = History.from_text(text, chat_template_name=chat_template_name)
         # Isolate last element, which should be our action
-        local_history = history[..., -1]
+        local_history = parsed_history[..., -1]
         # Get previous history
         history = tensordict["history"]
+        # Check that history has one more item than before
+        if history.shape[-1] <= parsed_history.shape[-1]:
+            warnings.warn(
+                "The parsed history has fewer or the same number than the last element in history."
+            )
+        if self.policy_role is not None:
+            # Iterate over batch and check policy role
+            for lh in local_history.unbind(0):
+                if lh.role != self.policy_role:
+                    raise ValueError(
+                        "The role received in the last block parsed from the policy "
+                        f"output does not match the expected policy role: received {lh.role} but expected {self.policy_role}."
+                    )
         # Append history item
         history = history.append(local_history, inplace=False)
         # FIXME: consider done to be always False
@@ -229,9 +256,12 @@ class ChatEnv(EnvBase):
             done=torch.zeros(tensordict.shape + (1,), dtype=torch.bool),
             batch_size=self.batch_size,
         )
-        if tensordict._lazy:
+        if self.make_lazy:
             result = result.unbind(0)
-            result = lazy_stack(list(result))
+            result = lazy_stack(list(result), dim=0)
+        elif tensordict._lazy:
+            result = result.unbind(tensordict.stack_dim)
+            result = lazy_stack(list(result), dim=tensordict.stack_dim)
         result.update(tensordict.exclude(*result.keys(True)))
         if self.apply_template:
             template = history.apply_chat_template(
@@ -266,8 +296,7 @@ class DatasetChatEnv(TransformedEnv):
 
         device (torch.device | None, optional): The device to use for computations. Defaults to None.
         template_kwargs (dict[str, Any] | None, optional): Additional keyword arguments for the template. Defaults to `None`.
-        apply_template (bool | None, optional): Whether to apply the template to the text. Defaults to `True` if the
-            kwargs or the tokenizer is passed.
+        apply_template (bool | None, optional): Whether to apply the template to the text. Defaults to `False`.
         collate_fn (Callable | None, optional): A custom collate function for data loading. If `None`, a default
             collate function is used. Defaults to `None`.
 
@@ -295,7 +324,7 @@ class DatasetChatEnv(TransformedEnv):
         tokenizer: transformers.AutoTokenizer | None = None,  # noqa: F821
         device: torch.device | None = None,
         template_kwargs: dict[str, Any] | None = None,
-        apply_template: bool | None = None,
+        apply_template: bool | None = False,
         collate_fn: Callable[[Any], Any] | None = None,
     ):
         from datasets import load_dataset

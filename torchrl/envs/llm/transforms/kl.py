@@ -152,10 +152,10 @@ class KLRewardTransform(Transform):
                 next_tensordict.set(self.out_keys[0], self.parent.reward_spec.zero())
             return next_tensordict
         if hasattr(self.actor, "log_prob"):
-            if self.device is not None:
+            if self.device is not None and tensordict.device != self.device:
                 td_device = tensordict.to(self.device)
             else:
-                td_device = tensordict
+                td_device = tensordict.copy()
             ref_log_prob = self.actor.log_prob(
                 td_device, as_nested_tensor=True, layout=torch.strided
             )
@@ -205,6 +205,20 @@ class KLRewardTransform(Transform):
         next_td = tensordict.pop("next")
         next_td = self._step(tensordict, next_td)
         return tensordict.set("next", next_td)
+
+    def transform_reward_spec(self, reward_spec: Composite) -> Composite:
+        if "reward" in reward_spec.keys():
+            reward_spec_item = reward_spec["reward"]
+            if reward_spec_item.shape[-1] == 1:
+                reward_spec_item = Unbounded(
+                    reward_spec_item.shape[:-1] + (-1,), dtype=reward_spec_item.dtype,
+                )
+                reward_spec["reward"] = reward_spec_item
+        else:
+            reward_spec["reward"] = Unbounded(
+                shape=reward_spec.shape + (-1,), dtype=torch.get_default_dtype()
+            )
+        return reward_spec
 
     def transform_output_spec(self, output_spec: Composite) -> Composite:
         in_key = unravel_key(self.in_keys[0])
