@@ -63,7 +63,6 @@ Prerequisites: Basic familiarity with TorchRL's environment concepts.
 from __future__ import annotations
 
 import warnings
-from pprint import pprint
 
 import torch
 
@@ -210,7 +209,7 @@ def execute_tool_action(
         print(action)
         print("\nEnvironment Response:")
         print("--------------------")
-        pprint(s_["history"].apply_chat_template(tokenizer=env.tokenizer))
+        torchrl_logger.info(s_["history"].apply_chat_template(tokenizer=env.tokenizer))
 
     return s, s_
 

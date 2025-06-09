@@ -8,7 +8,6 @@ from __future__ import annotations
 import os
 import queue
 import re
-import signal
 import subprocess
 import tempfile
 import threading
@@ -310,6 +309,8 @@ while True:
 
     def cleanup(self):
         """Clean up the persistent process."""
+        import signal
+
         if self.process:
             try:
                 self.process.send_signal(signal.SIGTERM)
