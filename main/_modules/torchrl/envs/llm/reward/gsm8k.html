@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+c6440df) &#x25BC</span></a>
+      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+16b70be) &#x25BC</span></a>
     </div>
     
 
@@ -330,6 +330,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/export.html">Exporting TorchRL modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/llm_browser.html">TorchRL LLM: Building Tool-Enabled Environments</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
@@ -427,6 +428,7 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">NestedKey</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_zip_strict</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">Unbounded</span>
@@ -476,17 +478,19 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">xml.etree</span><span class="w"> </span><span class="kn">import</span> <span class="n">ElementTree</span> <span class="k">as</span> <span class="n">ET</span>
 
-        <span class="c1"># Get the completion</span>
+        <span class="k">if</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">batch_dims</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">as</span> <span class="n">td_view</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">view</span><span class="p">(</span>
+                <span class="o">-</span><span class="mi">1</span>
+            <span class="p">)</span> <span class="k">as</span> <span class="n">next_td_view</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_step</span><span class="p">(</span><span class="n">td_view</span><span class="p">,</span> <span class="n">next_td_view</span><span class="p">)</span>
+            <span class="c1"># did update in place</span>
+            <span class="k">return</span> <span class="n">next_tensordict</span>
 
+        <span class="c1"># Get the completion</span>
         <span class="n">responses</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>  <span class="c1"># batch_size, grpo_size, L</span>
 
-        <span class="c1"># if isinstance(prompts, str):</span>
-        <span class="c1">#     prompts = [prompts]</span>
-
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">responses</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-            <span class="n">responses</span> <span class="o">=</span> <span class="p">[</span><span class="n">responses</span><span class="p">]</span>
-
-        <span class="c1"># responses = [p + r for p, r in zip(prompts, responses)]</span>
+            <span class="n">responses</span> <span class="o">=</span> <span class="p">[</span><span class="n">responses</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">next_tensordict</span><span class="o">.</span><span class="n">batch_size</span><span class="p">[</span><span class="mi">0</span><span class="p">])]</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">eos_token</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">responses</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span><span class="o">.</span><span class="n">removesuffix</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">eos_token</span><span class="p">)</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">responses</span><span class="p">]</span>
@@ -499,12 +503,14 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="n">text_completion</span> <span class="o">=</span> <span class="n">responses</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">text_completion</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
-            <span class="n">text_completion</span> <span class="o">=</span> <span class="p">[</span><span class="n">text_completion</span><span class="p">]</span>
+            <span class="n">text_completion</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">text_completion</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">next_tensordict</span><span class="o">.</span><span class="n">batch_size</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="p">]</span>
         <span class="c1"># Decomposed reward</span>
         <span class="n">tds</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">answers</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">text_completion</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">answer</span><span class="p">,</span> <span class="n">compl</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">answers</span><span class="p">,</span> <span class="n">text_completion</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">answer</span><span class="p">,</span> <span class="n">compl</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="n">answers</span><span class="p">,</span> <span class="n">text_completion</span><span class="p">):</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="n">compl</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;&lt;think&gt;&quot;</span><span class="p">):</span>
                     <span class="n">compl</span> <span class="o">=</span> <span class="s2">&quot;&lt;think&gt;&quot;</span> <span class="o">+</span> <span class="n">compl</span>
@@ -522,7 +528,7 @@
             <span class="c1">#  With tensorclass comparison should be easy</span>
             <span class="n">cot_orig</span><span class="p">,</span> <span class="n">answer</span> <span class="o">=</span> <span class="n">answer</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;#### &quot;</span><span class="p">)</span>
             <span class="n">tds</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">single_shaped_correctness_reward</span><span class="p">(</span><span class="n">answer</span><span class="p">,</span> <span class="n">potential_answer</span><span class="p">,</span> <span class="n">cot</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_single_shaped_correctness_reward</span><span class="p">(</span><span class="n">answer</span><span class="p">,</span> <span class="n">potential_answer</span><span class="p">,</span> <span class="n">cot</span><span class="p">)</span>
             <span class="p">)</span>
         <span class="n">tds</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">tds</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">responses</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="ow">and</span> <span class="n">responses</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
@@ -552,7 +558,7 @@
         <span class="k">return</span> <span class="n">reward_spec</span></div>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">single_shaped_correctness_reward</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_single_shaped_correctness_reward</span><span class="p">(</span>
         <span class="bp">cls</span><span class="p">,</span> <span class="n">true_answer</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">potential_answer</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">cot</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDict</span><span class="p">:</span>
         <span class="c1"># TODO: In tune, these end up being lists</span>

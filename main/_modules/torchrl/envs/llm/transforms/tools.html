@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+c6440df) &#x25BC</span></a>
+      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+16b70be) &#x25BC</span></a>
     </div>
     
 
@@ -330,6 +330,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/export.html">Exporting TorchRL modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/llm_browser.html">TorchRL LLM: Building Tool-Enabled Environments</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
@@ -429,7 +430,6 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">queue</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">signal</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">subprocess</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
@@ -731,6 +731,8 @@
 
     <span class="k">def</span><span class="w"> </span><span class="nf">cleanup</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Clean up the persistent process.&quot;&quot;&quot;</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">signal</span>
+
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">process</span><span class="p">:</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">process</span><span class="o">.</span><span class="n">send_signal</span><span class="p">(</span><span class="n">signal</span><span class="o">.</span><span class="n">SIGTERM</span><span class="p">)</span>
@@ -1004,6 +1006,229 @@
                 <span class="n">process</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">reset</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">else</span> <span class="n">PersistentPythonProcess</span><span class="p">()</span>
                 <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">process</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">processes</span><span class="p">)</span>
             <span class="p">]</span>
+        <span class="k">return</span> <span class="n">tensordict_reset</span></div>
+
+
+<div class="viewcode-block" id="MCPToolTransform"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">MCPToolTransform</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;A transform that executes MCP-style tools in response to LLM actions.</span>
+
+<span class="sd">    This transform allows execution of tools following the Mission Control Protocol pattern,</span>
+<span class="sd">    where tools are defined with clear input/output schemas and executed in a controlled manner.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        tools (dict[str, callable]): A dictionary mapping tool names to their implementation functions.</span>
+<span class="sd">            Each function should accept kwargs matching its schema and return a dict with results.</span>
+<span class="sd">        tool_schemas (dict[str, dict]): A dictionary mapping tool names to their JSON schemas.</span>
+<span class="sd">            Each schema should define the tool&#39;s parameters and return type.</span>
+<span class="sd">        tokenizer: The tokenizer to use. Defaults to `None` (no tokenizer).</span>
+<span class="sd">        tool_name: The name of the tool in the chat history. Defaults to `&quot;tool&quot;`.</span>
+<span class="sd">        timeout: The timeout for tool execution in seconds. Defaults to `10.0`.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs.llm.transforms import MCPToolTransform</span>
+<span class="sd">        &gt;&gt;&gt; from transformers import AutoTokenizer</span>
+<span class="sd">        &gt;&gt;&gt; from tensordict import TensorDict, set_list_to_stack</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs.llm import ChatEnv</span>
+<span class="sd">        &gt;&gt;&gt; set_list_to_stack(True).set()</span>
+<span class="sd">        &gt;&gt;&gt; tokenizer = AutoTokenizer.from_pretrained(&quot;Qwen/Qwen2.5-3B&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; # Define a simple tool</span>
+<span class="sd">        &gt;&gt;&gt; def add_numbers(a: int, b: int) -&gt; dict:</span>
+<span class="sd">        ...     return {&quot;result&quot;: a + b}</span>
+<span class="sd">        &gt;&gt;&gt; # Define its schema</span>
+<span class="sd">        &gt;&gt;&gt; add_schema = {</span>
+<span class="sd">        ...     &quot;name&quot;: &quot;add_numbers&quot;,</span>
+<span class="sd">        ...     &quot;description&quot;: &quot;Add two numbers&quot;,</span>
+<span class="sd">        ...     &quot;parameters&quot;: {</span>
+<span class="sd">        ...         &quot;type&quot;: &quot;object&quot;,</span>
+<span class="sd">        ...         &quot;properties&quot;: {</span>
+<span class="sd">        ...             &quot;a&quot;: {&quot;type&quot;: &quot;integer&quot;},</span>
+<span class="sd">        ...             &quot;b&quot;: {&quot;type&quot;: &quot;integer&quot;}</span>
+<span class="sd">        ...         },</span>
+<span class="sd">        ...         &quot;required&quot;: [&quot;a&quot;, &quot;b&quot;]</span>
+<span class="sd">        ...     }</span>
+<span class="sd">        ... }</span>
+<span class="sd">        &gt;&gt;&gt; tools = {&quot;add_numbers&quot;: add_numbers}</span>
+<span class="sd">        &gt;&gt;&gt; schemas = {&quot;add_numbers&quot;: add_schema}</span>
+<span class="sd">        &gt;&gt;&gt; env = ChatEnv(</span>
+<span class="sd">        ...     batch_size=(1,),</span>
+<span class="sd">        ...     system_prompt=&quot;I&#39;m the system, do as I say&quot;,</span>
+<span class="sd">        ...     apply_template=True,</span>
+<span class="sd">        ...     tokenizer=tokenizer,</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; env = env.append_transform(MCPToolTransform(tools, schemas))</span>
+<span class="sd">        &gt;&gt;&gt; r = env.reset(TensorDict(text=[&quot;This is the user prompt&quot;], batch_size=(1,)))</span>
+<span class="sd">        &gt;&gt;&gt; r[&quot;text_response&quot;] = [&quot;Let me add two numbers:\n&lt;tool&gt;add_numbers\n{\&quot;a\&quot;: 1, \&quot;b\&quot;: 2}&lt;/tool&gt;&quot;]</span>
+<span class="sd">        &gt;&gt;&gt; s = env.step(r)</span>
+<span class="sd">        &gt;&gt;&gt; print(s[&#39;next&#39;, &#39;history&#39;].apply_chat_template(tokenizer=tokenizer))</span>
+<span class="sd">        [&#39;&lt;|im_start|&gt;system\n&#39;</span>
+<span class="sd">         &quot;I&#39;m the system, do as I say&lt;|im_end|&gt;\n&quot;</span>
+<span class="sd">         &#39;&lt;|im_start|&gt;user\n&#39;</span>
+<span class="sd">         &#39;This is the user prompt&lt;|im_end|&gt;\n&#39;</span>
+<span class="sd">         &#39;&lt;|im_start|&gt;assistant\n&#39;</span>
+<span class="sd">         &#39;Let me add two numbers:\n&#39;</span>
+<span class="sd">         &#39;&lt;tool&gt;add_numbers\n&#39;</span>
+<span class="sd">         &#39;{&quot;a&quot;: 1, &quot;b&quot;: 2}&lt;/tool&gt;&lt;|im_end|&gt;\n&#39;</span>
+<span class="sd">         &#39;&lt;|im_start|&gt;user\n&#39;</span>
+<span class="sd">         &#39;&lt;tool_response&gt;\n&#39;</span>
+<span class="sd">         &#39;Tool add_numbers executed successfully:\n&#39;</span>
+<span class="sd">         &#39;{&quot;result&quot;: 3}\n&#39;</span>
+<span class="sd">         &#39;&lt;/tool_response&gt;&lt;|im_end|&gt;\n&#39;</span>
+<span class="sd">         &#39;&lt;|im_start|&gt;assistant\n&#39;]</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tools</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">callable</span><span class="p">],</span>
+        <span class="n">tool_schemas</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">],</span>
+        <span class="n">tokenizer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>  <span class="c1"># type: ignore</span>
+        <span class="n">tool_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;tool&quot;</span><span class="p">,</span>
+        <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tools</span> <span class="o">=</span> <span class="n">tools</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tool_schemas</span> <span class="o">=</span> <span class="n">tool_schemas</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span> <span class="o">=</span> <span class="n">tokenizer</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tool_name</span> <span class="o">=</span> <span class="n">tool_name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">timeout</span> <span class="o">=</span> <span class="n">timeout</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_extract_tool_calls</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]:</span>  <span class="c1"># noqa: D415, D301, D209, D205</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extract tool calls from text in the format &lt;tool&gt;tool_name\nargs_json&lt;/tool&gt;.&quot;&quot;&quot;</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
+
+        <span class="n">pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;&lt;tool&gt;(.*?)\n(.*?)&lt;/tool&gt;&quot;</span>
+        <span class="n">matches</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="n">pattern</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">DOTALL</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">matches</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_execute_tool</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tool_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">args_json</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Execute a tool with the given arguments.&quot;&quot;&quot;</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">signal</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">contextlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">contextmanager</span>
+
+        <span class="nd">@contextmanager</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">timeout_context</span><span class="p">(</span><span class="n">seconds</span><span class="p">):</span>
+            <span class="k">def</span><span class="w"> </span><span class="nf">signal_handler</span><span class="p">(</span><span class="n">signum</span><span class="p">,</span> <span class="n">frame</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TimeoutError</span><span class="p">(</span><span class="s2">&quot;Tool execution timed out&quot;</span><span class="p">)</span>
+
+            <span class="c1"># Set the signal handler and a timeout</span>
+            <span class="n">signal</span><span class="o">.</span><span class="n">signal</span><span class="p">(</span><span class="n">signal</span><span class="o">.</span><span class="n">SIGALRM</span><span class="p">,</span> <span class="n">signal_handler</span><span class="p">)</span>
+            <span class="n">signal</span><span class="o">.</span><span class="n">alarm</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">seconds</span><span class="p">))</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">yield</span>
+            <span class="k">finally</span><span class="p">:</span>
+                <span class="c1"># Disable the alarm</span>
+                <span class="n">signal</span><span class="o">.</span><span class="n">alarm</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">tool_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">tools</span><span class="p">:</span>
+                <span class="k">return</span> <span class="p">{</span>
+                    <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                    <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Tool </span><span class="si">{</span><span class="n">tool_name</span><span class="si">}</span><span class="s2"> not found&quot;</span><span class="p">,</span>
+                <span class="p">}</span>
+
+            <span class="c1"># Parse arguments</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">args</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">args_json</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">json</span><span class="o">.</span><span class="n">JSONDecodeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">return</span> <span class="p">{</span>
+                    <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                    <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Failed to parse tool arguments: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="p">}</span>
+
+            <span class="c1"># Execute with timeout</span>
+            <span class="k">with</span> <span class="n">timeout_context</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">timeout</span><span class="p">):</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tools</span><span class="p">[</span><span class="n">tool_name</span><span class="p">](</span><span class="o">**</span><span class="n">args</span><span class="p">)</span>
+                <span class="k">return</span> <span class="p">{</span>
+                    <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                    <span class="s2">&quot;result&quot;</span><span class="p">:</span> <span class="n">result</span><span class="p">,</span>
+                <span class="p">}</span>
+
+        <span class="k">except</span> <span class="ne">TimeoutError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span>
+                <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Tool execution timed out after </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">timeout</span><span class="si">}</span><span class="s2"> seconds&quot;</span><span class="p">,</span>
+            <span class="p">}</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span>
+                <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                <span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Tool execution failed: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_process_llm_response</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Process LLM response and execute any tool calls found.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            response (str): The response from the LLM.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            list[str]: A list of strings, each containing the result of a tool execution.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">tool_calls</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_extract_tool_calls</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+
+        <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">tool_name</span><span class="p">,</span> <span class="n">args_json</span> <span class="ow">in</span> <span class="n">tool_calls</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_execute_tool</span><span class="p">(</span><span class="n">tool_name</span><span class="p">,</span> <span class="n">args_json</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]:</span>
+                <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Tool </span><span class="si">{</span><span class="n">tool_name</span><span class="si">}</span><span class="s2"> executed successfully:</span><span class="se">\n</span><span class="si">{</span><span class="n">result</span><span class="p">[</span><span class="s1">&#39;result&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Tool </span><span class="si">{</span><span class="n">tool_name</span><span class="si">}</span><span class="s2"> failed:</span><span class="se">\n</span><span class="si">{</span><span class="n">result</span><span class="p">[</span><span class="s1">&#39;error&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">results</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">batch_dims</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">as</span> <span class="n">next_tensordict_flat</span><span class="p">:</span>
+                <span class="c1"># Call the transform on the flattened tensordict</span>
+                <span class="n">next_tensordict_flat</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_call</span><span class="p">(</span><span class="n">next_tensordict_flat</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">next_tensordict</span>
+
+        <span class="c1"># Convert text to a history</span>
+        <span class="n">history</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">]</span>
+        <span class="c1"># Isolate last element, which should be our action</span>
+        <span class="n">local_history</span> <span class="o">=</span> <span class="n">history</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+        <span class="n">procs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="c1"># Iterate over env batch-size</span>
+        <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">local_history</span><span class="o">.</span><span class="n">content</span><span class="p">:</span>
+            <span class="n">results</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_llm_response</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">results</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">procs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+                <span class="k">continue</span>
+            <span class="n">procs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="p">[</span><span class="n">History</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tool_name</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="n">result</span><span class="p">)</span> <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">results</span><span class="p">]</span>
+            <span class="p">)</span>
+
+        <span class="c1"># If there is no tool response, just skip entire batch</span>
+        <span class="k">if</span> <span class="nb">all</span><span class="p">(</span><span class="n">p</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">procs</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">next_tensordict</span>
+        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">p</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">procs</span><span class="p">):</span>
+            <span class="n">procs</span> <span class="o">=</span> <span class="p">[</span><span class="n">p</span> <span class="k">if</span> <span class="n">p</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">[]</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">procs</span><span class="p">]</span>
+        <span class="c1"># We need to have the same number of items for each element in the batch</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">procs</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">procs</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">procs</span><span class="p">):</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">fill_procs</span><span class="p">(</span><span class="n">proc</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">History</span><span class="p">],</span> <span class="n">max_len</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">History</span><span class="p">]:</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">proc</span><span class="p">)</span> <span class="o">==</span> <span class="n">max_len</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">proc</span>
+                <span class="k">return</span> <span class="n">proc</span> <span class="o">+</span> <span class="p">[</span><span class="n">History</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">&quot;&lt;none&gt;&quot;</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)]</span> <span class="o">*</span> <span class="p">(</span>
+                    <span class="n">max_len</span> <span class="o">-</span> <span class="nb">len</span><span class="p">(</span><span class="n">proc</span><span class="p">)</span>
+                <span class="p">)</span>
+
+            <span class="n">max_len</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">procs</span><span class="p">)</span>
+            <span class="n">procs</span> <span class="o">=</span> <span class="p">[</span><span class="n">fill_procs</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">max_len</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">procs</span><span class="p">]</span>
+        <span class="c1"># Procs has the shape of the batch-size. We can cat along dim=-1</span>
+        <span class="n">procs</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">([</span><span class="n">lazy_stack</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">procs</span><span class="p">])</span>
+        <span class="n">history</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">procs</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">next_tensordict</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">history</span>
+        <span class="k">return</span> <span class="n">next_tensordict</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reset</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">tensordict_reset</span></div>
 </pre></div>
 
