@@ -5,14 +5,28 @@
 #
 # Do not install PyTorch and torchvision here, otherwise they also get cached.
 
+unset PYTORCH_VERSION
+# For unittest, nightly PyTorch is used as the following section,
+# so no need to set PYTORCH_VERSION.
+# In fact, keeping PYTORCH_VERSION forces us to hardcode PyTorch version in config.
+apt-get update && apt-get install -y \
+    git wget gcc g++ \
+    libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev \
+    libglvnd0 libgl1 libglx0 libegl1 libgles2 \
+    xvfb libegl-dev libx11-dev freeglut3-dev \
+    mesa-utils mesa-common-dev \
+    libsdl2-dev libsdl2-2.0-0
+
 set -e
+set -v
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-# Avoid error: "fatal: unsafe repository"
-apt-get update && apt-get install -y git wget gcc g++
-apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev libsdl2-dev libsdl2-2.0-0
-apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2 xvfb libegl-dev libx11-dev freeglut3-dev
 
+# Setup EGL
+mkdir -p /usr/share/glvnd/egl_vendor.d
+cp $this_dir/10_nvidia.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
+
+# Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
 conda_dir="${root_dir}/conda"
@@ -79,13 +93,15 @@ conda env config vars set \
   SDL_VIDEODRIVER=dummy \
   DISPLAY=:99 \
   PYOPENGL_PLATFORM=egl \
-  LD_PRELOAD=$glew_path \
+  __GLX_VENDOR_LIBRARY_NAME=nvidia \
+  MESA_GL_VERSION_OVERRIDE=3.3 \
+  EGL_PLATFORM=x11 \
+  LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libGLEW.so:/usr/lib/x86_64-linux-gnu/libGL.so \
   NVIDIA_PATH=/usr/src/nvidia-470.63.01 \
   MUJOCO_PY_MJKEY_PATH=${root_dir}/mujoco-py/mujoco_py/binaries/mjkey.txt \
   MUJOCO_PY_MUJOCO_PATH=${root_dir}/mujoco-py/mujoco_py/binaries/linux/mujoco210 \
-  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/pytorch/rl/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin
+  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/pytorch/rl/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin \
   TOKENIZERS_PARALLELISM=true
-#  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/circleci/project/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin
 
 # make env variables apparent
 conda deactivate && conda activate "${env_dir}"
