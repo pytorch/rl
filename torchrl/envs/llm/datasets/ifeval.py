@@ -54,8 +54,7 @@ class IFEvalEnv(DatasetChatEnv):
 
         device (torch.device | None, optional): The device to use for computations. Defaults to None.
         template_kwargs (dict[str, Any] | None, optional): Additional keyword arguments for the template. Defaults to `None`.
-        apply_template (bool | None, optional): Whether to apply the template to the text. Defaults to `True` if the
-            kwargs or the tokenizer is passed.
+        apply_template (bool | None, optional): Whether to apply the template to the text. Defaults to `False`.
         compute_reward (bool, optional): Whether to compute rewards. Defaults to `True`.
         collate_fn (Callable | None, optional): A custom collate function for data loading. If `None`, a default
             collate function is used. Defaults to `None`.
@@ -155,7 +154,7 @@ You will be assessed by the content of the answer block only, so make sure it co
         tokenizer: transformers.AutoTokenizer | None = None,  # noqa
         device: torch.device | None = None,
         template_kwargs: dict[str, Any] | None = None,
-        apply_template: bool | None = None,
+        apply_template: bool | None = False,
         compute_reward: bool = True,
         collate_fn: Callable | None = None,
         max_steps: int = 1,

@@ -12,6 +12,7 @@ from typing import Any, Callable, Iterator, OrderedDict, Sequence
 import torch
 import torch.nn as nn
 from tensordict import TensorDict, TensorDictBase
+from torchr._utils import as_remote
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors import MultiaSyncDataCollector
@@ -73,22 +74,6 @@ def print_remote_collector_info(self):
     )
     # torchrl_logger.warning(s)
     torchrl_logger.info(s)
-
-
-@classmethod
-def as_remote(cls, remote_config):
-    """Creates an instance of a remote ray class.
-
-    Args:
-        cls (Python Class): class to be remotely instantiated.
-        remote_config (dict): the quantity of CPU cores to reserve for this class.
-
-    Returns:
-        A function that creates ray remote class instances.
-    """
-    remote_collector = ray.remote(**remote_config)(cls)
-    remote_collector.is_remote = True
-    return remote_collector
 
 
 class RayCollector(DataCollectorBase):

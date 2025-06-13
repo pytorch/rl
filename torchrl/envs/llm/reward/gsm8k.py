@@ -8,7 +8,6 @@ import torch
 from tensordict import NestedKey, TensorDict, TensorDictBase
 from tensordict.utils import _zip_strict
 
-from torchrl._utils import logger as torchrl_logger
 from torchrl.data import Composite, Unbounded
 from torchrl.envs import Transform
 
@@ -86,8 +85,8 @@ class GSM8KRewardParser(Transform):
             ]
         # Decomposed reward
         tds = []
-        torchrl_logger.info(f"{answers=}")
-        torchrl_logger.info(f"{text_completion=}")
+        # torchrl_logger.info(f"{answers=}")
+        # torchrl_logger.info(f"{text_completion=}")
         for answer, compl in _zip_strict(answers, text_completion):
             try:
                 if not compl.startswith("<think>"):
@@ -140,8 +139,8 @@ class GSM8KRewardParser(Transform):
         cls, true_answer: str, potential_answer: list[str], cot: list[str]
     ) -> TensorDict:
         # TODO: In tune, these end up being lists
-        torchrl_logger.info(f"{potential_answer=}")
-        torchrl_logger.info(f"{true_answer=}")
+        # torchrl_logger.info(f"{potential_answer=}")
+        # torchrl_logger.info(f"{true_answer=}")
         if isinstance(potential_answer, str):
             potential_answer = [potential_answer]
         if isinstance(cot, str):

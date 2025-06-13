@@ -619,10 +619,11 @@ class DistributedSyncDataCollector(DataCollectorBase):
 
     def update_policy_weights_(
         self,
-        policy_weights: TensorDictBase | None = None,
+        policy_or_weights: TensorDictBase | None = None,
         *,
         worker_ids=None,
         wait=True,
+        **kwargs,
     ) -> None:
         raise NotImplementedError
 

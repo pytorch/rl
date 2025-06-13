@@ -10,9 +10,9 @@ import importlib.util
 import numpy as np
 import pytest
 import torch
-from mocking_classes import DummyStrDataLoader
 
 from tensordict import lazy_stack, set_capture_non_tensor_stack, TensorDict
+from mocking_classes_llm import DummyStrDataLoader
 from torchrl.data import LazyStackStorage, ReplayBuffer, Unbounded
 from torchrl.envs import Transform
 from torchrl.envs.llm import LLMEnv

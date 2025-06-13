@@ -9,20 +9,26 @@ This module implements GRPO training for language models.
 from __future__ import annotations
 
 import gc
-import logging
 import os
 from pathlib import Path
 
 import hydra
+import ray
 import torch
 import tqdm
-from grpo_utils import get_inference_model, get_ref_model, get_train_model
+
+from grpo_utils import (
+    compute_device_allocation,
+    get_inference_model,
+    get_ref_model,
+    get_train_model,
+    make_weight_updater,
+)
 from omegaconf import DictConfig
 from tensordict import set_list_to_stack, TensorDict
 from torch.cuda.amp import GradScaler
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors.llm import LLMCollector
-from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
 from torchrl.data import LazyStackStorage, ReplayBuffer, SamplerWithoutReplacement
 from torchrl.envs.llm import GSM8KEnv, KLRewardTransform
 from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
@@ -47,22 +53,39 @@ def setup_environment() -> None:
     if torch.cuda.is_available():
         torch.cuda.set_device("cuda:0")
 
-    # Set all loggers to WARNING by default
-    logging.getLogger().setLevel(logging.WARNING)
-    # But keep torchrl at INFO
-    logging.getLogger("torchrl").setLevel(logging.INFO)
-
 
 @hydra.main(version_base=None, config_path="config", config_name="grpo_gsm8k")
-def train(cfg: DictConfig) -> None:
-    """Main training loop.
+def main(cfg):
+    # Force sync mode by overriding the config
+    cfg.train.sync = True
 
-    Args:
-        cfg: Hydra configuration object
-    """
-    import ray
+    # Compute device allocation
+    device_config = compute_device_allocation(cfg)
 
-    ray.init()
+    # Update config with computed devices
+    cfg.train_model.devices = device_config["train_model_devices"]
+    cfg.inference_model.devices = device_config["inference_model_devices"]
+    cfg.ref_model.devices = device_config["ref_model_devices"]
+
+    if not ray.is_initialized():
+        # Convert OmegaConf to regular dict and filter out unsupported parameters
+        ray_init_config = {
+            k: dict(v) if isinstance(v, DictConfig) else v
+            for k, v in dict(cfg.ray.init_config).items()
+            if not k.startswith("_")
+        }
+
+        # Add computed GPU configuration
+        ray_init_config["num_gpus"] = device_config["ray_num_gpus"]
+        if "runtime_env" not in ray_init_config:
+            ray_init_config["runtime_env"] = {}
+        if "env_vars" not in ray_init_config["runtime_env"]:
+            ray_init_config["runtime_env"]["env_vars"] = {}
+        ray_init_config["runtime_env"]["env_vars"][
+            "CUDA_VISIBLE_DEVICES"
+        ] = device_config["cuda_visible_devices"]
+
+        ray.init(**ray_init_config)
 
     # Initialize models using config-based device allocation
     torchrl_logger.info("Initializing models...")
@@ -103,21 +126,19 @@ def train(cfg: DictConfig) -> None:
 
     # Setup replay buffer
     rb = ReplayBuffer(
-        storage=LazyStackStorage(cfg.train.steps_per_batch),
+        storage=LazyStackStorage(
+            cfg.train.buffer_size
+            if cfg.train.buffer_size
+            else cfg.train.steps_per_batch
+        ),
         sampler=SamplerWithoutReplacement(),
         batch_size=cfg.train.optim_batch_size,
     )
     rb.append_transform(MCAdvantage(grpo_size=cfg.env.repeats))
 
     # Setup collector
-    model_metadata = {
-        k: (v.dtype, v.shape)
-        for k, v in policy_training.model.merge_and_unload().state_dict().items()
-    }
-    updater = vLLMUpdater(
-        master_address=None,
-        master_port=None,
-        model_metadata=model_metadata,
+    updater = make_weight_updater(
+        policy_training=policy_training, master_address="localhost", master_port=None
     )
 
     collector = LLMCollector(
@@ -141,9 +162,9 @@ def train(cfg: DictConfig) -> None:
     if cfg.model.compile:
         loss_fn = torch.compile(loss_fn)
 
-    optim = getattr(torch.optim, cfg.train.optimizer.name)(
+    optim = getattr(torch.optim, cfg.optimizer.name)(
         policy_training.model.parameters(),
-        lr=cfg.train.optimizer.lr,
+        lr=cfg.optimizer.lr,
         foreach=len(train_devices) == 1,
     )
 
@@ -325,4 +346,4 @@ def train(cfg: DictConfig) -> None:
 if __name__ == "__main__":
     # Setup environment
     setup_environment()
-    train()
+    main()

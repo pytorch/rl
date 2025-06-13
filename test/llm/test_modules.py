@@ -9,8 +9,6 @@ import importlib.util
 
 import pytest
 import torch
-
-from mocking_classes import DummyStrDataLoader
 from tensordict import (
     lazy_stack,
     LazyStackedTensorDict,
@@ -18,6 +16,8 @@ from tensordict import (
     set_list_to_stack,
     TensorDict,
 )
+
+from mocking_classes_llm import DummyStrDataLoader
 from torchrl.collectors.llm import LLMCollector
 from torchrl.data.llm import LLMData
 from torchrl.envs.llm import LLMEnv

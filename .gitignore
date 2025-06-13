@@ -44,6 +44,7 @@ htmlcov/
 .coverage
 .coverage.*
 .cache
+.neptune
 nosetests.xml
 coverage.xml
 *.cover
