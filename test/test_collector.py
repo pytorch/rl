@@ -1483,8 +1483,9 @@ if __name__ == "__main__":
         assert_allclose_td(data10, data20)
 
     @pytest.mark.parametrize("use_async", [False, True])
+    @pytest.mark.parametrize("cudagraph", [False, True])
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device found")
-    def test_update_weights(self, use_async):
+    def test_update_weights(self, use_async, cudagraph):
         def create_env():
             return ContinuousActionVecMockEnv()
 
@@ -1504,48 +1505,51 @@ if __name__ == "__main__":
             storing_device=[torch.device("cuda:0")] * 3,
             frames_per_batch=20,
             cat_results="stack",
+            cudagraph_policy=cudagraph,
         )
-        # collect state_dict
-        state_dict = collector.state_dict()
-        policy_state_dict = policy.state_dict()
-        for worker in range(3):
-            for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
-                torch.testing.assert_close(
-                    state_dict[f"worker{worker}"]["policy_state_dict"][k],
-                    policy_state_dict[k].cpu(),
-                )
-
-        # change policy weights
-        for p in policy.parameters():
-            p.data += torch.randn_like(p)
-
-        # collect state_dict
-        state_dict = collector.state_dict()
-        policy_state_dict = policy.state_dict()
-        # check they don't match
-        for worker in range(3):
-            for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
-                with pytest.raises(AssertionError):
+        try:
+            # collect state_dict
+            state_dict = collector.state_dict()
+            policy_state_dict = policy.state_dict()
+            for worker in range(3):
+                assert "policy_state_dict" in state_dict[f"worker{worker}"], state_dict[f"worker{worker}"].keys()
+                for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
                     torch.testing.assert_close(
                         state_dict[f"worker{worker}"]["policy_state_dict"][k],
                         policy_state_dict[k].cpu(),
                     )
 
-        # update weights
-        collector.update_policy_weights_()
+            # change policy weights
+            for p in policy.parameters():
+                p.data += torch.randn_like(p)
 
-        # collect state_dict
-        state_dict = collector.state_dict()
-        policy_state_dict = policy.state_dict()
-        for worker in range(3):
-            for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
-                torch.testing.assert_close(
-                    state_dict[f"worker{worker}"]["policy_state_dict"][k],
-                    policy_state_dict[k].cpu(),
-                )
+            # collect state_dict
+            state_dict = collector.state_dict()
+            policy_state_dict = policy.state_dict()
+            # check they don't match
+            for worker in range(3):
+                for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
+                    with pytest.raises(AssertionError):
+                        torch.testing.assert_close(
+                            state_dict[f"worker{worker}"]["policy_state_dict"][k],
+                            policy_state_dict[k].cpu(),
+                        )
 
-        collector.shutdown()
-        del collector
+            # update weights
+            collector.update_policy_weights_()
+
+            # collect state_dict
+            state_dict = collector.state_dict()
+            policy_state_dict = policy.state_dict()
+            for worker in range(3):
+                for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
+                    torch.testing.assert_close(
+                        state_dict[f"worker{worker}"]["policy_state_dict"][k],
+                        policy_state_dict[k].cpu(),
+                    )
+        finally:
+            collector.shutdown()
+            del collector
 
 
 class TestCollectorDevices:
