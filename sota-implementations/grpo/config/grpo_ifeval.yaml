@@ -1,6 +1,6 @@
 # @package _global_
 defaults:
-  - mode: async  # Default to async mode, will be overridden by grpo.py
+  - mode: ${mode:async}  # Default to async mode, can be overridden by scripts
   - _self_
   - override hydra/hydra_logging: disabled
   - override hydra/job_logging: disabled
@@ -35,16 +35,19 @@ train:
 
   # Fields used by both scripts but with different semantics
   checkpoint_frequency: 100  # Save checkpoint every N steps/batches
+
+  # KL coefficients for the KL divergence to the reference and inference policies
+  kl_to_ref_coeff: 1e-2
+  kl_to_inference_coeff: 0.0
+  entropy_coeff: 0.01
   
-  # Fields used only by grpo-async.py
-  weight_update_frequency: 10  # Update policy weights every N steps
+  # Fields used only by grpo-async.py / grpo-sync.py
   logging_frequency: 10  # Log metrics every N steps
 
 # Training model configuration
 train_model:
   gradient_checkpointing: true  # Enabled for memory efficiency
   num_devices: 1  # Number of devices to use
-  devices: null  # Will be computed by compute_device_allocation
   lora:
     enabled: true  # Using LoRA for memory efficiency
     r: 8  # LoRA rank - controls capacity of adaptations
@@ -58,7 +61,6 @@ train_model:
 # Inference model configuration
 inference_model:
   num_devices: 1  # Number of devices to use
-  devices: null  # Will be computed by compute_device_allocation
   quantization:
     enabled: false  # Enable 4-bit quantization for base model
   attn_implementation: sdpa  # Using flash attention for memory efficiency
@@ -73,7 +75,6 @@ inference_model:
 ref_model:
   gradient_checkpointing: false  # Always false, no backprop
   num_devices: 1  # Number of devices to use
-  devices: null  # Will be computed by compute_device_allocation
   lora:
     enabled: true  # Using LoRA for memory efficiency
     r: 8  # LoRA rank - controls capacity of adaptations
@@ -83,10 +84,6 @@ ref_model:
     enabled: false  # Enable 4-bit quantization for base model
   attn_implementation: sdpa  # Using flash attention for memory efficiency
   torch_dtype: bfloat16
-
-# Policy configuration
-policy:
-  kl_coef: 1e-2
 
 # Optimizer configuration
 optimizer:

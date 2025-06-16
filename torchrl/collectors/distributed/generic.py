@@ -15,8 +15,8 @@ from typing import Any, Callable, OrderedDict, Sequence
 
 import torch.cuda
 from tensordict import TensorDict, TensorDictBase
+from tensordict.nn import TensorDictModuleBase
 from torch import nn
-
 from torchrl._utils import _ProcessNoWarn, logger as torchrl_logger, VERBOSE
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
@@ -1040,9 +1040,9 @@ class DistributedWeightUpdater(WeightUpdaterBase):
     def all_worker_ids(self) -> list[int] | list[torch.device]:
         raise NotImplementedError
 
-    def push_weights(
+    def _push_weights(
         self,
-        weights: TensorDictBase | None = None,
+        policy_or_weights: TensorDictModuleBase | TensorDictBase | dict | None = None,
         worker_ids: torch.device | int | list[int] | list[torch.device] | None = None,
     ):
         worker_rank = worker_ids
@@ -1051,7 +1051,9 @@ class DistributedWeightUpdater(WeightUpdaterBase):
                 raise RuntimeError("worker_rank must be greater than 1")
             worker_rank = [worker_rank - 1]
         workers = range(self.num_workers) if worker_rank is None else worker_rank
-        weights = self.policy_weights if weights is None else weights
+        weights = (
+            self.policy_weights if policy_or_weights is None else policy_or_weights
+        )
         for i in workers:
             rank = i + 1
             if self._VERBOSE:

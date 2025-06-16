@@ -31,6 +31,7 @@ def get_tokenizer(cfg: DictConfig) -> PreTrainedTokenizer:
 
 def get_train_model(
     cfg: DictConfig,
+    devices: list[int] | None = None,
 ) -> tuple[TransformersWrapper, PreTrainedTokenizer]:
     """Creates and configures the training model with LoRA adapters.
 
@@ -57,7 +58,7 @@ def get_train_model(
     model_dtype = getattr(torch, cfg.train_model.torch_dtype)
 
     # Get configured devices or default to [0]
-    train_devices = cfg.train_model.get("devices", [0])
+    train_devices = devices if devices is not None else [0]
 
     # Create max_memory dict - set 0 memory for GPUs we don't want to use
     max_memory = {}
@@ -102,7 +103,9 @@ def get_train_model(
     return policy_training, train_tokenizer
 
 
-def get_inference_model(cfg: DictConfig, make_ray_worker: bool = True) -> vLLMWrapper:
+def get_inference_model(
+    cfg: DictConfig, devices: list[int] | None = None, make_ray_worker: bool = True
+) -> vLLMWrapper:
     """Creates the vLLM-based inference model for fast generation.
 
     This function initializes a vLLM model server for efficient inference and wraps
@@ -125,7 +128,7 @@ def get_inference_model(cfg: DictConfig, make_ray_worker: bool = True) -> vLLMWr
 
     num_devices = cfg.inference_model.num_devices
     if num_devices is None:
-        vllm_devices = cfg.inference_model.get("devices", [1])
+        vllm_devices = devices if devices is not None else [1]
     else:
         vllm_devices = None
     torchrl_logger.info(
@@ -161,7 +164,7 @@ def get_inference_model(cfg: DictConfig, make_ray_worker: bool = True) -> vLLMWr
 
 
 def get_ref_model(
-    cfg: DictConfig, tokenizer: PreTrainedTokenizer
+    cfg: DictConfig, tokenizer: PreTrainedTokenizer, devices: list[int] | None = None
 ) -> TransformersWrapper:
     """Creates the reference model for KL penalty computation.
 
@@ -183,7 +186,7 @@ def get_ref_model(
 
     # Get configured devices or default to [2]
     if cfg.ref_model.num_devices is None:
-        ref_devices = cfg.ref_model.get("devices", [2])
+        ref_devices = devices if devices is not None else [2]
     else:
         ref_devices = list(range(cfg.ref_model.num_devices))
 
@@ -443,29 +446,14 @@ def compute_device_allocation(cfg):
     inf_devices = cfg.inference_model.num_devices
     ref_devices = cfg.ref_model.num_devices
 
-    if cfg.train.sync:
-        # In sync mode:
-        # - inference and ref models run on the same actor
-        # - train model runs after them
-        # So we only need train_model GPUs for Ray
-        inference_start = 0
-        inference_end = inf_devices
-        ref_start = inference_end
-        ref_end = ref_start + ref_devices
-        train_start = ref_end
-        train_end = train_start + train_devices
-        ray_num_gpus = train_devices  # Only need train GPUs for Ray
-    else:
-        # In async mode:
-        # - train model runs on separate actor from inference+ref
-        # So we need all GPUs for Ray
-        train_start = 0
-        train_end = train_devices
-        inference_start = 0
-        inference_end = inf_devices
-        ref_start = inference_end
-        ref_end = ref_start + ref_devices
-        ray_num_gpus = train_devices + inf_devices + ref_devices
+    # So we need all GPUs for Ray
+    train_start = 0
+    train_end = train_devices
+    inference_start = 0
+    inference_end = inf_devices
+    ref_start = inference_end
+    ref_end = ref_start + ref_devices
+    ray_num_gpus = train_devices + inf_devices + ref_devices
 
     # Create device lists
     train_model_devices = list(range(train_start, train_end))

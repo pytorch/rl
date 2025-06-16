@@ -38,6 +38,8 @@ class GRPOLossOutput(TensorClass["nocast"]):
     loss_entropy: torch.Tensor | None = None
     loss_kl_to_ref: torch.Tensor | None = None
     kl_to_ref: torch.Tensor | None = None
+    loss_kl_to_inference: torch.Tensor | None = None
+    kl_to_inference: torch.Tensor | None = None
 
 
 class GRPOLoss(ClipPPOLoss):
@@ -71,7 +73,7 @@ class GRPOLoss(ClipPPOLoss):
             ``samples_mc_entropy`` will control how many
             samples will be used to compute this estimate.
             Defaults to ``1``.
-        entropy_coef (scalar, optional): entropy multiplier when computing the total loss.
+        entropy_coeff (scalar, optional): entropy multiplier when computing the total loss.
             Defaults to ``0.01``.
         advantage_key (str, optional): [Deprecated, use set_keys(advantage_key=advantage_key) instead]
             The input tensordict key where the advantage is
@@ -87,6 +89,8 @@ class GRPOLoss(ClipPPOLoss):
             estimate was done by the current version of the value estimator. If instead ``True`` is provided, the
             ``clip_epsilon`` parameter will be used as the clipping threshold. If not provided or ``False``, no
             clipping will be performed. Defaults to ``False``.
+        kl_to_ref_coeff (float, optional): coefficient for the KL divergence to the reference policy. Defaults to ``None`` (no KL divergence).
+        kl_to_inference_coeff (float, optional): coefficient for the KL divergence to the inference policy. Defaults to ``None`` (no KL divergence).
         device (torch.device, optional): device of the buffers. Defaults to ``None``.
 
             .. note:: Parameters and buffers from the policy / critic will not be cast to that device to ensure that
@@ -109,11 +113,12 @@ class GRPOLoss(ClipPPOLoss):
         clip_epsilon: float = 0.2,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
-        entropy_coef: float = 0.01,
+        entropy_coeff: float = 0.01,
         gamma: float | None = None,
         reduction: str = None,
         clip_value: bool | float | None = None,
         kl_to_ref_coeff: float | None = None,
+        kl_to_inference_coeff: float | None = None,
         device: torch.device = None,
         **kwargs,
     ):
@@ -126,7 +131,7 @@ class GRPOLoss(ClipPPOLoss):
             critic_network=None,
             entropy_bonus=entropy_bonus,
             samples_mc_entropy=samples_mc_entropy,
-            entropy_coef=entropy_coef,
+            entropy_coeff=entropy_coeff,
             gamma=gamma,
             separate_losses=False,
             reduction=reduction,
@@ -140,6 +145,7 @@ class GRPOLoss(ClipPPOLoss):
         self.set_keys(sample_log_prob="log_probs", action="tokens_response")
         # TODO: make this a buffer
         self.kl_to_ref_coeff = kl_to_ref_coeff
+        self.kl_to_inference_coeff = kl_to_inference_coeff
 
     def forward(self, tensordict: TensorDictBase) -> GRPOLossOutput:
         tensordict = tensordict.copy()
@@ -177,7 +183,7 @@ class GRPOLoss(ClipPPOLoss):
                 td_out.set("composite_entropy", entropy.detach())
                 entropy = _sum_td_features(entropy)
             td_out.set("entropy", entropy.detach().mean())  # for logging
-            td_out.set("loss_entropy", -self.entropy_coef * entropy)
+            td_out.set("loss_entropy", -self.entropy_coeff * entropy)
         if self._has_critic:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
@@ -194,14 +200,32 @@ class GRPOLoss(ClipPPOLoss):
             loss_kl, kl_penalty = self._kl_to_ref(tensordict)
             td_out["loss_kl_to_ref"] = loss_kl
             td_out["kl_to_ref"] = kl_penalty.detach()
+        if self.kl_to_inference_coeff is not None:
+            loss_kl, kl_penalty = self._kl_to_ref(
+                tensordict,
+                key=self.tensor_keys.sample_log_prob,
+                coeff=self.kl_to_inference_coeff,
+            )
+            td_out["loss_kl_to_inference"] = loss_kl
+            td_out["kl_to_inference"] = kl_penalty.detach()
         del tensordict["_cur_log_prob"]
         return GRPOLossOutput.from_tensordict(td_out)
 
-    def _kl_to_ref(self, tensordict):
+    def _kl_to_ref(
+        self,
+        tensordict: TensorDictBase,
+        key: NestedKey = ("next", "ref_log_prob"),
+        ref_log_prob: torch.Tensor | None = None,
+        coeff: float | None = None,
+    ):
+        if coeff is None:
+            coeff = self.kl_to_ref_coeff
         # TODO: customize this
-        ref_log_prob = tensordict.get(
-            ("next", "ref_log_prob"), as_padded_tensor=True
-        ).squeeze(-1)
+        if ref_log_prob is None:
+            ref_log_prob = tensordict.get(
+                key,
+                as_padded_tensor=True,
+            ).squeeze(-1)
         cur_log_prob = tensordict.get("_cur_log_prob")
         # TODO: remove this
         assert cur_log_prob.shape == ref_log_prob.shape, (
@@ -213,7 +237,7 @@ class GRPOLoss(ClipPPOLoss):
         cur_log_prob = cur_log_prob[mask]
         diff = ref_log_prob - cur_log_prob
         kl_penalty = (diff.expm1() - diff).mean()
-        return self.kl_to_ref_coeff * kl_penalty, kl_penalty
+        return coeff * kl_penalty, kl_penalty
 
     def _log_weight(
         self, tensordict: TensorDictBase, adv_shape: torch.Size

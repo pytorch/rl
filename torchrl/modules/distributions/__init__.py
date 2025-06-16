@@ -45,7 +45,7 @@ HAS_ENTROPY = {
     TanhDelta: False,
     TanhNormal: False,
     TruncatedNormal: False,
-    MaskedCategorical: False,
+    MaskedCategorical: True,
     MaskedOneHotCategorical: False,
     OneHotCategorical: True,
     torch_dist.Categorical: True,

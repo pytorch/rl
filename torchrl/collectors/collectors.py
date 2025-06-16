@@ -155,6 +155,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     compiled_policy: bool
     cudagraphed_policy: bool
     _weight_updater: WeightUpdaterBase | None = None
+    verbose: bool = False
 
     @property
     def weight_updater(self) -> WeightUpdaterBase:
@@ -1242,13 +1243,18 @@ class SyncDataCollector(DataCollectorBase):
 
             while self._frames < self.total_frames:
                 self._iter += 1
+                if self.verbose:
+                    torchrl_logger.info("Collector: rollout.")
                 tensordict_out = self.rollout()
                 if tensordict_out is None:
                     # if a replay buffer is passed and self.extend_buffer=False, there is no tensordict_out
                     #  frames are updated within the rollout function
+                    torchrl_logger.info("Collector: No tensordict_out. Yielding.")
                     yield
                     continue
                 self._increment_frames(tensordict_out.numel())
+                if self.verbose:
+                    torchrl_logger.info("Collector: postproc.")
                 tensordict_out = self._postproc(tensordict_out)
                 if self.return_same_td:
                     # This is used with multiprocessed collectors to use the buffers
@@ -1260,6 +1266,10 @@ class SyncDataCollector(DataCollectorBase):
                     yield tensordict_out
                 elif self.replay_buffer is not None:
                     self.replay_buffer.extend(tensordict_out)
+                    if self.verbose:
+                        torchrl_logger.info(
+                            f"Collector: Added {tensordict_out.numel()} frames to replay buffer. Yielding."
+                        )
                     yield
                 else:
                     # we must clone the values, as the tensordict is updated in-place.

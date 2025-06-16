@@ -901,6 +901,26 @@ class ReplayBuffer:
         self._transform.insert(index, transform)
         return self
 
+    _iterator = None
+
+    def next(self):
+        """Returns the next item in the replay buffer.
+
+        This method is used to iterate over the replay buffer in contexts where __iter__ is not available,
+        such as :class:`~torchrl.data.replay_buffers.RayReplayBuffer`.
+        """
+        try:
+            if self._iterator is None:
+                self._iterator = iter(self)
+            out = next(self._iterator)
+            # if any, we don't want the device ref to be passed in distributed settings
+            if out is not None:
+                out.clear_device_()
+            return out
+        except StopIteration:
+            self._iterator = None
+            return None
+
     def __iter__(self):
         if self._sampler.ran_out:
             self._sampler.ran_out = False
