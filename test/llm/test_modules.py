@@ -10,7 +10,7 @@ import importlib.util
 import pytest
 import torch
 
-from mocking_classes import DummyStrDataLoader
+from mocking_classes_llm import DummyStrDataLoader
 from tensordict import (
     lazy_stack,
     LazyStackedTensorDict,

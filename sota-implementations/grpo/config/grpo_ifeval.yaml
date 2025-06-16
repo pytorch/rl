@@ -1,4 +1,6 @@
+# @package _global_
 defaults:
+  - mode: async  # Default to async mode, will be overridden by grpo.py
   - _self_
   - override hydra/hydra_logging: disabled
   - override hydra/job_logging: disabled
@@ -17,71 +19,108 @@ model:
   name: Qwen/Qwen2.5-3B
   compile: false
 
+# Base training configuration - will be merged with mode-specific settings
+train:
+  # Fields defined in mode configs (async.yaml and sync.yaml)
+  # mixed_precision: true  # Whether to use mixed precision training
+  # epochs: 1  # Number of training epochs
+  # steps_per_batch: 32  # Number of steps per batch
+  # total_dialog_turns: 1_000_000  # Total number of dialog turns to collect
+  # optim_batch_size: 2  # Batch size for optimization
+  # gradient_accumulation_steps: 1  # Number of gradient accumulation steps
+  # kl_coef_in_loss: true  # Whether to include KL coefficient in loss
+  # sync: false  # Default to async, will be overridden by mode configs
+  # buffer_size: 128  # Size of replay buffer
+  exp_name: "grpo-ifeval"
+
+  # Fields used by both scripts but with different semantics
+  checkpoint_frequency: 100  # Save checkpoint every N steps/batches
+  
+  # Fields used only by grpo-async.py
+  weight_update_frequency: 10  # Update policy weights every N steps
+  logging_frequency: 10  # Log metrics every N steps
+
 # Training model configuration
 train_model:
-  gradient_checkpointing: true  # Only for training model
-  devices: [0]  # List of GPU devices to use for training
+  gradient_checkpointing: true  # Enabled for memory efficiency
+  num_devices: 1  # Number of devices to use
+  devices: null  # Will be computed by compute_device_allocation
   lora:
-    enabled: true
+    enabled: true  # Using LoRA for memory efficiency
     r: 8  # LoRA rank - controls capacity of adaptations
     alpha: 16  # LoRA alpha - scales the adaptations
     dropout: 0.1  # Dropout probability for LoRA layers
   quantization:
-    enabled: false  # Quantization might interfere with training
-  attn_implementation: sdpa  # choices: [flash_attention_2, flex_attention, sdpa]
+    enabled: false  # Enable 4-bit quantization for base model
+  attn_implementation: sdpa  # Using flash attention for memory efficiency
   torch_dtype: bfloat16
 
-# Inference model configuration (vLLM)
+# Inference model configuration
 inference_model:
-  devices: [1]  # List of GPU devices to use for inference
-  gpu_memory_utilization: 0.5
+  num_devices: 1  # Number of devices to use
+  devices: null  # Will be computed by compute_device_allocation
+  quantization:
+    enabled: false  # Enable 4-bit quantization for base model
+  attn_implementation: sdpa  # Using flash attention for memory efficiency
+  torch_dtype: bfloat16
+  gpu_memory_utilization: 0.5  # Limit GPU memory usage
   temperature: 0.8
   max_tokens: 2048
   include_stop_str_in_output: true
+  enforce_eager: false
 
 # Reference model configuration
 ref_model:
-  devices: [2]  # List of GPU devices to use for reference model
+  gradient_checkpointing: false  # Always false, no backprop
+  num_devices: 1  # Number of devices to use
+  devices: null  # Will be computed by compute_device_allocation
+  lora:
+    enabled: true  # Using LoRA for memory efficiency
+    r: 8  # LoRA rank - controls capacity of adaptations
+    alpha: 16  # LoRA alpha - scales the adaptations
+    dropout: 0.1  # Dropout probability for LoRA layers
   quantization:
-    enabled: false  # Enable quantization for memory efficiency
-  gradient_checkpointing: false  # Not needed for reference model
-  attn_implementation: 
+    enabled: false  # Enable 4-bit quantization for base model
+  attn_implementation: sdpa  # Using flash attention for memory efficiency
   torch_dtype: bfloat16
 
 # Policy configuration
 policy:
   kl_coef: 1e-2
 
-# Training configuration
-train:
-  epochs: 1
-  # Number of dialog turns per batch. This is passed to the collector and buffer.
-  # More steps do not consume more GPU memory, but it does affect the inference speed in
-  # that in sync contexts the training node will need to wait for a batch to be completed
-  # before starting the next one.
-  steps_per_batch: 16
-  # Total number of dialog turns to collect during training
-  total_dialog_turns: 1_000_000
-  # Number of batches to run in parallel. This determines the batch size passed to the optimizer.
-  # More batches consume more GPU memory.
-  optim_batch_size: 1
-  # Number of gradient accumulation steps. This determines the number of steps to run before
-  # updating the parameters.
-  gradient_accumulation_steps: 4
-  # Whether to include the KL coefficient in the loss or in the environment reward.
-  kl_coef_in_loss: true
-  # Whether to use mixed precision.
-  mixed_precision: true  # Disable mixed precision since we're not using it
-  optimizer:
-    name: AdamW
-    lr: 1e-5
-    clip_grad_norm: 0.5
+# Optimizer configuration
+optimizer:
+  name: AdamW
+  lr: 1e-5
+  clip_grad_norm: 1.0
+  weight_decay: 0.0
+
+# Ray configuration
+ray:
+  init_config:
+    num_cpus: 96  # Total available CPUs
+    num_gpus: 8  # Explicitly set number of GPUs
+    runtime_env:
+      working_dir: "."
+    _temp_dir: "/tmp/ray_grpo"  # Custom temp directory
+    _system_config:
+      object_spilling_threshold: 0.8  # Spill when 80% full
+      max_direct_memory_size: 10 * 1024 * 1024 * 1024  # 10GB limit
+      object_store_full_delay_ms: 100  # Delay when store is full
+      object_store_full_max_retries: 3  # Max retries when store is full
+  collector_config:
+    num_cpus: 24  # CPUs for inference and ref model (co-located)
+  train_handler_config:
+    num_cpus: 24  # Dedicated CPUs for training
+  replay_buffer_config:
+    num_cpus: 24  # CPUs for replay buffer
+    num_gpus: 0.0  # No GPU needed for replay buffer
 
 # Logging configuration
 logging:
-  checkpoint_dir: checkpoints
-  experiment_name: null  # auto-generated if null
-  checkpoint_frequency: 10  # save every N batches
+  experiment_name: null  # Will be auto-generated if not provided
+  checkpoint_dir: "checkpoints"
+  checkpoint_frequency: 10  # Save checkpoint every N batches
 
 hydra:
   run:

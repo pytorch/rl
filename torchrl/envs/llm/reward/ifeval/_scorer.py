@@ -24,9 +24,7 @@ import torch
 from tensordict import NestedKey, NonTensorData, TensorClass, TensorDict, TensorDictBase
 from tensordict.tensorclass import is_non_tensor
 
-from torchrl._utils import logger as torchrl_logger
-
-from torchrl.data.tensor_specs import Composite, TensorSpec, Unbounded
+from torchrl.data.tensor_specs import Composite, Unbounded
 from torchrl.envs import Transform
 
 _has_langdetect = importlib.util.find_spec("langdetect") is not None
@@ -37,13 +35,45 @@ _has_immutabledict = importlib.util.find_spec("immutabledict") is not None
 class IFEvalScoreData(TensorClass):
     """IFEval score container."""
 
-    prompt_level_strict_acc: torch.Tensor
-    inst_level_strict_acc: torch.Tensor
-    prompt_level_loose_acc: torch.Tensor
-    inst_level_loose_acc: torch.Tensor
+    prompt_level_strict_acc: torch.Tensor | None
+    inst_level_strict_acc: torch.Tensor | None
+    prompt_level_loose_acc: torch.Tensor | None
+    inst_level_loose_acc: torch.Tensor | None
+
+    def __post_init__(self):
+        prompt_level_loose_acc = self.get(
+            "prompt_level_loose_acc", as_padded_tensor=True
+        )
+        inst_level_loose_acc = self.get("inst_level_loose_acc", as_padded_tensor=True)
+        prompt_level_strict_acc = self.get(
+            "prompt_level_strict_acc", as_padded_tensor=True
+        )
+        inst_level_strict_acc = self.get("inst_level_strict_acc", as_padded_tensor=True)
+
+        if prompt_level_loose_acc is None:
+            self.prompt_level_loose_acc = torch.zeros(self.batch_size + (1,))
+        elif prompt_level_loose_acc.ndim == self.ndim:
+            self.prompt_level_loose_acc = prompt_level_loose_acc.unsqueeze(-1)
+
+        if inst_level_loose_acc is None:
+            self.inst_level_loose_acc = torch.zeros(self.batch_size + (1,))
+        elif inst_level_loose_acc.ndim == self.ndim:
+            self.inst_level_loose_acc = inst_level_loose_acc.unsqueeze(-1)
+
+        if prompt_level_strict_acc is None:
+            self.prompt_level_strict_acc = torch.zeros(self.batch_size + (1,))
+        elif prompt_level_strict_acc.ndim == self.ndim:
+            self.prompt_level_strict_acc = prompt_level_strict_acc.unsqueeze(-1)
+
+        if inst_level_strict_acc is None:
+            self.inst_level_strict_acc = torch.zeros(self.batch_size + (1,))
+        elif inst_level_strict_acc.ndim == self.ndim:
+            self.inst_level_strict_acc = inst_level_strict_acc.unsqueeze(-1)
 
 
-def _process_results(data: TensorDict, response: str | NonTensorData) -> TensorDict:
+def _process_results(
+    data: TensorDict, response: str | NonTensorData
+) -> IFEvalScoreData:
     if not _has_langdetect:
         raise ImportError("langdetect must be installed to user IFEvalScorer.")
     if not _has_immutabledict:
@@ -70,6 +100,8 @@ def _process_results(data: TensorDict, response: str | NonTensorData) -> TensorD
         inst_level_strict_acc=out_strict.follow_instruction_list,
         prompt_level_loose_acc=out_loose.follow_all_instructions,
         inst_level_loose_acc=out_loose.follow_instruction_list,
+        batch_size=data.batch_size,
+        device=data.device,
     )
 
 
@@ -90,9 +122,13 @@ class IfEvalScorer(Transform):
         response_column (NestedKey, optional): The column name for the response. Defaults to "text_response".
         score_key (NestedKey, optional): The key to store the score. Defaults to "ifeval_score".
         aggregate_reward (bool, callable, optional): Whether to aggregate the reward or not. If a Callable is passed,
-            it must take as input an :class:`~torchrl.envs.llm.IFEvalScoreData` instance and return a tensor with shape
-            identical to the env batch-size with an additional trailing singleton dimension.
+            it must take as input an :class:`~torchrl.envs.llm.IFEvalScoreData` instance, and optionally `think_blocks`, `answer_blocks` and `complete` keyword arguments
+            containing the list of think and answer blocks, respectively.
+            It must return a tensor with shape identical to the env batch-size with an additional trailing singleton dimension.
             Defaults to `True`. The default aggregator is a simple sum over the fields of :class:`~torchrl.envs.llm.IFEvalScoreData`.
+        format_weights (list[float], optional): The weights for the format fields (`prompt_level_strict_acc`, `inst_level_strict_acc`,
+            `prompt_level_loose_acc`, `inst_level_loose_acc`, in that order). Defaults to `[0.4, 0.3, 0.2, 0.1]`.
+            This is only used if `aggregate_reward` is `True` and the default aggregator is used.
 
     .. note:: `IFEvalScorer` requires the following libraries to be installed: `langdetect`, `nltk` and `immutabledict`.
 
@@ -107,7 +143,11 @@ class IfEvalScorer(Transform):
         id_key: NestedKey = "key",
         response_column: NestedKey = "text_response",
         score_key: NestedKey = "ifeval_score",
-        aggregate_reward: bool | Callable[[IFEvalScoreData], torch.Tensor] = True,
+        aggregate_reward: bool
+        | Callable[
+            [IFEvalScoreData, list[str] | None, list[str] | None], torch.Tensor
+        ] = True,
+        format_weights: list[float] | None = None,
     ):
         self.aggregate_reward = aggregate_reward
         self.score_key = score_key
@@ -133,6 +173,64 @@ class IfEvalScorer(Transform):
         self.keyword_args_key = keyword_args_key
         self.prompt_key = prompt_key
         self.id_key = id_key
+        self.format_weights = (
+            format_weights if format_weights is not None else [0.4, 0.3, 0.2, 0.1]
+        )
+
+    def _default_reward_aggregator(
+        self,
+        score: IFEvalScoreData,
+        think_blocks: list[str] | None = None,
+        answer_blocks: list[str] | None = None,
+        complete: bool | torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Default reward aggregation function that provides a more nuanced scoring system.
+
+        Args:
+            score (IFEvalScoreData): The score data.
+            think_blocks (list[str], optional): The list of think blocks.
+            answer_blocks (list[str], optional): The list of answer blocks.
+            complete (bool, optional): Whether the response is complete (ends with a eos token).
+
+        The weights are:
+        - prompt_level_strict_acc: 0.4 (highest weight for strict adherence to all instructions)
+        - inst_level_strict_acc: 0.3 (high weight for strict adherence to individual instructions)
+        - prompt_level_loose_acc: 0.2 (medium weight for loose adherence to all instructions)
+        - inst_level_loose_acc: 0.1 (lowest weight for loose adherence to individual instructions)
+        """
+        scores = torch.stack(
+            [
+                score.prompt_level_strict_acc.sum(-1, keepdim=True),
+                score.inst_level_strict_acc.sum(-1, keepdim=True),
+                score.prompt_level_loose_acc.sum(-1, keepdim=True),
+                score.inst_level_loose_acc.sum(-1, keepdim=True),
+            ],
+            -1,
+        )
+        weights = torch.tensor(
+            self.format_weights,
+            device=scores.device,
+            dtype=torch.get_default_dtype(),
+        )
+        reward_format = (scores * weights).sum(dim=-1, keepdim=True)
+        if think_blocks is not None:
+            reward_think = int(len(think_blocks) == 1)
+        else:
+            reward_think = 0
+        if answer_blocks is not None:
+            reward_answer = int(len(answer_blocks) == 1)
+        else:
+            reward_answer = 0
+        if complete is None:
+            complete = 0
+        elif isinstance(complete, torch.Tensor):
+            complete = complete.to(torch.get_default_dtype())
+        else:
+            complete = int(complete)
+
+        reward_format = reward_format * 3 + reward_answer * 2 + reward_think + complete
+        reward_format = reward_format.to(torch.get_default_dtype())
+        return reward_format
 
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
@@ -146,30 +244,26 @@ class IfEvalScorer(Transform):
                     )
                 ]
             )
-        response = tensordict.get(self.response_key)
+        h = next_tensordict["history"][..., -1]
+        response = h.content
+        complete = h.is_complete
+        # response = tensordict.get(self.response_key)
         if is_non_tensor(response):
             response = response.data
-        torchrl_logger.info(f"{response=}")
 
         # TODO: This should be a distinct module
         # Regular expression patterns to match think and answer blocks
         think_pattern = r"<think>(.*?)</think>"
         answer_pattern = r"<answer>(.*?)</answer>"
         # Extract think block
-        think_match = re.search(think_pattern, response, re.DOTALL)
-        if think_match:
-            think_match.group(1).strip()
-        else:
-            pass
+        think_blocks = re.findall(think_pattern, response, re.DOTALL)
 
         # Extract answer block
-        answer_match = re.search(answer_pattern, response, re.DOTALL)
-        if answer_match:
-            answer_block = answer_match.group(1).strip()
-        else:
-            answer_block = ""
+        answer_blocks = re.findall(answer_pattern, response, re.DOTALL)
 
-        score = _process_results(tensordict, answer_block)
+        score = _process_results(
+            tensordict.copy().auto_device_(), answer_blocks[0] if answer_blocks else ""
+        )
         next_tensordict.set(
             self.score_key,
             score,
@@ -178,12 +272,13 @@ class IfEvalScorer(Transform):
             if callable(self.aggregate_reward):
                 reward_func = self.aggregate_reward
             else:
-                reward_func = (
-                    lambda td: td.sum(reduce=True, dim="feature")
-                    .to(torch.get_default_dtype())
-                    .unsqueeze(-1)
-                )
-            reward = reward_func(score)
+                reward_func = self._default_reward_aggregator
+            reward = reward_func(
+                score,
+                think_blocks=think_blocks,
+                answer_blocks=answer_blocks,
+                complete=complete,
+            )
             next_tensordict.set("reward", reward)
 
         return next_tensordict
@@ -198,13 +293,13 @@ class IfEvalScorer(Transform):
             self.response_key,
         ]
 
-    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+    def transform_reward_spec(self, reward_spec: Composite) -> Composite:
         reward_spec["reward"] = Unbounded(
             reward_spec.shape + (1,), dtype=torch.get_default_dtype()
         )
         return reward_spec
 
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+    def transform_observation_spec(self, observation_spec: Composite) -> Composite:
         observation_spec[self.score_key] = Composite(
             prompt_level_strict_acc=Unbounded(
                 shape=observation_spec.shape, dtype=torch.bool

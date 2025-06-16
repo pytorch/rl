@@ -1512,7 +1512,9 @@ if __name__ == "__main__":
             state_dict = collector.state_dict()
             policy_state_dict = policy.state_dict()
             for worker in range(3):
-                assert "policy_state_dict" in state_dict[f"worker{worker}"], state_dict[f"worker{worker}"].keys()
+                assert "policy_state_dict" in state_dict[f"worker{worker}"], state_dict[
+                    f"worker{worker}"
+                ].keys()
                 for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
                     torch.testing.assert_close(
                         state_dict[f"worker{worker}"]["policy_state_dict"][k],

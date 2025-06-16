@@ -41,6 +41,11 @@ class TransformersWrapper(CategoricalSequential):
             `None`.
         from_text (bool, optional): Indicates whether the input is in text format. If `True`, the input is expected to
             be text that will be tokenized. If `False`, the input is expected to be token sequences. Defaults to `True`.
+
+            .. note:: If `from_text` is `True`, the input text can be provided in the `"text"` key or in the `"history"` key.
+                If using the `"history"` key, the history will be parsed from a :class:`~torchrl.data.llm.History` object to a
+                text string using the tokenizer.
+
         device (torch.device | None, optional): The device to use for computation. If `None`, the default device will
             be used. Defaults to `None`.
         generate (bool, optional): Whether to enable text generation. If `True`, the model will generate text based on
@@ -104,6 +109,7 @@ class TransformersWrapper(CategoricalSequential):
     """
 
     text_key: NestedKey = ("text",)
+    history_key: NestedKey = ("history",)
     token_key: NestedKey = ("tokens",)
     token_response_key: NestedKey = ("tokens_response",)
     text_response_key: NestedKey = ("text_response",)
@@ -287,6 +293,14 @@ class TransformersWrapper(CategoricalSequential):
         pad_val = self.tokenizer.pad_token_id
 
         text = td.get(self.text_key)
+        if text is None:
+            # Fallback on history parsing
+            history = td.get(self.history_key)
+            if history is None:
+                raise ValueError(
+                    "No text or history provided to the TransformersWrapper."
+                )
+            text = history.apply_chat_template(self.tokenizer)
         if not isinstance(text, (list, str)):
             text = text.tolist()
         tokens_in = self.tokenizer(text, **self.tokenizer_kwargs)
@@ -393,6 +407,14 @@ class TransformersWrapper(CategoricalSequential):
         pad_val = self.tokenizer.pad_token_id
 
         prompt_txt = td.get(self.text_key)
+        if prompt_txt is None:
+            # Fallback on history parsing
+            history = td.get(self.history_key)
+            if history is None:
+                raise ValueError(
+                    "No text or history provided to the TransformersWrapper."
+                )
+            prompt_txt = history.apply_chat_template(self.tokenizer)
         if not isinstance(prompt_txt, (list, str)):
             prompt_txt = prompt_txt.tolist()
         response_txt = td.get(self.text_response_key)

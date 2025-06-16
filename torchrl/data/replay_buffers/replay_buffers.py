@@ -453,6 +453,11 @@ class ReplayBuffer:
         # To access properties in remote settings, see RayReplayBuffer.write_count for instance
         return getattr(self, attr)
 
+    def _setattr(self, attr, value):
+        # To set properties in remote settings
+        setattr(self, attr, value)
+        return None  # explicit return for remote calls
+
     @property
     def write_count(self):
         """The total number of items written so far in the buffer through add and extend."""

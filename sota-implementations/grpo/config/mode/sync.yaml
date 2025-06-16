@@ -1,0 +1,15 @@
+# @package _global_
+train:
+  # Mode-specific setting
+  sync: true  # Force synchronous mode
+  
+  # Shared training settings
+  mixed_precision: true
+  epochs: 1
+  steps_per_batch: 32
+  # Leave buffer_size empty to use steps_per_batch in sync mode
+  buffer_size:
+  total_dialog_turns: 100_000
+  optim_batch_size: 1
+  gradient_accumulation_steps: 1
+  kl_coef_in_loss: true 
