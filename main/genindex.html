@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../versions.html"><span style="font-size:110%">main (0.9.0+2e7def8) &#x25BC</span></a>
+      <a href="../versions.html"><span style="font-size:110%">main (0.9.0+43d5333) &#x25BC</span></a>
     </div>
     
 
@@ -459,6 +459,8 @@
       <ul>
         <li><a href="reference/generated/torchrl.collectors.distributed.RPCWeightUpdater.html#torchrl.collectors.distributed.RPCWeightUpdater._get_server_weights">(torchrl.collectors.distributed.RPCWeightUpdater method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater._get_server_weights">(torchrl.collectors.llm.vLLMUpdater method)</a>
+</li>
         <li><a href="reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater._get_server_weights">(torchrl.collectors.RayWeightUpdater method)</a>
 </li>
       </ul></li>
@@ -466,6 +468,8 @@
 
       <ul>
         <li><a href="reference/generated/torchrl.collectors.distributed.RPCWeightUpdater.html#torchrl.collectors.distributed.RPCWeightUpdater._maybe_map_weights">(torchrl.collectors.distributed.RPCWeightUpdater method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater._maybe_map_weights">(torchrl.collectors.llm.vLLMUpdater method)</a>
 </li>
         <li><a href="reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater._maybe_map_weights">(torchrl.collectors.RayWeightUpdater method)</a>
 </li>
@@ -484,6 +488,8 @@
 
       <ul>
         <li><a href="reference/generated/torchrl.collectors.distributed.RPCWeightUpdater.html#torchrl.collectors.distributed.RPCWeightUpdater._sync_weights_with_worker">(torchrl.collectors.distributed.RPCWeightUpdater method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater._sync_weights_with_worker">(torchrl.collectors.llm.vLLMUpdater method)</a>
 </li>
         <li><a href="reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater._sync_weights_with_worker">(torchrl.collectors.RayWeightUpdater method)</a>
 </li>
@@ -755,6 +761,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.add_module">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.add_module">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.add_module">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.add_module">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -873,7 +881,7 @@
       <ul>
         <li><a href="reference/generated/torchrl.collectors.distributed.RPCWeightUpdater.html#id0">(torchrl.collectors.distributed.RPCWeightUpdater method)</a>, <a href="reference/generated/torchrl.collectors.distributed.RPCWeightUpdater.html#torchrl.collectors.distributed.RPCWeightUpdater.all_worker_ids">[1]</a>
 </li>
-        <li><a href="reference/generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater.all_worker_ids">(torchrl.collectors.llm.vLLMUpdater method)</a>
+        <li><a href="reference/generated/torchrl.collectors.llm.vLLMUpdater.html#id0">(torchrl.collectors.llm.vLLMUpdater method)</a>, <a href="reference/generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater.all_worker_ids">[1]</a>
 </li>
         <li><a href="reference/generated/torchrl.collectors.MultiProcessedWeightUpdater.html#torchrl.collectors.MultiProcessedWeightUpdater.all_worker_ids">(torchrl.collectors.MultiProcessedWeightUpdater method)</a>
 </li>
@@ -1039,6 +1047,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.apply">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.apply">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.apply">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.apply">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -1078,9 +1088,13 @@
 </li>
       <li><a href="reference/generated/torchrl.envs.llm.transforms.as_padded_tensor.html#torchrl.envs.llm.transforms.as_padded_tensor">as_padded_tensor (class in torchrl.envs.llm.transforms)</a>
 </li>
-      <li><a href="reference/generated/torchrl.data.PrioritizedReplayBuffer.html#torchrl.data.PrioritizedReplayBuffer.as_remote">as_remote() (torchrl.data.PrioritizedReplayBuffer class method)</a>
+      <li><a href="reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.as_remote">as_remote() (torchrl.collectors.llm.LLMCollector class method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector.as_remote">(torchrl.collectors.llm.RayLLMCollector class method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.PrioritizedReplayBuffer.html#torchrl.data.PrioritizedReplayBuffer.as_remote">(torchrl.data.PrioritizedReplayBuffer class method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer.as_remote">(torchrl.data.RayReplayBuffer class method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.RemoteTensorDictReplayBuffer.html#torchrl.data.RemoteTensorDictReplayBuffer.as_remote">(torchrl.data.RemoteTensorDictReplayBuffer class method)</a>
@@ -1174,6 +1188,8 @@
         <li><a href="reference/generated/torchrl.collectors.distributed.RPCDataCollector.html#torchrl.collectors.distributed.RPCDataCollector.async_shutdown">(torchrl.collectors.distributed.RPCDataCollector method)</a>
 </li>
         <li><a href="reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.async_shutdown">(torchrl.collectors.llm.LLMCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector.async_shutdown">(torchrl.collectors.llm.RayLLMCollector method)</a>
 </li>
         <li><a href="reference/generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector.async_shutdown">(torchrl.collectors.MultiaSyncDataCollector method)</a>
 </li>
@@ -1443,6 +1459,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.bfloat16">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.bfloat16">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.bfloat16">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.bfloat16">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -1552,6 +1570,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.buffers">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.buffers">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.buffers">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.buffers">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
@@ -1801,6 +1821,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.children">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.children">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.children">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.children">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -1975,6 +1997,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.close">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.close">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.close">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.close">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -2059,6 +2083,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.compile">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.compile">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.compile">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.compile">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -2126,6 +2152,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.container">(torchrl.envs.llm.transforms.KLRewardTransform property)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.container">(torchrl.envs.llm.transforms.MCPToolTransform property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.container">(torchrl.envs.llm.transforms.PolicyVersion property)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.container">(torchrl.envs.llm.transforms.PythonInterpreter property)</a>
 </li>
@@ -2317,6 +2345,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.cpu">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.cpu">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.cpu">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.cpu">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -2466,6 +2496,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.cuda">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.cuda">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.cuda">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.cuda">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
@@ -2673,7 +2705,11 @@
       <li><a href="reference/generated/torchrl.envs.transforms.DeviceCastTransform.html#torchrl.envs.transforms.DeviceCastTransform">DeviceCastTransform (class in torchrl.envs.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.dialog_turns_per_batch">dialog_turns_per_batch (torchrl.collectors.llm.LLMCollector property)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector.dialog_turns_per_batch">(torchrl.collectors.llm.RayLLMCollector property)</a>
 </li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.envs.transforms.DiscreteActionProjection.html#torchrl.envs.transforms.DiscreteActionProjection">DiscreteActionProjection (class in torchrl.envs.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.objectives.DiscreteCQLLoss.html#torchrl.objectives.DiscreteCQLLoss">DiscreteCQLLoss (class in torchrl.objectives)</a>
@@ -2952,6 +2988,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.double">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.double">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.double">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.double">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
@@ -3381,6 +3419,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.eval">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.eval">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.eval">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.eval">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -3560,6 +3600,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.extra_repr">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.extra_repr">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.extra_repr">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.extra_repr">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
@@ -3783,6 +3825,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.float">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.float">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.float">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.float">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -3868,6 +3912,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.forward">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.forward">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.forward">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.forward">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
@@ -4138,6 +4184,24 @@
 
       <ul>
         <li><a href="reference/generated/torchrl.data.PromptData.html#torchrl.data.PromptData.from_dataset">(torchrl.data.PromptData class method)</a>
+</li>
+      </ul></li>
+      <li><a href="reference/generated/torchrl.collectors.distributed.DistributedWeightUpdater.html#torchrl.collectors.distributed.DistributedWeightUpdater.from_policy">from_policy() (torchrl.collectors.distributed.DistributedWeightUpdater class method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.collectors.distributed.RPCWeightUpdater.html#torchrl.collectors.distributed.RPCWeightUpdater.from_policy">(torchrl.collectors.distributed.RPCWeightUpdater class method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater.from_policy">(torchrl.collectors.llm.vLLMUpdater class method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.MultiProcessedWeightUpdater.html#torchrl.collectors.MultiProcessedWeightUpdater.from_policy">(torchrl.collectors.MultiProcessedWeightUpdater class method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater.from_policy">(torchrl.collectors.RayWeightUpdater class method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.VanillaWeightUpdater.html#torchrl.collectors.VanillaWeightUpdater.from_policy">(torchrl.collectors.VanillaWeightUpdater class method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#id0">(torchrl.collectors.WeightUpdaterBase class method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.from_policy">(torchrl.collectors.WeightUpdaterBase method)</a>
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.modules.MultiAgentNetBase.html#torchrl.modules.MultiAgentNetBase.from_stateful_net">from_stateful_net() (torchrl.modules.MultiAgentNetBase method)</a>
@@ -4643,6 +4707,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.get_buffer">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.get_buffer">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.get_buffer">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.get_buffer">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -4735,6 +4801,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.get_extra_state">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.get_extra_state">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.get_extra_state">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.get_extra_state">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -4785,6 +4853,8 @@
       <li><a href="reference/generated/torchrl.record.loggers.get_logger.html#torchrl.record.loggers.get_logger">get_logger() (in module torchrl.record.loggers)</a>
 </li>
       <li><a href="reference/generated/torchrl.modules.TanhNormal.html#torchrl.modules.TanhNormal.get_mode">get_mode() (torchrl.modules.TanhNormal method)</a>
+</li>
+      <li><a href="reference/generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater.get_model_metadata">get_model_metadata() (torchrl.collectors.llm.vLLMUpdater class method)</a>
 </li>
       <li><a href="reference/generated/torchrl.data.BinaryToDecimal.html#torchrl.data.BinaryToDecimal.get_parameter">get_parameter() (torchrl.data.BinaryToDecimal method)</a>
 
@@ -4839,6 +4909,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.get_parameter">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.get_parameter">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.get_parameter">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.get_parameter">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -4882,10 +4954,22 @@
         <li><a href="reference/generated/torchrl.modules.tensordict_module.ActorValueOperator.html#torchrl.modules.tensordict_module.ActorValueOperator.get_policy_head">(torchrl.modules.tensordict_module.ActorValueOperator method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.get_policy_model">get_policy_model() (torchrl.collectors.llm.LLMCollector method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector.get_policy_model">(torchrl.collectors.llm.RayLLMCollector method)</a>
+</li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.modules.tensordict_module.ActorCriticWrapper.html#torchrl.modules.tensordict_module.ActorCriticWrapper.get_policy_operator">get_policy_operator() (torchrl.modules.tensordict_module.ActorCriticWrapper method)</a>
 
       <ul>
         <li><a href="reference/generated/torchrl.modules.tensordict_module.ActorValueOperator.html#torchrl.modules.tensordict_module.ActorValueOperator.get_policy_operator">(torchrl.modules.tensordict_module.ActorValueOperator method)</a>
+</li>
+      </ul></li>
+      <li><a href="reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.get_policy_version">get_policy_version() (torchrl.collectors.llm.LLMCollector method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector.get_policy_version">(torchrl.collectors.llm.RayLLMCollector method)</a>
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.modules.utils.get_primers_from_module.html#torchrl.modules.utils.get_primers_from_module">get_primers_from_module (class in torchrl.modules.utils)</a>
@@ -4954,6 +5038,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.get_submodule">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.get_submodule">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.get_submodule">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.get_submodule">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
@@ -5107,6 +5193,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.half">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.half">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.half">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.half">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -5226,6 +5314,28 @@
       </ul></li>
       <li><a href="reference/generated/torchrl.implement_for.html#torchrl.implement_for.import_module">import_module() (torchrl.implement_for class method)</a>
 </li>
+      <li><a href="reference/generated/torchrl.collectors.distributed.DistributedWeightUpdater.html#torchrl.collectors.distributed.DistributedWeightUpdater.increment_version">increment_version() (torchrl.collectors.distributed.DistributedWeightUpdater method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.collectors.distributed.RPCWeightUpdater.html#torchrl.collectors.distributed.RPCWeightUpdater.increment_version">(torchrl.collectors.distributed.RPCWeightUpdater method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.increment_version">(torchrl.collectors.llm.LLMCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector.increment_version">(torchrl.collectors.llm.RayLLMCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater.increment_version">(torchrl.collectors.llm.vLLMUpdater method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.MultiProcessedWeightUpdater.html#torchrl.collectors.MultiProcessedWeightUpdater.increment_version">(torchrl.collectors.MultiProcessedWeightUpdater method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater.increment_version">(torchrl.collectors.RayWeightUpdater method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.VanillaWeightUpdater.html#torchrl.collectors.VanillaWeightUpdater.increment_version">(torchrl.collectors.VanillaWeightUpdater method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.increment_version">(torchrl.collectors.WeightUpdaterBase method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.increment_version">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.modules.IndependentNormal.html#torchrl.modules.IndependentNormal">IndependentNormal (class in torchrl.modules)</a>
 </li>
       <li><a href="reference/generated/torchrl.data.Binary.html#torchrl.data.Binary.index">index() (torchrl.data.Binary method)</a>
@@ -5282,9 +5392,23 @@
         <li><a href="reference/generated/torchrl.data.UnboundedDiscreteTensorSpec.html#torchrl.data.UnboundedDiscreteTensorSpec.index">(torchrl.data.UnboundedDiscreteTensorSpec method)</a>
 </li>
       </ul></li>
-      <li><a href="reference/generated/torchrl.envs.llm.GSM8KPrepareQuestion.html#torchrl.envs.llm.GSM8KPrepareQuestion.init">init() (torchrl.envs.llm.GSM8KPrepareQuestion method)</a>
+      <li><a href="reference/generated/torchrl.collectors.distributed.DistributedWeightUpdater.html#torchrl.collectors.distributed.DistributedWeightUpdater.init">init() (torchrl.collectors.distributed.DistributedWeightUpdater method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.collectors.distributed.RPCWeightUpdater.html#torchrl.collectors.distributed.RPCWeightUpdater.init">(torchrl.collectors.distributed.RPCWeightUpdater method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.llm.vLLMUpdater.html#id1">(torchrl.collectors.llm.vLLMUpdater method)</a>, <a href="reference/generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater.init">[1]</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.MultiProcessedWeightUpdater.html#torchrl.collectors.MultiProcessedWeightUpdater.init">(torchrl.collectors.MultiProcessedWeightUpdater method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater.init">(torchrl.collectors.RayWeightUpdater method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.VanillaWeightUpdater.html#torchrl.collectors.VanillaWeightUpdater.init">(torchrl.collectors.VanillaWeightUpdater method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.init">(torchrl.collectors.WeightUpdaterBase method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.GSM8KPrepareQuestion.html#torchrl.envs.llm.GSM8KPrepareQuestion.init">(torchrl.envs.llm.GSM8KPrepareQuestion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.GSM8KRewardParser.html#torchrl.envs.llm.GSM8KRewardParser.init">(torchrl.envs.llm.GSM8KRewardParser method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.IfEvalScorer.html#torchrl.envs.llm.IfEvalScorer.init">(torchrl.envs.llm.IfEvalScorer method)</a>
@@ -5296,6 +5420,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.init">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.init">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.init">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.init">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
@@ -5316,6 +5442,30 @@
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.ObservationNorm.html#torchrl.envs.transforms.ObservationNorm.init_stats">init_stats() (torchrl.envs.transforms.ObservationNorm method)</a>
 </li>
+      <li><a href="reference/generated/torchrl.collectors.aSyncDataCollector.html#torchrl.collectors.aSyncDataCollector.init_updater">init_updater() (torchrl.collectors.aSyncDataCollector method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase.init_updater">(torchrl.collectors.DataCollectorBase method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.distributed.DistributedDataCollector.html#torchrl.collectors.distributed.DistributedDataCollector.init_updater">(torchrl.collectors.distributed.DistributedDataCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.distributed.DistributedSyncDataCollector.html#torchrl.collectors.distributed.DistributedSyncDataCollector.init_updater">(torchrl.collectors.distributed.DistributedSyncDataCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.init_updater">(torchrl.collectors.distributed.RayCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.distributed.RPCDataCollector.html#torchrl.collectors.distributed.RPCDataCollector.init_updater">(torchrl.collectors.distributed.RPCDataCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.init_updater">(torchrl.collectors.llm.LLMCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector.init_updater">(torchrl.collectors.llm.RayLLMCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector.init_updater">(torchrl.collectors.MultiaSyncDataCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector.init_updater">(torchrl.collectors.MultiSyncDataCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector.init_updater">(torchrl.collectors.SyncDataCollector method)</a>
+</li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.modules.NoisyLazyLinear.html#torchrl.modules.NoisyLazyLinear.initialize_parameters">initialize_parameters() (torchrl.modules.NoisyLazyLinear method)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.InitTracker.html#torchrl.envs.transforms.InitTracker">InitTracker (class in torchrl.envs.transforms)</a>
@@ -5398,6 +5548,8 @@
         <li><a href="reference/generated/torchrl.envs.TicTacToeEnv.html#torchrl.envs.TicTacToeEnv.input_spec_unbatched">(torchrl.envs.TicTacToeEnv property)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.envs.transforms.Compose.html#torchrl.envs.transforms.Compose.insert">insert() (torchrl.envs.transforms.Compose method)</a>
 </li>
       <li><a href="reference/generated/torchrl.data.PrioritizedReplayBuffer.html#torchrl.data.PrioritizedReplayBuffer.insert_transform">insert_transform() (torchrl.data.PrioritizedReplayBuffer method)</a>
@@ -5426,8 +5578,6 @@
         <li><a href="reference/generated/torchrl.envs.transforms.TransformedEnv.html#torchrl.envs.transforms.TransformedEnv.insert_transform">(torchrl.envs.transforms.TransformedEnv method)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.envs.llm.GSM8KPrepareQuestion.html#torchrl.envs.llm.GSM8KPrepareQuestion.inv">inv() (torchrl.envs.llm.GSM8KPrepareQuestion method)</a>
 
       <ul>
@@ -5442,6 +5592,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.inv">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.inv">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.inv">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.inv">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
@@ -5512,6 +5664,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.ipu">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.ipu">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.ipu">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.ipu">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
@@ -5612,6 +5766,12 @@
         <li><a href="reference/generated/torchrl.data.UnboundedDiscreteTensorSpec.html#torchrl.data.UnboundedDiscreteTensorSpec.is_in">(torchrl.data.UnboundedDiscreteTensorSpec method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.is_initialized">is_initialized() (torchrl.collectors.llm.LLMCollector method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector.is_initialized">(torchrl.collectors.llm.RayLLMCollector method)</a>
+</li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool.is_spec_locked">is_spec_locked (torchrl.envs.AsyncEnvPool property)</a>
 
       <ul>
@@ -5687,6 +5847,8 @@
       <li><a href="reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.iterator">iterator() (torchrl.collectors.llm.LLMCollector method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector.iterator">(torchrl.collectors.llm.RayLLMCollector method)</a>
+</li>
         <li><a href="reference/generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector.iterator">(torchrl.collectors.SyncDataCollector method)</a>
 </li>
       </ul></li>
@@ -5865,6 +6027,8 @@
 </li>
         <li><a href="reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.load_state_dict">(torchrl.collectors.llm.LLMCollector method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector.load_state_dict">(torchrl.collectors.llm.RayLLMCollector method)</a>
+</li>
         <li><a href="reference/generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector.load_state_dict">(torchrl.collectors.MultiaSyncDataCollector method)</a>
 </li>
         <li><a href="reference/generated/torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector.load_state_dict">(torchrl.collectors.MultiSyncDataCollector method)</a>
@@ -5938,6 +6102,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.load_state_dict">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.load_state_dict">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.load_state_dict">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.load_state_dict">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
@@ -6503,6 +6669,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.modules">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.modules">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.modules">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.modules">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -6596,6 +6764,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.mtia">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.mtia">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.mtia">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.mtia">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
@@ -6723,6 +6893,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.named_buffers">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.named_buffers">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.named_buffers">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.named_buffers">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -6809,6 +6981,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.named_children">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.named_children">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.named_children">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.named_children">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -6894,6 +7068,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.named_modules">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.named_modules">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.named_modules">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.named_modules">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
@@ -6982,6 +7158,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.named_parameters">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.named_parameters">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.named_parameters">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.named_parameters">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
@@ -7557,6 +7735,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.parameters">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.parameters">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.parameters">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.parameters">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -7609,6 +7789,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.parent">(torchrl.envs.llm.transforms.MCPToolTransform property)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.parent">(torchrl.envs.llm.transforms.PolicyVersion property)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.parent">(torchrl.envs.llm.transforms.PythonInterpreter property)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.parent">(torchrl.envs.llm.transforms.TemplateTransform property)</a>
@@ -7636,6 +7818,8 @@
         <li><a href="reference/generated/torchrl.collectors.distributed.RPCDataCollector.html#torchrl.collectors.distributed.RPCDataCollector.pause">(torchrl.collectors.distributed.RPCDataCollector method)</a>
 </li>
         <li><a href="reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.pause">(torchrl.collectors.llm.LLMCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector.pause">(torchrl.collectors.llm.RayLLMCollector method)</a>
 </li>
         <li><a href="reference/generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector.pause">(torchrl.collectors.MultiaSyncDataCollector method)</a>
 </li>
@@ -7668,6 +7852,14 @@
       </ul></li>
       <li><a href="reference/generated/torchrl.data.Tree.html#torchrl.data.Tree.plot">plot() (torchrl.data.Tree method)</a>
 </li>
+      <li><a href="reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.policy_version">policy_version (torchrl.collectors.llm.LLMCollector property)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector.policy_version">(torchrl.collectors.llm.RayLLMCollector property)</a>
+</li>
+      </ul></li>
+      <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion">PolicyVersion (class in torchrl.envs.llm.transforms)</a>
+</li>
       <li><a href="reference/generated/torchrl.data.Composite.html#torchrl.data.Composite.pop">pop() (torchrl.data.Composite method)</a>
 
       <ul>
@@ -7676,6 +7868,22 @@
         <li><a href="reference/generated/torchrl.data.LazyStackedCompositeSpec.html#torchrl.data.LazyStackedCompositeSpec.pop">(torchrl.data.LazyStackedCompositeSpec method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite.pop">(torchrl.data.StackedComposite method)</a>
+</li>
+      </ul></li>
+      <li><a href="reference/generated/torchrl.collectors.distributed.DistributedWeightUpdater.html#torchrl.collectors.distributed.DistributedWeightUpdater.post_hooks">post_hooks (torchrl.collectors.distributed.DistributedWeightUpdater property)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.collectors.distributed.RPCWeightUpdater.html#torchrl.collectors.distributed.RPCWeightUpdater.post_hooks">(torchrl.collectors.distributed.RPCWeightUpdater property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater.post_hooks">(torchrl.collectors.llm.vLLMUpdater property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.MultiProcessedWeightUpdater.html#torchrl.collectors.MultiProcessedWeightUpdater.post_hooks">(torchrl.collectors.MultiProcessedWeightUpdater property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater.post_hooks">(torchrl.collectors.RayWeightUpdater property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.VanillaWeightUpdater.html#torchrl.collectors.VanillaWeightUpdater.post_hooks">(torchrl.collectors.VanillaWeightUpdater property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.post_hooks">(torchrl.collectors.WeightUpdaterBase property)</a>
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.objectives.PPOLoss.html#torchrl.objectives.PPOLoss">PPOLoss (class in torchrl.objectives)</a>
@@ -7763,7 +7971,7 @@
 </li>
         <li><a href="reference/generated/torchrl.collectors.VanillaWeightUpdater.html#torchrl.collectors.VanillaWeightUpdater.push_weights">(torchrl.collectors.VanillaWeightUpdater method)</a>
 </li>
-        <li><a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#id0">(torchrl.collectors.WeightUpdaterBase method)</a>, <a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.push_weights">[1]</a>
+        <li><a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#id1">(torchrl.collectors.WeightUpdaterBase method)</a>, <a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.push_weights">[1]</a>
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter">PythonInterpreter (class in torchrl.envs.llm.transforms)</a>
@@ -7958,6 +8166,8 @@
 </li>
       <li><a href="reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector">RayCollector (class in torchrl.collectors.distributed)</a>
 </li>
+      <li><a href="reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector">RayLLMCollector (class in torchrl.collectors.llm)</a>
+</li>
       <li><a href="reference/generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer">RayReplayBuffer (class in torchrl.data)</a>
 </li>
       <li><a href="reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater">RayWeightUpdater (class in torchrl.collectors)</a>
@@ -8067,6 +8277,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.register_backward_hook">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.register_backward_hook">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.register_backward_hook">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.register_backward_hook">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -8153,6 +8365,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.register_buffer">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.register_buffer">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.register_buffer">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.register_buffer">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -8199,7 +8413,7 @@
 </li>
         <li><a href="reference/generated/torchrl.collectors.VanillaWeightUpdater.html#torchrl.collectors.VanillaWeightUpdater.register_collector">(torchrl.collectors.VanillaWeightUpdater method)</a>
 </li>
-        <li><a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#id1">(torchrl.collectors.WeightUpdaterBase method)</a>, <a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.register_collector">[1]</a>
+        <li><a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#id2">(torchrl.collectors.WeightUpdaterBase method)</a>, <a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.register_collector">[1]</a>
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.data.BinaryToDecimal.html#torchrl.data.BinaryToDecimal.register_forward_hook">register_forward_hook() (torchrl.data.BinaryToDecimal method)</a>
@@ -8254,6 +8468,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.register_forward_hook">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.register_forward_hook">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.register_forward_hook">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.register_forward_hook">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
@@ -8341,6 +8557,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.register_forward_pre_hook">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.register_forward_pre_hook">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.register_forward_pre_hook">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.register_forward_pre_hook">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -8427,6 +8645,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.register_full_backward_hook">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.register_full_backward_hook">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.register_full_backward_hook">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.register_full_backward_hook">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -8512,6 +8732,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.register_full_backward_pre_hook">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.register_full_backward_pre_hook">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.register_full_backward_pre_hook">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.register_full_backward_pre_hook">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
@@ -8657,6 +8879,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.register_load_state_dict_post_hook">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.register_load_state_dict_post_hook">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.register_load_state_dict_post_hook">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.register_load_state_dict_post_hook">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -8742,6 +8966,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.register_load_state_dict_pre_hook">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.register_load_state_dict_pre_hook">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.register_load_state_dict_pre_hook">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.register_load_state_dict_pre_hook">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
@@ -8831,6 +9057,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.register_module">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.register_module">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.register_module">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.register_module">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -8917,6 +9145,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.register_parameter">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.register_parameter">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.register_parameter">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.register_parameter">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -8948,6 +9178,22 @@
         <li><a href="reference/generated/torchrl.objectives.llm.GRPOLoss.html#torchrl.objectives.llm.GRPOLoss.register_parameter">(torchrl.objectives.llm.GRPOLoss method)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.llm.MCAdvantage.html#torchrl.objectives.llm.MCAdvantage.register_parameter">(torchrl.objectives.llm.MCAdvantage method)</a>
+</li>
+      </ul></li>
+      <li><a href="reference/generated/torchrl.collectors.distributed.DistributedWeightUpdater.html#torchrl.collectors.distributed.DistributedWeightUpdater.register_post_hook">register_post_hook() (torchrl.collectors.distributed.DistributedWeightUpdater method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.collectors.distributed.RPCWeightUpdater.html#torchrl.collectors.distributed.RPCWeightUpdater.register_post_hook">(torchrl.collectors.distributed.RPCWeightUpdater method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater.register_post_hook">(torchrl.collectors.llm.vLLMUpdater method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.MultiProcessedWeightUpdater.html#torchrl.collectors.MultiProcessedWeightUpdater.register_post_hook">(torchrl.collectors.MultiProcessedWeightUpdater method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater.register_post_hook">(torchrl.collectors.RayWeightUpdater method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.VanillaWeightUpdater.html#torchrl.collectors.VanillaWeightUpdater.register_post_hook">(torchrl.collectors.VanillaWeightUpdater method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.register_post_hook">(torchrl.collectors.WeightUpdaterBase method)</a>
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.data.PrioritizedReplayBuffer.html#torchrl.data.PrioritizedReplayBuffer.register_save_hook">register_save_hook() (torchrl.data.PrioritizedReplayBuffer method)</a>
@@ -9018,6 +9264,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.register_state_dict_post_hook">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.register_state_dict_post_hook">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.register_state_dict_post_hook">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.register_state_dict_post_hook">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
@@ -9104,6 +9352,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.register_state_dict_pre_hook">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.register_state_dict_pre_hook">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.register_state_dict_pre_hook">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.register_state_dict_pre_hook">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
@@ -9209,6 +9459,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.requires_grad_">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.requires_grad_">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.requires_grad_">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.requires_grad_">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -9248,6 +9500,8 @@
         <li><a href="reference/generated/torchrl.collectors.aSyncDataCollector.html#torchrl.collectors.aSyncDataCollector.reset">(torchrl.collectors.aSyncDataCollector method)</a>
 </li>
         <li><a href="reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.reset">(torchrl.collectors.llm.LLMCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector.reset">(torchrl.collectors.llm.RayLLMCollector method)</a>
 </li>
         <li><a href="reference/generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector.reset">(torchrl.collectors.MultiaSyncDataCollector method)</a>
 </li>
@@ -9599,7 +9853,11 @@
       <li><a href="reference/generated/torchrl.envs.RoboHiveEnv.html#torchrl.envs.RoboHiveEnv">RoboHiveEnv() (in module torchrl.envs)</a>
 </li>
       <li><a href="reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.rollout">rollout (torchrl.collectors.llm.LLMCollector property)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector.rollout">(torchrl.collectors.llm.RayLLMCollector property)</a>
 </li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.envs.ModelBasedEnvBase.html#torchrl.envs.rollout">rollout() (in module torchrl.envs)</a>
 
       <ul>
@@ -9955,6 +10213,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.set_extra_state">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.set_extra_state">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.set_extra_state">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.set_extra_state">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -10066,6 +10326,8 @@
         <li><a href="reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.set_seed">(torchrl.collectors.distributed.RayCollector method)</a>
 </li>
         <li><a href="reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.set_seed">(torchrl.collectors.llm.LLMCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector.set_seed">(torchrl.collectors.llm.RayLLMCollector method)</a>
 </li>
         <li><a href="reference/generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector.set_seed">(torchrl.collectors.MultiaSyncDataCollector method)</a>
 </li>
@@ -10219,6 +10481,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.set_submodule">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.set_submodule">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.set_submodule">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.set_submodule">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -10361,6 +10625,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.share_memory">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.share_memory">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.share_memory">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.share_memory">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -10402,6 +10668,8 @@
         <li><a href="reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.shutdown">(torchrl.collectors.distributed.RayCollector method)</a>
 </li>
         <li><a href="reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.shutdown">(torchrl.collectors.llm.LLMCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector.shutdown">(torchrl.collectors.llm.RayLLMCollector method)</a>
 </li>
         <li><a href="reference/generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector.shutdown">(torchrl.collectors.MultiaSyncDataCollector method)</a>
 </li>
@@ -10557,6 +10825,8 @@
 </li>
         <li><a href="reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.start">(torchrl.collectors.llm.LLMCollector method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector.start">(torchrl.collectors.llm.RayLLMCollector method)</a>
+</li>
         <li><a href="reference/generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector.start">(torchrl.collectors.MultiaSyncDataCollector method)</a>
 </li>
         <li><a href="reference/generated/torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector.start">(torchrl.collectors.MultiSyncDataCollector method)</a>
@@ -10570,6 +10840,8 @@
         <li><a href="reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.state_dict">(torchrl.collectors.distributed.RayCollector method)</a>
 </li>
         <li><a href="reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.state_dict">(torchrl.collectors.llm.LLMCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector.state_dict">(torchrl.collectors.llm.RayLLMCollector method)</a>
 </li>
         <li><a href="reference/generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector.state_dict">(torchrl.collectors.MultiaSyncDataCollector method)</a>
 </li>
@@ -10644,6 +10916,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.state_dict">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.state_dict">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.state_dict">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.state_dict">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
@@ -11153,6 +11427,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.to">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.to">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.to">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.to">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -11298,6 +11574,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.to_empty">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.to_empty">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.to_empty">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.to_empty">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
@@ -11470,6 +11748,8 @@
         <li><a href="reference/generated/torchrl.envs.transforms.Tokenizer.html#torchrl.envs.transforms.Tokenizer">(class in torchrl.envs.transforms)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector.total_dialog_turns">total_dialog_turns (torchrl.collectors.llm.RayLLMCollector property)</a>
+</li>
       <li><a href="reference/generated/torchrl.envs.transforms.ToTensorImage.html#torchrl.envs.transforms.ToTensorImage">ToTensorImage (class in torchrl.envs.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.data.BinaryToDecimal.html#torchrl.data.BinaryToDecimal.train">train() (torchrl.data.BinaryToDecimal method)</a>
@@ -11525,6 +11805,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.train">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.train">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.train">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.train">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -11568,8 +11850,6 @@
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform">Transform (class in torchrl.envs.transforms)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.envs.llm.GSM8KPrepareQuestion.html#torchrl.envs.llm.GSM8KPrepareQuestion.transform_action_spec">transform_action_spec() (torchrl.envs.llm.GSM8KPrepareQuestion method)</a>
 
       <ul>
@@ -11584,6 +11864,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.transform_action_spec">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.transform_action_spec">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.transform_action_spec">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.transform_action_spec">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
@@ -11608,6 +11890,8 @@
         <li><a href="reference/generated/torchrl.objectives.llm.MCAdvantage.html#torchrl.objectives.llm.MCAdvantage.transform_action_spec">(torchrl.objectives.llm.MCAdvantage method)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.envs.llm.GSM8KPrepareQuestion.html#torchrl.envs.llm.GSM8KPrepareQuestion.transform_done_spec">transform_done_spec() (torchrl.envs.llm.GSM8KPrepareQuestion method)</a>
 
       <ul>
@@ -11622,6 +11906,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.transform_done_spec">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.transform_done_spec">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.transform_done_spec">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.transform_done_spec">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
@@ -11659,6 +11945,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.transform_env_batch_size">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.transform_env_batch_size">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.transform_env_batch_size">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.transform_env_batch_size">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -11691,6 +11979,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.transform_env_device">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.transform_env_device">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.transform_env_device">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.transform_env_device">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -11722,6 +12012,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.transform_input_spec">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.transform_input_spec">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.transform_input_spec">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.transform_input_spec">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
@@ -11786,6 +12078,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.transform_observation_spec">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.transform_observation_spec">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.transform_observation_spec">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.transform_observation_spec">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
@@ -11879,6 +12173,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.transform_output_spec">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.transform_output_spec">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.transform_output_spec">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.transform_output_spec">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -11935,6 +12231,8 @@
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.transform_reward_spec">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.transform_reward_spec">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.transform_reward_spec">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform.transform_reward_spec">(torchrl.envs.llm.transforms.TemplateTransform method)</a>
@@ -11990,6 +12288,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.transform_state_spec">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.transform_state_spec">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.transform_state_spec">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.transform_state_spec">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
@@ -12076,6 +12376,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.type">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.type">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.type">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.type">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
@@ -12379,6 +12681,8 @@
 </li>
         <li><a href="reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.update_policy_weights_">(torchrl.collectors.llm.LLMCollector method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector.update_policy_weights_">(torchrl.collectors.llm.RayLLMCollector method)</a>
+</li>
         <li><a href="reference/generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector.update_policy_weights_">(torchrl.collectors.MultiaSyncDataCollector method)</a>
 </li>
         <li><a href="reference/generated/torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector.update_policy_weights_">(torchrl.collectors.MultiSyncDataCollector method)</a>
@@ -12463,6 +12767,8 @@
       <li><a href="reference/generated/torchrl.envs.transforms.VecNorm.html#torchrl.envs.transforms.VecNorm">VecNorm (class in torchrl.envs.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#torchrl.envs.transforms.VecNormV2">VecNormV2 (class in torchrl.envs.transforms)</a>
+</li>
+      <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.version">version (torchrl.envs.llm.transforms.PolicyVersion property)</a>
 </li>
       <li><a href="reference/generated/torchrl.data.Tree.html#torchrl.data.Tree.vertices">vertices() (torchrl.data.Tree method)</a>
 </li>
@@ -12555,6 +12861,8 @@
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.record.loggers.wandb.WandbLogger.html#torchrl.record.loggers.wandb.WandbLogger">WandbLogger() (in module torchrl.record.loggers.wandb)</a>
+</li>
+      <li><a href="reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector.weight_updater">weight_updater (torchrl.collectors.llm.RayLLMCollector property)</a>
 </li>
       <li><a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase">WeightUpdaterBase (class in torchrl.collectors)</a>
 </li>
@@ -12656,6 +12964,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.xpu">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.xpu">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.xpu">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.xpu">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>
@@ -12802,6 +13112,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform.zero_grad">(torchrl.envs.llm.transforms.KLRewardTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform.zero_grad">(torchrl.envs.llm.transforms.MCPToolTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion.zero_grad">(torchrl.envs.llm.transforms.PolicyVersion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter.zero_grad">(torchrl.envs.llm.transforms.PythonInterpreter method)</a>
 </li>

@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+2e7def8) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+43d5333) &#x25BC</span></a>
     </div>
     
 
@@ -455,8 +455,28 @@ as input and outputting an action (or actions) as well as its log-probability va
 and return a scalar value (<code class="docutils literal notranslate"><span class="pre">state_value</span></code> by default) in the output keys.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><ul class="simple">
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>While this loss module does not enforce any specific model mode (train/eval), it is highly recommended
+to keep your model in eval mode during RL training to ensure deterministic behavior.
+A failure to learn due to a train/eval mode mismatch is often observed when the Effective Sample Size (ESS)
+drops or increases significantly (see note below).</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The PPO loss exposes a couple of additional metrics that can be used to monitor the training process:</p>
+<ul class="simple">
+<li><p>The clip fraction is the ratio of the number of clipped weights in the PPO loss (i.e. the ratio of the number of weights that were clipped to the total number of weights).</p></li>
+<li><p>The Effective Sample Size (ESS) is a measure of the effective number of samples in the batch, computed as the inverse of the sum of the squared importance weights.
+A value of 1 indicates that the importance weights are all equal to 1 (i.e., the samples are equally weighted).
+Any value below 1 indicates that the samples are not equally weighted, and the ESS is a measure of the effective number of samples.
+If the value drops or increases significantly, it often indicates issues with the model configuration (such as a train/eval mode mismatch, or a large policy update).</p></li>
+</ul>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
 <li><p><strong>entropy_bonus</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, an entropy bonus will be added to the
 loss to favour exploratory policies.</p></li>
 <li><p><strong>samples_mc_entropy</strong> (<em>int</em><em>, </em><em>optional</em>) – if the distribution retrieved from the policy

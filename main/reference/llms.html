@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.9.0+2e7def8) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.9.0+43d5333) &#x25BC</span></a>
     </div>
     
 
@@ -431,15 +431,38 @@
 <p id="ref-llms">TorchRL offers a set of tools for LLM post-training, as well as some examples for training or setup.</p>
 <section id="collectors">
 <h2>Collectors<a class="headerlink" href="#collectors" title="Permalink to this heading">¶</a></h2>
-<p>TorchRL offers a specialized collector class (<a class="reference internal" href="generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector" title="torchrl.collectors.llm.LLMCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">LLMCollector</span></code></a>) that is tailored for LLM
+<p>TorchRL offers specialized collector classes (<a class="reference internal" href="generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector" title="torchrl.collectors.llm.LLMCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">LLMCollector</span></code></a> and <a class="reference internal" href="generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector" title="torchrl.collectors.llm.RayLLMCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">RayLLMCollector</span></code></a>) that are tailored for LLM
 use cases. We also provide dedicated updaters for some inference engines.</p>
+<p>LLM Collectors allow to track the version of the policy, which is useful for some use cases.
+This is done by adding a <a class="reference internal" href="generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion" title="torchrl.envs.llm.transforms.PolicyVersion"><code class="xref py py-class docutils literal notranslate"><span class="pre">PolicyVersion</span></code></a> transform to the environment, which is
+then incremented by the collector after each weight update. To do this, one either provides the stateful version of the
+transform, or a boolean to the collector constructor.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.llm.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">PolicyVersion</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">LLMCollector</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.llm.weight_update</span><span class="w"> </span><span class="kn">import</span> <span class="n">vLLMUpdater</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">env</span> <span class="o">=</span> <span class="n">make_env</span><span class="p">()</span> <span class="c1"># place your code here</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">policy</span> <span class="o">=</span> <span class="n">make_policy</span><span class="p">()</span> <span class="c1"># place your code here</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span> <span class="o">=</span> <span class="n">LLMCollector</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span> <span class="n">weight_updater</span><span class="o">=</span><span class="n">vLLMUpdater</span><span class="p">(),</span> <span class="n">track_policy_version</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># init the updater</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span><span class="o">.</span><span class="n">weight_updater</span><span class="o">.</span><span class="n">init</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># the version is incremented after each weight update</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span><span class="n">state_dict</span><span class="o">=...</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">collector</span><span class="o">.</span><span class="n">policy_version_tracker</span><span class="o">.</span><span class="n">version</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># the policy version is written in the data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">collector</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;policy_version&quot;</span><span class="p">])</span>
+</pre></div>
+</div>
 <table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater" title="torchrl.collectors.llm.vLLMUpdater"><code class="xref py py-obj docutils literal notranslate"><span class="pre">vLLMUpdater</span></code></a>(master_address, master_port, ...)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater" title="torchrl.collectors.llm.vLLMUpdater"><code class="xref py py-obj docutils literal notranslate"><span class="pre">vLLMUpdater</span></code></a>([master_address, master_port, ...])</p></td>
 <td><p>A class that sends weights to vLLM workers.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector" title="torchrl.collectors.llm.LLMCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LLMCollector</span></code></a>(env, *[, policy, ...])</p></td>
 <td><p>A simplified version of SyncDataCollector for LLM inference.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector" title="torchrl.collectors.llm.RayLLMCollector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RayLLMCollector</span></code></a>(env, *[, policy, ...])</p></td>
+<td><p>A lightweight Ray implementation of the LLM Collector that can be extended and sampled remotely.</p></td>
 </tr>
 </tbody>
 </table>
@@ -450,7 +473,7 @@ use cases. We also provide dedicated updaters for some inference engines.</p>
 data for LLM post-training.</p>
 <table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.llm.History.html#torchrl.data.llm.History" title="torchrl.data.llm.History"><code class="xref py py-obj docutils literal notranslate"><span class="pre">History</span></code></a>(role, content[, tool_calls, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.llm.History.html#torchrl.data.llm.History" title="torchrl.data.llm.History"><code class="xref py py-obj docutils literal notranslate"><span class="pre">History</span></code></a>(role, content[, is_complete, ...])</p></td>
 <td><p></p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase" title="torchrl.data.llm.ContentBase"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ContentBase</span></code></a>(type, text, url, data, ...[, ...])</p></td>
@@ -636,16 +659,19 @@ transforms).</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter" title="torchrl.envs.llm.transforms.PythonInterpreter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PythonInterpreter</span></code></a>([tokenizer, tool_name, ...])</p></td>
 <td><p>A transform that executes Python code in the LLM response.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform" title="torchrl.envs.llm.transforms.TemplateTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TemplateTransform</span></code></a>(tokenizer[, chat_template])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion" title="torchrl.envs.llm.transforms.PolicyVersion"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PolicyVersion</span></code></a>(version_type, ] =)</p></td>
+<td><p>A transform that keeps track of the version of the policy.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform" title="torchrl.envs.llm.transforms.TemplateTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TemplateTransform</span></code></a>(tokenizer[, chat_template])</p></td>
 <td><p>A transform that maps applies a chat template to an input string during the forward pass, and parses the strings to the template during backward.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.Tokenizer.html#torchrl.envs.llm.transforms.Tokenizer" title="torchrl.envs.llm.transforms.Tokenizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Tokenizer</span></code></a>([in_keys, out_keys, in_keys_inv, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.Tokenizer.html#torchrl.envs.llm.transforms.Tokenizer" title="torchrl.envs.llm.transforms.Tokenizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Tokenizer</span></code></a>([in_keys, out_keys, in_keys_inv, ...])</p></td>
 <td><p>Applies a tokenization operation on the specified inputs.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.as_nested_tensor.html#torchrl.envs.llm.transforms.as_nested_tensor" title="torchrl.envs.llm.transforms.as_nested_tensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_nested_tensor</span></code></a>(list_of_tensordicts)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.as_nested_tensor.html#torchrl.envs.llm.transforms.as_nested_tensor" title="torchrl.envs.llm.transforms.as_nested_tensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_nested_tensor</span></code></a>(list_of_tensordicts)</p></td>
 <td><p>Stacks a list of tensordicts into a single tensordict with nested tensors.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.as_padded_tensor.html#torchrl.envs.llm.transforms.as_padded_tensor" title="torchrl.envs.llm.transforms.as_padded_tensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_padded_tensor</span></code></a>(list_of_tensordicts[, dim, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.as_padded_tensor.html#torchrl.envs.llm.transforms.as_padded_tensor" title="torchrl.envs.llm.transforms.as_padded_tensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_padded_tensor</span></code></a>(list_of_tensordicts[, dim, ...])</p></td>
 <td><p>Stacks a list of tensordicts into a single tensordict with padded tensors.</p></td>
 </tr>
 </tbody>
@@ -683,11 +709,11 @@ weight update, etc.)</p></li>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.CategoricalSequential.html#torchrl.modules.llm.CategoricalSequential" title="torchrl.modules.llm.CategoricalSequential"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CategoricalSequential</span></code></a>(*args, **kwargs)</p></td>
 <td><p>A ProbabilisticTensorDictSequential subclass meant to work with LLMs.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.LLMOnDevice.html#torchrl.modules.llm.LLMOnDevice" title="torchrl.modules.llm.LLMOnDevice"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LLMOnDevice</span></code></a>(*args, **kwargs)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.LLMOnDevice.html#torchrl.modules.llm.LLMOnDevice" title="torchrl.modules.llm.LLMOnDevice"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LLMOnDevice</span></code></a>(*args[, bundle_indices])</p></td>
 <td><p>A thin wrapper around <cite>vllm.LLM</cite> to control its placement devices.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.make_vllm_worker.html#torchrl.modules.llm.make_vllm_worker" title="torchrl.modules.llm.make_vllm_worker"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_vllm_worker</span></code></a>(model_name, devices[, ...])</p></td>
-<td><p>Launches the vLLM inference engine.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.make_vllm_worker.html#torchrl.modules.llm.make_vllm_worker" title="torchrl.modules.llm.make_vllm_worker"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_vllm_worker</span></code></a>(*, model_name[, devices, ...])</p></td>
+<td><p>Creates a vLLM inference engine with tensor parallelism support.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.stateless_init_process_group.html#torchrl.modules.llm.stateless_init_process_group" title="torchrl.modules.llm.stateless_init_process_group"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stateless_init_process_group</span></code></a>(master_address, ...)</p></td>
 <td><p>Initializes a stateless process group for distributed communication.</p></td>

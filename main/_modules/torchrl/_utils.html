@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+2e7def8) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+43d5333) &#x25BC</span></a>
     </div>
     
 
@@ -551,14 +551,28 @@
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">timeit</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A dirty but easy to use decorator for profiling code.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A dirty but easy to use decorator for profiling code.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        name (str): The name of the timer.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl import timeit</span>
+<span class="sd">        &gt;&gt;&gt; @timeit(&quot;my_function&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; def my_function():</span>
+<span class="sd">            ...</span>
+<span class="sd">        &gt;&gt;&gt; my_function()</span>
+<span class="sd">        &gt;&gt;&gt; with timeit(&quot;my_other_function&quot;):</span>
+<span class="sd">        ...     my_other_function()</span>
+<span class="sd">        &gt;&gt;&gt; timeit.print()  # prints the state of the timer for each function</span>
+<span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">_REG</span> <span class="o">=</span> <span class="p">{}</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">:</span>
         <span class="nd">@wraps</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
         <span class="k">def</span><span class="w"> </span><span class="nf">decorated_fn</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
             <span class="k">with</span> <span class="bp">self</span><span class="p">:</span>
@@ -567,10 +581,10 @@
 
         <span class="k">return</span> <span class="n">decorated_fn</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">t0</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exc_type</span><span class="p">,</span> <span class="n">exc_val</span><span class="p">,</span> <span class="n">exc_tb</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exc_type</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">exc_val</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">exc_tb</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">t</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">t0</span>
         <span class="n">val</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_REG</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
 
@@ -581,8 +595,11 @@
         <span class="n">val</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">N</span>
 
     <span class="nd">@staticmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">print</span><span class="p">(</span><span class="n">prefix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>  <span class="c1"># noqa: T202</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">print</span><span class="p">(</span><span class="n">prefix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>  <span class="c1"># noqa: T202</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Prints the state of the timer.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            prefix (str): The prefix to add to the keys. If `None`, no prefix is added.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            the string printed using the logger.</span>
@@ -595,7 +612,7 @@
             <span class="k">if</span> <span class="n">prefix</span><span class="p">:</span>
                 <span class="n">strings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">prefix</span><span class="p">)</span>
             <span class="n">strings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> took </span><span class="si">{</span><span class="n">timeit</span><span class="o">.</span><span class="n">_REG</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1000</span><span class="si">:</span><span class="s2">4.4</span><span class="si">}</span><span class="s2"> msec (total = </span><span class="si">{</span><span class="n">timeit</span><span class="o">.</span><span class="n">_REG</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2"> sec)&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> took </span><span class="si">{</span><span class="n">timeit</span><span class="o">.</span><span class="n">_REG</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1000</span><span class="si">:</span><span class="s2">4.4f</span><span class="si">}</span><span class="s2"> msec (total = </span><span class="si">{</span><span class="n">timeit</span><span class="o">.</span><span class="n">_REG</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span><span class="si">:</span><span class="s2"> 4.4f</span><span class="si">}</span><span class="s2"> sec since last reset).&quot;</span>
             <span class="p">)</span>
             <span class="n">string</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot; -- &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">strings</span><span class="p">))</span>
             <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="n">string</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
@@ -609,10 +626,18 @@
         <span class="n">num_prints</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">total_count</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">prefix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">prefix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">erase</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Prints the state of the timer at regular intervals.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Prints the state of the timer at regular intervals.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            num_prints (int): The number of times to print the state of the timer, given the total_count.</span>
+<span class="sd">            total_count (int): The total number of times to print the state of the timer.</span>
+<span class="sd">            prefix (str): The prefix to add to the keys. If `None`, no prefix is added.</span>
+<span class="sd">            erase (bool): If True, erase the timer after printing. Default is `False`.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">interval</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">total_count</span> <span class="o">//</span> <span class="n">num_prints</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_printevery_count</span> <span class="o">%</span> <span class="n">interval</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="bp">cls</span><span class="o">.</span><span class="n">print</span><span class="p">(</span><span class="n">prefix</span><span class="o">=</span><span class="n">prefix</span><span class="p">)</span>
@@ -621,7 +646,16 @@
         <span class="bp">cls</span><span class="o">.</span><span class="n">_printevery_count</span> <span class="o">+=</span> <span class="mi">1</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">todict</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">percall</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">todict</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span> <span class="n">percall</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="n">prefix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert the timer to a dictionary.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            percall (bool): If True, return the average time per call.</span>
+<span class="sd">            prefix (str): The prefix to add to the keys.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
         <span class="k">def</span><span class="w"> </span><span class="nf">_make_key</span><span class="p">(</span><span class="n">key</span><span class="p">):</span>
             <span class="k">if</span> <span class="n">prefix</span><span class="p">:</span>
                 <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&quot;</span>
@@ -633,8 +667,20 @@
 
     <span class="nd">@staticmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">erase</span><span class="p">():</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Erase the timer.</span>
+
+<span class="sd">        .. seealso:: :meth:`reset`</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">timeit</span><span class="o">.</span><span class="n">_REG</span><span class="p">:</span>
             <span class="n">timeit</span><span class="o">.</span><span class="n">_REG</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reset</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reset the timer.</span>
+
+<span class="sd">        .. seealso:: :meth:`erase`</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">cls</span><span class="o">.</span><span class="n">erase</span><span class="p">()</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_check_for_faulty_process</span><span class="p">(</span><span class="n">processes</span><span class="p">):</span>
@@ -1572,6 +1618,27 @@
             <span class="sa">f</span><span class="s2">&quot;Returning False by default.&quot;</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="kc">False</span>
+
+
+<span class="nd">@classmethod</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">as_remote</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">remote_config</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Creates an instance of a remote ray class.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        cls (Python Class): class to be remotely instantiated.</span>
+<span class="sd">        remote_config (dict): the quantity of CPU cores to reserve for this class.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A function that creates ray remote class instances.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
+
+    <span class="k">if</span> <span class="n">remote_config</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">remote_config</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="n">remote_collector</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="o">**</span><span class="n">remote_config</span><span class="p">)(</span><span class="bp">cls</span><span class="p">)</span>
+    <span class="n">remote_collector</span><span class="o">.</span><span class="n">is_remote</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="k">return</span> <span class="n">remote_collector</span>
 </pre></div>
 
              </article>

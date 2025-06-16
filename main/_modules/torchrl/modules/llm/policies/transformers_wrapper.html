@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+2e7def8) &#x25BC</span></a>
+      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+43d5333) &#x25BC</span></a>
     </div>
     
 
@@ -463,6 +463,11 @@
 <span class="sd">            `None`.</span>
 <span class="sd">        from_text (bool, optional): Indicates whether the input is in text format. If `True`, the input is expected to</span>
 <span class="sd">            be text that will be tokenized. If `False`, the input is expected to be token sequences. Defaults to `True`.</span>
+
+<span class="sd">            .. note:: If `from_text` is `True`, the input text can be provided in the `&quot;text&quot;` key or in the `&quot;history&quot;` key.</span>
+<span class="sd">                If using the `&quot;history&quot;` key, the history will be parsed from a :class:`~torchrl.data.llm.History` object to a</span>
+<span class="sd">                text string using the tokenizer.</span>
+
 <span class="sd">        device (torch.device | None, optional): The device to use for computation. If `None`, the default device will</span>
 <span class="sd">            be used. Defaults to `None`.</span>
 <span class="sd">        generate (bool, optional): Whether to enable text generation. If `True`, the model will generate text based on</span>
@@ -526,6 +531,7 @@
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">text_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;text&quot;</span><span class="p">,)</span>
+    <span class="n">history_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;history&quot;</span><span class="p">,)</span>
     <span class="n">token_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;tokens&quot;</span><span class="p">,)</span>
     <span class="n">token_response_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;tokens_response&quot;</span><span class="p">,)</span>
     <span class="n">text_response_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;text_response&quot;</span><span class="p">,)</span>
@@ -709,6 +715,14 @@
         <span class="n">pad_val</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">pad_token_id</span>
 
         <span class="n">text</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">text_key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">text</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Fallback on history parsing</span>
+            <span class="n">history</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">history_key</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">history</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;No text or history provided to the TransformersWrapper.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">text</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">str</span><span class="p">)):</span>
             <span class="n">text</span> <span class="o">=</span> <span class="n">text</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
         <span class="n">tokens_in</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer_kwargs</span><span class="p">)</span>
@@ -815,6 +829,14 @@
         <span class="n">pad_val</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">pad_token_id</span>
 
         <span class="n">prompt_txt</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">text_key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">prompt_txt</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Fallback on history parsing</span>
+            <span class="n">history</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">history_key</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">history</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;No text or history provided to the TransformersWrapper.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">prompt_txt</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">prompt_txt</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">str</span><span class="p">)):</span>
             <span class="n">prompt_txt</span> <span class="o">=</span> <span class="n">prompt_txt</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
         <span class="n">response_txt</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">text_response_key</span><span class="p">)</span>

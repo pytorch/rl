@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+2e7def8) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+43d5333) &#x25BC</span></a>
     </div>
     
 
@@ -426,6 +426,8 @@
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Literal</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
@@ -463,14 +465,22 @@
 <span class="sd">        system_prompt (str, optional): an optional `&quot;system&quot;` prompt string to use during reset calls.</span>
 <span class="sd">            Defaults to `None`.</span>
 <span class="sd">        apply_template (bool, optional): if `True` (and a tokenizer is passed), the history will be parsed to a string</span>
-<span class="sd">            in the `&quot;text&quot;` entry of the output tensordict at reset time. Defaults to `False` if no tokenizer or</span>
-<span class="sd">            `template_kwargs` is passed, otherwise `True`.</span>
+<span class="sd">            in the `&quot;text&quot;` entry of the output tensordict at reset time. Defaults to `False`.</span>
+
+<span class="sd">            .. note:: If transforms are appended to the environment, the template will be applied to the history before the transform is applied.</span>
+<span class="sd">                As transforms can encode tools, this means that the text returned by the environment may be incomplete.</span>
+<span class="sd">                The :class:`~torchrl.modules.llm.vLLMWrapper` and :class:`~torchrl.modules.llm.TransformersWrapper`</span>
+<span class="sd">                will apply the template to the history when queried if no `&quot;text&quot;` input is provided.</span>
+
 <span class="sd">        tokenizer (transformers.PreTrainedTokenizer, *optional*): A tokenizer that will be used to tokenize the text.</span>
 <span class="sd">            Defaults to `None`.</span>
 <span class="sd">        template_kwargs (dict[str, any], optional): keyword arguments passed to :meth:`~torchrl.data.llm.History.apply_chat_template`.</span>
 <span class="sd">            Defaults to `None`.</span>
 <span class="sd">        system_role (str, optional): the role of the system (at reset time). Defaults to `&quot;system&quot;`.</span>
 <span class="sd">        user_role (str, optional): the role of the user (at reset time). Defaults to `&quot;user&quot;`.</span>
+<span class="sd">        make_lazy (bool, optional): if `True`, the environment will return a lazy stack of tensordicts. This is the recommended setting</span>
+<span class="sd">            for training, since it allows for efficient batching of environment outputs that may have different shapes or contents.</span>
+<span class="sd">            Defaults to `True`.</span>
 
 <span class="sd">    Methods:</span>
 <span class="sd">        reset (TensorDict): Resets the state of the environment. A tensordict or equivalent with a `&quot;text&quot;` entry must be passed.</span>
@@ -541,6 +551,8 @@
         <span class="n">template_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">system_role</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;system&quot;</span><span class="p">,</span>
         <span class="n">user_role</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span>
+        <span class="n">policy_role</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;assistant&quot;</span><span class="p">,</span>
+        <span class="n">make_lazy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="k">if</span> <span class="n">batch_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">batch_size</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,)</span>
@@ -582,6 +594,8 @@
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">system_role</span> <span class="o">=</span> <span class="n">system_role</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">user_role</span> <span class="o">=</span> <span class="n">user_role</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">policy_role</span> <span class="o">=</span> <span class="n">policy_role</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">make_lazy</span> <span class="o">=</span> <span class="n">make_lazy</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
         <span class="c1"># Expect action to be a &quot;text_response&quot; string</span>
@@ -598,11 +612,24 @@
             <span class="n">name_or_path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">name_or_path</span>
             <span class="k">if</span> <span class="s2">&quot;qwen&quot;</span> <span class="ow">in</span> <span class="n">name_or_path</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span>
                 <span class="n">chat_template_name</span> <span class="o">=</span> <span class="s2">&quot;qwen&quot;</span>
-        <span class="n">history</span> <span class="o">=</span> <span class="n">History</span><span class="o">.</span><span class="n">from_text</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">chat_template_name</span><span class="o">=</span><span class="n">chat_template_name</span><span class="p">)</span>
+        <span class="n">parsed_history</span> <span class="o">=</span> <span class="n">History</span><span class="o">.</span><span class="n">from_text</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">chat_template_name</span><span class="o">=</span><span class="n">chat_template_name</span><span class="p">)</span>
         <span class="c1"># Isolate last element, which should be our action</span>
-        <span class="n">local_history</span> <span class="o">=</span> <span class="n">history</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">local_history</span> <span class="o">=</span> <span class="n">parsed_history</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span>
         <span class="c1"># Get previous history</span>
         <span class="n">history</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">]</span>
+        <span class="c1"># Check that history has one more item than before</span>
+        <span class="k">if</span> <span class="n">history</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">parsed_history</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;The parsed history has fewer or the same number than the last element in history.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_role</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Iterate over batch and check policy role</span>
+            <span class="k">for</span> <span class="n">lh</span> <span class="ow">in</span> <span class="n">local_history</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">lh</span><span class="o">.</span><span class="n">role</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_role</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="s2">&quot;The role received in the last block parsed from the policy &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;output does not match the expected policy role: received </span><span class="si">{</span><span class="n">lh</span><span class="o">.</span><span class="n">role</span><span class="si">}</span><span class="s2"> but expected </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_role</span><span class="si">}</span><span class="s2">.&quot;</span>
+                    <span class="p">)</span>
         <span class="c1"># Append history item</span>
         <span class="n">history</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">local_history</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
         <span class="c1"># FIXME: consider done to be always False</span>
@@ -651,9 +678,12 @@
             <span class="n">done</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
             <span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="k">if</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">_lazy</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_lazy</span><span class="p">:</span>
             <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-            <span class="n">result</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">result</span><span class="p">))</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">result</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">_lazy</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">stack_dim</span><span class="p">)</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">result</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="n">tensordict</span><span class="o">.</span><span class="n">stack_dim</span><span class="p">)</span>
         <span class="n">result</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="o">*</span><span class="n">result</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">)))</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">apply_template</span><span class="p">:</span>
             <span class="n">template</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
@@ -688,8 +718,7 @@
 
 <span class="sd">        device (torch.device | None, optional): The device to use for computations. Defaults to None.</span>
 <span class="sd">        template_kwargs (dict[str, Any] | None, optional): Additional keyword arguments for the template. Defaults to `None`.</span>
-<span class="sd">        apply_template (bool | None, optional): Whether to apply the template to the text. Defaults to `True` if the</span>
-<span class="sd">            kwargs or the tokenizer is passed.</span>
+<span class="sd">        apply_template (bool | None, optional): Whether to apply the template to the text. Defaults to `False`.</span>
 <span class="sd">        collate_fn (Callable | None, optional): A custom collate function for data loading. If `None`, a default</span>
 <span class="sd">            collate function is used. Defaults to `None`.</span>
 
@@ -717,7 +746,7 @@
         <span class="n">tokenizer</span><span class="p">:</span> <span class="n">transformers</span><span class="o">.</span><span class="n">AutoTokenizer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
         <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">template_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">apply_template</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">apply_template</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">collate_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_dataset</span>

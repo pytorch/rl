@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+2e7def8) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+43d5333) &#x25BC</span></a>
     </div>
     
 
@@ -455,15 +455,25 @@ of the policy.</p></li>
 are not recommended as they don’t play well with generators).</p></li>
 <li><p><strong>system_prompt</strong> (<em>str</em><em>, </em><em>optional</em>) – an optional <cite>“system”</cite> prompt string to use during reset calls.
 Defaults to <cite>None</cite>.</p></li>
-<li><p><strong>apply_template</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <cite>True</cite> (and a tokenizer is passed), the history will be parsed to a string
-in the <cite>“text”</cite> entry of the output tensordict at reset time. Defaults to <cite>False</cite> if no tokenizer or
-<cite>template_kwargs</cite> is passed, otherwise <cite>True</cite>.</p></li>
+<li><p><strong>apply_template</strong> (<em>bool</em><em>, </em><em>optional</em>) – <p>if <cite>True</cite> (and a tokenizer is passed), the history will be parsed to a string
+in the <cite>“text”</cite> entry of the output tensordict at reset time. Defaults to <cite>False</cite>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If transforms are appended to the environment, the template will be applied to the history before the transform is applied.
+As transforms can encode tools, this means that the text returned by the environment may be incomplete.
+The <a class="reference internal" href="torchrl.modules.llm.vLLMWrapper.html#torchrl.modules.llm.vLLMWrapper" title="torchrl.modules.llm.vLLMWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">vLLMWrapper</span></code></a> and <a class="reference internal" href="torchrl.modules.llm.TransformersWrapper.html#torchrl.modules.llm.TransformersWrapper" title="torchrl.modules.llm.TransformersWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">TransformersWrapper</span></code></a>
+will apply the template to the history when queried if no <cite>“text”</cite> input is provided.</p>
+</div>
+</p></li>
 <li><p><strong>tokenizer</strong> (transformers.PreTrainedTokenizer, <em>optional</em>) – A tokenizer that will be used to tokenize the text.
 Defaults to <cite>None</cite>.</p></li>
 <li><p><strong>template_kwargs</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>any</em><em>]</em><em>, </em><em>optional</em>) – keyword arguments passed to <a class="reference internal" href="torchrl.data.llm.History.html#torchrl.data.llm.History.apply_chat_template" title="torchrl.data.llm.History.apply_chat_template"><code class="xref py py-meth docutils literal notranslate"><span class="pre">apply_chat_template()</span></code></a>.
 Defaults to <cite>None</cite>.</p></li>
 <li><p><strong>system_role</strong> (<em>str</em><em>, </em><em>optional</em>) – the role of the system (at reset time). Defaults to <cite>“system”</cite>.</p></li>
 <li><p><strong>user_role</strong> (<em>str</em><em>, </em><em>optional</em>) – the role of the user (at reset time). Defaults to <cite>“user”</cite>.</p></li>
+<li><p><strong>make_lazy</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <cite>True</cite>, the environment will return a lazy stack of tensordicts. This is the recommended setting
+for training, since it allows for efficient batching of environment outputs that may have different shapes or contents.
+Defaults to <cite>True</cite>.</p></li>
 </ul>
 </dd>
 </dl>

@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+2e7def8) &#x25BC</span></a>
+      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+43d5333) &#x25BC</span></a>
     </div>
     
 
@@ -432,6 +432,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">lazy_stack</span><span class="p">,</span>
+    <span class="n">LazyStackedTensorDict</span><span class="p">,</span>
     <span class="n">maybe_dense_stack</span><span class="p">,</span>
     <span class="n">NestedKey</span><span class="p">,</span>
     <span class="n">TensorDict</span><span class="p">,</span>
@@ -465,6 +466,11 @@
 <span class="sd">            `None`.</span>
 <span class="sd">        from_text (bool, optional): Indicates whether the input is in text format. If `True`, the input is expected to</span>
 <span class="sd">            be text that will be tokenized. If `False`, the input is expected to be token sequences. Defaults to `True`.</span>
+
+<span class="sd">            .. note:: If `from_text` is `True`, the input text can be provided in the `&quot;text&quot;` key or in the `&quot;history&quot;` key.</span>
+<span class="sd">                If using the `&quot;history&quot;` key, the history will be parsed from a :class:`~torchrl.data.llm.History` object to a</span>
+<span class="sd">                text string using the tokenizer.</span>
+
 <span class="sd">        device (torch.device | None, optional): The device to use for computation. If `None`, the default device will</span>
 <span class="sd">            be used. Defaults to `None`.</span>
 <span class="sd">        generate (bool, optional): Whether to enable text generation. If `True`, the model will generate text based on</span>
@@ -686,23 +692,31 @@
         <span class="k">if</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
             <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span><span class="o">.</span><span class="n">clear_device_</span><span class="p">()</span>
 
+        <span class="n">out</span> <span class="o">=</span> <span class="n">LazyStackedTensorDict</span><span class="p">(</span>
+            <span class="o">*</span><span class="p">[</span>
+                <span class="n">TensorDict</span><span class="p">(</span>
+                    <span class="n">device</span><span class="o">=</span><span class="n">tensordict</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">tensordict</span><span class="o">.</span><span class="n">batch_size</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
+                <span class="p">)</span>
+                <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="p">]</span>
+        <span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">from_text</span><span class="p">:</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">generate</span><span class="p">:</span>
                 <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_from_vllm_generate_text</span><span class="p">(</span>
-                    <span class="n">tensordict</span><span class="p">,</span> <span class="n">sampling_params</span><span class="o">=</span><span class="n">sampling_params</span>
+                    <span class="n">tensordict</span><span class="p">,</span> <span class="n">sampling_params</span><span class="o">=</span><span class="n">sampling_params</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">out</span>
                 <span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_from_vllm_logprobs_text</span><span class="p">(</span>
-                    <span class="n">tensordict</span><span class="p">,</span> <span class="n">sampling_params</span><span class="o">=</span><span class="n">sampling_params</span>
+                    <span class="n">tensordict</span><span class="p">,</span> <span class="n">sampling_params</span><span class="o">=</span><span class="n">sampling_params</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">out</span>
                 <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">generate</span><span class="p">:</span>
                 <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_from_vllm_generate_tokens</span><span class="p">(</span>
-                    <span class="n">tensordict</span><span class="p">,</span> <span class="n">sampling_params</span><span class="o">=</span><span class="n">sampling_params</span>
+                    <span class="n">tensordict</span><span class="p">,</span> <span class="n">sampling_params</span><span class="o">=</span><span class="n">sampling_params</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">out</span>
                 <span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_from_vllm_logprobs_tokens</span><span class="p">(</span>
-                    <span class="n">tensordict</span><span class="p">,</span> <span class="n">sampling_params</span><span class="o">=</span><span class="n">sampling_params</span>
+                    <span class="n">tensordict</span><span class="p">,</span> <span class="n">sampling_params</span><span class="o">=</span><span class="n">sampling_params</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">out</span>
                 <span class="p">)</span>
         <span class="k">if</span> <span class="n">_source_device</span><span class="p">:</span>
             <span class="n">out</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">_source_device</span><span class="p">)</span>
@@ -726,14 +740,20 @@
             <span class="n">result</span> <span class="o">=</span> <span class="n">out</span>
         <span class="k">return</span> <span class="n">result</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_from_vllm_generate_text</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">td</span><span class="p">,</span> <span class="n">sampling_params</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_from_vllm_generate_text</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">td</span><span class="p">,</span> <span class="n">sampling_params</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;sampling_params&quot;</span><span class="p">:</span> <span class="n">sampling_params</span><span class="p">}</span>
         <span class="n">args</span> <span class="o">=</span> <span class="p">()</span>
         <span class="n">input_ids</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="n">attention_mask</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">text</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">text_key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">text</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Fallback on history parsing</span>
+            <span class="n">history</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">history_key</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">history</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;No text or history provided to the vLLMWrapper.&quot;</span><span class="p">)</span>
+            <span class="n">text</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">:</span>
             <span class="n">tokenizer_kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer_kwargs</span>
-            <span class="n">text</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">text_key</span><span class="p">)</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">str</span><span class="p">)):</span>
                 <span class="n">text</span> <span class="o">=</span> <span class="n">text</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
             <span class="n">tokens_in</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="o">**</span><span class="n">tokenizer_kwargs</span><span class="p">))</span>
@@ -745,10 +765,10 @@
             <span class="n">prompt_token_ids</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_list</span><span class="p">(</span><span class="n">input_ids</span><span class="p">,</span> <span class="n">attention_mask</span><span class="p">)</span>
             <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;prompt_token_ids&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">prompt_token_ids</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">txt</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">text_key</span><span class="p">)</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">txt</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">str</span><span class="p">)):</span>
-                <span class="n">txt</span> <span class="o">=</span> <span class="n">txt</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
-            <span class="n">args</span> <span class="o">=</span> <span class="p">(</span><span class="n">txt</span><span class="p">,)</span>
+            <span class="n">text</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">text_key</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">str</span><span class="p">)):</span>
+                <span class="n">text</span> <span class="o">=</span> <span class="n">text</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+            <span class="n">args</span> <span class="o">=</span> <span class="p">(</span><span class="n">text</span><span class="p">,)</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_remote_calls</span><span class="p">:</span>
             <span class="n">tokens_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
@@ -772,7 +792,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">token_key</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">attention_mask_key</span><span class="p">,</span>
         <span class="p">]</span>
-        <span class="n">out</span> <span class="o">=</span> <span class="n">tokens_out</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">tokens_out</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
         <span class="c1"># We might already have the tokens</span>
         <span class="k">if</span> <span class="n">input_ids</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">token_key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">out</span><span class="p">:</span>
             <span class="n">out</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">token_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">input_ids</span>
@@ -785,8 +805,14 @@
         <span class="n">out</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">inputs</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">out</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_from_vllm_logprobs_text</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">td</span><span class="p">,</span> <span class="n">sampling_params</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_from_vllm_logprobs_text</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">td</span><span class="p">,</span> <span class="n">sampling_params</span><span class="p">,</span> <span class="n">out</span><span class="p">):</span>
         <span class="n">text_prompt</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">text_key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">text_prompt</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Fallback on history parsing</span>
+            <span class="n">history</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">history_key</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">history</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;No text or history provided to the vLLMWrapper.&quot;</span><span class="p">)</span>
+            <span class="n">text_prompt</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">text_prompt</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
             <span class="n">text_prompt</span> <span class="o">=</span> <span class="n">text_prompt</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
         <span class="n">text_response</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">text_response_key</span><span class="p">)</span>
@@ -859,7 +885,7 @@
                 <span class="p">[</span><span class="n">lp</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="o">-</span><span class="nb">len</span><span class="p">(</span><span class="n">tr</span><span class="p">)</span> <span class="p">:]</span> <span class="k">for</span> <span class="n">lp</span><span class="p">,</span> <span class="n">tr</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">lps</span><span class="p">,</span> <span class="n">input_ids_response</span><span class="p">)]</span>
             <span class="p">)</span>
 
-        <span class="n">out</span> <span class="o">=</span> <span class="n">tokens_out</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">tokens_out</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">input_ids_response</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
             <span class="n">input_ids_response</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nested</span><span class="o">.</span><span class="n">nested_tensor</span><span class="p">(</span><span class="n">input_ids_response</span><span class="p">)</span>
         <span class="n">out</span><span class="p">[</span><span class="s2">&quot;tokens_response&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">input_ids_response</span>
@@ -871,7 +897,7 @@
         <span class="n">out</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">inputs</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">out</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_from_vllm_generate_tokens</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">td</span><span class="p">,</span> <span class="n">sampling_params</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_from_vllm_generate_tokens</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">td</span><span class="p">,</span> <span class="n">sampling_params</span><span class="p">,</span> <span class="n">out</span><span class="p">):</span>
         <span class="n">input_ids</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">token_key</span><span class="p">)</span>
         <span class="n">attention_mask</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">attention_mask_key</span><span class="p">)</span>
         <span class="n">input_ids_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_list</span><span class="p">(</span><span class="n">input_ids</span><span class="p">,</span> <span class="n">attention_mask</span><span class="p">)</span>
@@ -906,7 +932,7 @@
                     <span class="n">lps</span> <span class="o">=</span> <span class="n">tokens_response_td</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">log_prob_key</span><span class="p">]</span>
                     <span class="n">lps</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">expand_as_right</span><span class="p">(</span><span class="o">~</span><span class="n">padded_values</span><span class="p">,</span> <span class="n">lps</span><span class="p">),</span> <span class="n">lps</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
                     <span class="n">tokens_response_td</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">log_prob_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">lps</span>
-        <span class="n">out</span> <span class="o">=</span> <span class="n">tokens_response_td</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">tokens_response_td</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
         <span class="n">out</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
             <span class="n">tokens_response_td</span><span class="p">,</span>
             <span class="n">keys_to_update</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">token_response_key</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_prob_key</span><span class="p">),</span>
@@ -918,7 +944,7 @@
         <span class="n">out</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">inputs</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">out</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_from_vllm_logprobs_tokens</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">td</span><span class="p">,</span> <span class="n">sampling_params</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_from_vllm_logprobs_tokens</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">td</span><span class="p">,</span> <span class="n">sampling_params</span><span class="p">,</span> <span class="n">out</span><span class="p">):</span>
 
         <span class="n">tokens</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">token_key</span><span class="p">)</span>
         <span class="n">tokens_response</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">token_response_key</span><span class="p">)</span>
@@ -946,7 +972,7 @@
         <span class="n">prompt_logprobs</span> <span class="o">=</span> <span class="n">prompt_logprobs</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="o">-</span><span class="n">tokens_response</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="p">:]</span>
         <span class="n">padded</span> <span class="o">=</span> <span class="n">tokens_response</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">padding_value</span>
         <span class="n">prompt_logprobs</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="o">~</span><span class="n">padded</span><span class="p">,</span> <span class="n">prompt_logprobs</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
-        <span class="n">out</span> <span class="o">=</span> <span class="n">tokens_out</span><span class="o">.</span><span class="n">_tensordict</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">tokens_out</span><span class="o">.</span><span class="n">_tensordict</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
         <span class="n">out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">log_prob_key</span><span class="p">,</span> <span class="n">prompt_logprobs</span><span class="p">)</span>
         <span class="n">out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">token_response_key</span><span class="p">,</span> <span class="n">tokens_response</span><span class="p">)</span>
         <span class="n">inputs</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>

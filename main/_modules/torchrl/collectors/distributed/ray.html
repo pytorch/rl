@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+2e7def8) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+43d5333) &#x25BC</span></a>
     </div>
     
 
@@ -435,7 +435,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch.nn</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nn</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">as_remote</span><span class="p">,</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiaSyncDataCollector</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">DataCollectorBase</span><span class="p">,</span>
@@ -495,22 +495,6 @@
     <span class="p">)</span>
     <span class="c1"># torchrl_logger.warning(s)</span>
     <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
-
-
-<span class="nd">@classmethod</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">as_remote</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">remote_config</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Creates an instance of a remote ray class.</span>
-
-<span class="sd">    Args:</span>
-<span class="sd">        cls (Python Class): class to be remotely instantiated.</span>
-<span class="sd">        remote_config (dict): the quantity of CPU cores to reserve for this class.</span>
-
-<span class="sd">    Returns:</span>
-<span class="sd">        A function that creates ray remote class instances.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">remote_collector</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="o">**</span><span class="n">remote_config</span><span class="p">)(</span><span class="bp">cls</span><span class="p">)</span>
-    <span class="n">remote_collector</span><span class="o">.</span><span class="n">is_remote</span> <span class="o">=</span> <span class="kc">True</span>
-    <span class="k">return</span> <span class="n">remote_collector</span>
 
 
 <div class="viewcode-block" id="RayCollector"><a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">RayCollector</span><span class="p">(</span><span class="n">DataCollectorBase</span><span class="p">):</span>

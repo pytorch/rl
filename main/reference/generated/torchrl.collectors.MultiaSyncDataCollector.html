@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+2e7def8) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+43d5333) &#x25BC</span></a>
     </div>
     
 
@@ -724,6 +724,22 @@ close_env (bool, optional): If True, the collector will close the contained envi
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.MultiaSyncDataCollector.init_updater">
+<span class="sig-name descname"><span class="pre">init_updater</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.collectors.MultiaSyncDataCollector.init_updater" title="Permalink to this definition">¶</a></dt>
+<dd><p>Initialize the weight updater with custom arguments.</p>
+<p>This method passes the arguments to the weight updater’s init method.
+If no weight updater is set, this is a no-op.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>*args</strong> – Positional arguments for weight updater initialization</p></li>
+<li><p><strong>**kwargs</strong> – Keyword arguments for weight updater initialization</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrl.collectors.MultiaSyncDataCollector.load_state_dict">
 <span class="sig-name descname"><span class="pre">load_state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">OrderedDict</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/collectors/collectors.html#MultiaSyncDataCollector.load_state_dict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.MultiaSyncDataCollector.load_state_dict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Loads the state_dict on the workers.</p>
@@ -882,7 +898,7 @@ data across multiple processes, allowing for decoupling of data collection and t
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.collectors.MultiaSyncDataCollector.update_policy_weights_">
-<span class="sig-name descname"><span class="pre">update_policy_weights_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">policy_weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">worker_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><span class="pre">torch.device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><span class="pre">torch.device</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/collectors/collectors.html#MultiaSyncDataCollector.update_policy_weights_"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.MultiaSyncDataCollector.update_policy_weights_" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">update_policy_weights_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">policy_or_weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">TensorDictModuleBase</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">worker_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><span class="pre">torch.device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><span class="pre">torch.device</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/collectors/collectors.html#MultiaSyncDataCollector.update_policy_weights_"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.MultiaSyncDataCollector.update_policy_weights_" title="Permalink to this definition">¶</a></dt>
 <dd><p>Updates the policy weights for the data collector, accommodating both local and remote execution contexts.</p>
 <p>This method ensures that the policy weights used by the data collector are synchronized with the latest
 trained weights. It supports both local and remote weight updates, depending on the configuration of the
@@ -891,9 +907,11 @@ can be transferred to the children workers from a server.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>policy_weights</strong> (<em>TensorDictBase</em><em>, </em><em>optional</em>) – A TensorDict containing the weights of the policy to be used
-for the update. If not provided, the method will attempt to fetch the weights using the configured
-weight updater.</p></li>
+<li><p><strong>policy_or_weights</strong> (<em>TensorDictBase</em><em> | </em><em>TensorDictModuleBase</em><em> | </em><em>dict</em><em> | </em><em>None</em>) – The weights to update with. Can be:
+- TensorDictModuleBase: A policy module whose weights will be extracted
+- TensorDictBase: A TensorDict containing weights
+- dict: A regular dict containing weights
+- None: Will try to get weights from server using _get_server_weights()</p></li>
 <li><p><strong>worker_ids</strong> (<em>int</em><em> | </em><em>List</em><em>[</em><em>int</em><em>] </em><em>| </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em> | </em><em>List</em><em>[</em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em>] </em><em>| </em><em>None</em><em>, </em><em>optional</em>) – Identifiers for the
 workers that need to be updated. This is relevant when the collector has more than one worker associated
 with it.</p></li>

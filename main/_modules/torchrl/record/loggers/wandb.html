@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+2e7def8) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+43d5333) &#x25BC</span></a>
     </div>
     
 
@@ -540,7 +540,7 @@
 
 <span class="sd">        Args:</span>
 <span class="sd">            name (str): The name of the scalar.</span>
-<span class="sd">            value (:obj:`float`): The value of the scalar.</span>
+<span class="sd">            value (float): The value of the scalar.</span>
 <span class="sd">            step (int, optional): The step at which the scalar is logged.</span>
 <span class="sd">                Defaults to None.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
@@ -627,7 +627,7 @@
 
 <span class="sd">        Keyword Args:</span>
 <span class="sd">            step (int): Global step value to record</span>
-<span class="sd">            bins (str): One of {‘tensorflow’,’auto’, ‘fd’, …}. This determines how the bins are made. You can find other options in: https://docs.scipy.org/doc/numpy/reference/generated/numpy.histogram.html</span>
+<span class="sd">            bins (str): One of {&#39;tensorflow&#39;,&#39;auto&#39;, &#39;fd&#39;, …}. This determines how the bins are made. You can find other options in: https://docs.scipy.org/doc/numpy/reference/generated/numpy.histogram.html</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">wandb</span>
@@ -639,7 +639,26 @@
             <span class="n">extra_kwargs</span><span class="p">[</span><span class="s2">&quot;trainer/step&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">step</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">experiment</span><span class="o">.</span><span class="n">log</span><span class="p">(</span>
             <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">wandb</span><span class="o">.</span><span class="n">Histogram</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">num_bins</span><span class="o">=</span><span class="n">num_bins</span><span class="p">),</span> <span class="o">**</span><span class="n">extra_kwargs</span><span class="p">}</span>
-        <span class="p">)</span></div>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">log_str</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Logs a string value to wandb using a table format for better visualization.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            name (str): The name of the string data.</span>
+<span class="sd">            value (str): The string value to log.</span>
+<span class="sd">            step (int, optional): The step at which the string is logged.</span>
+<span class="sd">                Defaults to None.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">wandb</span>
+
+        <span class="c1"># Create a table with a single row</span>
+        <span class="n">table</span> <span class="o">=</span> <span class="n">wandb</span><span class="o">.</span><span class="n">Table</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">],</span> <span class="n">data</span><span class="o">=</span><span class="p">[[</span><span class="n">value</span><span class="p">]])</span>
+
+        <span class="k">if</span> <span class="n">step</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">experiment</span><span class="o">.</span><span class="n">log</span><span class="p">({</span><span class="n">name</span><span class="p">:</span> <span class="n">table</span><span class="p">,</span> <span class="s2">&quot;trainer/step&quot;</span><span class="p">:</span> <span class="n">step</span><span class="p">})</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">experiment</span><span class="o">.</span><span class="n">log</span><span class="p">({</span><span class="n">name</span><span class="p">:</span> <span class="n">table</span><span class="p">})</span></div>
 </pre></div>
 
              </article>

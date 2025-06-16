@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+2e7def8) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+43d5333) &#x25BC</span></a>
     </div>
     
 
@@ -433,7 +433,7 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">lazy_stack</span><span class="p">,</span> <span class="n">TensorDictBase</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">as_remote</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">SyncDataCollector</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.llm.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_QueueAsRB</span>
@@ -441,6 +441,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.replay_buffers.replay_buffers</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReplayBuffer</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">AsyncEnvPool</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.llm.transforms.policy_version</span><span class="w"> </span><span class="kn">import</span> <span class="n">PolicyVersion</span>
 
 
 <div class="viewcode-block" id="LLMCollector"><a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">LLMCollector</span><span class="p">(</span><span class="n">SyncDataCollector</span><span class="p">):</span>
@@ -494,6 +495,11 @@
 <span class="sd">            or its subclass, responsible for updating the policy weights on remote inference workers.</span>
 <span class="sd">            This is typically not used in :class:`~torchrl.collectors.SyncDataCollector` as it operates in a single-process environment.</span>
 <span class="sd">            Consider using a constructor if the updater needs to be serialized.</span>
+<span class="sd">        track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.</span>
+<span class="sd">            This will be mediated by the :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform, which will be added to the environment.</span>
+<span class="sd">            Alternatively, a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` instance can be passed, which will be used to track</span>
+<span class="sd">            the policy version.</span>
+<span class="sd">            Defaults to `False`.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; import vllm</span>
@@ -576,6 +582,7 @@
         <span class="o">|</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">WeightUpdaterBase</span><span class="p">]</span>
         <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">queue</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">track_policy_version</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">PolicyVersion</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="k">if</span> <span class="n">queue</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
@@ -638,6 +645,47 @@
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                 <span class="s2">&quot;async_envs requires the environment to be an AsyncEnvPool instance.&quot;</span>
             <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span> <span class="o">=</span> <span class="n">track_policy_version</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">track_policy_version</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">and</span> <span class="n">track_policy_version</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="p">,</span> <span class="n">AsyncEnvPool</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;AsyncEnvPool is not supported for policy version tracking. Please add the PolicyVersion transform to the environment manually, &quot;</span>
+                    <span class="s2">&quot;and pass that transform to the collector.&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span> <span class="o">=</span> <span class="n">PolicyVersion</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">track_policy_version</span><span class="p">,</span> <span class="n">PolicyVersion</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span> <span class="o">=</span> <span class="n">track_policy_version</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="LLMCollector.increment_version"><a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.increment_version">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">increment_version</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Increment the policy version.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span><span class="p">,</span> <span class="n">PolicyVersion</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;Policy version tracker is not a PolicyVersion instance. Please pass a PolicyVersion instance to the collector.&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span><span class="o">.</span><span class="n">increment_version</span><span class="p">()</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">policy_version</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The current policy version.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span><span class="p">,</span> <span class="n">PolicyVersion</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_version_tracker</span><span class="o">.</span><span class="n">version</span>
+
+<div class="viewcode-block" id="LLMCollector.get_policy_version"><a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.get_policy_version">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_policy_version</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the current policy version.</span>
+
+<span class="sd">        This method exists to support remote calls in Ray actors, since properties</span>
+<span class="sd">        cannot be accessed directly through Ray&#39;s RPC mechanism.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The current version number (int) or UUID (str), or None if version tracking is disabled.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_version</span></div>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">total_dialog_turns</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -664,8 +712,8 @@
 
         <span class="n">trajectory</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">collected_steps</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">policy_input</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span>
         <span class="k">while</span> <span class="n">collected_steps</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">dialog_turns_per_batch</span><span class="p">:</span>
-            <span class="n">policy_input</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span>
             <span class="n">env_input</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">(</span><span class="n">policy_input</span><span class="p">)</span>
             <span class="n">env_output</span><span class="p">,</span> <span class="n">env_next_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">step_and_maybe_reset</span><span class="p">(</span><span class="n">env_input</span><span class="p">)</span>
 
@@ -673,11 +721,9 @@
             <span class="n">collector_data</span> <span class="o">=</span> <span class="n">env_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
             <span class="n">env_next_output</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="n">collector_data</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_update_traj_ids</span><span class="p">(</span><span class="n">env_output</span><span class="p">)</span>
-            <span class="n">data</span> <span class="o">=</span> <span class="n">env_output</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;extending with </span><span class="si">{</span><span class="n">data</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
-            <span class="n">trajectory</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">clone</span><span class="p">())</span>
-            <span class="n">collected_steps</span> <span class="o">+=</span> <span class="n">data</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span> <span class="o">=</span> <span class="n">env_next_output</span>
+            <span class="n">trajectory</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">env_output</span><span class="o">.</span><span class="n">clone</span><span class="p">())</span>
+            <span class="n">collected_steps</span> <span class="o">+=</span> <span class="n">env_output</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+            <span class="n">policy_input</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span> <span class="o">=</span> <span class="n">env_next_output</span>
         <span class="n">trajectory</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="n">trajectory</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">flatten_data</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">trajectory</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
@@ -788,7 +834,33 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">async_step_and_maybe_reset_send</span><span class="p">(</span><span class="n">env_input</span><span class="p">)</span>
 
         <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_trajectory_queue</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
-        <span class="k">return</span> <span class="n">result</span></div>
+        <span class="k">return</span> <span class="n">result</span>
+
+    <span class="n">as_remote</span> <span class="o">=</span> <span class="n">as_remote</span>
+
+<div class="viewcode-block" id="LLMCollector.get_policy_model"><a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.get_policy_model">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_policy_model</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the policy model.</span>
+
+<span class="sd">        This method is used by RayLLMCollector to get the remote LLM instance</span>
+<span class="sd">        for weight updates.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The policy model instance</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="o">.</span><span class="n">model</span></div>
+
+<div class="viewcode-block" id="LLMCollector.is_initialized"><a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.is_initialized">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">is_initialized</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if the collector is initialized and ready.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            bool: True if the collector is initialized and ready to collect data.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># The collector is initialized if it has a valid environment and policy</span>
+        <span class="k">return</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_env&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_policy&quot;</span><span class="p">)</span></div>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_weight_updater</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weight_updater</span><span class="p">:</span> <span class="n">WeightUpdaterBase</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">weight_updater</span> <span class="o">=</span> <span class="n">weight_updater</span>
+        <span class="k">return</span> <span class="kc">True</span></div>
 </pre></div>
 
              </article>

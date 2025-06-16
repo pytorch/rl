@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+2e7def8) &#x25BC</span></a>
+      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+43d5333) &#x25BC</span></a>
     </div>
     
 
@@ -431,7 +431,9 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch.cuda</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch.distributed</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictBase</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModuleBase</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
 
@@ -449,18 +451,47 @@
         <span class="p">)</span>
 
 
+<span class="n">_has_ray</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;ray&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+<span class="k">if</span> <span class="n">_has_ray</span><span class="p">:</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
+<span class="k">else</span><span class="p">:</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">ray</span><span class="p">():</span>  <span class="c1"># noqa: D103</span>
+        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+            <span class="s2">&quot;ray is not installed. Please install it with `pip install ray`.&quot;</span>
+        <span class="p">)</span>
+
+
 <div class="viewcode-block" id="vLLMUpdater"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">vLLMUpdater</span><span class="p">(</span><span class="n">WeightUpdaterBase</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A class that sends weights to vLLM workers.</span>
 
-<span class="sd">    Assumes that the vllm instance (the inference server) is a Ray Actor.</span>
+<span class="sd">    This class handles synchronizing weights between a training policy and vLLM inference workers.</span>
+<span class="sd">    It supports both local vLLM instances and remote Ray actors.</span>
 
+<span class="sd">    Args:</span>
+<span class="sd">        master_address (str, optional): The master address for distributed training. Defaults to localhost.</span>
+<span class="sd">        master_port (int, optional): The master port for distributed training. If None, will auto-assign.</span>
+<span class="sd">        model_metadata (dict[str, tuple[torch.dtype, torch.Size]], optional): Model metadata mapping</span>
+<span class="sd">            parameter names to their dtype and shape. If not provided, will be extracted from policy.</span>
+<span class="sd">        vllm_tp_size (int, optional): vLLM tensor parallel size. Defaults to 1.</span>
+
+<span class="sd">    Methods:</span>
+<span class="sd">        init: Initialize the updater with model metadata and initialize the group.</span>
+<span class="sd">        _sync_weights_with_worker: Synchronize weights with a vLLM worker.</span>
+<span class="sd">        _get_server_weights: Not used - weights must be passed directly.</span>
+<span class="sd">        _maybe_map_weights: No mapping needed.</span>
+<span class="sd">        all_worker_ids: Returns [0] since we only have one worker.</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        This class assumes the policy is a transformers model that can be loaded by vLLM.</span>
+<span class="sd">        The policy must have a state_dict() method that returns the model weights.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">master_address</span><span class="p">,</span>
-        <span class="n">master_port</span><span class="p">,</span>
-        <span class="n">model_metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">]],</span>
+        <span class="n">master_address</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">master_port</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">model_metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">vllm_tp_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;=&gt; in </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.__init__&quot;</span><span class="p">)</span>
@@ -471,6 +502,17 @@
         <span class="k">if</span> <span class="n">vllm_tp_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">vllm_tp_size</span> <span class="o">=</span> <span class="mi">1</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">vllm_tp_size</span> <span class="o">=</span> <span class="n">vllm_tp_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_model_ref</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="vLLMUpdater.init"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater.init">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">init</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the updater with model metadata and initialize the group.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            model_metadata (dict[str, tuple[torch.dtype, torch.Size]]): The model metadata mapping</span>
+<span class="sd">                parameter names to their dtype and shape.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model_metadata</span> <span class="o">=</span> <span class="n">model_metadata</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">maybe_init_group</span><span class="p">()</span></div>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">master_address</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -492,88 +534,187 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">master_port</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_master_port</span> <span class="o">=</span> <span class="n">value</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_model_ref</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get a reference to the model actor, either directly or through Ray.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The model reference that can be used for weight updates</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_ref</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_ref</span>
+
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="p">,</span> <span class="s2">&quot;_collector&quot;</span><span class="p">):</span>
+            <span class="c1"># We&#39;re dealing with a RayLLMCollector</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
+
+            <span class="c1"># Get direct reference to the model actor</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_model_ref</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">_collector</span><span class="o">.</span><span class="n">get_policy_model</span><span class="o">.</span><span class="n">remote</span><span class="p">()</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># We&#39;re dealing with a local collector</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_model_ref</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">policy</span><span class="o">.</span><span class="n">model</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_ref</span>
+
     <span class="k">def</span><span class="w"> </span><span class="nf">_init_group</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;=&gt; in </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">._init_group&quot;</span><span class="p">)</span>
-        <span class="n">inference_server</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">policy</span><span class="o">.</span><span class="n">model</span>
-        <span class="n">weight_sync_world_size</span> <span class="o">=</span> <span class="mi">2</span>  <span class="c1"># (</span>
-        <span class="c1"># inference_server.llm_engine.parallel_config.tensor_parallel_size + 1</span>
-        <span class="c1"># )</span>
+        <span class="n">weight_sync_world_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vllm_tp_size</span> <span class="o">+</span> <span class="mi">1</span>
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;initializing group with </span><span class="si">{</span><span class="n">weight_sync_world_size</span><span class="si">=}</span><span class="s2">...&quot;</span><span class="p">)</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">vllm</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;vllm_tp_size=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">vllm_tp_size</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">vllm_comm_group</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">model_ref</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_model_ref</span><span class="p">()</span>
 
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">inference_server</span><span class="p">,</span> <span class="n">vllm</span><span class="o">.</span><span class="n">LLM</span><span class="p">):</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">vllm_comm_group</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Calling init_weight_update_group on remote worker...&quot;</span><span class="p">)</span>
-            <span class="n">inference_server</span><span class="o">.</span><span class="n">collective_rpc</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
-                <span class="s2">&quot;init_weight_update_group&quot;</span><span class="p">,</span>
-                <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">master_address</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">master_port</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">weight_sync_world_size</span><span class="p">),</span>
-            <span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;model_ref: </span><span class="si">{</span><span class="n">model_ref</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="c1"># Initialize the weight update group</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Calling init_weight_update_group...&quot;</span><span class="p">)</span>
+        <span class="n">init_weight_update_group_getter</span> <span class="o">=</span> <span class="n">model_ref</span><span class="o">.</span><span class="n">collective_rpc</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
+            <span class="s2">&quot;init_weight_update_group&quot;</span><span class="p">,</span>
+            <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">master_address</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">master_port</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">weight_sync_world_size</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;init_weight_update_group remote call succeeded&quot;</span><span class="p">)</span>
 
-            <span class="n">vllm_tp_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vllm_tp_size</span>
-            <span class="n">weight_sync_world_size</span> <span class="o">=</span> <span class="n">vllm_tp_size</span> <span class="o">+</span> <span class="mi">1</span>
-
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-                <span class="s2">&quot;Calling stateless_init_process_group within updater...&quot;</span>
-            <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">vllm_comm_group</span> <span class="o">=</span> <span class="n">stateless_init_process_group</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">master_address</span><span class="p">,</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">master_port</span><span class="p">,</span>
-                <span class="mi">0</span><span class="p">,</span>
-                <span class="n">weight_sync_world_size</span><span class="p">,</span>
-                <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">),</span>
-            <span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Calling stateless_init_process_group within updater...&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">vllm_comm_group</span> <span class="o">=</span> <span class="n">stateless_init_process_group</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">master_address</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">master_port</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="n">weight_sync_world_size</span><span class="p">,</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">init_weight_update_group_getter</span><span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;init_weight_update_group getter succeeded&quot;</span><span class="p">)</span>
 
         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;group initialized&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">initialized_group</span> <span class="o">=</span> <span class="kc">True</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_get_server_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
-        <span class="k">return</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">maybe_init_group</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialized_group</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">collector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_init_group</span><span class="p">()</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_sync_weights_with_worker</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">worker_id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">):</span>
-        <span class="n">inference_server</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">policy</span><span class="o">.</span><span class="n">model</span>
+<div class="viewcode-block" id="vLLMUpdater._sync_weights_with_worker"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater._sync_weights_with_worker">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">_sync_weights_with_worker</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">worker_id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Synchronize weights with a vLLM worker.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            worker_id: Not used - we only have one worker.</span>
+<span class="sd">            server_weights: The weights to sync. Can be:</span>
+<span class="sd">                - TensorDictModuleBase: A policy module whose weights will be extracted</span>
+<span class="sd">                - TensorDictBase: A TensorDict containing weights</span>
+<span class="sd">                - dict: A regular dict containing weights</span>
+<span class="sd">                - None: Will try to get weights from server using _get_server_weights()</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">server_weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;server_weights cannot be None for vLLM updater&quot;</span><span class="p">)</span>
+
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialized_group</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                 <span class="s2">&quot;Failed to update weights because sender is not initialized.&quot;</span>
             <span class="p">)</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">vllm</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_metadata</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Failed to update weights because model metadata is not set. &quot;</span>
+                <span class="s2">&quot;In async mode, you must set the model metadata in the training actor &quot;</span>
+                <span class="s2">&quot;before any weight updates.&quot;</span>
+            <span class="p">)</span>
 
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">inference_server</span><span class="p">,</span> <span class="n">vllm</span><span class="o">.</span><span class="n">LLM</span><span class="p">):</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;broadcasting with update_weight_broadcast&quot;</span><span class="p">)</span>
-            <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="p">(</span><span class="n">dtype</span><span class="p">,</span> <span class="n">shape</span><span class="p">)</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_metadata</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                <span class="n">inference_server</span><span class="o">.</span><span class="n">collective_rpc</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
+        <span class="n">model_ref</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_model_ref</span><span class="p">()</span>
+
+        <span class="c1"># First broadcast metadata</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;broadcasting with update_weight_broadcast&quot;</span><span class="p">)</span>
+        <span class="n">remotes</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="p">(</span><span class="n">dtype</span><span class="p">,</span> <span class="n">shape</span><span class="p">)</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_metadata</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">remotes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">model_ref</span><span class="o">.</span><span class="n">collective_rpc</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
                     <span class="s2">&quot;update_weight_broadcast&quot;</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> <span class="n">shape</span><span class="p">)</span>
                 <span class="p">)</span>
+            <span class="p">)</span>
+
+        <span class="c1"># # Then update weights</span>
+        <span class="c1"># remotes = []</span>
+        <span class="c1"># pbar = tqdm.tqdm(server_weights.items(), desc=&quot;Updating weights&quot;, total=len(server_weights))</span>
+        <span class="c1"># for k, val in pbar:</span>
+        <span class="c1">#     pbar.set_description(f&quot;Updating {k}&quot;)</span>
+        <span class="c1">#     remotes.append(model_ref.collective_rpc.remote(&quot;update_weight&quot;, args=(k, val)))</span>
+        <span class="c1"># # ray.get(remotes)</span>
+
+        <span class="c1"># if self.vllm_comm_group is not True:</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;broadcasting...&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_metadata</span><span class="p">:</span>
+            <span class="n">val</span> <span class="o">=</span> <span class="n">server_weights</span><span class="p">[</span><span class="n">k</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">vllm_comm_group</span><span class="o">.</span><span class="n">broadcast</span><span class="p">(</span>
+                <span class="n">val</span><span class="p">,</span>
+                <span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                <span class="n">stream</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">(),</span>
+            <span class="p">)</span>
+            <span class="k">del</span> <span class="n">val</span>
+        <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">remotes</span><span class="p">)</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;done broadcasting&quot;</span><span class="p">)</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="vLLMUpdater._get_server_weights"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater._get_server_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">_get_server_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Not used - weights must be passed directly via policy.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="kc">None</span></div>
+
+<div class="viewcode-block" id="vLLMUpdater._maybe_map_weights"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater._maybe_map_weights">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_map_weights</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="nb">dict</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Map weights from any format to the format expected by vLLM.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            server_weights: The weights to map. Can be:</span>
+<span class="sd">                - TensorDictModuleBase: A policy module whose weights will be extracted</span>
+<span class="sd">                - TensorDictBase: A TensorDict containing weights</span>
+<span class="sd">                - dict: A regular dict containing weights</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            TensorDictBase: The mapped weights in TensorDict format</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">server_weights</span><span class="p">,</span> <span class="n">TensorDictModuleBase</span><span class="p">):</span>
+            <span class="c1"># Extract weights from policy module using merge_and_unload for LLMs</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">server_weights</span><span class="p">,</span> <span class="s2">&quot;model&quot;</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;TensorDictModuleBase must have a &#39;model&#39; attribute&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">server_weights</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;merge_and_unload&quot;</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Model must have a &#39;merge_and_unload&#39; method&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">server_weights</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">merge_and_unload</span><span class="p">()</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(),</span> <span class="p">[])</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">server_weights</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">server_weights</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">server_weights</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">server_weights</span><span class="p">,</span> <span class="p">[])</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">server_weights</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                <span class="n">inference_server</span><span class="o">.</span><span class="n">collective_rpc</span><span class="p">(</span><span class="s2">&quot;update_weight&quot;</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">val</span><span class="p">))</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;server_weights must be TensorDictModuleBase, TensorDictBase or dict, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">server_weights</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span></div>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">vllm_comm_group</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">True</span><span class="p">:</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;broadcasting...&quot;</span><span class="p">)</span>
-            <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_metadata</span><span class="p">:</span>
-                <span class="n">val</span> <span class="o">=</span> <span class="n">server_weights</span><span class="p">[</span><span class="n">k</span><span class="p">]</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">vllm_comm_group</span><span class="o">.</span><span class="n">broadcast</span><span class="p">(</span>
-                    <span class="n">val</span><span class="p">,</span> <span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">()</span>
-                <span class="p">)</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;done broadcasting&quot;</span><span class="p">)</span>
-            <span class="c1"># # TODO: this may fail</span>
-            <span class="c1"># self.vllm_comm_group.broadcast(</span>
-            <span class="c1">#     self.version_tensor, src=0, stream=torch.cuda.current_stream()</span>
-            <span class="c1"># )</span>
-            <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
-        <span class="k">return</span>
+<div class="viewcode-block" id="vLLMUpdater.get_model_metadata"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater.get_model_metadata">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_model_metadata</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">TensorDictModuleBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the model metadata from a model.</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_map_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">server_weights</span><span class="p">):</span>
-        <span class="k">return</span>
+<span class="sd">        Args:</span>
+<span class="sd">            model (TensorDictModuleBase): The model to get the metadata from.</span>
+<span class="sd">                Must be a TransformersWrapper or equivalent.</span>
 
-<div class="viewcode-block" id="vLLMUpdater.all_worker_ids"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater.all_worker_ids">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">all_worker_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span></div></div>
+<span class="sd">        Returns:</span>
+<span class="sd">            dict[str, tuple[torch.dtype, torch.Size]]: The model metadata.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">sd</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">merge_and_unload</span><span class="p">()</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+        <span class="n">model_metadata</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="p">(</span><span class="n">v</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">v</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">sd</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+        <span class="k">return</span> <span class="n">model_metadata</span></div>
+
+<div class="viewcode-block" id="vLLMUpdater.all_worker_ids"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater.all_worker_ids">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">all_worker_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns [0] since we only have one worker.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="vLLMUpdater.register_collector"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.collectors.llm.vLLMUpdater.html#torchrl.collectors.llm.vLLMUpdater.register_collector">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">register_collector</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">collector</span><span class="p">:</span> <span class="n">DataCollectorBase</span><span class="p">):</span>  <span class="c1"># noqa: F821</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">register_collector</span><span class="p">(</span><span class="n">collector</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_post_hook</span><span class="p">(</span><span class="n">collector</span><span class="o">.</span><span class="n">increment_version</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span></div></div>
 </pre></div>
 
              </article>

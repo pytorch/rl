@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+2e7def8) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+43d5333) &#x25BC</span></a>
     </div>
     
 
@@ -432,13 +432,60 @@
 <h1>vLLMUpdater<a class="headerlink" href="#vllmupdater" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.collectors.llm.vLLMUpdater">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.collectors.llm.</span></span><span class="sig-name descname"><span class="pre">vLLMUpdater</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">master_address</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">master_port</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.7)"><span class="pre">torch.dtype</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.7)"><span class="pre">torch.Size</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vllm_tp_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/llm/weight_update/vllm.html#vLLMUpdater"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.llm.vLLMUpdater" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.collectors.llm.</span></span><span class="sig-name descname"><span class="pre">vLLMUpdater</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">master_address</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">master_port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.7)"><span class="pre">torch.dtype</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.7)"><span class="pre">torch.Size</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vllm_tp_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/llm/weight_update/vllm.html#vLLMUpdater"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.llm.vLLMUpdater" title="Permalink to this definition">¶</a></dt>
 <dd><p>A class that sends weights to vLLM workers.</p>
-<p>Assumes that the vllm instance (the inference server) is a Ray Actor.</p>
+<p>This class handles synchronizing weights between a training policy and vLLM inference workers.
+It supports both local vLLM instances and remote Ray actors.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>master_address</strong> (<em>str</em><em>, </em><em>optional</em>) – The master address for distributed training. Defaults to localhost.</p></li>
+<li><p><strong>master_port</strong> (<em>int</em><em>, </em><em>optional</em>) – The master port for distributed training. If None, will auto-assign.</p></li>
+<li><p><strong>model_metadata</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>tuple</em><em>[</em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.7)"><em>torch.dtype</em></a><em>, </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.7)"><em>torch.Size</em></a><em>]</em><em>]</em><em>, </em><em>optional</em>) – Model metadata mapping
+parameter names to their dtype and shape. If not provided, will be extracted from policy.</p></li>
+<li><p><strong>vllm_tp_size</strong> (<em>int</em><em>, </em><em>optional</em>) – vLLM tensor parallel size. Defaults to 1.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.llm.vLLMUpdater.init">
+<span class="sig-name descname"><span class="pre">init</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/llm/weight_update/vllm.html#vLLMUpdater.init"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.llm.vLLMUpdater.init" title="Permalink to this definition">¶</a></dt>
+<dd><p>Initialize the updater with model metadata and initialize the group.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.llm.vLLMUpdater._sync_weights_with_worker">
+<span class="sig-name descname"><span class="pre">_sync_weights_with_worker</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/llm/weight_update/vllm.html#vLLMUpdater._sync_weights_with_worker"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.llm.vLLMUpdater._sync_weights_with_worker" title="Permalink to this definition">¶</a></dt>
+<dd><p>Synchronize weights with a vLLM worker.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.llm.vLLMUpdater._get_server_weights">
+<span class="sig-name descname"><span class="pre">_get_server_weights</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/llm/weight_update/vllm.html#vLLMUpdater._get_server_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.llm.vLLMUpdater._get_server_weights" title="Permalink to this definition">¶</a></dt>
+<dd><p>Not used - weights must be passed directly.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.llm.vLLMUpdater._maybe_map_weights">
+<span class="sig-name descname"><span class="pre">_maybe_map_weights</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/llm/weight_update/vllm.html#vLLMUpdater._maybe_map_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.llm.vLLMUpdater._maybe_map_weights" title="Permalink to this definition">¶</a></dt>
+<dd><p>No mapping needed.</p>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.collectors.llm.vLLMUpdater.all_worker_ids">
-<span class="sig-name descname"><span class="pre">all_worker_ids</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><span class="pre">torch.device</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/torchrl/collectors/llm/weight_update/vllm.html#vLLMUpdater.all_worker_ids"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.llm.vLLMUpdater.all_worker_ids" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns a list of all worker identifiers or <cite>None</cite> if there are no workers associated.</p>
+<span class="sig-name descname"><span class="pre">all_worker_ids</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/llm/weight_update/vllm.html#vLLMUpdater.all_worker_ids"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.llm.vLLMUpdater.all_worker_ids" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns [0] since we only have one worker.</p>
+</dd></dl>
+
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This class assumes the policy is a transformers model that can be loaded by vLLM.
+The policy must have a state_dict() method that returns the model weights.</p>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="id0">
+<span class="sig-name descname"><span class="pre">all_worker_ids</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/torchrl/collectors/llm/weight_update/vllm.html#vLLMUpdater.all_worker_ids"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#id0" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns [0] since we only have one worker.</p>
 </dd></dl>
 
 <dl class="py property">
@@ -449,15 +496,84 @@
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.llm.vLLMUpdater.from_policy">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_policy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">policy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictModuleBase</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase" title="torchrl.collectors.WeightUpdaterBase"><span class="pre">WeightUpdaterBase</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.collectors.llm.vLLMUpdater.from_policy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Optional classmethod to create a weight updater instance from a policy.</p>
+<p>This method can be implemented by subclasses to provide custom initialization logic
+based on the policy. If implemented, this method will be called before falling back
+to the default constructor when initializing a weight updater in a collector.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>policy</strong> (<em>TensorDictModuleBase</em>) – The policy to create the weight updater from.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>An instance of the weight updater, or None if the policy</dt><dd><p>cannot be used to create an instance.</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase" title="torchrl.collectors.WeightUpdaterBase">WeightUpdaterBase</a> | None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.llm.vLLMUpdater.get_model_metadata">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_model_metadata</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictModuleBase</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.7)"><span class="pre">torch.dtype</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.7)"><span class="pre">torch.Size</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/torchrl/collectors/llm/weight_update/vllm.html#vLLMUpdater.get_model_metadata"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.llm.vLLMUpdater.get_model_metadata" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the model metadata from a model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>model</strong> (<em>TensorDictModuleBase</em>) – The model to get the metadata from.
+Must be a TransformersWrapper or equivalent.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The model metadata.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict[str, tuple[<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.7)">torch.dtype</a>, <a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.7)">torch.Size</a>]]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.llm.vLLMUpdater.increment_version">
+<span class="sig-name descname"><span class="pre">increment_version</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.collectors.llm.vLLMUpdater.increment_version" title="Permalink to this definition">¶</a></dt>
+<dd><p>Increment the policy version.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="id1">
+<span class="sig-name descname"><span class="pre">init</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.7)"><span class="pre">torch.dtype</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.7)"><span class="pre">torch.Size</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/collectors/llm/weight_update/vllm.html#vLLMUpdater.init"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#id1" title="Permalink to this definition">¶</a></dt>
+<dd><p>Initialize the updater with model metadata and initialize the group.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>model_metadata</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>tuple</em><em>[</em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.7)"><em>torch.dtype</em></a><em>, </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.7)"><em>torch.Size</em></a><em>]</em><em>]</em>) – The model metadata mapping
+parameter names to their dtype and shape.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.collectors.llm.vLLMUpdater.post_hooks">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">post_hooks</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">NoneType</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrl.collectors.llm.vLLMUpdater.post_hooks" title="Permalink to this definition">¶</a></dt>
+<dd><p>The list of post-hooks registered to the weight updater.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrl.collectors.llm.vLLMUpdater.push_weights">
-<span class="sig-name descname"><span class="pre">push_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">worker_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><span class="pre">torch.device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><span class="pre">torch.device</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.collectors.llm.vLLMUpdater.push_weights" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">push_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">policy_or_weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictModuleBase</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">TensorDictBase</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">worker_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><span class="pre">torch.device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><span class="pre">torch.device</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.collectors.llm.vLLMUpdater.push_weights" title="Permalink to this definition">¶</a></dt>
 <dd><p>Updates the weights of the policy, or on specified / all remote workers.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>weights</strong> (<em>Any</em>) – The source weights to push to the policy / workers.</p></li>
-<li><p><strong>worker_ids</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em> | </em><em>int</em><em> | </em><em>list</em><em>[</em><em>int</em><em>] </em><em>| </em><em>list</em><em>[</em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em>] </em><em>| </em><em>None = None</em>) – an optional list of
-workers to update.</p></li>
+<li><p><strong>policy_or_weights</strong> – The source to get weights from. Can be:
+- TensorDictModuleBase: A policy module whose weights will be extracted
+- TensorDictBase: A TensorDict containing weights
+- dict: A regular dict containing weights
+- None: Will try to get weights from server using _get_server_weights()</p></li>
+<li><p><strong>worker_ids</strong> – An optional list of workers to update.</p></li>
 </ul>
 </dd>
 </dl>
@@ -466,12 +582,23 @@ workers to update.</p></li>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.collectors.llm.vLLMUpdater.register_collector">
-<span class="sig-name descname"><span class="pre">register_collector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">collector</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase" title="torchrl.collectors.DataCollectorBase"><span class="pre">DataCollectorBase</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.collectors.llm.vLLMUpdater.register_collector" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">register_collector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">collector</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase" title="torchrl.collectors.DataCollectorBase"><span class="pre">DataCollectorBase</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/collectors/llm/weight_update/vllm.html#vLLMUpdater.register_collector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.llm.vLLMUpdater.register_collector" title="Permalink to this definition">¶</a></dt>
 <dd><p>Register a collector in the updater.</p>
 <p>Once registered, the updater will not accept another collector.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>collector</strong> (<a class="reference internal" href="torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase" title="torchrl.collectors.DataCollectorBase"><em>DataCollectorBase</em></a>) – The collector to register.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.llm.vLLMUpdater.register_post_hook">
+<span class="sig-name descname"><span class="pre">register_post_hook</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hook</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.collectors.llm.vLLMUpdater.register_post_hook" title="Permalink to this definition">¶</a></dt>
+<dd><p>Registers a post-hook to be called after weights are updated.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>hook</strong> (<em>Callable</em><em>[</em><em>[</em><em>]</em><em>, </em><em>None</em><em>]</em>) – The post-hook to register.</p>
 </dd>
 </dl>
 </dd></dl>

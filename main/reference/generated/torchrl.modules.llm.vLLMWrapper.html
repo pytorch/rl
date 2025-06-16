@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+2e7def8) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+43d5333) &#x25BC</span></a>
     </div>
     
 
@@ -452,8 +452,15 @@ Defaults to <cite>None</cite>.</p></li>
 <li><p><strong>tokenizer</strong> (<em>transformers.tokenization_utils.PreTrainedTokenizer</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – The tokenizer to use for
 encoding and decoding text. If <cite>None</cite>, the tokenizer associated with the model will be used. Defaults to
 <cite>None</cite>.</p></li>
-<li><p><strong>from_text</strong> (<em>bool</em><em>, </em><em>optional</em>) – Indicates whether the input is in text format. If <cite>True</cite>, the input is expected to
-be text that will be tokenized. If <cite>False</cite>, the input is expected to be token sequences. Defaults to <cite>True</cite>.</p></li>
+<li><p><strong>from_text</strong> (<em>bool</em><em>, </em><em>optional</em>) – <p>Indicates whether the input is in text format. If <cite>True</cite>, the input is expected to
+be text that will be tokenized. If <cite>False</cite>, the input is expected to be token sequences. Defaults to <cite>True</cite>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If <cite>from_text</cite> is <cite>True</cite>, the input text can be provided in the <cite>“text”</cite> key or in the <cite>“history”</cite> key.
+If using the <cite>“history”</cite> key, the history will be parsed from a <a class="reference internal" href="torchrl.data.llm.History.html#torchrl.data.llm.History" title="torchrl.data.llm.History"><code class="xref py py-class docutils literal notranslate"><span class="pre">History</span></code></a> object to a
+text string using the tokenizer.</p>
+</div>
+</p></li>
 <li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em> | </em><em>None</em><em>, </em><em>optional</em>) – The device to use for computation. If <cite>None</cite>, the default device will
 be used. Defaults to <cite>None</cite>.</p></li>
 <li><p><strong>generate</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to enable text generation. If <cite>True</cite>, the model will generate text based on

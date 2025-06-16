@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+2e7def8) &#x25BC</span></a>
+      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+43d5333) &#x25BC</span></a>
     </div>
     
 
@@ -570,8 +570,7 @@
 
 <span class="sd">        device (torch.device | None, optional): The device to use for computations. Defaults to None.</span>
 <span class="sd">        template_kwargs (dict[str, Any] | None, optional): Additional keyword arguments for the template. Defaults to `None`.</span>
-<span class="sd">        apply_template (bool | None, optional): Whether to apply the template to the text. Defaults to `True` if the</span>
-<span class="sd">            kwargs or the tokenizer is passed.</span>
+<span class="sd">        apply_template (bool | None, optional): Whether to apply the template to the text. Defaults to `False`.</span>
 <span class="sd">        compute_reward (bool, optional): Whether to compute rewards. Defaults to `True`.</span>
 <span class="sd">        collate_fn (Callable | None, optional): A custom collate function for data loading. If `None`, a default</span>
 <span class="sd">            collate function is used. Defaults to `None`.</span>
@@ -721,7 +720,7 @@
         <span class="n">tokenizer</span><span class="p">:</span> <span class="n">transformers</span><span class="o">.</span><span class="n">AutoTokenizer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># noqa</span>
         <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">template_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">apply_template</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">apply_template</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">compute_reward</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">collate_fn</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">max_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>

@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+2e7def8) &#x25BC</span></a>
+      <a href="../../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+43d5333) &#x25BC</span></a>
     </div>
     
 
@@ -446,9 +446,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">NestedKey</span><span class="p">,</span> <span class="n">NonTensorData</span><span class="p">,</span> <span class="n">TensorClass</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.tensorclass</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_non_tensor</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
-
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">TensorSpec</span><span class="p">,</span> <span class="n">Unbounded</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">Unbounded</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Transform</span>
 
 <span class="n">_has_langdetect</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;langdetect&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
@@ -459,13 +457,45 @@
 <div class="viewcode-block" id="IFEvalScoreData"><a class="viewcode-back" href="../../../../../../reference/generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">IFEvalScoreData</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;IFEval score container.&quot;&quot;&quot;</span>
 
-    <span class="n">prompt_level_strict_acc</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
-    <span class="n">inst_level_strict_acc</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
-    <span class="n">prompt_level_loose_acc</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
-    <span class="n">inst_level_loose_acc</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></div>
+    <span class="n">prompt_level_strict_acc</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">inst_level_strict_acc</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">prompt_level_loose_acc</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">inst_level_loose_acc</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">prompt_level_loose_acc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+            <span class="s2">&quot;prompt_level_loose_acc&quot;</span><span class="p">,</span> <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        <span class="n">inst_level_loose_acc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;inst_level_loose_acc&quot;</span><span class="p">,</span> <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">prompt_level_strict_acc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+            <span class="s2">&quot;prompt_level_strict_acc&quot;</span><span class="p">,</span> <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        <span class="n">inst_level_strict_acc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;inst_level_strict_acc&quot;</span><span class="p">,</span> <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">prompt_level_loose_acc</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">prompt_level_loose_acc</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,))</span>
+        <span class="k">elif</span> <span class="n">prompt_level_loose_acc</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">prompt_level_loose_acc</span> <span class="o">=</span> <span class="n">prompt_level_loose_acc</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">inst_level_loose_acc</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">inst_level_loose_acc</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,))</span>
+        <span class="k">elif</span> <span class="n">inst_level_loose_acc</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">inst_level_loose_acc</span> <span class="o">=</span> <span class="n">inst_level_loose_acc</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">prompt_level_strict_acc</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">prompt_level_strict_acc</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,))</span>
+        <span class="k">elif</span> <span class="n">prompt_level_strict_acc</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">prompt_level_strict_acc</span> <span class="o">=</span> <span class="n">prompt_level_strict_acc</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">inst_level_strict_acc</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">inst_level_strict_acc</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,))</span>
+        <span class="k">elif</span> <span class="n">inst_level_strict_acc</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">inst_level_strict_acc</span> <span class="o">=</span> <span class="n">inst_level_strict_acc</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span></div>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_process_results</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">response</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">NonTensorData</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDict</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_process_results</span><span class="p">(</span>
+    <span class="n">data</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">response</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">NonTensorData</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">IFEvalScoreData</span><span class="p">:</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_langdetect</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="s2">&quot;langdetect must be installed to user IFEvalScorer.&quot;</span><span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_immutabledict</span><span class="p">:</span>
@@ -492,6 +522,8 @@
         <span class="n">inst_level_strict_acc</span><span class="o">=</span><span class="n">out_strict</span><span class="o">.</span><span class="n">follow_instruction_list</span><span class="p">,</span>
         <span class="n">prompt_level_loose_acc</span><span class="o">=</span><span class="n">out_loose</span><span class="o">.</span><span class="n">follow_all_instructions</span><span class="p">,</span>
         <span class="n">inst_level_loose_acc</span><span class="o">=</span><span class="n">out_loose</span><span class="o">.</span><span class="n">follow_instruction_list</span><span class="p">,</span>
+        <span class="n">batch_size</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+        <span class="n">device</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
     <span class="p">)</span>
 
 
@@ -512,9 +544,13 @@
 <span class="sd">        response_column (NestedKey, optional): The column name for the response. Defaults to &quot;text_response&quot;.</span>
 <span class="sd">        score_key (NestedKey, optional): The key to store the score. Defaults to &quot;ifeval_score&quot;.</span>
 <span class="sd">        aggregate_reward (bool, callable, optional): Whether to aggregate the reward or not. If a Callable is passed,</span>
-<span class="sd">            it must take as input an :class:`~torchrl.envs.llm.IFEvalScoreData` instance and return a tensor with shape</span>
-<span class="sd">            identical to the env batch-size with an additional trailing singleton dimension.</span>
+<span class="sd">            it must take as input an :class:`~torchrl.envs.llm.IFEvalScoreData` instance, and optionally `think_blocks`, `answer_blocks` and `complete` keyword arguments</span>
+<span class="sd">            containing the list of think and answer blocks, respectively.</span>
+<span class="sd">            It must return a tensor with shape identical to the env batch-size with an additional trailing singleton dimension.</span>
 <span class="sd">            Defaults to `True`. The default aggregator is a simple sum over the fields of :class:`~torchrl.envs.llm.IFEvalScoreData`.</span>
+<span class="sd">        format_weights (list[float], optional): The weights for the format fields (`prompt_level_strict_acc`, `inst_level_strict_acc`,</span>
+<span class="sd">            `prompt_level_loose_acc`, `inst_level_loose_acc`, in that order). Defaults to `[0.4, 0.3, 0.2, 0.1]`.</span>
+<span class="sd">            This is only used if `aggregate_reward` is `True` and the default aggregator is used.</span>
 
 <span class="sd">    .. note:: `IFEvalScorer` requires the following libraries to be installed: `langdetect`, `nltk` and `immutabledict`.</span>
 
@@ -529,7 +565,11 @@
         <span class="n">id_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;key&quot;</span><span class="p">,</span>
         <span class="n">response_column</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;text_response&quot;</span><span class="p">,</span>
         <span class="n">score_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;ifeval_score&quot;</span><span class="p">,</span>
-        <span class="n">aggregate_reward</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">IFEvalScoreData</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">aggregate_reward</span><span class="p">:</span> <span class="nb">bool</span>
+        <span class="o">|</span> <span class="n">Callable</span><span class="p">[</span>
+            <span class="p">[</span><span class="n">IFEvalScoreData</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+        <span class="p">]</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">format_weights</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">aggregate_reward</span> <span class="o">=</span> <span class="n">aggregate_reward</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">score_key</span> <span class="o">=</span> <span class="n">score_key</span>
@@ -555,6 +595,64 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">keyword_args_key</span> <span class="o">=</span> <span class="n">keyword_args_key</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">prompt_key</span> <span class="o">=</span> <span class="n">prompt_key</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">id_key</span> <span class="o">=</span> <span class="n">id_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">format_weights</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">format_weights</span> <span class="k">if</span> <span class="n">format_weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">[</span><span class="mf">0.4</span><span class="p">,</span> <span class="mf">0.3</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">]</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_default_reward_aggregator</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">score</span><span class="p">:</span> <span class="n">IFEvalScoreData</span><span class="p">,</span>
+        <span class="n">think_blocks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">answer_blocks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">complete</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Default reward aggregation function that provides a more nuanced scoring system.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            score (IFEvalScoreData): The score data.</span>
+<span class="sd">            think_blocks (list[str], optional): The list of think blocks.</span>
+<span class="sd">            answer_blocks (list[str], optional): The list of answer blocks.</span>
+<span class="sd">            complete (bool, optional): Whether the response is complete (ends with a eos token).</span>
+
+<span class="sd">        The weights are:</span>
+<span class="sd">        - prompt_level_strict_acc: 0.4 (highest weight for strict adherence to all instructions)</span>
+<span class="sd">        - inst_level_strict_acc: 0.3 (high weight for strict adherence to individual instructions)</span>
+<span class="sd">        - prompt_level_loose_acc: 0.2 (medium weight for loose adherence to all instructions)</span>
+<span class="sd">        - inst_level_loose_acc: 0.1 (lowest weight for loose adherence to individual instructions)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">scores</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+            <span class="p">[</span>
+                <span class="n">score</span><span class="o">.</span><span class="n">prompt_level_strict_acc</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+                <span class="n">score</span><span class="o">.</span><span class="n">inst_level_strict_acc</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+                <span class="n">score</span><span class="o">.</span><span class="n">prompt_level_loose_acc</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+                <span class="n">score</span><span class="o">.</span><span class="n">inst_level_loose_acc</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+            <span class="p">],</span>
+            <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">format_weights</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">scores</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">get_default_dtype</span><span class="p">(),</span>
+        <span class="p">)</span>
+        <span class="n">reward_format</span> <span class="o">=</span> <span class="p">(</span><span class="n">scores</span> <span class="o">*</span> <span class="n">weights</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">think_blocks</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">reward_think</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">think_blocks</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">reward_think</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">if</span> <span class="n">answer_blocks</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">reward_answer</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">answer_blocks</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">reward_answer</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">if</span> <span class="n">complete</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">complete</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">complete</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">complete</span> <span class="o">=</span> <span class="n">complete</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">get_default_dtype</span><span class="p">())</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">complete</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">complete</span><span class="p">)</span>
+
+        <span class="n">reward_format</span> <span class="o">=</span> <span class="n">reward_format</span> <span class="o">*</span> <span class="mi">3</span> <span class="o">+</span> <span class="n">reward_answer</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">+</span> <span class="n">reward_think</span> <span class="o">+</span> <span class="n">complete</span>
+        <span class="n">reward_format</span> <span class="o">=</span> <span class="n">reward_format</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">get_default_dtype</span><span class="p">())</span>
+        <span class="k">return</span> <span class="n">reward_format</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_step</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
@@ -568,30 +666,26 @@
                     <span class="p">)</span>
                 <span class="p">]</span>
             <span class="p">)</span>
-        <span class="n">response</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">response_key</span><span class="p">)</span>
+        <span class="n">h</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">][</span><span class="o">...</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="n">h</span><span class="o">.</span><span class="n">content</span>
+        <span class="n">complete</span> <span class="o">=</span> <span class="n">h</span><span class="o">.</span><span class="n">is_complete</span>
+        <span class="c1"># response = tensordict.get(self.response_key)</span>
         <span class="k">if</span> <span class="n">is_non_tensor</span><span class="p">(</span><span class="n">response</span><span class="p">):</span>
             <span class="n">response</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">data</span>
-        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">response</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
 
         <span class="c1"># TODO: This should be a distinct module</span>
         <span class="c1"># Regular expression patterns to match think and answer blocks</span>
         <span class="n">think_pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;&lt;think&gt;(.*?)&lt;/think&gt;&quot;</span>
         <span class="n">answer_pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;&lt;answer&gt;(.*?)&lt;/answer&gt;&quot;</span>
         <span class="c1"># Extract think block</span>
-        <span class="n">think_match</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">think_pattern</span><span class="p">,</span> <span class="n">response</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">DOTALL</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">think_match</span><span class="p">:</span>
-            <span class="n">think_match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">pass</span>
+        <span class="n">think_blocks</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="n">think_pattern</span><span class="p">,</span> <span class="n">response</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">DOTALL</span><span class="p">)</span>
 
         <span class="c1"># Extract answer block</span>
-        <span class="n">answer_match</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">answer_pattern</span><span class="p">,</span> <span class="n">response</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">DOTALL</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">answer_match</span><span class="p">:</span>
-            <span class="n">answer_block</span> <span class="o">=</span> <span class="n">answer_match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">answer_block</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="n">answer_blocks</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="n">answer_pattern</span><span class="p">,</span> <span class="n">response</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">DOTALL</span><span class="p">)</span>
 
-        <span class="n">score</span> <span class="o">=</span> <span class="n">_process_results</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">answer_block</span><span class="p">)</span>
+        <span class="n">score</span> <span class="o">=</span> <span class="n">_process_results</span><span class="p">(</span>
+            <span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span><span class="o">.</span><span class="n">auto_device_</span><span class="p">(),</span> <span class="n">answer_blocks</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">answer_blocks</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+        <span class="p">)</span>
         <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">score_key</span><span class="p">,</span>
             <span class="n">score</span><span class="p">,</span>
@@ -600,12 +694,13 @@
             <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">aggregate_reward</span><span class="p">):</span>
                 <span class="n">reward_func</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">aggregate_reward</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">reward_func</span> <span class="o">=</span> <span class="p">(</span>
-                    <span class="k">lambda</span> <span class="n">td</span><span class="p">:</span> <span class="n">td</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">reduce</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="s2">&quot;feature&quot;</span><span class="p">)</span>
-                    <span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">get_default_dtype</span><span class="p">())</span>
-                    <span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-                <span class="p">)</span>
-            <span class="n">reward</span> <span class="o">=</span> <span class="n">reward_func</span><span class="p">(</span><span class="n">score</span><span class="p">)</span>
+                <span class="n">reward_func</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_default_reward_aggregator</span>
+            <span class="n">reward</span> <span class="o">=</span> <span class="n">reward_func</span><span class="p">(</span>
+                <span class="n">score</span><span class="p">,</span>
+                <span class="n">think_blocks</span><span class="o">=</span><span class="n">think_blocks</span><span class="p">,</span>
+                <span class="n">answer_blocks</span><span class="o">=</span><span class="n">answer_blocks</span><span class="p">,</span>
+                <span class="n">complete</span><span class="o">=</span><span class="n">complete</span><span class="p">,</span>
+            <span class="p">)</span>
             <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;reward&quot;</span><span class="p">,</span> <span class="n">reward</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">next_tensordict</span>
@@ -620,13 +715,13 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">response_key</span><span class="p">,</span>
         <span class="p">]</span>
 
-<div class="viewcode-block" id="IfEvalScorer.transform_reward_spec"><a class="viewcode-back" href="../../../../../../reference/generated/torchrl.envs.llm.IfEvalScorer.html#torchrl.envs.llm.IfEvalScorer.transform_reward_spec">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">transform_reward_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reward_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+<div class="viewcode-block" id="IfEvalScorer.transform_reward_spec"><a class="viewcode-back" href="../../../../../../reference/generated/torchrl.envs.llm.IfEvalScorer.html#torchrl.envs.llm.IfEvalScorer.transform_reward_spec">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">transform_reward_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reward_spec</span><span class="p">:</span> <span class="n">Composite</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Composite</span><span class="p">:</span>
         <span class="n">reward_spec</span><span class="p">[</span><span class="s2">&quot;reward&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Unbounded</span><span class="p">(</span>
             <span class="n">reward_spec</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">get_default_dtype</span><span class="p">()</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">reward_spec</span></div>
 
-<div class="viewcode-block" id="IfEvalScorer.transform_observation_spec"><a class="viewcode-back" href="../../../../../../reference/generated/torchrl.envs.llm.IfEvalScorer.html#torchrl.envs.llm.IfEvalScorer.transform_observation_spec">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">transform_observation_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation_spec</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+<div class="viewcode-block" id="IfEvalScorer.transform_observation_spec"><a class="viewcode-back" href="../../../../../../reference/generated/torchrl.envs.llm.IfEvalScorer.html#torchrl.envs.llm.IfEvalScorer.transform_observation_spec">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">transform_observation_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation_spec</span><span class="p">:</span> <span class="n">Composite</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Composite</span><span class="p">:</span>
         <span class="n">observation_spec</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">score_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
             <span class="n">prompt_level_strict_acc</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span>
                 <span class="n">shape</span><span class="o">=</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span>

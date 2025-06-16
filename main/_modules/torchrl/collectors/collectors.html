@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+2e7def8) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+43d5333) &#x25BC</span></a>
     </div>
     
 
@@ -452,7 +452,7 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">LazyStackedTensorDict</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">NO_DEFAULT</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">CudaGraphModule</span><span class="p">,</span> <span class="n">TensorDictModule</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">CudaGraphModule</span><span class="p">,</span> <span class="n">TensorDictModule</span><span class="p">,</span> <span class="n">TensorDictModuleBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_zip_strict</span><span class="p">,</span> <span class="n">Buffer</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">multiprocessing</span> <span class="k">as</span> <span class="n">mp</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">Parameter</span>
@@ -585,8 +585,9 @@
     <span class="nd">@weight_updater</span><span class="o">.</span><span class="n">setter</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">weight_updater</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">WeightUpdaterBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">WeightUpdaterBase</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">callable</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
-                <span class="c1"># then it&#39;s a constructor</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">WeightUpdaterBase</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">callable</span><span class="p">(</span>
+                <span class="n">value</span>
+            <span class="p">):</span>  <span class="c1"># Fall back to default constructor</span>
                 <span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="p">()</span>
             <span class="n">value</span><span class="o">.</span><span class="n">register_collector</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">value</span><span class="o">.</span><span class="n">collector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">self</span><span class="p">:</span>
@@ -716,7 +717,7 @@
 
 <div class="viewcode-block" id="DataCollectorBase.update_policy_weights_"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase.update_policy_weights_">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">update_policy_weights_</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">policy_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">policy_or_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">worker_ids</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
@@ -729,9 +730,11 @@
 <span class="sd">        can be transferred to the children workers from a server.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            policy_weights (TensorDictBase, optional): A TensorDict containing the weights of the policy to be used</span>
-<span class="sd">                for the update. If not provided, the method will attempt to fetch the weights using the configured</span>
-<span class="sd">                weight updater.</span>
+<span class="sd">            policy_or_weights (TensorDictBase | TensorDictModuleBase | dict | None): The weights to update with. Can be:</span>
+<span class="sd">                - TensorDictModuleBase: A policy module whose weights will be extracted</span>
+<span class="sd">                - TensorDictBase: A TensorDict containing weights</span>
+<span class="sd">                - dict: A regular dict containing weights</span>
+<span class="sd">                - None: Will try to get weights from server using _get_server_weights()</span>
 <span class="sd">            worker_ids (int | List[int] | torch.device | List[torch.device] | None, optional): Identifiers for the</span>
 <span class="sd">                workers that need to be updated. This is relevant when the collector has more than one worker associated</span>
 <span class="sd">                with it.</span>
@@ -746,7 +749,16 @@
 <span class="sd">            :meth:`~torchrl.collectors.RemoteWeightsUpdaterBase`.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">weight_updater</span><span class="p">(</span><span class="n">policy_weights</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+        <span class="k">if</span> <span class="s2">&quot;policy_weights&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;`policy_weights` is deprecated. Use `policy_or_weights` instead.&quot;</span><span class="p">,</span>
+                <span class="ne">DeprecationWarning</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">policy_or_weights</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;policy_weights&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">weight_updater</span><span class="p">(</span>
+            <span class="n">policy_or_weights</span><span class="o">=</span><span class="n">policy_or_weights</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+        <span class="p">)</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">]:</span>
         <span class="k">try</span><span class="p">:</span>
@@ -807,7 +819,20 @@
     <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
             <span class="k">return</span> <span class="o">-</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span> <span class="o">//</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">requested_frames_per_batch</span><span class="p">)</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Non-terminating collectors do not have a length&quot;</span><span class="p">)</span></div>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Non-terminating collectors do not have a length&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="DataCollectorBase.init_updater"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase.init_updater">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">init_updater</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the weight updater with custom arguments.</span>
+
+<span class="sd">        This method passes the arguments to the weight updater&#39;s init method.</span>
+<span class="sd">        If no weight updater is set, this is a no-op.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            *args: Positional arguments for weight updater initialization</span>
+<span class="sd">            **kwargs: Keyword arguments for weight updater initialization</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_updater</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">weight_updater</span><span class="o">.</span><span class="n">init</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div></div>
 
 
 <div class="viewcode-block" id="SyncDataCollector"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector">[docs]</a><span class="nd">@accept_remote_rref_udf_invocation</span>
@@ -1322,7 +1347,9 @@
                 <span class="n">weight_getter</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">get_weights_fn</span><span class="p">,</span> <span class="n">policy_weights</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span>
             <span class="p">)</span>
         <span class="k">elif</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weight_updater</span><span class="p">,</span> <span class="n">WeightUpdaterBase</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;weight_updater must be a subclass of WeightUpdaterBase&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;weight_updater must be a subclass of WeightUpdaterBase. Got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">weight_updater</span><span class="p">)</span><span class="si">}</span><span class="s2"> instead.&quot;</span>
+            <span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">weight_updater</span> <span class="o">=</span> <span class="n">weight_updater</span>
 
@@ -1537,12 +1564,20 @@
     <span class="c1"># for RPC</span>
 <div class="viewcode-block" id="SyncDataCollector.update_policy_weights_"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector.update_policy_weights_">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">update_policy_weights_</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">policy_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">policy_or_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">worker_ids</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="s2">&quot;policy_weights&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;`policy_weights` is deprecated. Use `policy_or_weights` instead.&quot;</span><span class="p">,</span>
+                <span class="ne">DeprecationWarning</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">policy_or_weights</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;policy_weights&quot;</span><span class="p">)</span>
+
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span>
-            <span class="n">policy_weights</span><span class="o">=</span><span class="n">policy_weights</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span>
+            <span class="n">policy_or_weights</span><span class="o">=</span><span class="n">policy_or_weights</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
         <span class="p">)</span></div>
 
 <div class="viewcode-block" id="SyncDataCollector.set_seed"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector.set_seed">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">static_seed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
@@ -3134,12 +3169,20 @@
     <span class="c1"># for RPC</span>
 <div class="viewcode-block" id="MultiSyncDataCollector.update_policy_weights_"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiSyncDataCollector.html#torchrl.collectors.MultiSyncDataCollector.update_policy_weights_">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">update_policy_weights_</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">policy_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">policy_or_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">worker_ids</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="s2">&quot;policy_weights&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;`policy_weights` is deprecated. Use `policy_or_weights` instead.&quot;</span><span class="p">,</span>
+                <span class="ne">DeprecationWarning</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">policy_or_weights</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;policy_weights&quot;</span><span class="p">)</span>
+
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span>
-            <span class="n">policy_weights</span><span class="o">=</span><span class="n">policy_weights</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span>
+            <span class="n">policy_or_weights</span><span class="o">=</span><span class="n">policy_or_weights</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
         <span class="p">)</span></div>
 
     <span class="nd">@property</span>
@@ -3509,12 +3552,20 @@
     <span class="c1"># for RPC</span>
 <div class="viewcode-block" id="MultiaSyncDataCollector.update_policy_weights_"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiaSyncDataCollector.html#torchrl.collectors.MultiaSyncDataCollector.update_policy_weights_">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">update_policy_weights_</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">policy_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">policy_or_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">worker_ids</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="s2">&quot;policy_weights&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;`policy_weights` is deprecated. Use `policy_or_weights` instead.&quot;</span><span class="p">,</span>
+                <span class="ne">DeprecationWarning</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">policy_or_weights</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;policy_weights&quot;</span><span class="p">)</span>
+
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span>
-            <span class="n">policy_weights</span><span class="o">=</span><span class="n">policy_weights</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span>
+            <span class="n">policy_or_weights</span><span class="o">=</span><span class="n">policy_or_weights</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
         <span class="p">)</span></div>
 
     <span class="nd">@property</span>

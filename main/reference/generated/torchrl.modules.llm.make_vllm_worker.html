@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+2e7def8) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+43d5333) &#x25BC</span></a>
     </div>
     
 
@@ -432,34 +432,33 @@
 <h1>make_vllm_worker<a class="headerlink" href="#make-vllm-worker" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.modules.llm.make_vllm_worker">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.modules.llm.</span></span><span class="sig-name descname"><span class="pre">make_vllm_worker</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">devices</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><span class="pre">torch.device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">make_ray_worker</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/llm/backends/vllm.html#make_vllm_worker"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.llm.make_vllm_worker" title="Permalink to this definition">¶</a></dt>
-<dd><p>Launches the vLLM inference engine.</p>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.modules.llm.</span></span><span class="sig-name descname"><span class="pre">make_vllm_worker</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">devices</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><span class="pre">torch.device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_devices</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">make_ray_worker</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enforce_eager</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/llm/backends/vllm.html#make_vllm_worker"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.llm.make_vllm_worker" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates a vLLM inference engine with tensor parallelism support.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>model_name</strong> (<em>str</em>) – a model name to pass to <cite>vllm.LLM</cite>.</p></li>
-<li><p><strong>devices</strong> (<em>list</em><em>[</em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em> | </em><em>int</em><em>]</em>) – a list of devices to use.</p></li>
-<li><p><strong>make_ray_worker</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to use ray’s worker, or just a plain
-<cite>LLM</cite> instance. Defaults to <cite>True</cite>.</p></li>
-<li><p><strong>**kwargs</strong> – keyword arguments to pass to <cite>vllm.LLM.__init__</cite>.</p></li>
+<li><p><strong>model_name</strong> (<em>str</em>) – The model name to pass to vLLM.LLM.</p></li>
+<li><p><strong>devices</strong> (<em>list</em><em>[</em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em> | </em><em>int</em><em>]</em><em>, </em><em>optional</em>) – List of devices to use. Exclusive with num_devices.</p></li>
+<li><p><strong>num_devices</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of devices to use. Exclusive with devices.</p></li>
+<li><p><strong>make_ray_worker</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to create a Ray actor. Defaults to True.</p></li>
+<li><p><strong>enforce_eager</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to enforce eager execution. Defaults to <cite>False</cite>.</p></li>
+<li><p><strong>**kwargs</strong> – Additional arguments passed to vLLM.LLM.__init__.</p></li>
 </ul>
 </dd>
-</dl>
-<dl>
-<dt>Update weights example:</dt><dd><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># simulate training, modify the weights of the model.</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">train_model</span><span class="o">.</span><span class="n">named_parameters</span><span class="p">():</span>
-<span class="gp">... </span>    <span class="n">p</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">zero_</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># sync weight from the training process to the inference engine.</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">train_model</span><span class="o">.</span><span class="n">named_parameters</span><span class="p">():</span>
-<span class="gp">... </span>    <span class="n">handle</span> <span class="o">=</span> <span class="n">inference_server</span> <span class="o">.</span><span class="n">collective_rpc</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="s2">&quot;update_weight_broadcast&quot;</span><span class="p">,</span>
-<span class="gp">... </span>                                       <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
-<span class="gp">... </span>    <span class="n">model_update_group</span><span class="o">.</span><span class="n">broadcast</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">())</span>
-<span class="gp">... </span>    <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">handle</span><span class="p">)</span>
-</pre></div>
-</div>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Either a local vLLM LLM instance or a Ray actor handle.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>LLM | ray.actor.ActorClass</p>
 </dd>
 </dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create a 2-GPU tensor parallel worker with Ray</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">worker</span> <span class="o">=</span> <span class="n">make_vllm_worker</span><span class="p">(</span><span class="s2">&quot;Qwen/Qwen2.5-3B&quot;</span><span class="p">,</span> <span class="n">num_devices</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create a local LLM instance on GPU 1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">llm</span> <span class="o">=</span> <span class="n">make_vllm_worker</span><span class="p">(</span><span class="s2">&quot;Qwen/Qwen2.5-3B&quot;</span><span class="p">,</span> <span class="n">devices</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">make_ray_worker</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</pre></div>
+</div>
 </dd></dl>
 
 </section>
