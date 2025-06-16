@@ -3599,7 +3599,7 @@ class CatFrames(ObservationTransform):
                     n = buffer_reset.ndimension() + self.dim
                 else:
                     raise ValueError(self._CAT_DIM_ERR)
-                idx = [slice(None, None) for _ in range(n)] + [slice(-d, None)]
+                idx = tuple([slice(None, None) for _ in range(n)] + [slice(-d, None)])
                 if not _all:
                     buffer_reset = buffer[_reset]
                 buffer_reset[idx] = data_reset
@@ -3612,7 +3612,7 @@ class CatFrames(ObservationTransform):
                     n = buffer.ndimension() + self.dim
                 else:
                     raise ValueError(self._CAT_DIM_ERR)
-                idx = [slice(None, None) for _ in range(n)] + [slice(-d, None)]
+                idx = tuple([slice(None, None) for _ in range(n)] + [slice(-d, None)])
                 buffer[idx] = buffer[idx].copy_(data)
             # add to tensordict
             next_tensordict.set(out_key, buffer.clone())
