@@ -20,9 +20,9 @@ import re
 from typing import Callable
 
 import torch
-
 from tensordict import NestedKey, NonTensorData, TensorClass, TensorDict, TensorDictBase
 from tensordict.tensorclass import is_non_tensor
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.data.tensor_specs import Composite, Unbounded
 from torchrl.envs import Transform
@@ -72,7 +72,7 @@ class IFEvalScoreData(TensorClass):
 
 
 def _process_results(
-    data: TensorDict, response: str | NonTensorData
+    data: TensorDict, response: str | NonTensorData, verbose: bool = False
 ) -> IFEvalScoreData:
     if not _has_langdetect:
         raise ImportError("langdetect must be installed to user IFEvalScorer.")
@@ -92,10 +92,12 @@ def _process_results(
         kwargs=data["kwargs"],
     )
 
+    if verbose:
+        torchrl_logger.info(f"Processing {inp=} {response=}")
     out_strict = _test_instruction_following_strict(inp, response)
     out_loose = _test_instruction_following_loose(inp, response)
 
-    return IFEvalScoreData(
+    result = IFEvalScoreData(
         prompt_level_strict_acc=out_strict.follow_all_instructions,
         inst_level_strict_acc=out_strict.follow_instruction_list,
         prompt_level_loose_acc=out_loose.follow_all_instructions,
@@ -103,6 +105,10 @@ def _process_results(
         batch_size=data.batch_size,
         device=data.device,
     )
+
+    if verbose:
+        torchrl_logger.info(f"Result: {result.to_dict()=}")
+    return result
 
 
 class IfEvalScorer(Transform):
@@ -129,6 +135,7 @@ class IfEvalScorer(Transform):
         format_weights (list[float], optional): The weights for the format fields (`prompt_level_strict_acc`, `inst_level_strict_acc`,
             `prompt_level_loose_acc`, `inst_level_loose_acc`, in that order). Defaults to `[0.4, 0.3, 0.2, 0.1]`.
             This is only used if `aggregate_reward` is `True` and the default aggregator is used.
+        verbose (bool, optional): Whether to print verbose information. Defaults to `False`.
 
     .. note:: `IFEvalScorer` requires the following libraries to be installed: `langdetect`, `nltk` and `immutabledict`.
 
@@ -148,6 +155,7 @@ class IfEvalScorer(Transform):
             [IFEvalScoreData, list[str] | None, list[str] | None], torch.Tensor
         ] = True,
         format_weights: list[float] | None = None,
+        verbose: bool = False,
     ):
         self.aggregate_reward = aggregate_reward
         self.score_key = score_key
@@ -176,6 +184,7 @@ class IfEvalScorer(Transform):
         self.format_weights = (
             format_weights if format_weights is not None else [0.4, 0.3, 0.2, 0.1]
         )
+        self.verbose = verbose
 
     def default_reward_aggregator(
         self,
@@ -192,61 +201,82 @@ class IfEvalScorer(Transform):
             answer_blocks (list[str], optional): The list of answer blocks.
             complete (bool, optional): Whether the response is complete (ends with a eos token).
 
-        The weights are:
-        - prompt_level_strict_acc: 0.4 (highest weight for strict adherence to all instructions)
-        - inst_level_strict_acc: 0.3 (high weight for strict adherence to individual instructions)
-        - prompt_level_loose_acc: 0.2 (medium weight for loose adherence to all instructions)
-        - inst_level_loose_acc: 0.1 (lowest weight for loose adherence to individual instructions)
+        The reward is composed of three main components:
+        1. Format score (max 1.0):
+           - prompt_level_strict_acc: 0.4 (highest weight for strict adherence to all instructions)
+           - inst_level_strict_acc: 0.3 (high weight for strict adherence to individual instructions)
+           - prompt_level_loose_acc: 0.2 (medium weight for loose adherence to all instructions)
+           - inst_level_loose_acc: 0.1 (lowest weight for loose adherence to individual instructions)
+           All instruction-level metrics are averaged to ensure balanced contribution.
+
+        2. Structure score (max 1.0):
+           - think_block: 0.5 (presence of exactly one think block)
+           - answer_block: 0.5 (presence of exactly one answer block)
+
+        3. Completion bonus (max 0.2):
+           - complete: 0.2 (response ends with eos token)
 
         The overall formula for the reward is:
 
           .. math::
 
-            reward = 3 * \text{reward_format} + 2 * \text{reward_answer} + \text{reward_think} + \text{complete}
+            reward = format\_score + structure\_score + completion\_bonus
 
-        where
-
-        - :math:`\text{reward_format}` is the reward for the format of the response (actually respecting the instructions in the prompt).
-        - :math:`\text{reward_answer}` is the reward for the answer of the response (there is one and only one answer block).
-        - :math:`\text{reward_think}` is the reward for the think of the response (there is one and only one think block).
-        - :math:`\text{complete}` is the reward for the completion of the response (the response is complete, i.e. ends with a "eos" token).
-
-        Therefore, the maximum value the reward can take is 7.
-
+        Therefore, the maximum value the reward can take is 2.2, with:
+        - 1.0 from format adherence
+        - 1.0 from structural elements (think/answer blocks)
+        - 0.2 from completion bonus
         """
-        scores = torch.stack(
+        default_dtype = torch.get_default_dtype()
+        score = score.to(default_dtype)
+
+        # Format score calculation - using mean for instruction-level metrics
+        format_components = torch.stack(
             [
-                score.prompt_level_strict_acc.sum(-1, keepdim=True),
-                score.inst_level_strict_acc.sum(-1, keepdim=True),
-                score.prompt_level_loose_acc.sum(-1, keepdim=True),
-                score.inst_level_loose_acc.sum(-1, keepdim=True),
+                score.prompt_level_strict_acc.sum(-1, keepdim=True),  # Single value
+                score.inst_level_strict_acc.mean(
+                    -1, keepdim=True
+                ),  # Average across instructions
+                score.prompt_level_loose_acc.sum(-1, keepdim=True),  # Single value
+                score.inst_level_loose_acc.mean(
+                    -1, keepdim=True
+                ),  # Average across instructions
             ],
             -1,
         )
         weights = torch.tensor(
             self.format_weights,
-            device=scores.device,
+            device=format_components.device,
             dtype=torch.get_default_dtype(),
         )
-        reward_format = (scores * weights).sum(dim=-1, keepdim=True)
-        if think_blocks is not None:
-            reward_think = int(len(think_blocks) == 1)
-        else:
-            reward_think = 0
-        if answer_blocks is not None:
-            reward_answer = int(len(answer_blocks) == 1)
-        else:
-            reward_answer = 0
-        if complete is None:
-            complete = 0
-        elif isinstance(complete, torch.Tensor):
-            complete = complete.to(torch.get_default_dtype())
-        else:
-            complete = int(complete)
+        format_score = (format_components * weights).sum(dim=-1, keepdim=True)
 
-        reward_format = reward_format * 3 + reward_answer * 2 + reward_think + complete
-        reward_format = reward_format.to(torch.get_default_dtype())
-        return reward_format
+        # Structure score calculation
+        if think_blocks is not None:
+            think_score = float(len(think_blocks) == 1) * 0.5
+        else:
+            think_score = 0.0
+
+        if answer_blocks is not None:
+            answer_score = float(len(answer_blocks) == 1) * 0.5
+        else:
+            answer_score = 0.0
+
+        structure_score = think_score + answer_score
+
+        # Completion bonus
+        if complete is None:
+            completion_bonus = 0.0
+        elif isinstance(complete, torch.Tensor):
+            completion_bonus = complete.to(default_dtype) * 0.2
+        else:
+            completion_bonus = float(complete) * 0.2
+
+        # Combine all components
+        final_reward = format_score + structure_score + completion_bonus
+        final_reward = final_reward.to(default_dtype)
+
+        return final_reward
 
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
@@ -278,7 +308,9 @@ class IfEvalScorer(Transform):
         answer_blocks = re.findall(answer_pattern, response, re.DOTALL)
 
         score = _process_results(
-            tensordict.copy().auto_device_(), answer_blocks[0] if answer_blocks else ""
+            tensordict.copy().auto_device_(),
+            answer_blocks[0] if answer_blocks else "",
+            verbose=self.verbose,
         )
         next_tensordict.set(
             self.score_key,

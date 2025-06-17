@@ -280,7 +280,12 @@ class MaskedCategorical(D.Categorical):
 
         # Clamp logits to avoid numerical issues
         logits = self.logits
-        logits = torch.masked_fill(logits, ~self._mask | ~logits.isfinite(), min_real)
+        if self._mask.dtype is torch.bool:
+            mask = (~self._mask) | (~logits.isfinite())
+            logits = torch.masked_fill(logits, mask, min_real)
+        else:
+            # logits are already masked
+            pass
         logits = logits - logits.logsumexp(-1, keepdim=True)
 
         # Get probabilities and mask them
