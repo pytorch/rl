@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+43d5333) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+fac4b3e) &#x25BC</span></a>
     </div>
     
 
@@ -469,7 +469,7 @@
 
 <span class="sd">    Attributes:</span>
 <span class="sd">        collector: The collector (or any container) of the weight receiver. The collector is registered via</span>
-<span class="sd">            :meth:`~torchrl.collectors.WeightUpdateReceiverBase.register_collector`.</span>
+<span class="sd">            :meth:`~torchrl.collectors.WeightUpdaterBase.register_collector`.</span>
 
 <span class="sd">    Methods:</span>
 <span class="sd">        push_weights: Updates the weights on specified or all remote workers.</span>
@@ -739,7 +739,7 @@
 <span class="sd">    This class is used by default in the `SyncDataCollector` when no custom weight sender</span>
 <span class="sd">    is provided.</span>
 
-<span class="sd">    .. seealso:: :class:`~torchrl.collectors.WeightUpdateReceiverBase` and :class:`~torchrl.collectors.SyncDataCollector`.</span>
+<span class="sd">    .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase` and :class:`~torchrl.collectors.SyncDataCollector`.</span>
 
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        weight_getter (Callable[[], TensorDictBase], optional): a callable that returns the weights from the server.</span>
