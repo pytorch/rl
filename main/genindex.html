@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../versions.html"><span style="font-size:110%">main (0.9.0+fac4b3e) &#x25BC</span></a>
+      <a href="../versions.html"><span style="font-size:110%">main (0.9.0+169fe1f) &#x25BC</span></a>
     </div>
     
 
@@ -1978,9 +1978,11 @@
         <li><a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#torchrl.envs.transforms.VecNormV2.clone">(torchrl.envs.transforms.VecNormV2 method)</a>
 </li>
       </ul></li>
-      <li><a href="reference/generated/torchrl.envs.GymLikeEnv.html#torchrl.envs.GymLikeEnv.close">close() (torchrl.envs.GymLikeEnv method)</a>
+      <li><a href="reference/generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer.close">close() (torchrl.data.RayReplayBuffer method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.envs.GymLikeEnv.html#torchrl.envs.GymLikeEnv.close">(torchrl.envs.GymLikeEnv method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.GSM8KPrepareQuestion.html#torchrl.envs.llm.GSM8KPrepareQuestion.close">(torchrl.envs.llm.GSM8KPrepareQuestion method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.GSM8KRewardParser.html#torchrl.envs.llm.GSM8KRewardParser.close">(torchrl.envs.llm.GSM8KRewardParser method)</a>
@@ -2622,6 +2624,8 @@
         <li><a href="reference/generated/torchrl.objectives.value.ValueEstimatorBase.html#torchrl.objectives.value.ValueEstimatorBase.default_keys">(torchrl.objectives.value.ValueEstimatorBase attribute)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.envs.llm.IfEvalScorer.html#torchrl.envs.llm.IfEvalScorer.default_reward_aggregator">default_reward_aggregator() (torchrl.envs.llm.IfEvalScorer method)</a>
+</li>
       <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.default_spec">default_spec() (torchrl.data.llm.History class method)</a>
 </li>
       <li><a href="reference/generated/torchrl.objectives.default_value_kwargs.html#torchrl.objectives.default_value_kwargs">default_value_kwargs (class in torchrl.objectives)</a>
@@ -3242,8 +3246,12 @@
       </ul></li>
       <li><a href="reference/generated/torchrl.envs.transforms.EndOfLifeTransform.html#torchrl.envs.transforms.EndOfLifeTransform">EndOfLifeTransform (class in torchrl.envs.transforms)</a>
 </li>
-      <li><a href="reference/generated/torchrl.modules.OneHotCategorical.html#torchrl.modules.OneHotCategorical.entropy">entropy() (torchrl.modules.OneHotCategorical method)</a>
+      <li><a href="reference/generated/torchrl.modules.MaskedCategorical.html#torchrl.modules.MaskedCategorical.entropy">entropy() (torchrl.modules.MaskedCategorical method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.modules.OneHotCategorical.html#torchrl.modules.OneHotCategorical.entropy">(torchrl.modules.OneHotCategorical method)</a>
 </li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.data.Binary.html#torchrl.data.Binary.enumerate">enumerate() (torchrl.data.Binary method)</a>
 
       <ul>
@@ -7308,6 +7316,24 @@
 </li>
       <li><a href="reference/generated/torchrl.data.replay_buffers.NestedStorageCheckpointer.html#torchrl.data.replay_buffers.NestedStorageCheckpointer">NestedStorageCheckpointer (class in torchrl.data.replay_buffers)</a>
 </li>
+      <li><a href="reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector.next">next() (torchrl.collectors.llm.RayLLMCollector method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.data.PrioritizedReplayBuffer.html#torchrl.data.PrioritizedReplayBuffer.next">(torchrl.data.PrioritizedReplayBuffer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer.next">(torchrl.data.RayReplayBuffer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.RemoteTensorDictReplayBuffer.html#torchrl.data.RemoteTensorDictReplayBuffer.next">(torchrl.data.RemoteTensorDictReplayBuffer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.replay_buffers.ReplayBufferEnsemble.html#torchrl.data.replay_buffers.ReplayBufferEnsemble.next">(torchrl.data.replay_buffers.ReplayBufferEnsemble method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.next">(torchrl.data.ReplayBuffer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.TensorDictPrioritizedReplayBuffer.html#torchrl.data.TensorDictPrioritizedReplayBuffer.next">(torchrl.data.TensorDictPrioritizedReplayBuffer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer.next">(torchrl.data.TensorDictReplayBuffer method)</a>
+</li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.objectives.next_state_value.html#torchrl.objectives.next_state_value">next_state_value (class in torchrl.objectives)</a>
 </li>
       <li><a href="reference/generated/torchrl.data.Tree.html#torchrl.data.Tree.node_observation">node_observation (torchrl.data.Tree property)</a>

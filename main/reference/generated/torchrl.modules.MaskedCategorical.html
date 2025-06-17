@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+fac4b3e) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+169fe1f) &#x25BC</span></a>
     </div>
     
 
@@ -485,6 +485,14 @@ the cross_entropy loss functional can be used. Defaults to <code class="docutils
 <span class="go">        -2.1972, -2.1972])</span>
 </pre></div>
 </div>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.modules.MaskedCategorical.entropy">
+<span class="sig-name descname"><span class="pre">entropy</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/distributions/discrete.html#MaskedCategorical.entropy"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.MaskedCategorical.entropy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Compute the entropy of the distribution.</p>
+<p>For masked distributions, we only consider the entropy over the valid (unmasked) outcomes.
+Invalid outcomes have zero probability and don’t contribute to entropy.</p>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.modules.MaskedCategorical.log_prob">
 <span class="sig-name descname"><span class="pre">log_prob</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><span class="pre">Tensor</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/modules/distributions/discrete.html#MaskedCategorical.log_prob"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.MaskedCategorical.log_prob" title="Permalink to this definition">¶</a></dt>

@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+fac4b3e) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+169fe1f) &#x25BC</span></a>
     </div>
     
 
@@ -643,6 +643,40 @@ copied to that device</p>
 <dd class="field-odd"><p>Module</p>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.envs.llm.IfEvalScorer.default_reward_aggregator">
+<span class="sig-name descname"><span class="pre">default_reward_aggregator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">score</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData" title="torchrl.envs.llm.IFEvalScoreData"><span class="pre">IFEvalScoreData</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">think_blocks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">answer_blocks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">complete</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><span class="pre">torch.Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><span class="pre">torch.Tensor</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/llm/reward/ifeval/_scorer.html#IfEvalScorer.default_reward_aggregator"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.llm.IfEvalScorer.default_reward_aggregator" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default reward aggregation function that provides a more nuanced scoring system.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>score</strong> (<a class="reference internal" href="torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData" title="torchrl.envs.llm.IFEvalScoreData"><em>IFEvalScoreData</em></a>) – The score data.</p></li>
+<li><p><strong>think_blocks</strong> (<em>list</em><em>[</em><em>str</em><em>]</em><em>, </em><em>optional</em>) – The list of think blocks.</p></li>
+<li><p><strong>answer_blocks</strong> (<em>list</em><em>[</em><em>str</em><em>]</em><em>, </em><em>optional</em>) – The list of answer blocks.</p></li>
+<li><p><strong>complete</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether the response is complete (ends with a eos token).</p></li>
+</ul>
+</dd>
+</dl>
+<p>The weights are:
+- prompt_level_strict_acc: 0.4 (highest weight for strict adherence to all instructions)
+- inst_level_strict_acc: 0.3 (high weight for strict adherence to individual instructions)
+- prompt_level_loose_acc: 0.2 (medium weight for loose adherence to all instructions)
+- inst_level_loose_acc: 0.1 (lowest weight for loose adherence to individual instructions)</p>
+<p>The overall formula for the reward is:</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[reward = 3 * \text{reward_format} + 2 * \text{reward_answer} + \text{reward_think} + \text{complete}\]</div>
+</div></blockquote>
+<p>where</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(\text{reward_format}\)</span> is the reward for the format of the response (actually respecting the instructions in the prompt).</p></li>
+<li><p><span class="math notranslate nohighlight">\(\text{reward_answer}\)</span> is the reward for the answer of the response (there is one and only one answer block).</p></li>
+<li><p><span class="math notranslate nohighlight">\(\text{reward_think}\)</span> is the reward for the think of the response (there is one and only one think block).</p></li>
+<li><p><span class="math notranslate nohighlight">\(\text{complete}\)</span> is the reward for the completion of the response (the response is complete, i.e. ends with a “eos” token).</p></li>
+</ul>
+<p>Therefore, the maximum value the reward can take is 7.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -2090,6 +2124,7 @@ See <a class="reference external" href="https://docs.pytorch.org/docs/stable/gen
          <script src="../../_static/_sphinx_javascript_frameworks_compat.js"></script>
          <script src="../../_static/doctools.js"></script>
          <script src="../../_static/design-tabs.js"></script>
+         <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
      
 
   

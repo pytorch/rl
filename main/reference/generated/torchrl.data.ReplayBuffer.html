@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+fac4b3e) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+169fe1f) &#x25BC</span></a>
     </div>
     
 
@@ -769,6 +769,14 @@ during writing and inverse calls during reading). Defaults to <code class="docut
 </dd>
 </dl>
 <p>See <a class="reference internal" href="#torchrl.data.ReplayBuffer.dumps" title="torchrl.data.ReplayBuffer.dumps"><code class="xref py py-meth docutils literal notranslate"><span class="pre">dumps()</span></code></a> for more info.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.ReplayBuffer.next">
+<span class="sig-name descname"><span class="pre">next</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.next"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.ReplayBuffer.next" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the next item in the replay buffer.</p>
+<p>This method is used to iterate over the replay buffer in contexts where __iter__ is not available,
+such as <code class="xref py py-class docutils literal notranslate"><span class="pre">RayReplayBuffer</span></code>.</p>
 </dd></dl>
 
 <dl class="py method">

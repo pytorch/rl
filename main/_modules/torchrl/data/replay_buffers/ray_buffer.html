@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+fac4b3e) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+169fe1f) &#x25BC</span></a>
     </div>
     
 
@@ -429,9 +429,10 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">contextlib</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterator</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.replay_buffers.replay_buffers</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReplayBuffer</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">Transform</span>
 
@@ -558,6 +559,14 @@
         <span class="n">remote_cls</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="o">.</span><span class="n">as_remote</span><span class="p">(</span><span class="n">remote_config</span><span class="p">)</span><span class="o">.</span><span class="n">remote</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_rb</span> <span class="o">=</span> <span class="n">remote_cls</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
+<div class="viewcode-block" id="RayReplayBuffer.close"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer.close">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Terminates the Ray actor associated with this replay buffer.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_rb&quot;</span><span class="p">):</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Killing Ray actor.&quot;</span><span class="p">)</span>
+            <span class="n">ray</span><span class="o">.</span><span class="n">kill</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rb</span><span class="p">)</span>  <span class="c1"># Forcefully terminate the actor</span>
+            <span class="nb">delattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_rb&quot;</span><span class="p">)</span>  <span class="c1"># Remove the reference to the terminated actor</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Ray actor killed.&quot;</span><span class="p">)</span></div>
+
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_replay_lock</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Placeholder for the replay lock.</span>
@@ -601,8 +610,17 @@
     <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rb</span><span class="o">.</span><span class="fm">__getitem__</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">index</span><span class="p">))</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rb</span><span class="o">.</span><span class="fm">__iter__</span><span class="o">.</span><span class="n">remote</span><span class="p">())</span>
+<div class="viewcode-block" id="RayReplayBuffer.next"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer.next">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">next</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rb</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">remote</span><span class="p">())</span></div>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns an iterator that yields None as the collector writes directly to the replay buffer.&quot;&quot;&quot;</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">next</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">yield</span> <span class="n">data</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">break</span>
 
 <div class="viewcode-block" id="RayReplayBuffer.insert_transform"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer.insert_transform">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">insert_transform</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>

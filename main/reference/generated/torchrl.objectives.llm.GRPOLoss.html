@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+fac4b3e) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+169fe1f) &#x25BC</span></a>
     </div>
     
 
@@ -469,7 +469,7 @@ formula for the entropy, a Monte-Carlo estimate will be used.
 <code class="docutils literal notranslate"><span class="pre">samples_mc_entropy</span></code> will control how many
 samples will be used to compute this estimate.
 Defaults to <code class="docutils literal notranslate"><span class="pre">1</span></code>.</p></li>
-<li><p><strong>entropy_coef</strong> (<em>scalar</em><em>, </em><em>optional</em>) – entropy multiplier when computing the total loss.
+<li><p><strong>entropy_coeff</strong> (<em>scalar</em><em>, </em><em>optional</em>) – entropy multiplier when computing the total loss.
 Defaults to <code class="docutils literal notranslate"><span class="pre">0.01</span></code>.</p></li>
 <li><p><strong>advantage_key</strong> (<em>str</em><em>, </em><em>optional</em>) – [Deprecated, use set_keys(advantage_key=advantage_key) instead]
 The input tensordict key where the advantage is
@@ -485,6 +485,8 @@ helping stabilize training and preventing large updates. However, it will have n
 estimate was done by the current version of the value estimator. If instead <code class="docutils literal notranslate"><span class="pre">True</span></code> is provided, the
 <code class="docutils literal notranslate"><span class="pre">clip_epsilon</span></code> parameter will be used as the clipping threshold. If not provided or <code class="docutils literal notranslate"><span class="pre">False</span></code>, no
 clipping will be performed. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>kl_to_ref_coeff</strong> (<a class="reference internal" href="#torchrl.objectives.llm.GRPOLoss.float" title="torchrl.objectives.llm.GRPOLoss.float"><em>float</em></a><em>, </em><em>optional</em>) – coefficient for the KL divergence to the reference policy. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (no KL divergence).</p></li>
+<li><p><strong>kl_to_inference_coeff</strong> (<a class="reference internal" href="#torchrl.objectives.llm.GRPOLoss.float" title="torchrl.objectives.llm.GRPOLoss.float"><em>float</em></a><em>, </em><em>optional</em>) – coefficient for the KL divergence to the inference policy. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (no KL divergence).</p></li>
 <li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em>, </em><em>optional</em>) – <p>device of the buffers. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>

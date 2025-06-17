@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+fac4b3e) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+169fe1f) &#x25BC</span></a>
     </div>
     
 
@@ -577,6 +577,7 @@
     <span class="n">compiled_policy</span><span class="p">:</span> <span class="nb">bool</span>
     <span class="n">cudagraphed_policy</span><span class="p">:</span> <span class="nb">bool</span>
     <span class="n">_weight_updater</span><span class="p">:</span> <span class="n">WeightUpdaterBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">weight_updater</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">WeightUpdaterBase</span><span class="p">:</span>
@@ -1664,13 +1665,18 @@
 
             <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">_frames</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_iter</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Collector: rollout.&quot;</span><span class="p">)</span>
                 <span class="n">tensordict_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rollout</span><span class="p">()</span>
                 <span class="k">if</span> <span class="n">tensordict_out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="c1"># if a replay buffer is passed and self.extend_buffer=False, there is no tensordict_out</span>
                     <span class="c1">#  frames are updated within the rollout function</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Collector: No tensordict_out. Yielding.&quot;</span><span class="p">)</span>
                     <span class="k">yield</span>
                     <span class="k">continue</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_increment_frames</span><span class="p">(</span><span class="n">tensordict_out</span><span class="o">.</span><span class="n">numel</span><span class="p">())</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Collector: postproc.&quot;</span><span class="p">)</span>
                 <span class="n">tensordict_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_postproc</span><span class="p">(</span><span class="n">tensordict_out</span><span class="p">)</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_same_td</span><span class="p">:</span>
                     <span class="c1"># This is used with multiprocessed collectors to use the buffers</span>
@@ -1682,6 +1688,10 @@
                     <span class="k">yield</span> <span class="n">tensordict_out</span>
                 <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">tensordict_out</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
+                        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;Collector: Added </span><span class="si">{</span><span class="n">tensordict_out</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span><span class="si">}</span><span class="s2"> frames to replay buffer. Yielding.&quot;</span>
+                        <span class="p">)</span>
                     <span class="k">yield</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="c1"># we must clone the values, as the tensordict is updated in-place.</span>
