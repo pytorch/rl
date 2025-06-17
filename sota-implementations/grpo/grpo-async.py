@@ -72,7 +72,7 @@ def setup_environment() -> None:
         torch.cuda.set_device("cuda:0")
 
 
-def make_env(cfg: DictConfig):
+def make_env(cfg: DictConfig, devices: list[int] | None = None):
     """Create the environment with proper device allocation.
 
     Args:
@@ -85,16 +85,14 @@ def make_env(cfg: DictConfig):
     # For the collector actor, we want inference_model devices first, then ref_model devices
     train_tokenizer = get_tokenizer(cfg)
 
-    # Modify the config to use the last N devices for the ref model
-    cfg_copy = dict(cfg)
-    num_inf_devices = len(cfg.inference_model.devices)
-    num_ref_devices = len(cfg.ref_model.devices)
-    total_devices = num_inf_devices + num_ref_devices
+    # Get device information
+    num_inf_devices = cfg.inference_model.num_devices
+    num_ref_devices = cfg.ref_model.num_devices
+    num_inf_devices + num_ref_devices
 
     # Create a new config with adjusted device assignments
-    ref_cfg = DictConfig(cfg_copy)
-    ref_cfg.ref_model.devices = list(range(num_inf_devices, total_devices))
-    ref_model = get_ref_model(ref_cfg, train_tokenizer)
+    ref_cfg = DictConfig(dict(cfg))
+    ref_model = get_ref_model(ref_cfg, train_tokenizer, devices=devices)
 
     # Setup environment
     if cfg.env.dataset == "gsm8k":
@@ -109,22 +107,27 @@ def make_env(cfg: DictConfig):
             tokenizer=train_tokenizer,
             num_envs=cfg.env.num_envs,
         )
-    if ref_cfg.ref_model.num_devices is None:
-        kwargs = {"device": torch.device(f"cuda:{ref_cfg.ref_model.devices[0]}")}
-    else:
-        kwargs = {}
+
+    # Pass device directly to KLRewardTransform - Since, for Ray, the local device is always 0
+    # we can just use 0 here.
+    device = torch.device("cuda:0")
     env = env.append_transform(
         KLRewardTransform(
             actor=ref_model,
-            coef=cfg.policy.kl_coef,
+            coef=cfg.train.kl_to_ref_coeff,
             add_to_reward=not cfg.train.kl_coef_in_loss,
-            **kwargs,
+            device=device,
         )
     )
     return env
 
 
-def train(replay_buffer: ReplayBuffer, cfg: DictConfig, collector: RayLLMCollector):
+def train(
+    replay_buffer: ReplayBuffer,
+    cfg: DictConfig,
+    collector: RayLLMCollector,
+    devices: list[int] | None = None,
+):
     """Main training loop for GRPO async.
 
     This function implements asynchronous training where data collection and optimization
@@ -135,17 +138,19 @@ def train(replay_buffer: ReplayBuffer, cfg: DictConfig, collector: RayLLMCollect
         replay_buffer: The replay buffer to store experiences
         cfg: The configuration object containing training parameters
         collector: The collector object.
+        devices: The devices to use for the training model.
     """
     # Setup training model and tokenizer
-    policy_training, train_tokenizer = get_train_model(cfg)
-    train_device = cfg.train_model.get("devices", [0])[
-        0
-    ]  # Use first device for batch processing
+    policy_training, train_tokenizer = get_train_model(cfg, devices=devices)
+    train_device = devices[0]  # Use first device for batch processing
 
     # Setup loss function
     loss_fn = GRPOLoss(
         actor_network=policy_training,
-        kl_to_ref_coeff=cfg.policy.kl_coef if cfg.train.kl_coef_in_loss else 0.0,
+        kl_to_ref_coeff=cfg.train.kl_to_ref_coeff if cfg.train.kl_coef_in_loss else 0.0,
+        kl_to_inference_coeff=cfg.train.kl_to_inference_coeff,
+        entropy_coeff=cfg.train.entropy_coeff,
+        device=train_device,
     )
     if cfg.model.compile:
         loss_fn = torch.compile(loss_fn)
@@ -170,7 +175,7 @@ def train(replay_buffer: ReplayBuffer, cfg: DictConfig, collector: RayLLMCollect
     # First update the weights
     with timeit("update_policy_weights"):
         weight_updater.push_weights(policy_training)
-    timeit.print(prefix="First update_policy_weights time")
+    timeit.print(prefix="First update_policy_weights_ time")
     timeit.reset()
 
     # Start collector
@@ -217,6 +222,7 @@ def train(replay_buffer: ReplayBuffer, cfg: DictConfig, collector: RayLLMCollect
     metrics = {}  # Initialize metrics dict
     grad_norm = 0.0  # Initialize grad_norm
     data_read_count = 0
+    start_time = time.time()
 
     for step in range(total_steps):
         pbar.update(1)
@@ -302,17 +308,23 @@ def train(replay_buffer: ReplayBuffer, cfg: DictConfig, collector: RayLLMCollect
                             dtype=torch.float,
                         ).mean()
                     ),
-                    "ESS from loss": float(loss.ESS),
-                    "loss_objective from loss": float(loss.loss_objective),
-                    "clip_fraction from loss": float(loss.clip_fraction),
-                    "kl_approx (train to inference)from loss": float(loss.kl_approx),
-                    "entropy from loss": float(loss.loss_entropy.mean()),
-                    "kl_to_ref from loss": float(loss.kl_to_ref.mean()),
-                    "loss_kl_to_ref from loss": float(loss.loss_kl_to_ref.mean()),
+                    "ESS, from loss": float(loss.ESS),
+                    "loss_objective, from loss": float(loss.loss_objective),
+                    "clip_fraction, from loss": float(loss.clip_fraction),
+                    "kl_approx (train to inference), from loss": float(loss.kl_approx),
+                    "kl_to_inference (train to inference - differentiable), from loss": float(
+                        loss.kl_to_inference.mean()
+                    ),
+                    "kl_to_ref, from loss": float(loss.kl_to_ref.mean()),
+                    "loss_kl_to_inference, from loss": float(
+                        loss.loss_kl_to_inference.mean()
+                    ),
+                    "loss_kl_to_ref, from loss": float(loss.loss_kl_to_ref.mean()),
+                    "entropy loss, from loss": float(loss.loss_entropy.mean()),
                     "grad_norm": float(grad_norm)
                     if step % cfg.train.gradient_accumulation_steps == 0
                     else metrics.get("grad_norm", 0.0),
-                    "write_count from buffer": int(replay_buffer.write_count),
+                    "write_count, from buffer": int(replay_buffer.write_count),
                     # how many gradient steps per write
                     "gradient_step_throughput (gradient step per write)": float(
                         step / replay_buffer.write_count
@@ -329,6 +341,9 @@ def train(replay_buffer: ReplayBuffer, cfg: DictConfig, collector: RayLLMCollect
                     #  is messed up - we need the next data
                     "batch_policy_version (sampled batch)": batch_policy_version,
                     "batch_policy_age (sampled batch)": batch_policy_age,
+                    "throughput (steps per second)": float(
+                        step / (time.time() - start_time)
+                    ),
                 }
                 for name, value in metrics.items():
                     wandb_logger.log_scalar(name, value)
@@ -377,16 +392,11 @@ def main(cfg):
     # Force async mode
     if cfg.train.sync:
         raise ValueError(
-            "grpo-async.py must run in async mode. Please use grpo.py for sync mode."
+            "grpo-async.py must run in async mode (`python grpo-async.py mode=async`). Please use grpo-sync.py for sync mode (`python grpo-sync.py mode=sync`)."
         )
 
     # Compute device allocation
     device_config = compute_device_allocation(cfg)
-
-    # Update config with computed devices
-    cfg.train_model.devices = device_config["train_model_devices"]
-    cfg.inference_model.devices = device_config["inference_model_devices"]
-    cfg.ref_model.devices = device_config["ref_model_devices"]
 
     if not ray.is_initialized():
         # Convert OmegaConf to regular dict and filter out unsupported parameters
@@ -429,7 +439,9 @@ def main(cfg):
     collector_config = dict(cfg.ray.collector_config)
     train_handler_config = dict(cfg.ray.train_handler_config)
 
-    inference_policy = get_inference_model(cfg)
+    inference_policy = get_inference_model(
+        cfg, devices=device_config["inference_model_devices"]
+    )
     torchrl_logger.info(f"Inference policy: {inference_policy}")
 
     torchrl_logger.info(f"Starting replay buffer with {replay_buffer_config=}")
@@ -454,7 +466,7 @@ def main(cfg):
     torchrl_logger.info(f"Starting collector with {collector_config=}")
 
     collector = RayLLMCollector(
-        env=partial(make_env, cfg),
+        env=partial(make_env, cfg, devices=device_config["ref_model_devices"]),
         policy=inference_policy,
         dialog_turns_per_batch=cfg.train.steps_per_batch,
         total_dialog_turns=cfg.train.total_dialog_turns,
@@ -478,7 +490,11 @@ def main(cfg):
     )(train)
 
     # launch training
-    ray.get(train_handler.remote(rb, cfg, collector))
+    ray.get(
+        train_handler.remote(
+            rb, cfg, collector, devices=device_config["train_model_devices"]
+        )
+    )
 
 
 if __name__ == "__main__":

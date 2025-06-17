@@ -53,7 +53,7 @@ class CategoricalSequential(TensorDictModuleBase):
             dist = MaskedCategorical(
                 logits=logits,
                 mask=logits != padding_value,
-                # use_cross_entropy=True,
+                use_cross_entropy=True,
             )
             return dist
         return Categorical(logits)

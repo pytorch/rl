@@ -7,9 +7,10 @@ from __future__ import annotations
 import contextlib
 import importlib
 
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 import torch
+from torchrl._utils import logger as torchrl_logger
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.envs.transforms.transforms import Transform
 
@@ -136,6 +137,14 @@ class RayReplayBuffer(ReplayBuffer):
         remote_cls = ReplayBuffer.as_remote(remote_config).remote
         self._rb = remote_cls(*args, **kwargs)
 
+    def close(self):
+        """Terminates the Ray actor associated with this replay buffer."""
+        if hasattr(self, "_rb"):
+            torchrl_logger.info("Killing Ray actor.")
+            ray.kill(self._rb)  # Forcefully terminate the actor
+            delattr(self, "_rb")  # Remove the reference to the terminated actor
+            torchrl_logger.info("Ray actor killed.")
+
     @property
     def _replay_lock(self):
         """Placeholder for the replay lock.
@@ -179,8 +188,17 @@ class RayReplayBuffer(ReplayBuffer):
     def __getitem__(self, index):
         return ray.get(self._rb.__getitem__.remote(index))
 
-    def __iter__(self):
-        return ray.get(self._rb.__iter__.remote())
+    def next(self):
+        return ray.get(self._rb.next.remote())
+
+    def __iter__(self) -> Iterator[Any]:
+        """Returns an iterator that yields None as the collector writes directly to the replay buffer."""
+        while True:
+            data = self.next()
+            if data is not None:
+                yield data
+            else:
+                break
 
     def insert_transform(
         self,

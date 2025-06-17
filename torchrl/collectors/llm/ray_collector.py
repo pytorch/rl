@@ -5,8 +5,7 @@
 from __future__ import annotations
 
 import warnings
-
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 import torch
 from tensordict import TensorDictBase
@@ -56,6 +55,8 @@ class RayLLMCollector(LLMCollector):
             or its subclass, responsible for updating the policy weights on remote inference workers.
         ray_init_config (dict[str, Any], optional): keyword arguments to pass to ray.init().
         remote_config (dict[str, Any], optional): keyword arguments to pass to cls.as_remote().
+        verbose (bool, optional): if ``True``, the collector will print progress information.
+            Defaults to `False`.
     """
 
     def __init__(
@@ -80,6 +81,7 @@ class RayLLMCollector(LLMCollector):
         ray_init_config: dict[str, Any] | None = None,
         remote_config: dict[str, Any] | None = None,
         track_policy_version: bool | PolicyVersion = False,
+        verbose: bool = False,
     ) -> None:
         if not _has_ray:
             raise RuntimeError(
@@ -108,11 +110,24 @@ class RayLLMCollector(LLMCollector):
             flatten_data=flatten_data,
             weight_updater=weight_updater,
             track_policy_version=track_policy_version,
+            verbose=verbose,
         )
 
-    def __iter__(self):
-        pending_task = self._collector.__iter__.remote()
-        return ray.get(pending_task)
+    def next(self) -> None:
+        """Get the next batch of data from the collector.
+
+        Returns:
+            None as the data is written directly to the replay buffer.
+        """
+        return ray.get(self._collector.next.remote())
+
+    def __iter__(self) -> Iterator[None]:
+        """Returns an iterator that yields None as the collector writes directly to the replay buffer."""
+        while True:
+            try:
+                yield self.next()
+            except StopIteration:
+                break
 
     def start(self):
         """Starts the collector in a background thread."""

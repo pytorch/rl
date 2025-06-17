@@ -177,14 +177,14 @@ class IfEvalScorer(Transform):
             format_weights if format_weights is not None else [0.4, 0.3, 0.2, 0.1]
         )
 
-    def _default_reward_aggregator(
+    def default_reward_aggregator(
         self,
         score: IFEvalScoreData,
         think_blocks: list[str] | None = None,
         answer_blocks: list[str] | None = None,
         complete: bool | torch.Tensor | None = None,
     ) -> torch.Tensor:
-        """Default reward aggregation function that provides a more nuanced scoring system.
+        r"""Default reward aggregation function that provides a more nuanced scoring system.
 
         Args:
             score (IFEvalScoreData): The score data.
@@ -197,6 +197,22 @@ class IfEvalScorer(Transform):
         - inst_level_strict_acc: 0.3 (high weight for strict adherence to individual instructions)
         - prompt_level_loose_acc: 0.2 (medium weight for loose adherence to all instructions)
         - inst_level_loose_acc: 0.1 (lowest weight for loose adherence to individual instructions)
+
+        The overall formula for the reward is:
+
+          .. math::
+
+            reward = 3 * \text{reward_format} + 2 * \text{reward_answer} + \text{reward_think} + \text{complete}
+
+        where
+
+        - :math:`\text{reward_format}` is the reward for the format of the response (actually respecting the instructions in the prompt).
+        - :math:`\text{reward_answer}` is the reward for the answer of the response (there is one and only one answer block).
+        - :math:`\text{reward_think}` is the reward for the think of the response (there is one and only one think block).
+        - :math:`\text{complete}` is the reward for the completion of the response (the response is complete, i.e. ends with a "eos" token).
+
+        Therefore, the maximum value the reward can take is 7.
+
         """
         scores = torch.stack(
             [
@@ -272,7 +288,7 @@ class IfEvalScorer(Transform):
             if callable(self.aggregate_reward):
                 reward_func = self.aggregate_reward
             else:
-                reward_func = self._default_reward_aggregator
+                reward_func = self.default_reward_aggregator
             reward = reward_func(
                 score,
                 think_blocks=think_blocks,

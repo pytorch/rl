@@ -11,7 +11,7 @@ import torch
 
 from tensordict import lazy_stack, TensorDictBase
 
-from torchrl._utils import as_remote
+from torchrl._utils import as_remote, logger as torchrl_logger
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.collectors.llm.utils import _QueueAsRB
@@ -77,6 +77,8 @@ class LLMCollector(SyncDataCollector):
             This will be mediated by the :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform, which will be added to the environment.
             Alternatively, a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` instance can be passed, which will be used to track
             the policy version.
+            Defaults to `False`.
+        verbose (bool, optional): if ``True``, the collector will print progress information.
             Defaults to `False`.
 
     Examples:
@@ -161,6 +163,7 @@ class LLMCollector(SyncDataCollector):
         | None = None,
         queue: Any | None = None,
         track_policy_version: bool | PolicyVersion = False,
+        verbose: bool = False,
     ):
         if queue is not None and replay_buffer is not None:
             raise RuntimeError(
@@ -208,6 +211,7 @@ class LLMCollector(SyncDataCollector):
         self.flatten_data = flatten_data
         self.yield_completed_trajectories = yield_completed_trajectories
         self.yield_only_last_steps = yield_only_last_steps
+        self.verbose = verbose
         if self.yield_completed_trajectories:
             if len(self.env.batch_size) != 1:
                 raise ValueError(
@@ -292,6 +296,10 @@ class LLMCollector(SyncDataCollector):
         collected_steps = 0
         policy_input = self._shuttle
         while collected_steps < self.dialog_turns_per_batch:
+            if self.verbose:
+                torchrl_logger.info(
+                    f"LLMCollector: Collected {collected_steps} steps over {self.dialog_turns_per_batch} requested."
+                )
             env_input = self.policy(policy_input)
             env_output, env_next_output = self.env.step_and_maybe_reset(env_input)
 
@@ -352,8 +360,10 @@ class LLMCollector(SyncDataCollector):
                             lazy_stack([self._yield_queues[idx][-1]])
                         )
                     self._yield_queues[idx].clear()
-
         result = self._trajectory_queue.popleft()
+        torchrl_logger.info(
+            f"LLMCollector: Yielding completed trajectory with shape {result.shape}."
+        )
         return result
 
     started = False
@@ -412,6 +422,9 @@ class LLMCollector(SyncDataCollector):
                 self.env.async_step_and_maybe_reset_send(env_input)
 
         result = self._trajectory_queue.popleft()
+        torchrl_logger.info(
+            f"LLMCollector: Yielding completed trajectory with shape {result.shape}."
+        )
         return result
 
     as_remote = as_remote
