@@ -47,7 +47,7 @@ class WeightUpdaterBase(metaclass=abc.ABCMeta):
 
     Attributes:
         collector: The collector (or any container) of the weight receiver. The collector is registered via
-            :meth:`~torchrl.collectors.WeightUpdateReceiverBase.register_collector`.
+            :meth:`~torchrl.collectors.WeightUpdaterBase.register_collector`.
 
     Methods:
         push_weights: Updates the weights on specified or all remote workers.
@@ -317,7 +317,7 @@ class VanillaWeightUpdater(WeightUpdaterBase):
     This class is used by default in the `SyncDataCollector` when no custom weight sender
     is provided.
 
-    .. seealso:: :class:`~torchrl.collectors.WeightUpdateReceiverBase` and :class:`~torchrl.collectors.SyncDataCollector`.
+    .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase` and :class:`~torchrl.collectors.SyncDataCollector`.
 
     Keyword Args:
         weight_getter (Callable[[], TensorDictBase], optional): a callable that returns the weights from the server.
