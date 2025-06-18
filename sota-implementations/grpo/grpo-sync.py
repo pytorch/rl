@@ -288,7 +288,8 @@ def train(
 
                 # Clear memory
                 del loss_val
-                torch.cuda.empty_cache()
+                # TODO: do we need this? Does it interfere with other processes?
+                # torch.cuda.empty_cache()
                 gc.collect()
 
                 # Update metrics
@@ -387,7 +388,8 @@ def train(
         with timeit("update_policy_weights"):
             torchrl_logger.info("Updating policy weights...")
             weight_updater.push_weights(policy_training)
-            torch.cuda.empty_cache()
+            # TODO: do we need this? Does it interfere with other processes?
+            # torch.cuda.empty_cache()
             gc.collect()
 
         timeit.print(prefix="timeit")
