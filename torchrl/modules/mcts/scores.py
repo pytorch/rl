@@ -91,6 +91,13 @@ class UCBScore(MCTSScore):
         )
         return node
 
+class EXP3Score(MCTSScore):
+    def __init__(
+        self,
+        *,
+        gamma: float = 0.07
+    ):
+        pass
 
 class MCTSScores(Enum):
     PUCT = functools.partial(PUCTScore, c=5)  # AlphaGo default value
