@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+7576e47) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+7ee5248) &#x25BC</span></a>
     </div>
     
 
@@ -433,10 +433,12 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 
+
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">lazy_stack</span><span class="p">,</span> <span class="n">LazyStackedTensorDict</span><span class="p">,</span> <span class="n">list_to_stack</span><span class="p">,</span> <span class="n">TensorClass</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_maybe_correct_neg_dim</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
+
 
 <span class="n">_CHAT_TEMPLATES</span> <span class="o">=</span> <span class="p">{</span>
     <span class="s2">&quot;chatml_format&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;&quot;{</span><span class="si">% f</span><span class="s2">or message in messages %}</span>
@@ -446,7 +448,64 @@
 <span class="s2">    {{- &#39;&lt;|im_start|&gt;assistant</span><span class="se">\n</span><span class="s2">&#39; }}</span>
 <span class="s2">{</span><span class="si">%- e</span><span class="s2">ndif %}</span>
 <span class="s2">&quot;&quot;&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;qwen&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;&quot;&#39;{</span><span class="si">%- i</span><span class="s2">f tools %}</span><span class="se">\n</span><span class="s2">    {{- </span><span class="se">\&#39;</span><span class="s2">&lt;|im_start|&gt;system</span><span class="se">\\</span><span class="s2">n</span><span class="se">\&#39;</span><span class="s2"> }}</span><span class="se">\n</span><span class="s2">    {</span><span class="si">%- i</span><span class="s2">f messages[0][</span><span class="se">\&#39;</span><span class="s2">role</span><span class="se">\&#39;</span><span class="s2">] == </span><span class="se">\&#39;</span><span class="s2">system</span><span class="se">\&#39;</span><span class="s2"> %}</span><span class="se">\n</span><span class="s2">        {{- messages[0][</span><span class="se">\&#39;</span><span class="s2">content</span><span class="se">\&#39;</span><span class="s2">] }}</span><span class="se">\n</span><span class="s2">    {</span><span class="si">%- e</span><span class="s2">lse %}</span><span class="se">\n</span><span class="s2">        {{- </span><span class="se">\&#39;</span><span class="s2">You are a helpful assistant.</span><span class="se">\&#39;</span><span class="s2"> }}</span><span class="se">\n</span><span class="s2">    {</span><span class="si">%- e</span><span class="s2">ndif %}</span><span class="se">\n</span><span class="s2">    {{- &quot;</span><span class="se">\\</span><span class="s2">n</span><span class="se">\\</span><span class="s2">n# Tools</span><span class="se">\\</span><span class="s2">n</span><span class="se">\\</span><span class="s2">nYou may call one or more functions to assist with the user query.</span><span class="se">\\</span><span class="s2">n</span><span class="se">\\</span><span class="s2">nYou are provided with function signatures within &lt;tools&gt;&lt;/tools&gt; XML tags:</span><span class="se">\\</span><span class="s2">n&lt;tools&gt;&quot; }}</span><span class="se">\n</span><span class="s2">    {</span><span class="si">%- f</span><span class="s2">or tool in tools %}</span><span class="se">\n</span><span class="s2">        {{- &quot;</span><span class="se">\\</span><span class="s2">n&quot; }}</span><span class="se">\n</span><span class="s2">        {{- tool | tojson }}</span><span class="se">\n</span><span class="s2">    {</span><span class="si">%- e</span><span class="s2">ndfor %}</span><span class="se">\n</span><span class="s2">    {{- &quot;</span><span class="se">\\</span><span class="s2">n&lt;/tools&gt;</span><span class="se">\\</span><span class="s2">n</span><span class="se">\\</span><span class="s2">nFor each function call, return a json object with function name and arguments within &lt;tool_call&gt;&lt;/tool_call&gt; XML tags:</span><span class="se">\\</span><span class="s2">n&lt;tool_call&gt;</span><span class="se">\\</span><span class="s2">n{</span><span class="se">\\</span><span class="s2">&quot;name</span><span class="se">\\</span><span class="s2">&quot;: &lt;function-name&gt;, </span><span class="se">\\</span><span class="s2">&quot;arguments</span><span class="se">\\</span><span class="s2">&quot;: &lt;args-json-object&gt;}</span><span class="se">\\</span><span class="s2">n&lt;/tool_call&gt;&lt;|im_end|&gt;</span><span class="se">\\</span><span class="s2">n&quot; }}</span><span class="se">\n</span><span class="s2">{</span><span class="si">%- e</span><span class="s2">lse %}</span><span class="se">\n</span><span class="s2">    {</span><span class="si">%- i</span><span class="s2">f messages[0][</span><span class="se">\&#39;</span><span class="s2">role</span><span class="se">\&#39;</span><span class="s2">] == </span><span class="se">\&#39;</span><span class="s2">system</span><span class="se">\&#39;</span><span class="s2"> %}</span><span class="se">\n</span><span class="s2">        {{- </span><span class="se">\&#39;</span><span class="s2">&lt;|im_start|&gt;system</span><span class="se">\\</span><span class="s2">n</span><span class="se">\&#39;</span><span class="s2"> + messages[0][</span><span class="se">\&#39;</span><span class="s2">content</span><span class="se">\&#39;</span><span class="s2">] + </span><span class="se">\&#39;</span><span class="s2">&lt;|im_end|&gt;</span><span class="se">\\</span><span class="s2">n</span><span class="se">\&#39;</span><span class="s2"> }}</span><span class="se">\n</span><span class="s2">    {</span><span class="si">%- e</span><span class="s2">lse %}</span><span class="se">\n</span><span class="s2">        {{- </span><span class="se">\&#39;</span><span class="s2">&lt;|im_start|&gt;system</span><span class="se">\\</span><span class="s2">nYou are a helpful assistant.&lt;|im_end|&gt;</span><span class="se">\\</span><span class="s2">n</span><span class="se">\&#39;</span><span class="s2"> }}</span><span class="se">\n</span><span class="s2">    {</span><span class="si">%- e</span><span class="s2">ndif %}</span><span class="se">\n</span><span class="s2">{</span><span class="si">%- e</span><span class="s2">ndif %}</span><span class="se">\n</span><span class="s2">{</span><span class="si">%- f</span><span class="s2">or message in messages %}</span><span class="se">\n</span><span class="s2">    {</span><span class="si">%- i</span><span class="s2">f (message.role == &quot;user&quot;) or (message.role == &quot;system&quot; and not loop.first) or (message.role == &quot;assistant&quot; and not message.tool_calls) %}</span><span class="se">\n</span><span class="s2">        {{- </span><span class="se">\&#39;</span><span class="s2">&lt;|im_start|&gt;</span><span class="se">\&#39;</span><span class="s2"> + message.role + </span><span class="se">\&#39;\\</span><span class="s2">n</span><span class="se">\&#39;</span><span class="s2"> + message.content + </span><span class="se">\&#39;</span><span class="s2">&lt;|im_end|&gt;</span><span class="se">\&#39;</span><span class="s2"> + </span><span class="se">\&#39;\\</span><span class="s2">n</span><span class="se">\&#39;</span><span class="s2"> }}</span><span class="se">\n</span><span class="s2">    {</span><span class="si">%- e</span><span class="s2">lif message.role == &quot;assistant&quot; %}</span><span class="se">\n</span><span class="s2">        {{- </span><span class="se">\&#39;</span><span class="s2">&lt;|im_start|&gt;</span><span class="se">\&#39;</span><span class="s2"> + message.role }}</span><span class="se">\n</span><span class="s2">        {</span><span class="si">%- i</span><span class="s2">f message.content %}</span><span class="se">\n</span><span class="s2">            {{- </span><span class="se">\&#39;\\</span><span class="s2">n</span><span class="se">\&#39;</span><span class="s2"> + message.content }}</span><span class="se">\n</span><span class="s2">        {</span><span class="si">%- e</span><span class="s2">ndif %}</span><span class="se">\n</span><span class="s2">        {</span><span class="si">%- f</span><span class="s2">or tool_call in message.tool_calls %}</span><span class="se">\n</span><span class="s2">            {</span><span class="si">%- i</span><span class="s2">f tool_call.function is defined %}</span><span class="se">\n</span><span class="s2">                {</span><span class="si">%- s</span><span class="s2">et tool_call = tool_call.function %}</span><span class="se">\n</span><span class="s2">            {</span><span class="si">%- e</span><span class="s2">ndif %}</span><span class="se">\n</span><span class="s2">            {{- </span><span class="se">\&#39;\\</span><span class="s2">n&lt;tool_call&gt;</span><span class="se">\\</span><span class="s2">n{&quot;name&quot;: &quot;</span><span class="se">\&#39;</span><span class="s2"> }}</span><span class="se">\n</span><span class="s2">            {{- tool_call.name }}</span><span class="se">\n</span><span class="s2">            {{- </span><span class="se">\&#39;</span><span class="s2">&quot;, &quot;arguments&quot;: </span><span class="se">\&#39;</span><span class="s2"> }}</span><span class="se">\n</span><span class="s2">            {{- tool_call.arguments | tojson }}</span><span class="se">\n</span><span class="s2">            {{- </span><span class="se">\&#39;</span><span class="s2">}</span><span class="se">\\</span><span class="s2">n&lt;/tool_call&gt;</span><span class="se">\&#39;</span><span class="s2"> }}</span><span class="se">\n</span><span class="s2">        {</span><span class="si">%- e</span><span class="s2">ndfor %}</span><span class="se">\n</span><span class="s2">        {{- </span><span class="se">\&#39;</span><span class="s2">&lt;|im_end|&gt;</span><span class="se">\\</span><span class="s2">n</span><span class="se">\&#39;</span><span class="s2"> }}</span><span class="se">\n</span><span class="s2">    {</span><span class="si">%- e</span><span class="s2">lif message.role == &quot;tool&quot; %}</span><span class="se">\n</span><span class="s2">        {</span><span class="si">%- i</span><span class="s2">f (loop.index0 == 0) or (messages[loop.index0 - 1].role != &quot;tool&quot;) %}</span><span class="se">\n</span><span class="s2">            {{- </span><span class="se">\&#39;</span><span class="s2">&lt;|im_start|&gt;user</span><span class="se">\&#39;</span><span class="s2"> }}</span><span class="se">\n</span><span class="s2">        {</span><span class="si">%- e</span><span class="s2">ndif %}</span><span class="se">\n</span><span class="s2">        {{- </span><span class="se">\&#39;\\</span><span class="s2">n&lt;tool_response&gt;</span><span class="se">\\</span><span class="s2">n</span><span class="se">\&#39;</span><span class="s2"> }}</span><span class="se">\n</span><span class="s2">        {{- message.content }}</span><span class="se">\n</span><span class="s2">        {{- </span><span class="se">\&#39;\\</span><span class="s2">n&lt;/tool_response&gt;</span><span class="se">\&#39;</span><span class="s2"> }}</span><span class="se">\n</span><span class="s2">        {</span><span class="si">%- i</span><span class="s2">f loop.last or (messages[loop.index0 + 1].role != &quot;tool&quot;) %}</span><span class="se">\n</span><span class="s2">            {{- </span><span class="se">\&#39;</span><span class="s2">&lt;|im_end|&gt;</span><span class="se">\\</span><span class="s2">n</span><span class="se">\&#39;</span><span class="s2"> }}</span><span class="se">\n</span><span class="s2">        {</span><span class="si">%- e</span><span class="s2">ndif %}</span><span class="se">\n</span><span class="s2">    {</span><span class="si">%- e</span><span class="s2">ndif %}</span><span class="se">\n</span><span class="s2">{</span><span class="si">%- e</span><span class="s2">ndfor %}</span><span class="se">\n</span><span class="s2">{</span><span class="si">%- i</span><span class="s2">f add_generation_prompt %}</span><span class="se">\n</span><span class="s2">    {{- </span><span class="se">\&#39;</span><span class="s2">&lt;|im_start|&gt;assistant</span><span class="se">\\</span><span class="s2">n</span><span class="se">\&#39;</span><span class="s2"> }}</span><span class="se">\n</span><span class="s2">{</span><span class="si">%- e</span><span class="s2">ndif %}</span><span class="se">\n</span><span class="s2">&#39;&quot;&quot;&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;qwen&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">{</span><span class="si">%- i</span><span class="s2">f tools %}</span>
+<span class="s2">    {{- &#39;&lt;|im_start|&gt;system</span><span class="se">\\</span><span class="s2">n&#39; }}</span>
+<span class="s2">    {</span><span class="si">%- i</span><span class="s2">f messages[0][&#39;role&#39;] == &#39;system&#39; %}</span>
+<span class="s2">        {{- messages[0][&#39;content&#39;] }}</span>
+<span class="s2">    {</span><span class="si">%- e</span><span class="s2">lse %}</span>
+<span class="s2">        {{- &#39;You are Qwen, created by Alibaba Cloud. You are a helpful assistant.&#39; }}</span>
+<span class="s2">    {</span><span class="si">%- e</span><span class="s2">ndif %}</span>
+<span class="s2">    {{- &quot;</span><span class="se">\\</span><span class="s2">n</span><span class="se">\\</span><span class="s2">n# Tools</span><span class="se">\\</span><span class="s2">n</span><span class="se">\\</span><span class="s2">nYou may call one or more functions to assist with the user query.</span><span class="se">\\</span><span class="s2">n</span><span class="se">\\</span><span class="s2">nYou are provided with function signatures within &lt;tools&gt;&lt;/tools&gt; XML tags:</span><span class="se">\\</span><span class="s2">n&lt;tools&gt;&quot; }}</span>
+<span class="s2">    {</span><span class="si">%- f</span><span class="s2">or tool in tools %}</span>
+<span class="s2">        {{- &quot;</span><span class="se">\\</span><span class="s2">n&quot; }}</span>
+<span class="s2">        {{- tool | tojson }}</span>
+<span class="s2">    {</span><span class="si">%- e</span><span class="s2">ndfor %}</span>
+<span class="s2">    {{- &quot;</span><span class="se">\\</span><span class="s2">n&lt;/tools&gt;</span><span class="se">\\</span><span class="s2">n</span><span class="se">\\</span><span class="s2">nFor each function call, return a json object with function name and arguments within &lt;tool_call&gt;&lt;/tool_call&gt; XML tags:</span><span class="se">\\</span><span class="s2">n&lt;tool_call&gt;</span><span class="se">\\</span><span class="s2">n{</span><span class="se">\\\&quot;</span><span class="s2">name</span><span class="se">\\\&quot;</span><span class="s2">: &lt;function-name&gt;, </span><span class="se">\\\&quot;</span><span class="s2">arguments</span><span class="se">\\\&quot;</span><span class="s2">: &lt;args-json-object&gt;}</span><span class="se">\\</span><span class="s2">n&lt;/tool_call&gt;&lt;|im_end|&gt;</span><span class="se">\\</span><span class="s2">n&quot; }}</span>
+<span class="s2">{</span><span class="si">%- e</span><span class="s2">lse %}</span>
+<span class="s2">    {</span><span class="si">%- i</span><span class="s2">f messages[0][&#39;role&#39;] == &#39;system&#39; %}</span>
+<span class="s2">        {{- &#39;&lt;|im_start|&gt;system</span><span class="se">\\</span><span class="s2">n&#39; + messages[0][&#39;content&#39;] + &#39;&lt;|im_end|&gt;</span><span class="se">\\</span><span class="s2">n&#39; }}</span>
+<span class="s2">    {</span><span class="si">%- e</span><span class="s2">lse %}</span>
+<span class="s2">        {{- &#39;&lt;|im_start|&gt;system</span><span class="se">\\</span><span class="s2">nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.&lt;|im_end|&gt;</span><span class="se">\\</span><span class="s2">n&#39; }}</span>
+<span class="s2">    {</span><span class="si">%- e</span><span class="s2">ndif %}</span>
+<span class="s2">{</span><span class="si">%- e</span><span class="s2">ndif %}</span>
+<span class="s2">{</span><span class="si">%- f</span><span class="s2">or message in messages %}</span>
+<span class="s2">    {</span><span class="si">%- i</span><span class="s2">f (message.role == &quot;user&quot;) or (message.role == &quot;system&quot; and not loop.first) %}</span>
+<span class="s2">        {{- &#39;&lt;|im_start|&gt;&#39; + message.role + &#39;</span><span class="se">\\</span><span class="s2">n&#39; + message.content + &#39;&lt;|im_end|&gt;&#39; + &#39;</span><span class="se">\\</span><span class="s2">n&#39; }}</span>
+<span class="s2">    {</span><span class="si">%- e</span><span class="s2">lif (message.role == &quot;assistant&quot; and not message.tool_calls) %}</span>
+<span class="s2">    {</span><span class="si">% g</span><span class="s2">eneration %}    {{- &#39;&lt;|im_start|&gt;&#39; + message.role + &#39;</span><span class="se">\\</span><span class="s2">n&#39; + message.content + &#39;&lt;|im_end|&gt;&#39; + &#39;</span><span class="se">\\</span><span class="s2">n&#39; }}    {</span><span class="si">% e</span><span class="s2">ndgeneration %}</span>
+<span class="s2">    {</span><span class="si">%- e</span><span class="s2">lif message.role == &quot;assistant&quot; %}</span>
+<span class="s2">        {</span><span class="si">% g</span><span class="s2">eneration %}{{- &#39;&lt;|im_start|&gt;&#39; + message.role }}</span>
+<span class="s2">        {</span><span class="si">%- i</span><span class="s2">f message.content %}</span>
+<span class="s2">            {{- &#39;</span><span class="se">\\</span><span class="s2">n&#39; + message.content }}</span>
+<span class="s2">        {</span><span class="si">%- e</span><span class="s2">ndif %}</span>
+<span class="s2">        {</span><span class="si">%- f</span><span class="s2">or tool_call in message.tool_calls %}</span>
+<span class="s2">            {</span><span class="si">%- i</span><span class="s2">f tool_call.function is defined %}</span>
+<span class="s2">                {</span><span class="si">%- s</span><span class="s2">et tool_call = tool_call.function %}</span>
+<span class="s2">            {</span><span class="si">%- e</span><span class="s2">ndif %}</span>
+<span class="s2">            {{- &#39;</span><span class="se">\\</span><span class="s2">n&lt;tool_call&gt;</span><span class="se">\\</span><span class="s2">n{</span><span class="se">\\\&quot;</span><span class="s2">name</span><span class="se">\\\&quot;</span><span class="s2">: </span><span class="se">\\\&quot;</span><span class="s2">&#39; }}</span>
+<span class="s2">            {{- tool_call.name }}</span>
+<span class="s2">            {{- &#39;</span><span class="se">\\\&quot;</span><span class="s2">, </span><span class="se">\\\&quot;</span><span class="s2">arguments</span><span class="se">\\\&quot;</span><span class="s2">: &#39; }}</span>
+<span class="s2">            {{- tool_call.arguments | tojson }}</span>
+<span class="s2">            {{- &#39;}</span><span class="se">\\</span><span class="s2">n&lt;/tool_call&gt;&#39; }}</span>
+<span class="s2">        {</span><span class="si">%- e</span><span class="s2">ndfor %}</span>
+<span class="s2">        {{- &#39;&lt;|im_end|&gt;</span><span class="se">\\</span><span class="s2">n&#39; }}{</span><span class="si">% e</span><span class="s2">ndgeneration %}</span>
+<span class="s2">    {</span><span class="si">%- e</span><span class="s2">lif message.role == &quot;tool&quot; %}</span>
+<span class="s2">        {</span><span class="si">%- i</span><span class="s2">f (loop.index0 == 0) or (messages[loop.index0 - 1].role != &quot;tool&quot;) %}</span>
+<span class="s2">            {{- &#39;&lt;|im_start|&gt;user&#39; }}</span>
+<span class="s2">        {</span><span class="si">%- e</span><span class="s2">ndif %}</span>
+<span class="s2">        {{- &#39;</span><span class="se">\\</span><span class="s2">n&lt;tool_response&gt;</span><span class="se">\\</span><span class="s2">n&#39; }}</span>
+<span class="s2">        {{- message.content }}</span>
+<span class="s2">        {{- &#39;</span><span class="se">\\</span><span class="s2">n&lt;/tool_response&gt;&#39; }}</span>
+<span class="s2">        {</span><span class="si">%- i</span><span class="s2">f loop.last or (messages[loop.index0 + 1].role != &quot;tool&quot;) %}</span>
+<span class="s2">            {{- &#39;&lt;|im_end|&gt;</span><span class="se">\\</span><span class="s2">n&#39; }}</span>
+<span class="s2">        {</span><span class="si">%- e</span><span class="s2">ndif %}</span>
+<span class="s2">    {</span><span class="si">%- e</span><span class="s2">ndif %}</span>
+<span class="s2">{</span><span class="si">%- e</span><span class="s2">ndfor %}</span>
+<span class="s2">{</span><span class="si">%- i</span><span class="s2">f add_generation_prompt %}</span>
+<span class="s2">    {</span><span class="si">% g</span><span class="s2">eneration %}{{- &#39;&lt;|im_start|&gt;assistant</span><span class="se">\\</span><span class="s2">n&#39; }}{</span><span class="si">% e</span><span class="s2">ndgeneration %}</span>
+<span class="s2">{</span><span class="si">%- e</span><span class="s2">ndif %}</span>
+<span class="s2">&quot;&quot;&quot;</span><span class="p">,</span>
 <span class="p">}</span>
 
 
@@ -632,12 +691,14 @@
         <span class="n">tokenizer</span><span class="p">:</span> <span class="n">transformers</span><span class="o">.</span><span class="n">AutoTokenizer</span> <span class="o">|</span> <span class="n">transformers</span><span class="o">.</span><span class="n">AutoProcessor</span><span class="p">,</span>  <span class="c1"># noqa</span>
         <span class="n">add_generation_prompt</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">chat_template</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">chat_template_name</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;chatml_format&quot;</span><span class="p">,</span> <span class="s2">&quot;qwen&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">continue_final_message</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-        <span class="n">tokenize</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">tokenize</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">padding</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">truncation</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-        <span class="n">return_tensors</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;pt&quot;</span><span class="p">,</span>
-        <span class="n">return_dict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">return_tensors</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">return_dict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">return_assistant_tokens_mask</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Applies a chat template to the history.</span>
@@ -646,37 +707,68 @@
 <span class="sd">            tokenizer (transformers.PreTrainedTokenizer | transformers.AutoProcessor): The tokenizer to use.</span>
 <span class="sd">            add_generation_prompt (bool, optional): Whether to add a generation prompt. Defaults to `True`.</span>
 <span class="sd">            chat_template (str, optional): The chat template to use. Defaults to the tokenizer&#39;s default template.</span>
+<span class="sd">            chat_template_name (Literal[&quot;chatml_format&quot;, &quot;qwen&quot;], optional): The name of the chat template to use.</span>
+<span class="sd">                Prevalent over `tokenizer.chat_template`. Defaults to `None`.</span>
 <span class="sd">            continue_final_message (bool, optional): Whether to continue the final message. Defaults to `False`.</span>
 <span class="sd">            tokenize (bool, optional): Whether to tokenize the output. Defaults to `False`.</span>
 <span class="sd">            padding (bool | str, optional): The padding strategy to use. Defaults to `False`.</span>
 <span class="sd">            truncation (bool | str, optional): The truncation strategy to use. Defaults to `False`.</span>
 <span class="sd">            return_tensors (str | None, optional): The type of tensors to return. Defaults to &quot;pt&quot;.</span>
 <span class="sd">            return_dict (bool, optional): Whether to return a dictionary. Defaults to `False`.</span>
+<span class="sd">            return_assistant_tokens_mask (bool, optional): Whether to return a mask of the assistant generated tokens.</span>
+<span class="sd">                For tokens generated by the assistant, the mask will contain `1`.</span>
+<span class="sd">                For user and system tokens, the mask will contain `0`.</span>
+<span class="sd">                This functionality is only available for chat templates that support it via the `{% generation %}` keyword.</span>
+<span class="sd">                Defaults to `False`.</span>
+
+<span class="sd">                .. note:: By default, the `&quot;qwen&quot;` chat template does not support this functionality. A modified version of the template</span>
+<span class="sd">                    can be used by setting `chat_template_name=&quot;qwen&quot;`, which will override the default template from the tokenizer.</span>
+<span class="sd">                    For other tokenizers, similar edits can be made to the template and passed to the method via the `chat_template` argument.</span>
+
 <span class="sd">            **kwargs: Additional keyword arguments to pass to the tokenizer `apply_chat_template` method.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            The formatted history.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">chat_template</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">tokenizer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">chat_template_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">chat_template</span> <span class="o">=</span> <span class="n">_CHAT_TEMPLATES</span><span class="p">[</span><span class="n">chat_template_name</span><span class="p">]</span>
+                <span class="n">chat_template_name</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">elif</span> <span class="n">tokenizer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                     <span class="s2">&quot;You must specify a tokenizer to use when chat_template is not specified.&quot;</span>
                 <span class="p">)</span>
-            <span class="n">chat_template</span> <span class="o">=</span> <span class="n">tokenizer</span><span class="o">.</span><span class="n">chat_template</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">chat_template</span> <span class="o">=</span> <span class="n">tokenizer</span><span class="o">.</span><span class="n">chat_template</span>
         <span class="k">if</span> <span class="n">chat_template</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">chat_template</span> <span class="o">=</span> <span class="n">_CHAT_TEMPLATES</span><span class="p">[</span><span class="s2">&quot;chatml_format&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">tokenize</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">return_assistant_tokens_mask</span> <span class="ow">or</span> <span class="n">return_tensors</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">tokenize</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">tokenize</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="n">tokenize</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">return_tensors</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">return_tensors</span> <span class="o">=</span> <span class="s2">&quot;pt&quot;</span>
+            <span class="k">if</span> <span class="n">return_dict</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">return_assistant_tokens_mask</span><span class="p">:</span>
+                <span class="n">return_dict</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">elif</span> <span class="n">return_dict</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">return_dict</span> <span class="o">=</span> <span class="kc">False</span>
+
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">return</span> <span class="p">[</span>
                 <span class="bp">self</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
                     <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
                     <span class="n">add_generation_prompt</span><span class="o">=</span><span class="n">add_generation_prompt</span><span class="p">,</span>
                     <span class="n">chat_template</span><span class="o">=</span><span class="n">chat_template</span><span class="p">,</span>
+                    <span class="n">chat_template_name</span><span class="o">=</span><span class="n">chat_template_name</span><span class="p">,</span>
                     <span class="n">tokenize</span><span class="o">=</span><span class="n">tokenize</span><span class="p">,</span>
                     <span class="n">padding</span><span class="o">=</span><span class="n">padding</span><span class="p">,</span>
                     <span class="n">truncation</span><span class="o">=</span><span class="n">truncation</span><span class="p">,</span>
                     <span class="n">return_tensors</span><span class="o">=</span><span class="n">return_tensors</span><span class="p">,</span>
                     <span class="n">continue_final_message</span><span class="o">=</span><span class="n">continue_final_message</span><span class="p">,</span>
                     <span class="n">return_dict</span><span class="o">=</span><span class="n">return_dict</span><span class="p">,</span>
+                    <span class="n">return_assistant_tokens_mask</span><span class="o">=</span><span class="n">return_assistant_tokens_mask</span><span class="p">,</span>
                     <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
                 <span class="p">)</span>
                 <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
@@ -696,6 +788,8 @@
             <span class="n">return_tensors</span><span class="o">=</span><span class="n">return_tensors</span><span class="p">,</span>
             <span class="n">continue_final_message</span><span class="o">=</span><span class="n">continue_final_message</span><span class="p">,</span>
             <span class="n">return_dict</span><span class="o">=</span><span class="n">return_dict</span><span class="p">,</span>
+            <span class="n">return_assistant_tokens_mask</span><span class="o">=</span><span class="n">return_assistant_tokens_mask</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span></div>
 
     <span class="nd">@classmethod</span>
