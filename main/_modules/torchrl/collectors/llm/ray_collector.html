@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+d6d0b13) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+e36d562) &#x25BC</span></a>
     </div>
     
 
@@ -491,6 +491,8 @@
 <span class="sd">               &gt;&gt;&gt; for data in collector:  # non-blocking</span>
 <span class="sd">               ...     # expensive operation - collector is collecting data</span>
 
+<span class="sd">            This is somehwat equivalent to using :class:`~torchrl.collectors.MultiSyncDataCollector` (`sync_iter=True`) or</span>
+<span class="sd">            :class:`~torchrl.collectors.MultiAsyncDataCollector` (`sync_iter=False`).</span>
 <span class="sd">            Defaults to `True`.</span>
 <span class="sd">        verbose (bool, optional): if ``True``, the collector will print progress information.</span>
 <span class="sd">            Defaults to `False`.</span>
