@@ -318,6 +318,24 @@ Let me help you with that.
 The result is""",
     ]
 
+    def test_history_assistant_mask(self):
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B")
+        for test_case in self.TEST_CASES:
+            history = History.from_text(test_case, chat_template_name="qwen")
+            proc = history.apply_chat_template(
+                tokenizer=tokenizer,
+                chat_template_name="qwen",
+                add_generation_prompt=False,
+                return_dict=True,
+                return_assistant_tokens_mask=True,
+            )
+            if "assistant" in history.role:
+                assert proc["assistant_masks"].any()
+            else:
+                assert not proc["assistant_masks"].any()
+
     def test_history_completion(self):
         """Test the History class's handling of complete and incomplete messages."""
 
