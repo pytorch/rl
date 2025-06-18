@@ -17,6 +17,7 @@ from .llm import (
     RolloutFromModel,
     TensorDictTokenizer,
     TokenizedDatasetLoader,
+    TopKRewardSelector,
 )
 from .map import (
     BinaryToDecimal,
@@ -116,6 +117,7 @@ __all__ = [
     "Categorical",
     "Choice",
     "ContentBase",
+    "TopKRewardSelector",
     "Composite",
     "CompositeSpec",
     "ConstantKLController",

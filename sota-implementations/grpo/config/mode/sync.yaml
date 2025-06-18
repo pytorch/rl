@@ -5,7 +5,7 @@ train:
   
   # Number of epochs to train for, every time a batch is collected.
   epochs: 1
-  # Leave buffer_size empty to use steps_per_batch in sync mode
+  # Leave buffer_size empty to use dialog_turns_per_batch in sync mode
   buffer_size:
   # Update policy weights every N steps - must be left empty in sync mode
   weight_update_frequency:  

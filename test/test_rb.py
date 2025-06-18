@@ -2853,11 +2853,11 @@ class TestSamplers:
         )
         if not circ:
             # Simplest case: the buffer is full but no overlap
-            index = rb.extend(data)
+            index = rb.extend(data, update_priority=False)
         else:
             # The buffer is 2/3 -> 1/3 overlapping
-            rb.extend(data[..., : data.shape[-1] // 3])
-            index = rb.extend(data)
+            rb.extend(data[..., : data.shape[-1] // 3], update_priority=False)
+            index = rb.extend(data, update_priority=False)
         rb.update_priority(index, data["priority"])
         samples = []
         found_shorter_batch = False
@@ -2881,7 +2881,7 @@ class TestSamplers:
             assert (sc == 1).sum() == (sc == 2).sum()
             assert (sc == 1).sum() == (sc == 4).sum()
         assert rb._sampler._cache
-        rb.extend(data)
+        rb.extend(data, update_priority=False)
         assert not rb._sampler._cache
 
     @pytest.mark.parametrize("ndim", [1, 2])
@@ -3096,7 +3096,9 @@ class TestSamplers:
         )
         data = TensorDict({"a": torch.arange(10), "p": torch.ones(10) / 2}, [10])
         idx = rb.extend(data)
-        assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 1).all()
+        assert (
+            torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 0.5
+        ).all()
         rb.update_priority(idx, 2)
         assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 2).all()
         s = rb.sample()
@@ -3172,7 +3174,9 @@ class TestSamplers:
             {"a": torch.arange(5).expand(2, 5), "p": torch.ones(2, 5) / 2}, [2, 5]
         )
         idx = rb.extend(data)
-        assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 1).all()
+        assert (
+            torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 0.5
+        ).all()
         rb.update_priority(idx, torch.ones(()) * 2)
         assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 2).all()
         s = rb.sample()

@@ -54,9 +54,12 @@ class RayReplayBuffer(ReplayBuffer):
     """A Ray implementation of the Replay Buffer that can be extended and sampled remotely.
 
     Keyword Args:
+        replay_buffer_cls (type[ReplayBuffer], optional): the class to use for the replay buffer.
+            Defaults to :class:`~torchrl.data.ReplayBuffer`.
         ray_init_config (dict[str, Any], optiona): keyword arguments to pass to `ray.init()`.
         remote_config (dict[str, Any], optiona): keyword arguments to pass to `cls.as_remote()`.
             Defaults to `torchrl.collectors.distributed.ray.DEFAULT_REMOTE_CLASS_CONFIG`.
+        **kwargs: keyword arguments to pass to the replay buffer class.
 
     .. seealso:: :class:`~torchrl.data.ReplayBuffer` for a list of other keyword arguments.
 
@@ -119,6 +122,7 @@ class RayReplayBuffer(ReplayBuffer):
     def __init__(
         self,
         *args,
+        replay_buffer_cls: type[ReplayBuffer] | None = ReplayBuffer,
         ray_init_config: dict[str, Any] | None = None,
         remote_config: dict[str, Any] | None = None,
         **kwargs,
@@ -134,7 +138,13 @@ class RayReplayBuffer(ReplayBuffer):
                 ray_init_config = DEFAULT_RAY_INIT_CONFIG
             ray.init(**ray_init_config)
 
-        remote_cls = ReplayBuffer.as_remote(remote_config).remote
+        remote_cls = replay_buffer_cls.as_remote(remote_config).remote
+        # We can detect if the buffer has a GPU allocated, if not
+        #  we'll make sure that the data is sent to CPU when needed.
+        if remote_config is not None:
+            self.has_gpu = remote_config.get("num_gpus", 0) > 0
+        else:
+            self.has_gpu = False
         self._rb = remote_cls(*args, **kwargs)
 
     def close(self):
@@ -158,6 +168,10 @@ class RayReplayBuffer(ReplayBuffer):
         return ray.get(pending_task)
 
     def extend(self, *args, **kwargs):
+        if not self.has_gpu:
+            # Move the data to GPU
+            args = [arg.to("cpu") for arg in args if hasattr(arg, "to")]
+            kwargs = {k: v.to("cpu") for k, v in kwargs.items() if hasattr(v, "to")}
         pending_task = self._rb.extend.remote(*args, **kwargs)
         return ray.get(pending_task)
 

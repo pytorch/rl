@@ -115,7 +115,7 @@ Key differences:
    - Async: Data collection runs in background while optimization happens
 
 2. **Buffer Size**:
-   - Sync: Buffer size must equal the batch size returned by collector (`buffer_size = steps_per_batch`)
+   - Sync: Buffer size must equal the batch size returned by collector (`buffer_size = dialog_turns_per_batch`)
    - Async: Buffer can be larger than the batch size, allowing for more diverse sampling
 
 3. **Data Processing**:

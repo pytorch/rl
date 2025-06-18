@@ -352,8 +352,8 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 self._iterator = iter(self)
             out = next(self._iterator)
             # if any, we don't want the device ref to be passed in distributed settings
-            if out is not None:
-                out.clear_device_()
+            if out is not None and (out.device != "cpu"):
+                out = out.copy().clear_device_()
             return out
         except StopIteration:
             return None
@@ -892,7 +892,10 @@ class SyncDataCollector(DataCollectorBase):
             and hasattr(self.postproc, "to")
             and self.storing_device
         ):
-            self.postproc.to(self.storing_device)
+            postproc = self.postproc.to(self.storing_device)
+            if postproc is not self.postproc and postproc is not None:
+                self.postproc = postproc
+
         if frames_per_batch % self.n_env != 0 and RL_WARNINGS:
             warnings.warn(
                 f"frames_per_batch ({frames_per_batch}) is not exactly divisible by the number of batched environments ({self.n_env}), "
@@ -1253,9 +1256,9 @@ class SyncDataCollector(DataCollectorBase):
                     yield
                     continue
                 self._increment_frames(tensordict_out.numel())
-                if self.verbose:
-                    torchrl_logger.info("Collector: postproc.")
                 tensordict_out = self._postproc(tensordict_out)
+                if self.verbose:
+                    torchrl_logger.info("Collector: postproc done.")
                 if self.return_same_td:
                     # This is used with multiprocessed collectors to use the buffers
                     # stored in the tensordict.

@@ -145,25 +145,32 @@ class GSM8KRewardParser(Transform):
             potential_answer = [potential_answer]
         if isinstance(cot, str):
             cot = [cot]
-        reward_answer = 5.0 * (len(potential_answer) == 1)
 
+        # Format quality rewards (always applied)
+        reward_answer = 5.0 * (len(potential_answer) == 1)
         reward_think = 5.0 * (len(cot) == 1)
 
-        # One of the answer tags has the right answer
+        # Answer correctness rewards
         reward_right = 20.0 * (
             any(attempt == true_answer for attempt in potential_answer)
         )
-
-        # One of the answer tags contains the right answer (might be e.g. $20 instead of 20)
         reward_contained = 10.0 * (
             any((true_answer in attempt) for attempt in potential_answer)
         )
 
         success = len(potential_answer) > 0 and potential_answer[-1] == true_answer
-        # Compose the rewards
-        reward = 100.0 * float(success) + (
-            reward_answer + reward_think + reward_contained + reward_right
-        ) * (1 - float(success))
+
+        # Base success reward (lower than before to make format quality more important)
+        base_success_reward = 60.0 if success else 0.0
+
+        # Compose the rewards - always include format quality, even when successful
+        reward = (
+            base_success_reward
+            + reward_answer
+            + reward_think
+            + reward_contained
+            + reward_right
+        )
 
         rewards = TensorDict(
             reward_answer=reward_answer,

@@ -11,12 +11,18 @@ from typing import Mapping
 
 import pytest
 import torch
-from tensordict import lazy_stack, set_list_to_stack
+from tensordict import lazy_stack, set_list_to_stack, TensorDict
 
 from torchrl import torchrl_logger
 
-from torchrl.data import History
+from torchrl.data import (
+    History,
+    LazyStackStorage,
+    ReplayBuffer,
+    SamplerWithoutReplacement,
+)
 from torchrl.data.llm.chat import ContentBase
+from torchrl.data.llm.topk import TopKRewardSelector
 
 _has_transformers = importlib.util.find_spec("transformers")
 _has_vllm = importlib.util.find_spec("vllm")
@@ -262,9 +268,9 @@ class TestHistory:
             tokenize=True,
         )
         assert isinstance(proc, Mapping)
-        assert proc["input_ids"].shape == (1, 7294)
-        assert proc["attention_mask"].shape == (1, 7294)
-        assert proc["pixel_values"].shape == (1, 37, 3, 384, 384), proc[
+        assert proc["input_ids"].shape == (7294,)
+        assert proc["attention_mask"].shape == (7294,)
+        assert proc["pixel_values"].shape == (37, 3, 384, 384), proc[
             "pixel_values"
         ].shape
         assert (proc["image_sizes"] == torch.tensor([[2096, 2324]])).all()
@@ -318,23 +324,36 @@ Let me help you with that.
 The result is""",
     ]
 
-    def test_history_assistant_mask(self):
+    @pytest.mark.parametrize("test_case", TEST_CASES)
+    def test_history_assistant_mask(self, test_case):
         from transformers import AutoTokenizer
 
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B")
-        for test_case in self.TEST_CASES:
-            history = History.from_text(test_case, chat_template_name="qwen")
-            proc = history.apply_chat_template(
-                tokenizer=tokenizer,
-                chat_template_name="qwen",
-                add_generation_prompt=False,
-                return_dict=True,
-                return_assistant_tokens_mask=True,
+        history = History.from_text(test_case, chat_template_name="qwen")
+        proc = history.apply_chat_template(
+            tokenizer=tokenizer,
+            chat_template_name="qwen",
+            add_generation_prompt=False,
+            return_dict=True,
+            return_assistant_tokens_mask=True,
+        )
+        role_assistant = torch.tensor([r == "assistant" for r in history.role])
+        last_item: str = history[role_assistant].apply_chat_template(
+            tokenizer=tokenizer,
+            chat_template_name="qwen",
+            add_generation_prompt=False,
+        )
+
+        if "assistant" in history.role:
+            assert proc["assistant_masks"].any()
+        else:
+            assert not proc["assistant_masks"].any()
+        if last_item:
+            decoded = tokenizer.decode(
+                proc["input_ids"][proc["assistant_masks"].bool()]
             )
-            if "assistant" in history.role:
-                assert proc["assistant_masks"].any()
-            else:
-                assert not proc["assistant_masks"].any()
+            assert type(decoded) is str
+            assert last_item.endswith(decoded), (decoded, last_item)
 
     def test_history_completion(self):
         """Test the History class's handling of complete and incomplete messages."""
@@ -398,6 +417,59 @@ The result is""",
                     -1
                 ], "Case 5 should have last message incomplete"
                 assert history[2].role == "tool"
+
+
+class TestTopK:
+    @pytest.mark.parametrize("per_token_reward", [True, False])
+    def test_topk(self, per_token_reward):
+        rb = ReplayBuffer(
+            storage=LazyStackStorage(50),
+            sampler=SamplerWithoutReplacement,
+            batch_size=5,
+        )
+
+        def _per_token_reward(i):
+            if per_token_reward:
+                return torch.full((i + 5, 1), i)
+            else:
+                return torch.full((1, 1), i)
+
+        td = lazy_stack(
+            [
+                TensorDict(
+                    {
+                        ("next", "done"): torch.full((1, 1), True),
+                        ("next", "reward"): _per_token_reward(i),
+                        # total of 10 dialogs per prompt
+                        "text": f"Prompt {i // 5}",
+                    }
+                )
+                for i in range(50)
+            ]
+        )
+        topk = TopKRewardSelector(total_dialog_turns=5, topk_size=3)
+        rb.append_transform(topk)
+        for _td in td.chunk(25):
+            rb.extend(_td)
+        # Only wrote top3 of 50 items in 10 groups of 5
+        #  Because we only write items that are strictly greater than the median,
+        #  only 20 items are written.
+        assert rb.write_count == 20
+        assert len(rb) == 20
+        r3 = rb[:2].get(("next", "reward"), as_padded_tensor=True).squeeze()
+        # 0 and 1 are missing because they're not part of the top-k
+        if per_token_reward:
+            assert (
+                r3
+                == torch.tensor(
+                    [
+                        [4, 4, 4, 4, 4, 4, 4, 4, 4],
+                        [3, 3, 3, 3, 3, 3, 3, 3, 0],
+                    ]
+                )
+            ).all()
+        else:
+            assert (r3 == torch.tensor([[4, 3]])).all()
 
 
 if __name__ == "__main__":

@@ -242,6 +242,11 @@ class LLMCollector(SyncDataCollector):
         else:
             self.policy_version_tracker = None
 
+    def set_postproc(self, postproc: Callable[[TensorDictBase], TensorDictBase]):
+        if self.postproc is not None:
+            raise RuntimeError("Postproc already set")
+        self.postproc = postproc
+
     def increment_version(self):
         """Increment the policy version."""
         if self.policy_version_tracker is not None:
@@ -361,9 +366,10 @@ class LLMCollector(SyncDataCollector):
                         )
                     self._yield_queues[idx].clear()
         result = self._trajectory_queue.popleft()
-        torchrl_logger.info(
-            f"LLMCollector: Yielding completed trajectory with shape {result.shape}."
-        )
+        if self.verbose:
+            torchrl_logger.info(
+                f"LLMCollector: Yielding completed trajectory with shape {result.shape}."
+            )
         return result
 
     started = False
@@ -422,9 +428,10 @@ class LLMCollector(SyncDataCollector):
                 self.env.async_step_and_maybe_reset_send(env_input)
 
         result = self._trajectory_queue.popleft()
-        torchrl_logger.info(
-            f"LLMCollector: Yielding completed trajectory with shape {result.shape}."
-        )
+        if self.verbose:
+            torchrl_logger.info(
+                f"LLMCollector: Yielding completed trajectory with shape {result.shape}."
+            )
         return result
 
     as_remote = as_remote

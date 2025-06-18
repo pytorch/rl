@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import gc
+import math
 import os
 from functools import partial
 from pathlib import Path
@@ -28,15 +29,18 @@ import time
 import torch
 import tqdm
 
-from grpo_utils import (
+from ei_utils import (
     compute_device_allocation,
+    create_cosine_scheduler_with_warmup,
     get_inference_model,
     get_ref_model,
     get_tokenizer,
     get_train_model,
     make_weight_updater,
+    RemoteDataLogger,
 )
 from omegaconf import DictConfig
+from ray.util.queue import Queue
 
 try:
     from tensordict import set_list_to_stack
@@ -49,10 +53,11 @@ from torch.amp.grad_scaler import GradScaler
 from torchrl._utils import timeit
 from torchrl.collectors.llm import RayLLMCollector
 from torchrl.data import LazyStackStorage, ReplayBuffer, SamplerWithoutReplacement
+from torchrl.data.llm.topk import TopKRewardSelector
 from torchrl.data.replay_buffers.ray_buffer import RayReplayBuffer
-from torchrl.envs.llm import GSM8KEnv, KLRewardTransform
+from torchrl.envs.llm import GSM8KEnv, RetrieveLogProb
 from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
-from torchrl.objectives.llm.grpo import GRPOLoss, MCAdvantage
+from torchrl.objectives.llm.sft import SFTLoss
 
 
 def setup_environment() -> None:
@@ -101,22 +106,24 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
             repeats=cfg.env.repeats,
             tokenizer=train_tokenizer,
             num_envs=cfg.env.num_envs,
+            device="cpu",
         )
     else:  # ifeval
         env = IFEvalEnv(
             repeats=cfg.env.repeats,
             tokenizer=train_tokenizer,
             num_envs=cfg.env.num_envs,
+            device="cpu",
         )
 
     # Pass device directly to KLRewardTransform - Since, for Ray, the local device is always 0
     # we can just use 0 here.
     device = torch.device("cuda:0")
     env = env.append_transform(
-        KLRewardTransform(
+        RetrieveLogProb(
             actor=ref_model,
-            coef=cfg.train.kl_to_ref_coeff,
-            add_to_reward=not cfg.train.kl_coef_in_loss,
+            assistant_only=True,
+            tokenizer_kwargs={"chat_template_name": "qwen"},
             device=device,
         )
     )
@@ -129,7 +136,7 @@ def train(
     collector: RayLLMCollector,
     devices: list[int] | None = None,
 ):
-    """Main training loop for GRPO sync.
+    """Main training loop for EI sync.
 
     This function implements synchronous training where data collection and optimization
     happen in separate, consecutive steps. The total number of steps is determined by the number of epochs,
@@ -142,16 +149,20 @@ def train(
         devices: The devices to use for the training model.
     """
     # Setup training model and tokenizer
-    policy_training, train_tokenizer = get_train_model(cfg, devices=devices)
+    policy_training, train_tokenizer = get_train_model(
+        cfg, devices=devices, chat_template_name="qwen"
+    )
     train_device = devices[0]  # Use first device for batch processing
 
     # Setup loss function
-    loss_fn = GRPOLoss(
+    loss_fn = SFTLoss(
         actor_network=policy_training,
-        kl_to_ref_coeff=cfg.train.kl_to_ref_coeff if cfg.train.kl_coef_in_loss else 0.0,
-        kl_to_inference_coeff=cfg.train.kl_to_inference_coeff,
-        entropy_coeff=cfg.train.entropy_coeff,
+        kl_to_ref_coeff=cfg.train.kl_to_ref_coeff,
+        tokenizer=train_tokenizer,
+        tokenizer_kwargs={"chat_template_name": "qwen"},
         device=train_device,
+        loss_function=cfg.train.loss_function,
+        beta=cfg.train.minor_sft_beta,
     )
     if cfg.model.compile:
         loss_fn = torch.compile(loss_fn)
@@ -189,6 +200,34 @@ def train(
     )
     scaler = GradScaler(enabled=cfg.train.mixed_precision)
 
+    # Calculate total optimization steps for scheduler
+    # The training loop structure: for each collector iteration, we do cfg.train.epochs epochs
+    # Each epoch processes the entire replay buffer, and optimization happens every gradient_accumulation_steps
+    # We need to estimate the total number of optimization steps
+    # For now, we'll use a conservative estimate based on the total dialog turns
+    # This can be refined based on the actual training dynamics
+    total_optim_steps = (
+        cfg.train.total_dialog_turns
+        * cfg.train.epochs
+        // cfg.train.gradient_accumulation_steps
+    )
+
+    # Create scheduler if enabled
+    scheduler = None
+    if cfg.optimizer.scheduler.enabled:
+        warmup_steps = cfg.optimizer.scheduler.warmup_steps
+        num_cycles = cfg.optimizer.scheduler.num_cycles
+        torchrl_logger.info(
+            f"Creating {cfg.optimizer.scheduler.type} scheduler with {warmup_steps} warmup steps out of {total_optim_steps} total steps"
+        )
+
+        scheduler = create_cosine_scheduler_with_warmup(
+            optimizer,
+            num_warmup_steps=warmup_steps,
+            num_training_steps=total_optim_steps,
+            num_cycles=num_cycles,
+        )
+
     # Make checkpoint dir
     checkpoint_dir = Path(cfg.logging.checkpoint_dir)
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
@@ -203,21 +242,36 @@ def train(
 
     experiment_name.append(cfg.env.dataset)
     experiment_name.append(cfg.model.name)
-    wandb_logger = WandbLogger(
-        project="grpo-sync", exp_name="-".join(["grpo-sync"] + experiment_name)
-    )
+
+    # Create local wandb logger for training metrics
+    wandb_config = {
+        "project": "ei-async",
+        "exp_name": "-".join(["ei-async"] + experiment_name),
+    }
+    wandb_logger = WandbLogger(**wandb_config)
+
+    # Pass the logging actor reference to the collector
+    log_queue = Queue(maxsize=1000)
+    collector.set_postproc(RemoteDataLogger(log_queue=log_queue))
 
     # Training loop
     torchrl_logger.info("Starting training loop.")
-    pbar = tqdm.tqdm(collector)
+    pbar = tqdm.tqdm(total=cfg.train.total_dialog_turns)
     metrics = {}  # Initialize metrics dict
     grad_norm = 0.0  # Initialize grad_norm
     data_read_count = 0
 
     global_step = 0
+    optim_step = 0  # Track optimization steps separately for scheduler
     start_time = time.time()
-    for data in pbar:
-        pbar.update(1)
+    write_count = replay_buffer.write_count
+    for data in collector:
+        new_write_count = replay_buffer.write_count
+        if new_write_count == write_count:
+            torchrl_logger.warning("No new writes to replay buffer")
+            continue
+        pbar.update(new_write_count - write_count)
+        write_count = new_write_count
 
         # data is None as the collector directly writes to the replay buffer
         if data is not None:
@@ -246,10 +300,11 @@ def train(
                     # Forward pass with mixed precision
                     with autocast("cuda", enabled=cfg.train.mixed_precision):
                         loss = loss_fn(batch)
-                        loss_val = (
-                            loss.mean(reduce=True)
-                            / cfg.train.gradient_accumulation_steps
-                        )
+                        if loss.loss_kl_to_ref is not None:
+                            loss_val = loss.loss_sft + loss.loss_kl_to_ref
+                        else:
+                            loss_val = loss.loss_sft
+                        loss_val = loss_val / cfg.train.gradient_accumulation_steps
 
                 with timeit("backward_pass"):
                     # Backward pass
@@ -286,10 +341,16 @@ def train(
                             optimizer.step()
                         optimizer.zero_grad(set_to_none=True)
 
+                        # Step the scheduler
+                        if scheduler is not None:
+                            scheduler.step()
+
+                        # Increment optimization step counter
+                        optim_step += 1
+
                 # Clear memory
                 del loss_val
-                # TODO: do we need this? Does it interfere with other processes?
-                # torch.cuda.empty_cache()
+                torch.cuda.empty_cache()
                 gc.collect()
 
                 # Update metrics
@@ -308,11 +369,7 @@ def train(
                                     rb_content.get(("next", "reward"), as_list=True)
                                 ).mean()
                             ),
-                            "kl_penalty (inference to ref) from buffer": float(
-                                torch.cat(
-                                    rb_content.get(("next", "kl_penalty"), as_list=True)
-                                ).mean()
-                            ),
+                            "reward from batch": float(batch["next", "reward"].mean()),
                             "seq_length from buffer": float(
                                 torch.tensor(
                                     [
@@ -324,23 +381,9 @@ def train(
                                     dtype=torch.float,
                                 ).mean()
                             ),
-                            "ESS, from loss": float(loss.ESS),
-                            "loss_objective, from loss": float(loss.loss_objective),
-                            "clip_fraction, from loss": float(loss.clip_fraction),
-                            "kl_approx (train to inference), from loss": float(
-                                loss.kl_approx
-                            ),
-                            "kl_to_inference (train to inference - differentiable), from loss": float(
-                                loss.kl_to_inference.mean()
-                            ),
-                            "kl_to_ref, from loss": float(loss.kl_to_ref.mean()),
-                            "loss_kl_to_inference, from loss": float(
-                                loss.loss_kl_to_inference.mean()
-                            ),
-                            "loss_kl_to_ref, from loss": float(
-                                loss.loss_kl_to_ref.mean()
-                            ),
-                            "entropy loss, from loss": float(loss.loss_entropy.mean()),
+                            "loss_sft, from loss": float(loss.loss_sft),
+                            "loss_kl_to_ref, from loss": float(loss.loss_kl_to_ref),
+                            "kl_to_ref, from loss": float(loss.kl_to_ref),
                             "grad_norm": float(grad_norm)
                             if global_step % cfg.train.gradient_accumulation_steps == 0
                             else metrics.get("grad_norm", 0.0),
@@ -364,11 +407,27 @@ def train(
                             "throughput (steps per second)": float(
                                 global_step / (time.time() - start_time)
                             ),
+                            "learning_rate": float(optimizer.param_groups[0]["lr"]),
+                            "optim_step": optim_step,
                         }
                         for name, value in metrics.items():
-                            wandb_logger.log_scalar(name, value)
+                            wandb_logger.log_scalar(name, value, step=global_step)
                         wandb_logger.log_str("history", history_str, step=global_step)
+                        while not log_queue.empty():
+                            logs = log_queue.get()
+                            for k, v in logs.items():
+                                wandb_logger.log_scalar(k, v)
 
+                # Update policy weights
+                if (
+                    cfg.train.weight_update_frequency is not None
+                    and (global_step + 1) % cfg.train.weight_update_frequency == 0
+                ):
+                    with timeit("update_policy_weights"):
+                        torchrl_logger.info("Updating policy weights...")
+                        weight_updater.push_weights(policy_training)
+                        torch.cuda.empty_cache()
+                        gc.collect()
                 # Checkpointing disabled to prevent disk space issues
                 # if (global_step + 1) % cfg.train.checkpoint_frequency == 0:
                 #     with timeit("save_checkpoint"):
@@ -385,12 +444,13 @@ def train(
                 #         torch.save(checkpoint, checkpoint_dir / f"checkpoint_{global_step:04d}.pt")
 
         # Update policy weights
-        with timeit("update_policy_weights"):
-            torchrl_logger.info("Updating policy weights...")
-            weight_updater.push_weights(policy_training)
-            # TODO: do we need this? Does it interfere with other processes?
-            # torch.cuda.empty_cache()
-            gc.collect()
+        if cfg.train.weight_update_frequency is None:
+            # If weight_update_frequency is not set, we update the weights after each batch
+            with timeit("update_policy_weights"):
+                torchrl_logger.info("Updating policy weights...")
+                weight_updater.push_weights(policy_training)
+                torch.cuda.empty_cache()
+                gc.collect()
 
         timeit.print(prefix="timeit")
         for key, val in timeit.todict().items():
@@ -401,15 +461,13 @@ def train(
     collector.shutdown()
 
 
-@hydra.main(version_base=None, config_path="config", config_name="grpo_gsm8k")
+@hydra.main(version_base=None, config_path="config", config_name="ei_gsm8k")
 def main(cfg):
     # Force sync mode
     if not cfg.train.sync:
         raise ValueError(
-            "grpo-sync.py must run in sync mode (`python grpo-sync.py mode=sync`). Please use grpo-async.py for async mode (`python grpo-async.py mode=async`)."
+            "expert-iteration-sync.py must run in sync mode (`python expert-iteration-sync.py mode=sync`). Please use expert-iteration-async.py for async mode (`python expert-iteration-async.py mode=async`)."
         )
-    if cfg.train.weight_update_frequency is not None:
-        raise ValueError("weight_update_frequency must be left empty in sync mode.")
 
     # Compute device allocation
     device_config = compute_device_allocation(cfg)
@@ -461,20 +519,25 @@ def main(cfg):
     torchrl_logger.info(f"Inference policy: {inference_policy}")
 
     torchrl_logger.info(f"Starting replay buffer with {replay_buffer_config=}")
-    if cfg.train.buffer_size is not None and (
-        cfg.train.buffer_size != cfg.train.dialog_turns_per_batch
-    ):
-        raise ValueError(
-            "buffer_size must be equal to dialog_turns_per_batch in sync settings."
+    rb_size = cfg.train.buffer_size
+    if rb_size is None:
+        rb_size = int(
+            math.ceil(
+                cfg.train.dialog_turns_per_batch * cfg.train.topk_size / cfg.env.repeats
+            )
         )
-
     rb = RayReplayBuffer(
         storage=partial(
             LazyStackStorage,
-            cfg.train.dialog_turns_per_batch,
+            rb_size,
+            device="cpu",
         ),
         sampler=SamplerWithoutReplacement,
-        transform_factory=partial(MCAdvantage, grpo_size=cfg.env.repeats),
+        transform_factory=partial(
+            TopKRewardSelector,
+            total_dialog_turns=cfg.env.repeats,
+            topk_size=cfg.train.topk_size,
+        ),
         batch_size=cfg.train.optim_batch_size,
         remote_config=replay_buffer_config,
     )
@@ -485,13 +548,17 @@ def main(cfg):
         # The ref model will be instantiated within the collector, so we only need to allocate the number of devices for the inference model
         cfg.ref_model.num_devices
     )
-    collector_config["num_cpus"] = cfg.ray.collector_config.get("num_cpus", 1)
     torchrl_logger.info(f"Starting collector with {collector_config=}")
+
+    dialog_turns_per_batch = cfg.train.dialog_turns_per_batch
+    if dialog_turns_per_batch is None:
+        # Hardcoded for now
+        dialog_turns_per_batch = 256
 
     collector = RayLLMCollector(
         env=partial(make_env, cfg, devices=device_config["ref_model_devices"]),
         policy=inference_policy,
-        dialog_turns_per_batch=cfg.train.dialog_turns_per_batch,
+        dialog_turns_per_batch=dialog_turns_per_batch,
         total_dialog_turns=cfg.train.total_dialog_turns,
         replay_buffer=rb,
         ray_init_config=None,  # Ray is already initialized
