@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+7ee5248) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+d6d0b13) &#x25BC</span></a>
     </div>
     
 
@@ -426,6 +426,8 @@
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
+
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterator</span>
 
@@ -477,6 +479,19 @@
 <span class="sd">            or its subclass, responsible for updating the policy weights on remote inference workers.</span>
 <span class="sd">        ray_init_config (dict[str, Any], optional): keyword arguments to pass to ray.init().</span>
 <span class="sd">        remote_config (dict[str, Any], optional): keyword arguments to pass to cls.as_remote().</span>
+<span class="sd">        sync_iter (bool, optional): if `True`, items yeilded by the collector will be synced to the local process.</span>
+<span class="sd">            If `False`, the collector will collect the next batch of data in between yielding.</span>
+<span class="sd">            This has no effect when data is collected through the :meth:`start` method.</span>
+<span class="sd">            For example:</span>
+
+<span class="sd">               &gt;&gt;&gt; collector = RayLLMCollector(..., sync_iter=True)</span>
+<span class="sd">               &gt;&gt;&gt; for data in collector:  # blocking</span>
+<span class="sd">               ...     # expensive operation - collector is idle</span>
+<span class="sd">               &gt;&gt;&gt; collector = RayLLMCollector(..., sync_iter=False)</span>
+<span class="sd">               &gt;&gt;&gt; for data in collector:  # non-blocking</span>
+<span class="sd">               ...     # expensive operation - collector is collecting data</span>
+
+<span class="sd">            Defaults to `True`.</span>
 <span class="sd">        verbose (bool, optional): if ``True``, the collector will print progress information.</span>
 <span class="sd">            Defaults to `False`.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -503,6 +518,7 @@
         <span class="n">ray_init_config</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">remote_config</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">track_policy_version</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">PolicyVersion</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">sync_iter</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_ray</span><span class="p">:</span>
@@ -515,8 +531,11 @@
 
                 <span class="n">ray_init_config</span> <span class="o">=</span> <span class="n">DEFAULT_RAY_INIT_CONFIG</span>
             <span class="n">ray</span><span class="o">.</span><span class="n">init</span><span class="p">(</span><span class="o">**</span><span class="n">ray_init_config</span><span class="p">)</span>
-
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">sync_iter</span><span class="p">:</span>
+            <span class="n">remote_config</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">remote_config</span><span class="p">)</span>
+            <span class="n">remote_config</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;max_concurrency&quot;</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
         <span class="n">remote_cls</span> <span class="o">=</span> <span class="n">LLMCollector</span><span class="o">.</span><span class="n">as_remote</span><span class="p">(</span><span class="n">remote_config</span><span class="p">)</span><span class="o">.</span><span class="n">remote</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sync_iter</span> <span class="o">=</span> <span class="n">sync_iter</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_collector</span> <span class="o">=</span> <span class="n">remote_cls</span><span class="p">(</span>
             <span class="n">env</span><span class="o">=</span><span class="n">env</span><span class="p">,</span>
             <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
@@ -535,19 +554,31 @@
             <span class="n">verbose</span><span class="o">=</span><span class="n">verbose</span><span class="p">,</span>
         <span class="p">)</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">_next_remote</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collector</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">remote</span><span class="p">()</span>
+
 <div class="viewcode-block" id="RayLLMCollector.next"><a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector.next">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">next</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the next batch of data from the collector.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            None as the data is written directly to the replay buffer.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_collector</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">remote</span><span class="p">())</span></div>
+        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_next_remote</span><span class="p">())</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="kc">None</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns an iterator that yields None as the collector writes directly to the replay buffer.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">sync_iter</span><span class="p">:</span>
+            <span class="n">future</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_next_remote</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">future</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
             <span class="k">try</span><span class="p">:</span>
-                <span class="k">yield</span> <span class="bp">self</span><span class="o">.</span><span class="n">next</span><span class="p">()</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sync_iter</span><span class="p">:</span>
+                    <span class="k">yield</span> <span class="bp">self</span><span class="o">.</span><span class="n">next</span><span class="p">()</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">result</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">future</span><span class="p">)</span>
+                    <span class="n">future</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_next_remote</span><span class="p">()</span>
+                    <span class="k">yield</span> <span class="n">result</span>
             <span class="k">except</span> <span class="ne">StopIteration</span><span class="p">:</span>
                 <span class="k">break</span>
 
