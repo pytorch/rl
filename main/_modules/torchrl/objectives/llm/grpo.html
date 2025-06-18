@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+169fe1f) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+7576e47) &#x25BC</span></a>
     </div>
     
 
@@ -444,6 +444,7 @@
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">distributions</span> <span class="k">as</span> <span class="n">d</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">Transform</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives.ppo</span><span class="w"> </span><span class="kn">import</span> <span class="n">ClipPPOLoss</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_maybe_get_or_select</span><span class="p">,</span> <span class="n">_reduce</span><span class="p">,</span> <span class="n">_sum_td_features</span>
@@ -714,7 +715,13 @@
 <span class="sd">    .. warning:: This transform will flatten the input tensordicts and therefore is not compatible yet with replay</span>
 <span class="sd">        buffers hosting storages of more than one dimension.</span>
 
-<span class="sd">    Args: TODO</span>
+<span class="sd">    Args:</span>
+<span class="sd">        grpo_size (int): Number of trajectories to keep in memory for the advantage computation.</span>
+<span class="sd">        prompt_key (NestedKey): Key to the prompt in the tensordict. Defaults to &quot;text&quot;.</span>
+<span class="sd">        rewards_key (NestedKey): Key to the rewards in the tensordict. Defaults to (&quot;next&quot;, &quot;reward&quot;).</span>
+<span class="sd">        advantage_key (NestedKey): Key to the advantage in the tensordict. Defaults to &quot;advantage&quot;.</span>
+<span class="sd">        done_key (NestedKey): Key to the done state in the tensordict. Defaults to (&quot;next&quot;, &quot;done&quot;).</span>
+<span class="sd">        verbose (bool): Whether to print verbose information. Defaults to `False`.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
@@ -725,6 +732,7 @@
         <span class="n">rewards_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">),</span>
         <span class="n">advantage_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;advantage&quot;</span><span class="p">,</span>
         <span class="n">done_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">),</span>
+        <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span> <span class="o">=</span> <span class="p">[</span><span class="n">prompt_key</span><span class="p">,</span> <span class="n">rewards_key</span><span class="p">,</span> <span class="n">done_key</span><span class="p">]</span>
@@ -735,6 +743,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">done_key</span> <span class="o">=</span> <span class="n">done_key</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">queues</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">deque</span><span class="p">(</span><span class="n">maxlen</span><span class="o">=</span><span class="n">grpo_size</span><span class="p">))</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">grpo_size</span> <span class="o">=</span> <span class="n">grpo_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">=</span> <span class="n">verbose</span>
 
 <div class="viewcode-block" id="MCAdvantage.forward"><a class="viewcode-back" href="../../../../reference/generated/torchrl.objectives.llm.MCAdvantage.html#torchrl.objectives.llm.MCAdvantage.forward">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GRPOLossOutput</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">tensordict</span></div>
@@ -759,6 +768,8 @@
                 <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected a string as prompt, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">prompt</span><span class="p">)</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">queues</span><span class="p">[</span><span class="n">prompt</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
             <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">queues</span><span class="p">[</span><span class="n">prompt</span><span class="p">])</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">grpo_size</span><span class="p">:</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Computing advantage for </span><span class="si">{</span><span class="n">prompt</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
                 <span class="c1"># Cat is the most robust way to combine the trajs</span>
                 <span class="n">tds</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">queues</span><span class="p">[</span><span class="n">prompt</span><span class="p">]),</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
                 <span class="c1"># Collect rewards</span>
@@ -766,6 +777,8 @@
                 <span class="n">reward_mean</span> <span class="o">=</span> <span class="n">reward</span><span class="o">.</span><span class="n">values</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
                 <span class="n">reward_scale</span> <span class="o">=</span> <span class="n">reward</span><span class="o">.</span><span class="n">values</span><span class="p">()</span><span class="o">.</span><span class="n">std</span><span class="p">()</span>
                 <span class="n">advantage</span> <span class="o">=</span> <span class="p">(</span><span class="n">reward</span> <span class="o">-</span> <span class="n">reward_mean</span><span class="p">)</span> <span class="o">/</span> <span class="n">reward_scale</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="mf">1e-6</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Advantage: </span><span class="si">{</span><span class="n">reward_mean</span><span class="si">=}</span><span class="s2"> </span><span class="si">{</span><span class="n">reward_scale</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
                 <span class="n">tds</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">advantage_key</span><span class="p">,</span> <span class="n">advantage</span><span class="p">)</span>
                 <span class="k">return</span> <span class="n">tds</span>
             <span class="k">return</span>
