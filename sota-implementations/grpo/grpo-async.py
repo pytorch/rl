@@ -465,6 +465,8 @@ def main(cfg):
     )
     torchrl_logger.info(f"Starting collector with {collector_config=}")
 
+    if cfg.train.sync_iter is not None:
+        raise ValueError("sync_iter is not supported in async mode.")
     collector = RayLLMCollector(
         env=partial(make_env, cfg, devices=device_config["ref_model_devices"]),
         policy=inference_policy,

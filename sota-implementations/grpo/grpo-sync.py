@@ -483,6 +483,7 @@ def main(cfg):
         # The ref model will be instantiated within the collector, so we only need to allocate the number of devices for the inference model
         cfg.ref_model.num_devices
     )
+    collector_config["num_cpus"] = cfg.ray.collector_config.get("num_cpus", 1)
     torchrl_logger.info(f"Starting collector with {collector_config=}")
 
     collector = RayLLMCollector(
@@ -495,6 +496,7 @@ def main(cfg):
         weight_updater=None,  # We'll create this after getting the remote LLM
         track_policy_version=True,
         remote_config=collector_config,
+        sync_iter=cfg.train.sync_iter,
         verbose=True,
     )
     # Ensure collector is initialized by calling a method that will block until ready
