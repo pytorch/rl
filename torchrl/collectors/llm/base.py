@@ -347,7 +347,7 @@ class LLMCollector(SyncDataCollector):
                 queue.append(_data)
                 dones[i] = _data["next", "done"].any()
             if dones.any():
-                for idx in dones.nonzero()[0].tolist():
+                for idx in dones.nonzero(as_tuple=True)[0].tolist():
                     if not self.yield_only_last_steps:
                         self._trajectory_queue.append(
                             lazy_stack(self._yield_queues[idx], -1)
@@ -401,7 +401,7 @@ class LLMCollector(SyncDataCollector):
                 queue.append(_data)
                 dones[i] = _data["next", "done"].any()
             if dones.any():
-                for idx in dones.nonzero()[0].tolist():
+                for idx in dones.nonzero(as_tuple=True)[0].tolist():
                     if not self.yield_only_last_steps:
                         self._trajectory_queue.append(
                             lazy_stack(self._yield_queues[idx], -1)
