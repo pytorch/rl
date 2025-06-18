@@ -107,7 +107,11 @@ for step in range(total_steps):
 
 Key differences:
 1. **Data Collection**: 
-   - Sync: Data collection and optimization happen sequentially
+   - Sync: Data collection and optimization happen sequentially.
+     
+     *Note*: The `train.sync_iter=False` argument can be used to collect data whilst optimizing. In this context, the
+     maximum policy age will be 1. If `train.sync_iter=True` (default), the maximum policy age is `0`.
+
    - Async: Data collection runs in background while optimization happens
 
 2. **Buffer Size**:

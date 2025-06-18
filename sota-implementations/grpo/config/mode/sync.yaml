@@ -9,3 +9,6 @@ train:
   buffer_size:
   # Update policy weights every N steps - must be left empty in sync mode
   weight_update_frequency:  
+  # Sync the collector between iterations. Not syncing means that the collector will collect the next batch of data in between yielding.
+  #  When sync_iter=True, the maximuum policy age is 0. When sync_iter=False, the maximuum policy age is 1.
+  sync_iter: true
