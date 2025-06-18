@@ -83,7 +83,7 @@ for data in collector:  # Data collection loop
             loss = loss_fn(batch)
             loss.backward()
             optimizer.step()
-    # Weight updte
+    # Weight update
     weight_updater.push_weights(policy_training)
 ```
 
@@ -119,8 +119,9 @@ Key differences:
    - Async: Each piece of data is processed a non-deterministic number of times.
 
 4. **Weight updates**:
-   - Sync: Weights are updated befor every collection of data
-   - Async: Weights are updated at a given interval (in gradient steps)
+   - Sync: Weights are updated befor every collection of data.
+   - Async: Weights are updated at a given interval (in gradient steps). This will require a synchronization between the training
+     and inference processes, and frequent updates will cause both workers to often wait for each other.
 
 The async mode offers better performance by:
 - Running data collection and optimization concurrently

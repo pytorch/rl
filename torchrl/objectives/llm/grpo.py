@@ -22,6 +22,7 @@ from tensordict.nn import (
 )
 from torch import distributions as d
 
+from torchrl._utils import logger as torchrl_logger
 from torchrl.envs.transforms.transforms import Transform
 from torchrl.objectives.ppo import ClipPPOLoss
 from torchrl.objectives.utils import _maybe_get_or_select, _reduce, _sum_td_features
@@ -292,7 +293,13 @@ class MCAdvantage(Transform):
     .. warning:: This transform will flatten the input tensordicts and therefore is not compatible yet with replay
         buffers hosting storages of more than one dimension.
 
-    Args: TODO
+    Args:
+        grpo_size (int): Number of trajectories to keep in memory for the advantage computation.
+        prompt_key (NestedKey): Key to the prompt in the tensordict. Defaults to "text".
+        rewards_key (NestedKey): Key to the rewards in the tensordict. Defaults to ("next", "reward").
+        advantage_key (NestedKey): Key to the advantage in the tensordict. Defaults to "advantage".
+        done_key (NestedKey): Key to the done state in the tensordict. Defaults to ("next", "done").
+        verbose (bool): Whether to print verbose information. Defaults to `False`.
 
     """
 
@@ -303,6 +310,7 @@ class MCAdvantage(Transform):
         rewards_key: NestedKey = ("next", "reward"),
         advantage_key: NestedKey = "advantage",
         done_key: NestedKey = ("next", "done"),
+        verbose: bool = False,
     ):
         super().__init__()
         self.in_keys = [prompt_key, rewards_key, done_key]
@@ -313,6 +321,7 @@ class MCAdvantage(Transform):
         self.done_key = done_key
         self.queues = defaultdict(lambda: deque(maxlen=grpo_size))
         self.grpo_size = grpo_size
+        self.verbose = verbose
 
     def forward(self, tensordict: TensorDictBase) -> GRPOLossOutput:
         return tensordict
@@ -337,6 +346,8 @@ class MCAdvantage(Transform):
                 raise TypeError(f"Expected a string as prompt, got {type(prompt)=}")
             self.queues[prompt].append(tensordict)
             if len(self.queues[prompt]) == self.grpo_size:
+                if self.verbose:
+                    torchrl_logger.info(f"Computing advantage for {prompt=}")
                 # Cat is the most robust way to combine the trajs
                 tds = torch.cat(list(self.queues[prompt]), -1)
                 # Collect rewards
@@ -344,6 +355,8 @@ class MCAdvantage(Transform):
                 reward_mean = reward.values().mean()
                 reward_scale = reward.values().std()
                 advantage = (reward - reward_mean) / reward_scale.clamp_min(1e-6)
+                if self.verbose:
+                    torchrl_logger.info(f"Advantage: {reward_mean=} {reward_scale=}")
                 tds.set(self.advantage_key, advantage)
                 return tds
             return
