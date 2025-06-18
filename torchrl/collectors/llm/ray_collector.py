@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import copy
+
 import warnings
 from typing import Any, Callable, Iterator
 
@@ -55,6 +57,21 @@ class RayLLMCollector(LLMCollector):
             or its subclass, responsible for updating the policy weights on remote inference workers.
         ray_init_config (dict[str, Any], optional): keyword arguments to pass to ray.init().
         remote_config (dict[str, Any], optional): keyword arguments to pass to cls.as_remote().
+        sync_iter (bool, optional): if `True`, items yeilded by the collector will be synced to the local process.
+            If `False`, the collector will collect the next batch of data in between yielding.
+            This has no effect when data is collected through the :meth:`start` method.
+            For example:
+
+               >>> collector = RayLLMCollector(..., sync_iter=True)
+               >>> for data in collector:  # blocking
+               ...     # expensive operation - collector is idle
+               >>> collector = RayLLMCollector(..., sync_iter=False)
+               >>> for data in collector:  # non-blocking
+               ...     # expensive operation - collector is collecting data
+
+            This is somehwat equivalent to using :class:`~torchrl.collectors.MultiSyncDataCollector` (`sync_iter=True`) or
+            :class:`~torchrl.collectors.MultiAsyncDataCollector` (`sync_iter=False`).
+            Defaults to `True`.
         verbose (bool, optional): if ``True``, the collector will print progress information.
             Defaults to `False`.
     """
@@ -81,6 +98,7 @@ class RayLLMCollector(LLMCollector):
         ray_init_config: dict[str, Any] | None = None,
         remote_config: dict[str, Any] | None = None,
         track_policy_version: bool | PolicyVersion = False,
+        sync_iter: bool = True,
         verbose: bool = False,
     ) -> None:
         if not _has_ray:
@@ -93,8 +111,11 @@ class RayLLMCollector(LLMCollector):
 
                 ray_init_config = DEFAULT_RAY_INIT_CONFIG
             ray.init(**ray_init_config)
-
+        if not sync_iter:
+            remote_config = copy.copy(remote_config)
+            remote_config.setdefault("max_concurrency", 2)
         remote_cls = LLMCollector.as_remote(remote_config).remote
+        self.sync_iter = sync_iter
         self._collector = remote_cls(
             env=env,
             policy=policy,
@@ -113,19 +134,31 @@ class RayLLMCollector(LLMCollector):
             verbose=verbose,
         )
 
+    def _next_remote(self) -> None:
+        return self._collector.next.remote()
+
     def next(self) -> None:
         """Get the next batch of data from the collector.
 
         Returns:
             None as the data is written directly to the replay buffer.
         """
-        return ray.get(self._collector.next.remote())
+        return ray.get(self._next_remote())
 
     def __iter__(self) -> Iterator[None]:
         """Returns an iterator that yields None as the collector writes directly to the replay buffer."""
+        if not self.sync_iter:
+            future = self._next_remote()
+        else:
+            future = None
         while True:
             try:
-                yield self.next()
+                if self.sync_iter:
+                    yield self.next()
+                else:
+                    result = ray.get(future)
+                    future = self._next_remote()
+                    yield result
             except StopIteration:
                 break
 

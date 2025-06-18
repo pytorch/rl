@@ -9,3 +9,5 @@ train:
   buffer_size: 128
   # Update policy weights every N steps - can be set to any positive integer in async mode
   weight_update_frequency: 10
+  # Sync the collector between iterations. Deactivated when async.
+  sync_iter:
