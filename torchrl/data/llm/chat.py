@@ -11,7 +11,6 @@ from typing import Literal
 
 import torch
 
-
 from tensordict import lazy_stack, LazyStackedTensorDict, list_to_stack, TensorClass
 from tensordict.utils import _maybe_correct_neg_dim
 
