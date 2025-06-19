@@ -1765,8 +1765,11 @@ class _MultiDataCollector(DataCollectorBase):
             .. warning:: `policy_factory` is currently not compatible with multiprocessed data
                 collectors.
 
-        frames_per_batch (int): A keyword-only argument representing the
+        frames_per_batch (int, optional): A keyword-only argument representing the
             total number of elements in a batch.
+        frames_per_batch_worker (Sequence[int], optional): A keyword-only argument representing the
+            number of elements in a batch for each worker. This argument is mutually exclusive with `frames_per_batch`.
+            If `frames_per_batch_worker` is specified, `frames_per_batch` is computed as the sum across all workers.
         total_frames (int, optional): A keyword-only argument representing the
             total number of frames returned by the collector
             during its lifespan. If the ``total_frames`` is not divisible by
@@ -1923,7 +1926,8 @@ class _MultiDataCollector(DataCollectorBase):
         policy_factory: Callable[[], Callable]
         | list[Callable[[], Callable]]
         | None = None,
-        frames_per_batch: int,
+        frames_per_batch: int | None = None,
+        frames_per_batch_worker: Sequence[int] | None = None,
         total_frames: int | None = -1,
         device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         storing_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
@@ -1958,6 +1962,27 @@ class _MultiDataCollector(DataCollectorBase):
     ):
         self.closed = True
         self.num_workers = len(create_env_fn)
+
+        if (frames_per_batch is None and frames_per_batch_worker is None) or (
+            frames_per_batch is not None and frames_per_batch_worker is not None
+        ):
+            raise ValueError(
+                "`frames_per_batch` and `frames_per_batch_worker` are mutually exclusive and one need to be set."
+                f"Got {frames_per_batch=} and {frames_per_batch_worker=}"
+            )
+
+        if frames_per_batch is None:
+            frames_per_batch = sum(frames_per_batch_worker)
+
+        if (
+            frames_per_batch_worker is not None
+            and len(frames_per_batch_worker) != self.num_workers
+        ):
+            raise ValueError(
+                "If specified, `frames_per_batch_worker` should contain exactly one value per worker."
+                f"Got {len(frames_per_batch_worker)} values for {self.num_workers} workers."
+            )
+        self._frames_per_batch_worker = frames_per_batch_worker
 
         self.set_truncated = set_truncated
         self.num_sub_threads = num_sub_threads
@@ -2221,8 +2246,7 @@ class _MultiDataCollector(DataCollectorBase):
         )
         return storing_device, policy_device, env_device
 
-    @property
-    def frames_per_batch_worker(self):
+    def frames_per_batch_worker(self, worker_idx: int | None = None) -> int:
         raise NotImplementedError
 
     @property
@@ -2281,7 +2305,7 @@ class _MultiDataCollector(DataCollectorBase):
                     "create_env_kwargs": env_fun_kwargs,
                     "policy": policy,
                     "max_frames_per_traj": self.max_frames_per_traj,
-                    "frames_per_batch": self.frames_per_batch_worker,
+                    "frames_per_batch": self.frames_per_batch_worker(worker_idx=i),
                     "reset_at_each_iter": self.reset_at_each_iter,
                     "policy_device": policy_device,
                     "storing_device": storing_device,
@@ -2773,8 +2797,9 @@ class MultiSyncDataCollector(_MultiDataCollector):
             policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
         )
 
-    @property
-    def frames_per_batch_worker(self):
+    def frames_per_batch_worker(self, worker_idx: int | None) -> int:
+        if worker_idx is not None and self._frames_per_batch_worker is not None:
+            return self._frames_per_batch_worker[worker_idx]
         if self.requested_frames_per_batch % self.num_workers != 0 and RL_WARNINGS:
             warnings.warn(
                 f"frames_per_batch {self.requested_frames_per_batch} is not exactly divisible by the number of collector workers {self.num_workers},"
@@ -2855,9 +2880,9 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 use_buffers = self._use_buffers
                 if self.replay_buffer is not None:
                     idx = new_data
-                    workers_frames[idx] = (
-                        workers_frames[idx] + self.frames_per_batch_worker
-                    )
+                    workers_frames[idx] = workers_frames[
+                        idx
+                    ] + self.frames_per_batch_worker(worker_idx=idx)
                     continue
                 elif j == 0 or not use_buffers:
                     try:
@@ -2903,7 +2928,12 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
             if self.replay_buffer is not None:
                 yield
-                self._frames += self.frames_per_batch_worker * self.num_workers
+                self._frames += sum(
+                    [
+                        self.frames_per_batch_worker(worker_idx)
+                        for worker_idx in range(len(self.num_workers))
+                    ]
+                )
                 continue
 
             # we have to correct the traj_ids to make sure that they don't overlap
@@ -3156,8 +3186,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
         )
 
-    @property
-    def frames_per_batch_worker(self):
+    def frames_per_batch_worker(self, worker_idx: int | None = None) -> int:
         return self.requested_frames_per_batch
 
     def _get_from_queue(self, timeout=None) -> tuple[int, int, TensorDictBase]:
@@ -3221,7 +3250,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
                 if self.split_trajs:
                     out = split_trajectories(out, prefix="collector")
             else:
-                worker_frames = self.frames_per_batch_worker
+                worker_frames = self.frames_per_batch_worker()
             self._frames += worker_frames
             workers_frames[idx] = workers_frames[idx] + worker_frames
             if self.postprocs:
