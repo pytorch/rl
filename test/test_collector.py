@@ -1553,6 +1553,105 @@ if __name__ == "__main__":
             collector.shutdown()
             del collector
 
+    @pytest.mark.parametrize("num_env", [1, 2])
+    @pytest.mark.parametrize("env_name", ["vec"])
+    @pytest.mark.parametrize("frames_per_batch_worker", [[10, 10], [15, 5]])
+    def test_collector_frames_per_batch_worker(
+        self,
+        num_env,
+        env_name,
+        frames_per_batch_worker,
+        seed=100,
+        num_workers=2,
+    ):
+        """Tests that there are 'sum(frames_per_batch_worker)' frames in each batch of a collection."""
+        if num_env == 1:
+
+            def env_fn():
+                env = make_make_env(env_name)()
+                return env
+
+        else:
+
+            def env_fn():
+                # 1226: For efficiency, we don't use Parallel but Serial
+                # env = ParallelEnv(
+                env = SerialEnv(
+                    num_workers=num_env, create_env_fn=make_make_env(env_name)
+                )
+                return env
+
+        policy = make_policy(env_name)
+
+        torch.manual_seed(0)
+        np.random.seed(0)
+
+        frames_per_batch = sum(frames_per_batch_worker)
+
+        collector = MultiaSyncDataCollector(
+            create_env_fn=[env_fn for _ in range(num_workers)],
+            policy=policy,
+            frames_per_batch_worker=frames_per_batch_worker,
+            max_frames_per_traj=1000,
+            total_frames=frames_per_batch * 100,
+        )
+        try:
+            collector.set_seed(seed)
+            for i, b in enumerate(collector):
+                assert b.numel() == -(-frames_per_batch // num_env) * num_env
+                if i == 5:
+                    break
+            assert b.names[-1] == "time"
+        finally:
+            collector.shutdown()
+
+        collector = MultiSyncDataCollector(
+            create_env_fn=[env_fn for _ in range(num_workers)],
+            policy=policy,
+            frames_per_batch=frames_per_batch,
+            max_frames_per_traj=1000,
+            total_frames=frames_per_batch * 100,
+            cat_results="stack",
+        )
+        try:
+            collector.set_seed(seed)
+            for i, b in enumerate(collector):
+                assert (
+                    b.numel()
+                    == -(-frames_per_batch // num_env // num_workers)
+                    * num_env
+                    * num_workers
+                )
+                if i == 5:
+                    break
+            assert b.names[-1] == "time"
+        finally:
+            collector.shutdown()
+            del collector
+
+        with pytest.raises(
+            ValueError,
+            match="`frames_per_batch` and `frames_per_batch_worker` are mutually exclusive and one need to be set.",
+        ):
+            collector = MultiSyncDataCollector(
+                create_env_fn=[env_fn for _ in range(num_workers)],
+                policy=policy,
+                max_frames_per_traj=1000,
+                total_frames=frames_per_batch * 100,
+            )
+
+        with pytest.raises(
+            ValueError,
+            match="If specified, `frames_per_batch_worker` should contain exactly one value per worker.",
+        ):
+            collector = MultiSyncDataCollector(
+                create_env_fn=[env_fn for _ in range(num_workers)],
+                policy=policy,
+                frames_per_batch_worker=frames_per_batch_worker[:-1],
+                max_frames_per_traj=1000,
+                total_frames=frames_per_batch * 100,
+            )
+
 
 class TestCollectorDevices:
     class DeviceLessEnv(EnvBase):
