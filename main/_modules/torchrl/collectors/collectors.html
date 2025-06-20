@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+6e38458) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+c275988) &#x25BC</span></a>
     </div>
     
 
@@ -2187,8 +2187,9 @@
 <span class="sd">            .. warning:: `policy_factory` is currently not compatible with multiprocessed data</span>
 <span class="sd">                collectors.</span>
 
-<span class="sd">        frames_per_batch (int): A keyword-only argument representing the</span>
-<span class="sd">            total number of elements in a batch.</span>
+<span class="sd">        frames_per_batch (int, Sequence[int]): A keyword-only argument representing the</span>
+<span class="sd">            total number of elements in a batch. If a sequence is provided, represents the number of elements in a</span>
+<span class="sd">            batch per worker. Total number of elements in a batch is then the sum over the sequence.</span>
 <span class="sd">        total_frames (int, optional): A keyword-only argument representing the</span>
 <span class="sd">            total number of frames returned by the collector</span>
 <span class="sd">            during its lifespan. If the ``total_frames`` is not divisible by</span>
@@ -2345,7 +2346,7 @@
         <span class="n">policy_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Callable</span><span class="p">]</span>
         <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[],</span> <span class="n">Callable</span><span class="p">]]</span>
         <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">frames_per_batch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">frames_per_batch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
         <span class="n">total_frames</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
         <span class="n">device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span> <span class="o">|</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">DEVICE_TYPING</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">storing_device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span> <span class="o">|</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">DEVICE_TYPING</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -2380,6 +2381,22 @@
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">closed</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="nb">isinstance</span><span class="p">(</span><span class="n">frames_per_batch</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">frames_per_batch</span><span class="p">)</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;If `frames_per_batch` is provided as a sequence, it should contain exactly one value per worker.&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">frames_per_batch</span><span class="p">)</span><span class="si">}</span><span class="s2"> values for </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="si">}</span><span class="s2"> workers.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_frames_per_batch</span> <span class="o">=</span> <span class="n">frames_per_batch</span>
+        <span class="n">total_frames_per_batch</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="nb">sum</span><span class="p">(</span><span class="n">frames_per_batch</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">frames_per_batch</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">)</span>
+            <span class="k">else</span> <span class="n">frames_per_batch</span>
+        <span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">set_truncated</span> <span class="o">=</span> <span class="n">set_truncated</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">num_sub_threads</span> <span class="o">=</span> <span class="n">num_sub_threads</span>
@@ -2498,11 +2515,11 @@
         <span class="k">if</span> <span class="n">total_frames</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">total_frames</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
             <span class="n">total_frames</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">remainder</span> <span class="o">=</span> <span class="n">total_frames</span> <span class="o">%</span> <span class="n">frames_per_batch</span>
+            <span class="n">remainder</span> <span class="o">=</span> <span class="n">total_frames</span> <span class="o">%</span> <span class="n">total_frames_per_batch</span>
             <span class="k">if</span> <span class="n">remainder</span> <span class="o">!=</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">RL_WARNINGS</span><span class="p">:</span>
                 <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;total_frames (</span><span class="si">{</span><span class="n">total_frames</span><span class="si">}</span><span class="s2">) is not exactly divisible by frames_per_batch (</span><span class="si">{</span><span class="n">frames_per_batch</span><span class="si">}</span><span class="s2">). &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;This means </span><span class="si">{</span><span class="n">frames_per_batch</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">remainder</span><span class="si">}</span><span class="s2"> additional frames will be collected. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;total_frames (</span><span class="si">{</span><span class="n">total_frames</span><span class="si">}</span><span class="s2">) is not exactly divisible by frames_per_batch (</span><span class="si">{</span><span class="n">total_frames_per_batch</span><span class="si">}</span><span class="s2">). &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;This means </span><span class="si">{</span><span class="n">total_frames_per_batch</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">remainder</span><span class="si">}</span><span class="s2"> additional frames will be collected. &quot;</span>
                     <span class="s2">&quot;To silence this message, set the environment variable RL_WARNINGS to False.&quot;</span>
                 <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span> <span class="o">=</span> <span class="p">(</span>
@@ -2513,7 +2530,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">max_frames_per_traj</span> <span class="o">=</span> <span class="p">(</span>
             <span class="nb">int</span><span class="p">(</span><span class="n">max_frames_per_traj</span><span class="p">)</span> <span class="k">if</span> <span class="n">max_frames_per_traj</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">0</span>
         <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">requested_frames_per_batch</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">frames_per_batch</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">requested_frames_per_batch</span> <span class="o">=</span> <span class="n">total_frames_per_batch</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">reset_when_done</span> <span class="o">=</span> <span class="n">reset_when_done</span>
         <span class="k">if</span> <span class="n">split_trajs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">split_trajs</span> <span class="o">=</span> <span class="kc">False</span>
@@ -2643,8 +2661,7 @@
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">storing_device</span><span class="p">,</span> <span class="n">policy_device</span><span class="p">,</span> <span class="n">env_device</span>
 
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">frames_per_batch_worker</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">frames_per_batch_worker</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span>
 
     <span class="nd">@property</span>
@@ -2703,7 +2720,7 @@
                     <span class="s2">&quot;create_env_kwargs&quot;</span><span class="p">:</span> <span class="n">env_fun_kwargs</span><span class="p">,</span>
                     <span class="s2">&quot;policy&quot;</span><span class="p">:</span> <span class="n">policy</span><span class="p">,</span>
                     <span class="s2">&quot;max_frames_per_traj&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_frames_per_traj</span><span class="p">,</span>
-                    <span class="s2">&quot;frames_per_batch&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch_worker</span><span class="p">,</span>
+                    <span class="s2">&quot;frames_per_batch&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch_worker</span><span class="p">(</span><span class="n">worker_idx</span><span class="o">=</span><span class="n">i</span><span class="p">),</span>
                     <span class="s2">&quot;reset_at_each_iter&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">reset_at_each_iter</span><span class="p">,</span>
                     <span class="s2">&quot;policy_device&quot;</span><span class="p">:</span> <span class="n">policy_device</span><span class="p">,</span>
                     <span class="s2">&quot;storing_device&quot;</span><span class="p">:</span> <span class="n">storing_device</span><span class="p">,</span>
@@ -3195,8 +3212,9 @@
             <span class="n">policy_or_weights</span><span class="o">=</span><span class="n">policy_or_weights</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
         <span class="p">)</span></div>
 
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">frames_per_batch_worker</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">frames_per_batch_worker</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">worker_idx</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_frames_per_batch</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_frames_per_batch</span><span class="p">[</span><span class="n">worker_idx</span><span class="p">]</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">requested_frames_per_batch</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">!=</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">RL_WARNINGS</span><span class="p">:</span>
             <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;frames_per_batch </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">requested_frames_per_batch</span><span class="si">}</span><span class="s2"> is not exactly divisible by the number of collector workers </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="si">}</span><span class="s2">,&quot;</span>
@@ -3277,9 +3295,9 @@
                 <span class="n">use_buffers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="n">idx</span> <span class="o">=</span> <span class="n">new_data</span>
-                    <span class="n">workers_frames</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
-                        <span class="n">workers_frames</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch_worker</span>
-                    <span class="p">)</span>
+                    <span class="n">workers_frames</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">workers_frames</span><span class="p">[</span>
+                        <span class="n">idx</span>
+                    <span class="p">]</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch_worker</span><span class="p">(</span><span class="n">worker_idx</span><span class="o">=</span><span class="n">idx</span><span class="p">)</span>
                     <span class="k">continue</span>
                 <span class="k">elif</span> <span class="n">j</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">use_buffers</span><span class="p">:</span>
                     <span class="k">try</span><span class="p">:</span>
@@ -3325,7 +3343,12 @@
 
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">yield</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_frames</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch_worker</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_frames</span> <span class="o">+=</span> <span class="nb">sum</span><span class="p">(</span>
+                    <span class="p">[</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch_worker</span><span class="p">(</span><span class="n">worker_idx</span><span class="p">)</span>
+                        <span class="k">for</span> <span class="n">worker_idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">)</span>
+                    <span class="p">]</span>
+                <span class="p">)</span>
                 <span class="k">continue</span>
 
             <span class="c1"># we have to correct the traj_ids to make sure that they don&#39;t overlap</span>
@@ -3578,8 +3601,7 @@
             <span class="n">policy_or_weights</span><span class="o">=</span><span class="n">policy_or_weights</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
         <span class="p">)</span></div>
 
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">frames_per_batch_worker</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">frames_per_batch_worker</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">requested_frames_per_batch</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_get_from_queue</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">]:</span>
@@ -3643,7 +3665,7 @@
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">split_trajs</span><span class="p">:</span>
                     <span class="n">out</span> <span class="o">=</span> <span class="n">split_trajectories</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;collector&quot;</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">worker_frames</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch_worker</span>
+                <span class="n">worker_frames</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch_worker</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_frames</span> <span class="o">+=</span> <span class="n">worker_frames</span>
             <span class="n">workers_frames</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">workers_frames</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">+</span> <span class="n">worker_frames</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">postprocs</span><span class="p">:</span>
