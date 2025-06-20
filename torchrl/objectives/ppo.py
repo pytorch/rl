@@ -29,7 +29,7 @@ from tensordict.nn import (
 from tensordict.utils import NestedKey
 from torch import distributions as d
 
-from torchrl._utils import _standardize, logger as torchrl_logger
+from torchrl._utils import _standardize, logger as torchrl_logger, VERBOSE
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
@@ -564,14 +564,16 @@ class PPOLoss(LossModule):
             entropy = dist.entropy()
             if not entropy.isfinite().all():
                 del entropy
-                torchrl_logger.info(
-                    "Entropy is not finite. Using Monte Carlo sampling."
-                )
+                if VERBOSE:
+                    torchrl_logger.info(
+                        "Entropy is not finite. Using Monte Carlo sampling."
+                    )
                 raise NotImplementedError
         except NotImplementedError:
-            torchrl_logger.warn(
-                f"Entropy not implemented for {type(dist)} or is not finite. Using Monte Carlo sampling."
-            )
+            if VERBOSE:
+                torchrl_logger.warning(
+                    f"Entropy not implemented for {type(dist)} or is not finite. Using Monte Carlo sampling."
+                )
             if getattr(dist, "has_rsample", False):
                 x = dist.rsample((self.samples_mc_entropy,))
             else:
