@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+e1e15d6) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+77dbc6c) &#x25BC</span></a>
     </div>
     
 
@@ -434,11 +434,17 @@
 <dt class="sig sig-object py" id="torchrl.data.replay_buffers.PrioritizedSliceSampler">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.data.replay_buffers.</span></span><span class="sig-name descname"><span class="pre">PrioritizedSliceSampler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">max_capacity</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1e-08</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.7)"><span class="pre">torch.dtype</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">torch.float32</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reduction</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'max'</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_slices</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">slice_len</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">traj_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ends</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><span class="pre">torch.Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trajectories</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><span class="pre">torch.Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_values</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">truncated_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">('next',</span> <span class="pre">'truncated')</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strict_length</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compile</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">dict</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">span</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_priority_within_buffer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/samplers.html#PrioritizedSliceSampler"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.replay_buffers.PrioritizedSliceSampler" title="Permalink to this definition">¶</a></dt>
 <dd><p>Samples slices of data along the first dimension, given start and stop signals, using prioritized sampling.</p>
-<dl class="simple">
-<dt>This class samples sub-trajectories with replacement following a priority weighting presented in “Schaul, T.; Quan, J.; Antonoglou, I.; and Silver, D. 2015.</dt><dd><p>Prioritized experience replay.”
+<p>This class combines trajectory sampling with Prioritized Experience Replay (PER) as presented in
+“Schaul, T.; Quan, J.; Antonoglou, I.; and Silver, D. 2015. Prioritized experience replay.”
 (<a class="reference external" href="https://arxiv.org/abs/1511.05952">https://arxiv.org/abs/1511.05952</a>)</p>
-</dd>
-</dl>
+<p><strong>Core Idea</strong>: Instead of sampling trajectory slices uniformly, this sampler prioritizes
+trajectory start points based on the importance of the transitions at those positions.
+This allows focusing learning on the most informative parts of trajectories.</p>
+<p><strong>How it works</strong>:
+1. Each transition is assigned a priority based on its TD error: <span class="math notranslate nohighlight">\(p_i = |\\delta_i| + \\epsilon\)</span>
+2. Trajectory start points are sampled with probability: <span class="math notranslate nohighlight">\(P(i) = \frac{p_i^\alpha}{\\sum_j p_j^\alpha}\)</span>
+3. Importance sampling weights correct for bias: <span class="math notranslate nohighlight">\(w_i = (N \\cdot P(i))^{-\beta}\)</span>
+4. Complete trajectory slices are extracted from the sampled start points</p>
 <p>For more info see <a class="reference internal" href="torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler" title="torchrl.data.replay_buffers.samplers.SliceSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code></a> and <a class="reference internal" href="torchrl.data.replay_buffers.PrioritizedSampler.html#torchrl.data.replay_buffers.PrioritizedSampler" title="torchrl.data.replay_buffers.samplers.PrioritizedSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">PrioritizedSampler</span></code></a>.</p>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
@@ -452,18 +458,60 @@ Currently, it is the user responsibility to aggregate priorities across items of
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>alpha</strong> (<code class="xref py py-obj docutils literal notranslate"><span class="pre">float</span></code>) – exponent α determines how much prioritization is used,
-with α = 0 corresponding to the uniform case.</p></li>
-<li><p><strong>beta</strong> (<code class="xref py py-obj docutils literal notranslate"><span class="pre">float</span></code>) – importance sampling negative exponent.</p></li>
-<li><p><strong>eps</strong> (<code class="xref py py-obj docutils literal notranslate"><span class="pre">float</span></code>, optional) – delta added to the priorities to ensure that the buffer
-does not contain null priorities. Defaults to 1e-8.</p></li>
+<li><p><strong>max_capacity</strong> (<em>int</em>) – maximum capacity of the buffer.</p></li>
+<li><p><strong>alpha</strong> (<code class="xref py py-obj docutils literal notranslate"><span class="pre">float</span></code>) – exponent <span class="math notranslate nohighlight">\(\alpha\)</span> determines how much prioritization is used.
+- <span class="math notranslate nohighlight">\(\alpha = 0\)</span>: uniform sampling of trajectory start points
+- <span class="math notranslate nohighlight">\(\alpha = 1\)</span>: full prioritization based on TD error magnitude at start points
+- Typical values: 0.4-0.7 for balanced prioritization
+- Higher <span class="math notranslate nohighlight">\(\alpha\)</span> means more aggressive prioritization of high-error trajectory regions</p></li>
+<li><p><strong>beta</strong> (<code class="xref py py-obj docutils literal notranslate"><span class="pre">float</span></code>) – importance sampling negative exponent <span class="math notranslate nohighlight">\(\beta\)</span>.
+- <span class="math notranslate nohighlight">\(\beta\)</span> controls the correction for the bias introduced by prioritization
+- <span class="math notranslate nohighlight">\(\beta = 0\)</span>: no correction (biased towards high-priority trajectory regions)
+- <span class="math notranslate nohighlight">\(\beta = 1\)</span>: full correction (unbiased but potentially unstable)
+- Typical values: start at 0.4-0.6 and anneal to 1.0 during training
+- Lower <span class="math notranslate nohighlight">\(\beta\)</span> early in training provides stability, higher <span class="math notranslate nohighlight">\(\beta\)</span> later reduces bias</p></li>
+<li><p><strong>eps</strong> (<code class="xref py py-obj docutils literal notranslate"><span class="pre">float</span></code>, optional) – small constant added to priorities to ensure
+no transition has zero priority. This prevents trajectory regions from never
+being sampled. Defaults to 1e-8.</p></li>
 <li><p><strong>reduction</strong> (<em>str</em><em>, </em><em>optional</em>) – the reduction method for multidimensional
 tensordicts (i.e., stored trajectory). Can be one of “max”, “min”,
 “median” or “mean”.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><ul class="simple">
+</dl>
+<p><strong>Parameter Guidelines</strong>:
+- <strong>:math:`alpha` (alpha)</strong>: Controls how much to prioritize high-error trajectory regions</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>0.4-0.7: Good balance between learning speed and stability</p></li>
+<li><p>1.0: Maximum prioritization (may be unstable)</p></li>
+<li><p>0.0: Uniform sampling (no prioritization benefit)</p></li>
+</ul>
+</div></blockquote>
+<ul class="simple">
+<li><dl class="simple">
+<dt><strong>:math:`beta` (beta)</strong>: Controls importance sampling correction</dt><dd><ul>
+<li><p>Start at 0.4-0.6 for training stability</p></li>
+<li><p>Anneal to 1.0 over training to reduce bias</p></li>
+<li><p>Lower values = more stable but biased</p></li>
+<li><p>Higher values = less biased but potentially unstable</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt><strong>:math:`\epsilon`</strong>: Small constant to prevent zero priorities</dt><dd><ul>
+<li><p>1e-8: Good default value</p></li>
+<li><p>Too small: may cause numerical issues</p></li>
+<li><p>Too large: reduces prioritization effect</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+</ul>
+<dl class="field-list simple">
+<dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
 <li><p><strong>num_slices</strong> (<em>int</em>) – the number of slices to be sampled. The batch-size
 must be greater or equal to the <code class="docutils literal notranslate"><span class="pre">num_slices</span></code> argument. Exclusive
 with <code class="docutils literal notranslate"><span class="pre">slice_len</span></code>.</p></li>
@@ -668,6 +716,7 @@ the 1d size of the sum_tree and min_tree. Only required whenever
          <script src="../../_static/_sphinx_javascript_frameworks_compat.js"></script>
          <script src="../../_static/doctools.js"></script>
          <script src="../../_static/design-tabs.js"></script>
+         <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
      
 
   

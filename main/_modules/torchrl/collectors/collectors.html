@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+e1e15d6) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+77dbc6c) &#x25BC</span></a>
     </div>
     
 
@@ -774,8 +774,8 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">_iterator</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
             <span class="n">out</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_iterator</span><span class="p">)</span>
             <span class="c1"># if any, we don&#39;t want the device ref to be passed in distributed settings</span>
-            <span class="k">if</span> <span class="n">out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">out</span><span class="o">.</span><span class="n">clear_device_</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="s2">&quot;cpu&quot;</span><span class="p">):</span>
+                <span class="n">out</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span><span class="o">.</span><span class="n">clear_device_</span><span class="p">()</span>
             <span class="k">return</span> <span class="n">out</span>
         <span class="k">except</span> <span class="ne">StopIteration</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">None</span>
@@ -1314,7 +1314,10 @@
             <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">postproc</span><span class="p">,</span> <span class="s2">&quot;to&quot;</span><span class="p">)</span>
             <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span>
         <span class="p">):</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">postproc</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span><span class="p">)</span>
+            <span class="n">postproc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">postproc</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">postproc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">postproc</span> <span class="ow">and</span> <span class="n">postproc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">postproc</span> <span class="o">=</span> <span class="n">postproc</span>
+
         <span class="k">if</span> <span class="n">frames_per_batch</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_env</span> <span class="o">!=</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">RL_WARNINGS</span><span class="p">:</span>
             <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;frames_per_batch (</span><span class="si">{</span><span class="n">frames_per_batch</span><span class="si">}</span><span class="s2">) is not exactly divisible by the number of batched environments (</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_env</span><span class="si">}</span><span class="s2">), &quot;</span>
@@ -1675,9 +1678,9 @@
                     <span class="k">yield</span>
                     <span class="k">continue</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_increment_frames</span><span class="p">(</span><span class="n">tensordict_out</span><span class="o">.</span><span class="n">numel</span><span class="p">())</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
-                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Collector: postproc.&quot;</span><span class="p">)</span>
                 <span class="n">tensordict_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_postproc</span><span class="p">(</span><span class="n">tensordict_out</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Collector: postproc done.&quot;</span><span class="p">)</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_same_td</span><span class="p">:</span>
                     <span class="c1"># This is used with multiprocessed collectors to use the buffers</span>
                     <span class="c1"># stored in the tensordict.</span>

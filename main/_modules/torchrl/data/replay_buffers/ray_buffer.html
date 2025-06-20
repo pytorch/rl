@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+e1e15d6) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+77dbc6c) &#x25BC</span></a>
     </div>
     
 
@@ -476,9 +476,12 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A Ray implementation of the Replay Buffer that can be extended and sampled remotely.</span>
 
 <span class="sd">    Keyword Args:</span>
+<span class="sd">        replay_buffer_cls (type[ReplayBuffer], optional): the class to use for the replay buffer.</span>
+<span class="sd">            Defaults to :class:`~torchrl.data.ReplayBuffer`.</span>
 <span class="sd">        ray_init_config (dict[str, Any], optiona): keyword arguments to pass to `ray.init()`.</span>
 <span class="sd">        remote_config (dict[str, Any], optiona): keyword arguments to pass to `cls.as_remote()`.</span>
 <span class="sd">            Defaults to `torchrl.collectors.distributed.ray.DEFAULT_REMOTE_CLASS_CONFIG`.</span>
+<span class="sd">        **kwargs: keyword arguments to pass to the replay buffer class.</span>
 
 <span class="sd">    .. seealso:: :class:`~torchrl.data.ReplayBuffer` for a list of other keyword arguments.</span>
 
@@ -541,6 +544,7 @@
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="o">*</span><span class="n">args</span><span class="p">,</span>
+        <span class="n">replay_buffer_cls</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n">ReplayBuffer</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="p">,</span>
         <span class="n">ray_init_config</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">remote_config</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
@@ -556,7 +560,13 @@
                 <span class="n">ray_init_config</span> <span class="o">=</span> <span class="n">DEFAULT_RAY_INIT_CONFIG</span>
             <span class="n">ray</span><span class="o">.</span><span class="n">init</span><span class="p">(</span><span class="o">**</span><span class="n">ray_init_config</span><span class="p">)</span>
 
-        <span class="n">remote_cls</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="o">.</span><span class="n">as_remote</span><span class="p">(</span><span class="n">remote_config</span><span class="p">)</span><span class="o">.</span><span class="n">remote</span>
+        <span class="n">remote_cls</span> <span class="o">=</span> <span class="n">replay_buffer_cls</span><span class="o">.</span><span class="n">as_remote</span><span class="p">(</span><span class="n">remote_config</span><span class="p">)</span><span class="o">.</span><span class="n">remote</span>
+        <span class="c1"># We can detect if the buffer has a GPU allocated, if not</span>
+        <span class="c1">#  we&#39;ll make sure that the data is sent to CPU when needed.</span>
+        <span class="k">if</span> <span class="n">remote_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">has_gpu</span> <span class="o">=</span> <span class="n">remote_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;num_gpus&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">has_gpu</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_rb</span> <span class="o">=</span> <span class="n">remote_cls</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
 <div class="viewcode-block" id="RayReplayBuffer.close"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer.close">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -580,6 +590,10 @@
         <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">pending_task</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="RayReplayBuffer.extend"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer.extend">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">extend</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">has_gpu</span><span class="p">:</span>
+            <span class="c1"># Move the data to GPU</span>
+            <span class="n">args</span> <span class="o">=</span> <span class="p">[</span><span class="n">arg</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">args</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="s2">&quot;to&quot;</span><span class="p">)]</span>
+            <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="s2">&quot;to&quot;</span><span class="p">)}</span>
         <span class="n">pending_task</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rb</span><span class="o">.</span><span class="n">extend</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">pending_task</span><span class="p">)</span></div>
 

@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+e1e15d6) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+77dbc6c) &#x25BC</span></a>
     </div>
     
 
@@ -628,7 +628,10 @@
                 <span class="k">if</span> <span class="n">lh</span><span class="o">.</span><span class="n">role</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_role</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                         <span class="s2">&quot;The role received in the last block parsed from the policy &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;output does not match the expected policy role: received </span><span class="si">{</span><span class="n">lh</span><span class="o">.</span><span class="n">role</span><span class="si">}</span><span class="s2"> but expected </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_role</span><span class="si">}</span><span class="s2">.&quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;output does not match the expected policy role: received </span><span class="si">{</span><span class="n">lh</span><span class="o">.</span><span class="n">role</span><span class="si">}</span><span class="s2"> but expected </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_role</span><span class="si">}</span><span class="s2">.</span><span class="se">\n</span><span class="s2">&quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;Parsed input: </span><span class="si">{</span><span class="n">text</span><span class="si">=}</span><span class="se">\n</span><span class="s2">&quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;Parsed history: </span><span class="si">{</span><span class="n">parsed_history</span><span class="si">=}</span><span class="se">\n</span><span class="s2">&quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;Final element: </span><span class="si">{</span><span class="n">local_history</span><span class="si">=}</span><span class="s2">&quot;</span>
                     <span class="p">)</span>
         <span class="c1"># Append history item</span>
         <span class="n">history</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">local_history</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>

@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+e1e15d6) &#x25BC</span></a>
+      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+77dbc6c) &#x25BC</span></a>
     </div>
     
 
@@ -426,15 +426,25 @@
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">contextlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">gc</span>
+
 <span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">copy</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">NestedKey</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">unravel_key</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">NestedKey</span><span class="p">,</span> <span class="n">set_list_to_stack</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">unravel_key</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProbabilisticTensorDictModule</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_seq_of_nested_key</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_zip_strict</span><span class="p">,</span> <span class="n">is_seq_of_nested_key</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">Unbounded</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.llm.chat</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span><span class="p">,</span> <span class="n">Transform</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.transforms.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_set_missing_tolerance</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm.policies.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">CategoricalSequential</span>
+
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">transformers</span>
+<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+    <span class="n">transformers</span> <span class="o">=</span> <span class="kc">None</span>
 
 
 <div class="viewcode-block" id="KLRewardTransform"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">KLRewardTransform</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
@@ -563,8 +573,8 @@
                 <span class="sa">f</span><span class="s2">&quot;action_key is required. Please set a parent for the </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> to recover the action keys automatically, &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;or pass the action_key argument directly to </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> constructor.&quot;</span>
             <span class="p">)</span>
-        <span class="n">action</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">action_key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">action</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">response_txt</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">action_key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">response_txt</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">missing_tolerance</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;Action with key </span><span class="si">{</span><span class="n">action_key</span><span class="si">}</span><span class="s2"> not found data </span><span class="si">{</span><span class="n">tensordict</span><span class="si">}</span><span class="s2">&quot;</span>
@@ -691,6 +701,232 @@
         <span class="n">observation_spec</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span> <span class="o">=</span> <span class="n">reward_spec</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
 
         <span class="k">return</span> <span class="n">output_spec</span></div></div>
+
+
+<div class="viewcode-block" id="RetrieveLogProb"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.RetrieveLogProb.html#torchrl.envs.llm.transforms.RetrieveLogProb">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">RetrieveLogProb</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A transform to retrieve the log-probs of a text given a reference model.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        actor (CategoricalSequential): the reference model.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        history_key (NestedKey): the key where the history is stored. Defaults to `&quot;history&quot;`.</span>
+<span class="sd">        log_prob_key (NestedKey): the key where the log-probs are stored. Defaults to `&quot;ref_log_prob&quot;`.</span>
+<span class="sd">        assistant_only (bool): whether to only retrieve the log-probs of the assistant tokens (i.e., steps of history</span>
+<span class="sd">            where the role is `&quot;assistant&quot;`). Defaults to `False`.</span>
+
+<span class="sd">            .. note:: The template must accommodate the `return_assistant_tokens_mask` keyword argument.</span>
+<span class="sd">                This may not be the case for all templates. In this case, you can pass a custom template to the `apply_chat_template` method</span>
+<span class="sd">                via the `tokenizer_kwargs` argument: `tokenizer_kwargs = {&quot;chat_template_name&quot;: &quot;qwen&quot;}` or `tokenizer_kwargs = {&quot;chat_template&quot;: my_template}.</span>
+
+<span class="sd">        tokenizer_kwargs (dict): the keyword arguments to pass to the tokenizer to be used to apply the chat template to the history when `assistant_only` is `True`.</span>
+<span class="sd">            To control the tokenization in the actor, pass the tokenizer kwargs to the actor constructor.</span>
+<span class="sd">            Defaults to `{&quot;return_assistant_tokens_mask&quot;: True, &quot;tokenize&quot;: True, &quot;return_tensors&quot;: &quot;pt&quot;, &quot;padding&quot;: True, &quot;add_generation_prompt&quot;: False}`.</span>
+<span class="sd">        tokenizer (transformers.AutoTokenizer): the tokenizer to be used to tokenize the input and compute the assitant mask. If not provided, the tokenizer will be inferred from the `actor`.</span>
+<span class="sd">        detach (bool): whether to exclude the log-probs from the gradient computation. Defaults to `True`.</span>
+<span class="sd">        device (torch.device): the device to use for tensor creation. Defaults to `None`.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data.llm.chat import History, _CHAT_TEMPLATES</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.modules.llm import TransformersWrapper</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.objectives.llm.sft import SFTLoss</span>
+<span class="sd">        &gt;&gt;&gt; from transformers import AutoTokenizer, OPTConfig, OPTForCausalLM</span>
+<span class="sd">        &gt;&gt;&gt; from tensordict import TensorDict, lazy_stack, set_list_to_stack</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; set_list_to_stack(True).set()</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Create chat data</span>
+<span class="sd">        &gt;&gt;&gt; chats = [</span>
+<span class="sd">        ...     [</span>
+<span class="sd">        ...         {&quot;role&quot;: &quot;system&quot;, &quot;content&quot;: &quot;You are a helpful assistant.&quot;},</span>
+<span class="sd">        ...         {&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;Hello, how are you?&quot;},</span>
+<span class="sd">        ...         {&quot;role&quot;: &quot;assistant&quot;, &quot;content&quot;: &quot;I&#39;m doing well, thank you!&quot;},</span>
+<span class="sd">        ...     ],</span>
+<span class="sd">        ...     [</span>
+<span class="sd">        ...         {&quot;role&quot;: &quot;system&quot;, &quot;content&quot;: &quot;You are a helpful assistant.&quot;},</span>
+<span class="sd">        ...         {&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;What&#39;s the weather like?&quot;},</span>
+<span class="sd">        ...         {&quot;role&quot;: &quot;assistant&quot;, &quot;content&quot;: &quot;I can&#39;t check the weather for you.&quot;},</span>
+<span class="sd">        ...     ],</span>
+<span class="sd">        ... ]</span>
+<span class="sd">        &gt;&gt;&gt; history = History.from_chats(chats)</span>
+<span class="sd">        &gt;&gt;&gt; print(f&quot;Created history with shape: {history.shape}&quot;)</span>
+<span class="sd">        Created history with shape: torch.Size([2, 3])</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Setup tokenizer and model</span>
+<span class="sd">        &gt;&gt;&gt; tokenizer = AutoTokenizer.from_pretrained(&quot;facebook/opt-125m&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; tokenizer.pad_token = tokenizer.eos_token</span>
+<span class="sd">        &gt;&gt;&gt; tokenizer.chat_template = _CHAT_TEMPLATES[&quot;chatml_format&quot;]</span>
+<span class="sd">        &gt;&gt;&gt; model = OPTForCausalLM(OPTConfig()).eval()</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Create training and reference policies</span>
+<span class="sd">        &gt;&gt;&gt; policy_train = TransformersWrapper(</span>
+<span class="sd">        ...     model,</span>
+<span class="sd">        ...     tokenizer=tokenizer,</span>
+<span class="sd">        ...     generate=False,</span>
+<span class="sd">        ...     from_text=True,</span>
+<span class="sd">        ...     chat_template_name=&quot;qwen&quot;,</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; policy_ref = TransformersWrapper(</span>
+<span class="sd">        ...     model,</span>
+<span class="sd">        ...     tokenizer=tokenizer,</span>
+<span class="sd">        ...     generate=False,</span>
+<span class="sd">        ...     from_text=True,</span>
+<span class="sd">        ...     return_log_probs=True,</span>
+<span class="sd">        ...     chat_template_name=&quot;qwen&quot;,</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Create the RetrieveLogProb transform</span>
+<span class="sd">        &gt;&gt;&gt; transform = RetrieveLogProb(</span>
+<span class="sd">        ...     policy_ref,</span>
+<span class="sd">        ...     assistant_only=True,</span>
+<span class="sd">        ...     tokenizer_kwargs={&quot;chat_template_name&quot;: &quot;qwen&quot;},</span>
+<span class="sd">        ...     tokenizer=tokenizer,</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Prepare data</span>
+<span class="sd">        &gt;&gt;&gt; text = history[:, :-1].apply_chat_template(</span>
+<span class="sd">        ...     tokenizer=tokenizer, chat_template_name=&quot;qwen&quot;, add_generation_prompt=True</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; text_response = history.apply_chat_template(</span>
+<span class="sd">        ...     tokenizer=tokenizer, chat_template_name=&quot;qwen&quot;, add_generation_prompt=False</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; text_response = [</span>
+<span class="sd">        ...     txt[len(txt_start):] for txt, txt_start in zip(text_response, text)</span>
+<span class="sd">        ... ]</span>
+<span class="sd">        &gt;&gt;&gt; td = TensorDict(</span>
+<span class="sd">        ...     text=text,</span>
+<span class="sd">        ...     text_response=text_response,</span>
+<span class="sd">        ...     history=history,</span>
+<span class="sd">        ...     next=TensorDict(</span>
+<span class="sd">        ...         reward=torch.randn(2, 1),</span>
+<span class="sd">        ...         done=torch.zeros(2, dtype=torch.bool),</span>
+<span class="sd">        ...         history=history,</span>
+<span class="sd">        ...     ),</span>
+<span class="sd">        ...     batch_size=(2,),</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; data = lazy_stack(list(td.unbind(0)))</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Apply the transform to get reference log probabilities</span>
+<span class="sd">        &gt;&gt;&gt; data = transform(data)</span>
+<span class="sd">        &gt;&gt;&gt; # You can get a padded tensor for batching:</span>
+<span class="sd">        &gt;&gt;&gt; ref_log_probs = data.get((&quot;next&quot;, &quot;ref_log_prob&quot;), as_padded_tensor=True)</span>
+<span class="sd">        &gt;&gt;&gt; print(f&quot;Type: {type(ref_log_probs)}, Length: {len(ref_log_probs)}&quot;)</span>
+<span class="sd">        Type: &lt;class &#39;torch.Tensor&#39;&gt;, Length: 2</span>
+<span class="sd">        &gt;&gt;&gt; print(f&quot;Example shapes: {[x.shape for x in ref_log_probs]}&quot;)</span>
+<span class="sd">        Example shapes: [torch.Size([35]), torch.Size([35])]</span>
+<span class="sd">        &gt;&gt;&gt; print(ref_log_probs.shape)  # (batch, max_seq_len)</span>
+<span class="sd">        torch.Size([2, 35])</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Use with SFTLoss for KL regularization</span>
+<span class="sd">        &gt;&gt;&gt; loss = SFTLoss(</span>
+<span class="sd">        ...     actor_network=policy_train,</span>
+<span class="sd">        ...     tokenizer=tokenizer,</span>
+<span class="sd">        ...     reduction=&quot;mean&quot;,</span>
+<span class="sd">        ...     normalize_by_seq_length=True,</span>
+<span class="sd">        ...     kl_to_ref_coeff=0.1,</span>
+<span class="sd">        ...     tokenizer_kwargs={&quot;chat_template_name&quot;: &quot;qwen&quot;},</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; loss_vals = loss(data)</span>
+<span class="sd">        &gt;&gt;&gt; print(f&quot;SFT Loss: {loss_vals.loss_sft.item():.4f}&quot;)</span>
+<span class="sd">        SFT Loss: 10.7856</span>
+<span class="sd">        &gt;&gt;&gt; print(f&quot;KL to Reference Loss: {loss_vals.loss_kl_to_ref.item():.4f}&quot;)</span>
+<span class="sd">        KL to Reference Loss: 0.0000</span>
+<span class="sd">        &gt;&gt;&gt; print(f&quot;Total Loss: {loss_vals.sum(reduce=True).item():.4f}&quot;)</span>
+<span class="sd">        Total Loss: 10.7856</span>
+
+<span class="sd">    Note:</span>
+<span class="sd">        By default, the log-probabilities are stored as a list of tensors (one per sample, with variable length).</span>
+<span class="sd">        Use `as_padded_tensor=True` in `.get()` to obtain a batchable tensor (with padding).</span>
+<span class="sd">        The reference log probabilities are computed only for assistant tokens when `assistant_only=True`.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">actor</span><span class="p">:</span> <span class="n">CategoricalSequential</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">history_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">log_prob_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;ref_log_prob&quot;</span><span class="p">,</span>
+        <span class="n">assistant_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">tokenizer_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">detach</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">tokenizer</span><span class="p">:</span> <span class="n">transformers</span><span class="o">.</span><span class="n">AutoTokenizer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">history_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">history_key</span> <span class="o">=</span> <span class="s2">&quot;history&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">history_key</span> <span class="o">=</span> <span class="n">history_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_prob_key</span> <span class="o">=</span> <span class="n">log_prob_key</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="n">history_key</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="n">log_prob_key</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">actor</span> <span class="o">=</span> <span class="n">actor</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">actor</span><span class="p">,</span> <span class="s2">&quot;return_log_probs&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;The actor must have `return_log_probs=True` to use the `AssistantLogProb` transform.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">actor</span><span class="p">,</span> <span class="s2">&quot;generate&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;The actor must have `generate=False` to use the `AssistantLogProb` transform.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">actor</span><span class="p">,</span> <span class="s2">&quot;from_text&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;The actor must have `from_text=True` to use the `AssistantLogProb` transform. If `from_text=False` is required, please file an issue on GitHub.&quot;</span>
+            <span class="p">)</span>
+        <span class="c1"># if getattr(self.actor, &quot;tokenizer_kwargs&quot;, {}).get(&quot;add_generation_prompt&quot;, True):</span>
+        <span class="c1"># raise ValueError(&quot;The actor must have `tokenizer_kwargs[&#39;add_generation_prompt&#39;]=False` to use the `AssistantLogProb` transform.&quot;)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assistant_only</span> <span class="o">=</span> <span class="n">assistant_only</span>
+        <span class="k">if</span> <span class="n">tokenizer_kwargs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">tokenizer_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">tokenizer_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;return_assistant_tokens_mask&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="n">tokenizer_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;tokenize&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="n">tokenizer_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;return_tensors&quot;</span><span class="p">,</span> <span class="s2">&quot;pt&quot;</span><span class="p">)</span>
+        <span class="n">tokenizer_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;padding&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="n">tokenizer_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;add_generation_prompt&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer_kwargs</span> <span class="o">=</span> <span class="n">tokenizer_kwargs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span> <span class="o">=</span> <span class="n">tokenizer</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">detach</span> <span class="o">=</span> <span class="n">detach</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">device</span>
+
+<div class="viewcode-block" id="RetrieveLogProb.forward"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.transforms.RetrieveLogProb.html#torchrl.envs.llm.transforms.RetrieveLogProb.forward">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="n">next_td</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">next_td</span><span class="p">)</span></div>
+
+    <span class="nd">@set_list_to_stack</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_step</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="n">td</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">history_key</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+        <span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">(),</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">detach</span> <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">():</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">history_key</span><span class="p">))</span>
+            <span class="n">td</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">actor</span><span class="p">,</span> <span class="s2">&quot;log_prob_key&quot;</span><span class="p">,</span> <span class="s2">&quot;log_probs&quot;</span><span class="p">)))</span>
+            <span class="n">td</span><span class="o">.</span><span class="n">rename_key_</span><span class="p">(</span>
+                <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">actor</span><span class="p">,</span> <span class="s2">&quot;log_prob_key&quot;</span><span class="p">,</span> <span class="s2">&quot;log_probs&quot;</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_prob_key</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
+                <span class="n">gc</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">empty_cache</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">assistant_only</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">():</span>
+                <span class="c1"># Get assistant mask</span>
+                <span class="n">history</span><span class="p">:</span> <span class="n">History</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">history_key</span><span class="p">)</span>
+                <span class="n">proc</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
+                    <span class="n">tokenizer</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">actor</span><span class="o">.</span><span class="n">tokenizer</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span> <span class="ow">is</span> <span class="kc">None</span>
+                    <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">,</span>
+                    <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer_kwargs</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">assistant_masks</span> <span class="o">=</span> <span class="n">proc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;assistant_masks&quot;</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="n">log_probs</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">log_prob_key</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="n">log_probs</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="n">lp</span><span class="p">[</span><span class="n">mask</span><span class="o">.</span><span class="n">bool</span><span class="p">()]</span>
+                    <span class="k">for</span> <span class="n">lp</span><span class="p">,</span> <span class="n">mask</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="n">log_probs</span><span class="p">,</span> <span class="n">assistant_masks</span><span class="p">)</span>
+                <span class="p">]</span>
+                <span class="n">td</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">log_prob_key</span><span class="p">,</span> <span class="n">log_probs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">td</span><span class="p">)</span></div>
 </pre></div>
 
              </article>

@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+e1e15d6) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+77dbc6c) &#x25BC</span></a>
     </div>
     
 
@@ -707,7 +707,7 @@ Defaults to <cite>torchrl.collectors.distributed.ray.DEFAULT_REMOTE_CLASS_CONFIG
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.data.ReplayBuffer.extend">
-<span class="sig-name descname"><span class="pre">extend</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><span class="pre">Tensor</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.extend"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.ReplayBuffer.extend" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">extend</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">update_priority</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><span class="pre">torch.Tensor</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.extend"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.ReplayBuffer.extend" title="Permalink to this definition">¶</a></dt>
 <dd><p>Extends the replay buffer with one or more elements contained in an iterable.</p>
 <p>If present, the inverse transforms will be called.`</p>
 <dl class="field-list simple">
@@ -715,8 +715,12 @@ Defaults to <cite>torchrl.collectors.distributed.ray.DEFAULT_REMOTE_CLASS_CONFIG
 <dd class="field-odd"><p><strong>data</strong> (<em>iterable</em>) – collection of data to be added to the replay
 buffer.</p>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Indices of the data added to the replay buffer.</p>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>update_priority</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to update the priority of the data. Defaults to True.
+Without effect in this class. See <a class="reference internal" href="torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer.extend" title="torchrl.data.TensorDictReplayBuffer.extend"><code class="xref py py-meth docutils literal notranslate"><span class="pre">extend()</span></code></a> for more details.</p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Indices of the data added to the replay buffer.</p>
 </dd>
 </dl>
 <div class="admonition warning">

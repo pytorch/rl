@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+e1e15d6) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+77dbc6c) &#x25BC</span></a>
     </div>
     
 
@@ -432,14 +432,17 @@
 <h1>RayReplayBuffer<a class="headerlink" href="#rayreplaybuffer" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.data.RayReplayBuffer">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.data.</span></span><span class="sig-name descname"><span class="pre">RayReplayBuffer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ray_init_config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">remote_config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/ray_buffer.html#RayReplayBuffer"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.RayReplayBuffer" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.data.</span></span><span class="sig-name descname"><span class="pre">RayReplayBuffer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">*args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">replay_buffer_cls:</span> <span class="pre">type[ReplayBuffer]</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">&lt;class</span> <span class="pre">'torchrl.data.replay_buffers.replay_buffers.ReplayBuffer'&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ray_init_config:</span> <span class="pre">dict[str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Any]</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">remote_config:</span> <span class="pre">dict[str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Any]</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/ray_buffer.html#RayReplayBuffer"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.RayReplayBuffer" title="Permalink to this definition">¶</a></dt>
 <dd><p>A Ray implementation of the Replay Buffer that can be extended and sampled remotely.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
+<li><p><strong>replay_buffer_cls</strong> (<a class="reference internal" href="torchrl.data.BinaryToDecimal.html#torchrl.data.BinaryToDecimal.type" title="torchrl.data.BinaryToDecimal.type"><em>type</em></a><em>[</em><a class="reference internal" href="torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer" title="torchrl.data.ReplayBuffer"><em>ReplayBuffer</em></a><em>]</em><em>, </em><em>optional</em>) – the class to use for the replay buffer.
+Defaults to <a class="reference internal" href="torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer" title="torchrl.data.ReplayBuffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBuffer</span></code></a>.</p></li>
 <li><p><strong>ray_init_config</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>Any</em><em>]</em><em>, </em><em>optiona</em>) – keyword arguments to pass to <cite>ray.init()</cite>.</p></li>
 <li><p><strong>remote_config</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>Any</em><em>]</em><em>, </em><em>optiona</em>) – keyword arguments to pass to <cite>cls.as_remote()</cite>.
 Defaults to <cite>torchrl.collectors.distributed.ray.DEFAULT_REMOTE_CLASS_CONFIG</cite>.</p></li>
+<li><p><strong>**kwargs</strong> – keyword arguments to pass to the replay buffer class.</p></li>
 </ul>
 </dd>
 </dl>
@@ -630,8 +633,12 @@ Defaults to <cite>torchrl.collectors.distributed.ray.DEFAULT_REMOTE_CLASS_CONFIG
 <dd class="field-odd"><p><strong>data</strong> (<em>iterable</em>) – collection of data to be added to the replay
 buffer.</p>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Indices of the data added to the replay buffer.</p>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>update_priority</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to update the priority of the data. Defaults to True.
+Without effect in this class. See <a class="reference internal" href="torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer.extend" title="torchrl.data.TensorDictReplayBuffer.extend"><code class="xref py py-meth docutils literal notranslate"><span class="pre">extend()</span></code></a> for more details.</p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Indices of the data added to the replay buffer.</p>
 </dd>
 </dl>
 <div class="admonition warning">

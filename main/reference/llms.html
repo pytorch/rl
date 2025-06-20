@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../versions.html"><span style="font-size:110%">main (0.9.0+e1e15d6) &#x25BC</span></a>
+      <a href="../../versions.html"><span style="font-size:110%">main (0.9.0+77dbc6c) &#x25BC</span></a>
     </div>
     
 
@@ -650,28 +650,31 @@ transforms).</p>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform" title="torchrl.envs.llm.transforms.KLRewardTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KLRewardTransform</span></code></a>(actor[, coef, in_keys, ...])</p></td>
 <td><p>A transform to add a KL[pi_current||pi_0] correction term to the reward.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform" title="torchrl.envs.llm.transforms.MCPToolTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MCPToolTransform</span></code></a>(tools, tool_schemas[, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.RetrieveLogProb.html#torchrl.envs.llm.transforms.RetrieveLogProb" title="torchrl.envs.llm.transforms.RetrieveLogProb"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RetrieveLogProb</span></code></a>(actor, *[, history_key, ...])</p></td>
+<td><p>A transform to retrieve the log-probs of a text given a reference model.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.MCPToolTransform.html#torchrl.envs.llm.transforms.MCPToolTransform" title="torchrl.envs.llm.transforms.MCPToolTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MCPToolTransform</span></code></a>(tools, tool_schemas[, ...])</p></td>
 <td><p>A transform that executes MCP-style tools in response to LLM actions.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.BrowserTransform.html#torchrl.envs.llm.transforms.BrowserTransform" title="torchrl.envs.llm.transforms.BrowserTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BrowserTransform</span></code></a>([allowed_domains, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.BrowserTransform.html#torchrl.envs.llm.transforms.BrowserTransform" title="torchrl.envs.llm.transforms.BrowserTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BrowserTransform</span></code></a>([allowed_domains, ...])</p></td>
 <td><p>A transform that enables web browsing capabilities.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter" title="torchrl.envs.llm.transforms.PythonInterpreter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PythonInterpreter</span></code></a>([tokenizer, tool_name, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.PythonInterpreter.html#torchrl.envs.llm.transforms.PythonInterpreter" title="torchrl.envs.llm.transforms.PythonInterpreter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PythonInterpreter</span></code></a>([tokenizer, tool_name, ...])</p></td>
 <td><p>A transform that executes Python code in the LLM response.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion" title="torchrl.envs.llm.transforms.PolicyVersion"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PolicyVersion</span></code></a>(version_type, ] =)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion" title="torchrl.envs.llm.transforms.PolicyVersion"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PolicyVersion</span></code></a>(version_type, ] =)</p></td>
 <td><p>A transform that keeps track of the version of the policy.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform" title="torchrl.envs.llm.transforms.TemplateTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TemplateTransform</span></code></a>(tokenizer[, chat_template])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.TemplateTransform.html#torchrl.envs.llm.transforms.TemplateTransform" title="torchrl.envs.llm.transforms.TemplateTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TemplateTransform</span></code></a>(tokenizer[, chat_template])</p></td>
 <td><p>A transform that maps applies a chat template to an input string during the forward pass, and parses the strings to the template during backward.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.Tokenizer.html#torchrl.envs.llm.transforms.Tokenizer" title="torchrl.envs.llm.transforms.Tokenizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Tokenizer</span></code></a>([in_keys, out_keys, in_keys_inv, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.Tokenizer.html#torchrl.envs.llm.transforms.Tokenizer" title="torchrl.envs.llm.transforms.Tokenizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Tokenizer</span></code></a>([in_keys, out_keys, in_keys_inv, ...])</p></td>
 <td><p>Applies a tokenization operation on the specified inputs.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.as_nested_tensor.html#torchrl.envs.llm.transforms.as_nested_tensor" title="torchrl.envs.llm.transforms.as_nested_tensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_nested_tensor</span></code></a>(list_of_tensordicts)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.as_nested_tensor.html#torchrl.envs.llm.transforms.as_nested_tensor" title="torchrl.envs.llm.transforms.as_nested_tensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_nested_tensor</span></code></a>(list_of_tensordicts)</p></td>
 <td><p>Stacks a list of tensordicts into a single tensordict with nested tensors.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.as_padded_tensor.html#torchrl.envs.llm.transforms.as_padded_tensor" title="torchrl.envs.llm.transforms.as_padded_tensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_padded_tensor</span></code></a>(list_of_tensordicts[, dim, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.envs.llm.transforms.as_padded_tensor.html#torchrl.envs.llm.transforms.as_padded_tensor" title="torchrl.envs.llm.transforms.as_padded_tensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_padded_tensor</span></code></a>(list_of_tensordicts[, dim, ...])</p></td>
 <td><p>Stacks a list of tensordicts into a single tensordict with padded tensors.</p></td>
 </tr>
 </tbody>
@@ -730,6 +733,8 @@ weight update, etc.)</p></li>
 <p>LLM post training require some appropriate versions of the losses implemented in TorchRL.</p>
 <section id="grpo">
 <h3>GRPO<a class="headerlink" href="#grpo" title="Permalink to this heading">¶</a></h3>
+<p>The <a class="reference internal" href="generated/torchrl.objectives.llm.GRPOLoss.html#torchrl.objectives.llm.GRPOLoss" title="torchrl.objectives.llm.GRPOLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">GRPOLoss</span></code></a> class is a thin wrapper around the <a class="reference internal" href="generated/torchrl.objectives.PPOLoss.html#torchrl.objectives.PPOLoss" title="torchrl.objectives.PPOLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">PPOLoss</span></code></a> class
+that codes the LLM-specific functionnalities.</p>
 <table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.llm.GRPOLoss.html#torchrl.objectives.llm.GRPOLoss" title="torchrl.objectives.llm.GRPOLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GRPOLoss</span></code></a>(*args, **kwargs)</p></td>
@@ -740,6 +745,26 @@ weight update, etc.)</p></li>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.llm.MCAdvantage.html#torchrl.objectives.llm.MCAdvantage" title="torchrl.objectives.llm.MCAdvantage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MCAdvantage</span></code></a>(grpo_size[, prompt_key, ...])</p></td>
 <td><p>Monte-Carlo advantage computation engine.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="sft">
+<h3>SFT<a class="headerlink" href="#sft" title="Permalink to this heading">¶</a></h3>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.llm.SFTLoss.html#torchrl.objectives.llm.SFTLoss" title="torchrl.objectives.llm.SFTLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SFTLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Supervised fine-tuning loss.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.llm.SFTLossOutput.html#torchrl.objectives.llm.SFTLossOutput" title="torchrl.objectives.llm.SFTLossOutput"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SFTLossOutput</span></code></a>(loss_sft[, loss_kl_to_ref, ...])</p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+<table class="autosummary longtable docutils # Necessary for the table generated by autosummary to look decent align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector" title="torchrl.data.llm.TopKRewardSelector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TopKRewardSelector</span></code></a>(total_dialog_turns, topk_size)</p></td>
+<td><p>A replay-buffer transform that selects the top-k rewards for each prompt.</p></td>
 </tr>
 </tbody>
 </table>
@@ -807,6 +832,9 @@ weight update, etc.)</p></li>
 </li>
 <li><a class="reference internal" href="#objectives">Objectives</a><ul>
 <li><a class="reference internal" href="#grpo">GRPO</a></li>
+<li><a class="reference internal" href="#sft">SFT</a><ul>
+</ul>
+</li>
 </ul>
 </li>
 </ul>

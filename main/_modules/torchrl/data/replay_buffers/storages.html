@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+e1e15d6) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+77dbc6c) &#x25BC</span></a>
     </div>
     
 
@@ -652,15 +652,38 @@
 <span class="sd">        max_size (int, optional): the maximum number of elements stored in the storage.</span>
 <span class="sd">            If not provided, an unlimited storage is created.</span>
 
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        compilable (bool, optional): if ``True``, the storage will be made compatible with :func:`~torch.compile` at</span>
+<span class="sd">            the cost of being executable in multiprocessed settings.</span>
+<span class="sd">        device (str, optional): the device to use for the storage. Defaults to `None` (inputs are not moved to the device).</span>
+
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">_default_checkpointer</span> <span class="o">=</span> <span class="n">ListStorageCheckpointer</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">max_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">compilable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">max_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">compilable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
         <span class="k">if</span> <span class="n">max_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">max_size</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">iinfo</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span><span class="o">.</span><span class="n">max</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">max_size</span><span class="p">,</span> <span class="n">compilable</span><span class="o">=</span><span class="n">compilable</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">device</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_to_device</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Utility method to move data to the device.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="s2">&quot;to&quot;</span><span class="p">):</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">tree_map</span><span class="p">(</span>
+                    <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="s2">&quot;to&quot;</span><span class="p">)</span> <span class="k">else</span> <span class="n">x</span><span class="p">,</span> <span class="n">data</span>
+                <span class="p">)</span>
+        <span class="k">return</span> <span class="n">data</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">set</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -676,6 +699,7 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">cursor</span><span class="p">),</span> <span class="n">data</span><span class="p">,</span> <span class="n">set_cursor</span><span class="o">=</span><span class="n">set_cursor</span><span class="p">)</span>
                 <span class="k">return</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cursor</span><span class="p">,</span> <span class="nb">slice</span><span class="p">):</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_device</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">cursor</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span>
                 <span class="k">return</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span>
@@ -712,6 +736,7 @@
                     <span class="sa">f</span><span class="s2">&quot;maximum capacity is </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">max_size</span><span class="si">}</span><span class="s2"> &quot;</span>
                     <span class="sa">f</span><span class="s2">&quot;and the index of the item to be set is </span><span class="si">{</span><span class="n">cursor</span><span class="si">}</span><span class="s2">.&quot;</span>
                 <span class="p">)</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_device</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">cursor</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">):</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
@@ -809,6 +834,7 @@
 <span class="sd">        compilable (bool, optional): if ``True``, the storage will be made compatible with :func:`~torch.compile` at</span>
 <span class="sd">            the cost of being executable in multiprocessed settings.</span>
 <span class="sd">        stack_dim (int, optional): the stack dimension in terms of TensorDict batch sizes. Defaults to `0`.</span>
+<span class="sd">        device (str, optional): the device to use for the storage. Defaults to `None` (inputs are not moved to the device).</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; import torch</span>
@@ -843,8 +869,9 @@
         <span class="o">*</span><span class="p">,</span>
         <span class="n">compilable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">stack_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">max_size</span><span class="o">=</span><span class="n">max_size</span><span class="p">,</span> <span class="n">compilable</span><span class="o">=</span><span class="n">compilable</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">max_size</span><span class="o">=</span><span class="n">max_size</span><span class="p">,</span> <span class="n">compilable</span><span class="o">=</span><span class="n">compilable</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">stack_dim</span> <span class="o">=</span> <span class="n">stack_dim</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">slice</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>

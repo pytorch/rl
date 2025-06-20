@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+e1e15d6) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+77dbc6c) &#x25BC</span></a>
     </div>
     
 
@@ -434,16 +434,35 @@
 <dt class="sig sig-object py" id="torchrl.data.replay_buffers.PrioritizedSampler">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.data.replay_buffers.</span></span><span class="sig-name descname"><span class="pre">PrioritizedSampler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">max_capacity</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1e-08</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.7)"><span class="pre">dtype</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">torch.float32</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reduction</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'max'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_priority_within_buffer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/samplers.html#PrioritizedSampler"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.replay_buffers.PrioritizedSampler" title="Permalink to this definition">¶</a></dt>
 <dd><p>Prioritized sampler for replay buffer.</p>
-<p>Presented in “Schaul, T.; Quan, J.; Antonoglou, I.; and Silver, D. 2015. Prioritized experience replay.” (<a class="reference external" href="https://arxiv.org/abs/1511.05952">https://arxiv.org/abs/1511.05952</a>)</p>
+<p>This sampler implements Prioritized Experience Replay (PER) as presented in
+“Schaul, T.; Quan, J.; Antonoglou, I.; and Silver, D. 2015. Prioritized experience replay.”
+(<a class="reference external" href="https://arxiv.org/abs/1511.05952">https://arxiv.org/abs/1511.05952</a>)</p>
+<p><strong>Core Idea</strong>: Instead of sampling experiences uniformly from the replay buffer,
+PER samples experiences with probability proportional to their “importance” - typically
+measured by the magnitude of their temporal-difference (TD) error. This prioritization
+can lead to faster learning by focusing on experiences that are most informative.</p>
+<p><strong>How it works</strong>:
+1. Each experience is assigned a priority based on its TD error: <span class="math notranslate nohighlight">\(p_i = |\delta_i| + \epsilon\)</span>
+2. Sampling probability is computed as: <span class="math notranslate nohighlight">\(P(i) = \frac{p_i^\alpha}{\sum_j p_j^\alpha}\)</span>
+3. Importance sampling weights correct for the bias: <span class="math notranslate nohighlight">\(w_i = (N \cdot P(i))^{-\beta}\)</span></p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>max_capacity</strong> (<em>int</em>) – maximum capacity of the buffer.</p></li>
-<li><p><strong>alpha</strong> (<code class="xref py py-obj docutils literal notranslate"><span class="pre">float</span></code>) – exponent α determines how much prioritization is used,
-with α = 0 corresponding to the uniform case.</p></li>
-<li><p><strong>beta</strong> (<code class="xref py py-obj docutils literal notranslate"><span class="pre">float</span></code>) – importance sampling negative exponent.</p></li>
-<li><p><strong>eps</strong> (<code class="xref py py-obj docutils literal notranslate"><span class="pre">float</span></code>, optional) – delta added to the priorities to ensure that the buffer
-does not contain null priorities. Defaults to 1e-8.</p></li>
+<li><p><strong>alpha</strong> (<code class="xref py py-obj docutils literal notranslate"><span class="pre">float</span></code>) – exponent <span class="math notranslate nohighlight">\(\alpha\)</span> determines how much prioritization is used.
+- <span class="math notranslate nohighlight">\(\alpha = 0\)</span>: uniform sampling (no prioritization)
+- <span class="math notranslate nohighlight">\(\alpha = 1\)</span>: full prioritization based on TD error magnitude
+- Typical values: 0.4-0.7 for balanced prioritization
+- Higher <span class="math notranslate nohighlight">\(\alpha\)</span> means more aggressive prioritization of high-error experiences</p></li>
+<li><p><strong>beta</strong> (<code class="xref py py-obj docutils literal notranslate"><span class="pre">float</span></code>) – importance sampling negative exponent <span class="math notranslate nohighlight">\(\beta\)</span>.
+- <span class="math notranslate nohighlight">\(\beta\)</span> controls the correction for the bias introduced by prioritization
+- <span class="math notranslate nohighlight">\(\beta = 0\)</span>: no correction (biased towards high-priority samples)
+- <span class="math notranslate nohighlight">\(\beta = 1\)</span>: full correction (unbiased but potentially unstable)
+- Typical values: start at 0.4-0.6 and anneal to 1.0 during training
+- Lower <span class="math notranslate nohighlight">\(\beta\)</span> early in training provides stability, higher <span class="math notranslate nohighlight">\(\beta\)</span> later reduces bias</p></li>
+<li><p><strong>eps</strong> (<code class="xref py py-obj docutils literal notranslate"><span class="pre">float</span></code>, optional) – small constant added to priorities to ensure
+no experience has zero priority. This prevents experiences from never
+being sampled. Defaults to 1e-8.</p></li>
 <li><p><strong>reduction</strong> (<em>str</em><em>, </em><em>optional</em>) – the reduction method for multidimensional
 tensordicts (ie stored trajectory). Can be one of “max”, “min”,
 “median” or “mean”.</p></li>
@@ -453,6 +472,36 @@ the maximum value since the instantiation of the sampler.</p></li>
 </ul>
 </dd>
 </dl>
+<p><strong>Parameter Guidelines</strong>:
+- <strong>:math:`alpha` (alpha)</strong>: Controls how much to prioritize high-error experiences</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>0.4-0.7: Good balance between learning speed and stability</p></li>
+<li><p>1.0: Maximum prioritization (may be unstable)</p></li>
+<li><p>0.0: Uniform sampling (no prioritization benefit)</p></li>
+</ul>
+</div></blockquote>
+<ul class="simple">
+<li><dl class="simple">
+<dt><strong>:math:`beta` (beta)</strong>: Controls importance sampling correction</dt><dd><ul>
+<li><p>Start at 0.4-0.6 for training stability</p></li>
+<li><p>Anneal to 1.0 over training to reduce bias</p></li>
+<li><p>Lower values = more stable but biased</p></li>
+<li><p>Higher values = less biased but potentially unstable</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt><strong>:math:`epsilon`</strong>: Small constant to prevent zero priorities</dt><dd><ul>
+<li><p>1e-8: Good default value</p></li>
+<li><p>Too small: may cause numerical issues</p></li>
+<li><p>Too large: reduces prioritization effect</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+</ul>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.replay_buffers</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReplayBuffer</span><span class="p">,</span> <span class="n">LazyTensorStorage</span><span class="p">,</span> <span class="n">PrioritizedSampler</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
@@ -594,6 +643,7 @@ the 1d size of the sum_tree and min_tree. Only required whenever
          <script src="../../_static/_sphinx_javascript_frameworks_compat.js"></script>
          <script src="../../_static/doctools.js"></script>
          <script src="../../_static/design-tabs.js"></script>
+         <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
      
 
   

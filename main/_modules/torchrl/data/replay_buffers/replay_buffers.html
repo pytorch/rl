@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+e1e15d6) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+77dbc6c) &#x25BC</span></a>
     </div>
     
 
@@ -1124,7 +1124,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">index</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_extend</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_extend</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">update_priority</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
         <span class="n">is_comp</span> <span class="o">=</span> <span class="n">is_compiling</span><span class="p">()</span>
         <span class="n">nc</span> <span class="o">=</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">()</span>
         <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_replay_lock</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">is_comp</span> <span class="k">else</span> <span class="n">nc</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_write_lock</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">is_comp</span> <span class="k">else</span> <span class="n">nc</span><span class="p">:</span>
@@ -1134,7 +1134,9 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">index</span>
 
-<div class="viewcode-block" id="ReplayBuffer.extend"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.extend">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">extend</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<div class="viewcode-block" id="ReplayBuffer.extend"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.extend">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">extend</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">update_priority</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Extends the replay buffer with one or more elements contained in an iterable.</span>
 
 <span class="sd">        If present, the inverse transforms will be called.`</span>
@@ -1142,6 +1144,10 @@
 <span class="sd">        Args:</span>
 <span class="sd">            data (iterable): collection of data to be added to the replay</span>
 <span class="sd">                buffer.</span>
+
+<span class="sd">        Keyword Args:</span>
+<span class="sd">            update_priority (bool, optional): Whether to update the priority of the data. Defaults to True.</span>
+<span class="sd">                Without effect in this class. See :meth:`~torchrl.data.TensorDictReplayBuffer.extend` for more details.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            Indices of the data added to the replay buffer.</span>
@@ -1157,12 +1163,16 @@
 <span class="sd">          unbound elements can be provided (no PyTrees).</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">update_priority</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;update_priority is not supported in this class. See :meth:`~torchrl.data.TensorDictReplayBuffer.extend` for more details.&quot;</span>
+            <span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transform</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_transform</span><span class="p">):</span>
             <span class="k">with</span> <span class="n">_set_dispatch_td_nn_modules</span><span class="p">(</span><span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">data</span><span class="p">)):</span>
                 <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transform</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">ndim</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_extend</span><span class="p">(</span><span class="n">data</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_extend</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">update_priority</span><span class="o">=</span><span class="n">update_priority</span><span class="p">)</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">update_priority</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -1336,8 +1346,8 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">_iterator</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
             <span class="n">out</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_iterator</span><span class="p">)</span>
             <span class="c1"># if any, we don&#39;t want the device ref to be passed in distributed settings</span>
-            <span class="k">if</span> <span class="n">out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">out</span><span class="o">.</span><span class="n">clear_device_</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="s2">&quot;cpu&quot;</span><span class="p">):</span>
+                <span class="n">out</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span><span class="o">.</span><span class="n">clear_device_</span><span class="p">()</span>
             <span class="k">return</span> <span class="n">out</span>
         <span class="k">except</span> <span class="ne">StopIteration</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_iterator</span> <span class="o">=</span> <span class="kc">None</span>
@@ -1437,6 +1447,9 @@
 <span class="sd">        storage (Storage, optional): the storage to be used. If none is provided</span>
 <span class="sd">            a default :class:`~torchrl.data.replay_buffers.ListStorage` with</span>
 <span class="sd">            ``max_size`` of ``1_000`` will be created.</span>
+<span class="sd">        sampler (Sampler, optional): the sampler to be used. If none is provided,</span>
+<span class="sd">            a default :class:`~torchrl.data.replay_buffers.PrioritizedSampler` with</span>
+<span class="sd">            ``alpha``, ``beta``, and ``eps`` will be created.</span>
 <span class="sd">        collate_fn (callable, optional): merges a list of samples to form a</span>
 <span class="sd">            mini-batch of Tensor(s)/outputs.  Used when using batched</span>
 <span class="sd">            loading from a map-style dataset. The default value will be decided</span>
@@ -1529,6 +1542,7 @@
         <span class="n">eps</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-8</span><span class="p">,</span>
         <span class="n">dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">,</span>
         <span class="n">storage</span><span class="p">:</span> <span class="n">Storage</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">sampler</span><span class="p">:</span> <span class="n">Sampler</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">collate_fn</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">pin_memory</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">prefetch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -1538,7 +1552,8 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">storage</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">storage</span> <span class="o">=</span> <span class="n">ListStorage</span><span class="p">(</span><span class="n">max_size</span><span class="o">=</span><span class="mi">1_000</span><span class="p">)</span>
-        <span class="n">sampler</span> <span class="o">=</span> <span class="n">PrioritizedSampler</span><span class="p">(</span><span class="n">storage</span><span class="o">.</span><span class="n">max_size</span><span class="p">,</span> <span class="n">alpha</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">eps</span><span class="p">,</span> <span class="n">dtype</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">sampler</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">sampler</span> <span class="o">=</span> <span class="n">PrioritizedSampler</span><span class="p">(</span><span class="n">storage</span><span class="o">.</span><span class="n">max_size</span><span class="p">,</span> <span class="n">alpha</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">eps</span><span class="p">,</span> <span class="n">dtype</span><span class="p">)</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
             <span class="n">storage</span><span class="o">=</span><span class="n">storage</span><span class="p">,</span>
             <span class="n">sampler</span><span class="o">=</span><span class="n">sampler</span><span class="p">,</span>
@@ -1769,7 +1784,20 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">update_tensordict_priority</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">index</span></div>
 
-<div class="viewcode-block" id="TensorDictReplayBuffer.extend"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer.extend">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">extend</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordicts</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<div class="viewcode-block" id="TensorDictReplayBuffer.extend"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer.extend">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">extend</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordicts</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">update_priority</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extends the replay buffer with a batch of data.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tensordicts (TensorDictBase): The data to extend the replay buffer with.</span>
+
+<span class="sd">        Keyword Args:</span>
+<span class="sd">            update_priority (bool, optional): Whether to update the priority of the data. Defaults to True.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The indices of the data that were added to the replay buffer.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tensordicts</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> only accepts TensorDictBase subclasses. tensorclasses &quot;</span>
@@ -1787,8 +1815,17 @@
         <span class="c1">#  is that just doing this results in indices that are not sorted like the original data</span>
         <span class="c1">#  so the actually indices will have to be used on the _storage directly (not on the buffer)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_set_index_in_td</span><span class="p">(</span><span class="n">tensordicts</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
-        <span class="c1"># TODO: in principle this is a good idea but currently it doesn&#39;t work + it re-writes a priority that has just been written</span>
-        <span class="c1"># self.update_tensordict_priority(tensordicts)</span>
+        <span class="k">if</span> <span class="n">update_priority</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">update_priority</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">if</span> <span class="n">update_priority</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">vector</span> <span class="o">=</span> <span class="n">tensordicts</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">priority_key</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">vector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">update_priority</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">vector</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;Failed to update priority of extended data. You can try to set update_priority=False in the extend method and update the priority manually.&quot;</span>
+                <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
         <span class="k">return</span> <span class="n">index</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_set_index_in_td</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
@@ -2107,8 +2144,10 @@
 <div class="viewcode-block" id="RemoteTensorDictReplayBuffer.add"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.RemoteTensorDictReplayBuffer.html#torchrl.data.RemoteTensorDictReplayBuffer.add">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">data</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="RemoteTensorDictReplayBuffer.extend"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.RemoteTensorDictReplayBuffer.html#torchrl.data.RemoteTensorDictReplayBuffer.extend">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">extend</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordicts</span><span class="p">:</span> <span class="nb">list</span> <span class="o">|</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">tensordicts</span><span class="p">)</span></div>
+<div class="viewcode-block" id="RemoteTensorDictReplayBuffer.extend"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.RemoteTensorDictReplayBuffer.html#torchrl.data.RemoteTensorDictReplayBuffer.extend">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">extend</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordicts</span><span class="p">:</span> <span class="nb">list</span> <span class="o">|</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">update_priority</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">tensordicts</span><span class="p">,</span> <span class="n">update_priority</span><span class="o">=</span><span class="n">update_priority</span><span class="p">)</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">update_priority</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">priority</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>

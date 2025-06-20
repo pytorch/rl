@@ -200,6 +200,7 @@ transforms).
 
     DataLoadingPrimer
     KLRewardTransform
+    RetrieveLogProb
     MCPToolTransform
     BrowserTransform
     PythonInterpreter
@@ -256,6 +257,9 @@ LLM post training require some appropriate versions of the losses implemented in
 GRPO
 ~~~~
 
+The :class:`~torchrl.objectives.llm.GRPOLoss` class is a thin wrapper around the :class:`~torchrl.objectives.PPOLoss` class
+that codes the LLM-specific functionnalities.
+
 .. currentmodule:: torchrl.objectives.llm
 
 .. autosummary::
@@ -265,3 +269,24 @@ GRPO
     GRPOLoss
     GRPOLossOutput
     MCAdvantage
+
+
+SFT
+~~~
+
+.. currentmodule:: torchrl.objectives.llm
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    SFTLoss
+    SFTLossOutput
+
+.. currentmodule:: torchrl.data.llm
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    TopKRewardSelector
