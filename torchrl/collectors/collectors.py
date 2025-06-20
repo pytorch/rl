@@ -1765,11 +1765,9 @@ class _MultiDataCollector(DataCollectorBase):
             .. warning:: `policy_factory` is currently not compatible with multiprocessed data
                 collectors.
 
-        frames_per_batch (int, optional): A keyword-only argument representing the
-            total number of elements in a batch.
-        frames_per_batch_worker (Sequence[int], optional): A keyword-only argument representing the
-            number of elements in a batch for each worker. This argument is mutually exclusive with `frames_per_batch`.
-            If `frames_per_batch_worker` is specified, `frames_per_batch` is computed as the sum across all workers.
+        frames_per_batch (int, Sequence[int]): A keyword-only argument representing the
+            total number of elements in a batch. If a sequence is provided, represents the number of elements in a
+            batch per worker. Total number of elements in a batch is then the sum over the sequence.
         total_frames (int, optional): A keyword-only argument representing the
             total number of frames returned by the collector
             during its lifespan. If the ``total_frames`` is not divisible by
@@ -1926,8 +1924,7 @@ class _MultiDataCollector(DataCollectorBase):
         policy_factory: Callable[[], Callable]
         | list[Callable[[], Callable]]
         | None = None,
-        frames_per_batch: int | None = None,
-        frames_per_batch_worker: Sequence[int] | None = None,
+        frames_per_batch: int | Sequence[int],
         total_frames: int | None = -1,
         device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         storing_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
@@ -1963,26 +1960,21 @@ class _MultiDataCollector(DataCollectorBase):
         self.closed = True
         self.num_workers = len(create_env_fn)
 
-        if (frames_per_batch is None and frames_per_batch_worker is None) or (
-            frames_per_batch is not None and frames_per_batch_worker is not None
-        ):
-            raise ValueError(
-                "`frames_per_batch` and `frames_per_batch_worker` are mutually exclusive and one need to be set."
-                f"Got {frames_per_batch=} and {frames_per_batch_worker=}"
-            )
-
-        if frames_per_batch is None:
-            frames_per_batch = sum(frames_per_batch_worker)
-
         if (
-            frames_per_batch_worker is not None
-            and len(frames_per_batch_worker) != self.num_workers
+            isinstance(frames_per_batch, Sequence)
+            and len(frames_per_batch) != self.num_workers
         ):
             raise ValueError(
-                "If specified, `frames_per_batch_worker` should contain exactly one value per worker."
-                f"Got {len(frames_per_batch_worker)} values for {self.num_workers} workers."
+                "If `frames_per_batch` is provided as a sequence, it should contain exactly one value per worker."
+                f"Got {len(frames_per_batch)} values for {self.num_workers} workers."
             )
-        self._frames_per_batch_worker = frames_per_batch_worker
+
+        self._frames_per_batch = frames_per_batch
+        total_frames_per_batch = (
+            sum(frames_per_batch)
+            if isinstance(frames_per_batch, Sequence)
+            else frames_per_batch
+        )
 
         self.set_truncated = set_truncated
         self.num_sub_threads = num_sub_threads
@@ -2101,11 +2093,11 @@ class _MultiDataCollector(DataCollectorBase):
         if total_frames is None or total_frames < 0:
             total_frames = float("inf")
         else:
-            remainder = total_frames % frames_per_batch
+            remainder = total_frames % total_frames_per_batch
             if remainder != 0 and RL_WARNINGS:
                 warnings.warn(
-                    f"total_frames ({total_frames}) is not exactly divisible by frames_per_batch ({frames_per_batch}). "
-                    f"This means {frames_per_batch - remainder} additional frames will be collected. "
+                    f"total_frames ({total_frames}) is not exactly divisible by frames_per_batch ({total_frames_per_batch}). "
+                    f"This means {total_frames_per_batch - remainder} additional frames will be collected. "
                     "To silence this message, set the environment variable RL_WARNINGS to False."
                 )
         self.total_frames = (
@@ -2116,7 +2108,8 @@ class _MultiDataCollector(DataCollectorBase):
         self.max_frames_per_traj = (
             int(max_frames_per_traj) if max_frames_per_traj is not None else 0
         )
-        self.requested_frames_per_batch = int(frames_per_batch)
+
+        self.requested_frames_per_batch = total_frames_per_batch
         self.reset_when_done = reset_when_done
         if split_trajs is None:
             split_trajs = False
@@ -2798,8 +2791,8 @@ class MultiSyncDataCollector(_MultiDataCollector):
         )
 
     def frames_per_batch_worker(self, worker_idx: int | None) -> int:
-        if worker_idx is not None and self._frames_per_batch_worker is not None:
-            return self._frames_per_batch_worker[worker_idx]
+        if worker_idx is not None and isinstance(self._frames_per_batch, Sequence):
+            return self._frames_per_batch[worker_idx]
         if self.requested_frames_per_batch % self.num_workers != 0 and RL_WARNINGS:
             warnings.warn(
                 f"frames_per_batch {self.requested_frames_per_batch} is not exactly divisible by the number of collector workers {self.num_workers},"
@@ -2931,7 +2924,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 self._frames += sum(
                     [
                         self.frames_per_batch_worker(worker_idx)
-                        for worker_idx in range(len(self.num_workers))
+                        for worker_idx in range(self.num_workers)
                     ]
                 )
                 continue

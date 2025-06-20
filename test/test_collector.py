@@ -1591,7 +1591,7 @@ if __name__ == "__main__":
         collector = MultiaSyncDataCollector(
             create_env_fn=[env_fn for _ in range(num_workers)],
             policy=policy,
-            frames_per_batch_worker=frames_per_batch_worker,
+            frames_per_batch=frames_per_batch_worker,
             max_frames_per_traj=1000,
             total_frames=frames_per_batch * 100,
         )
@@ -1631,23 +1631,12 @@ if __name__ == "__main__":
 
         with pytest.raises(
             ValueError,
-            match="`frames_per_batch` and `frames_per_batch_worker` are mutually exclusive and one need to be set.",
+            match="If `frames_per_batch` is provided as a sequence, it should contain exactly one value per worker.",
         ):
             collector = MultiSyncDataCollector(
                 create_env_fn=[env_fn for _ in range(num_workers)],
                 policy=policy,
-                max_frames_per_traj=1000,
-                total_frames=frames_per_batch * 100,
-            )
-
-        with pytest.raises(
-            ValueError,
-            match="If specified, `frames_per_batch_worker` should contain exactly one value per worker.",
-        ):
-            collector = MultiSyncDataCollector(
-                create_env_fn=[env_fn for _ in range(num_workers)],
-                policy=policy,
-                frames_per_batch_worker=frames_per_batch_worker[:-1],
+                frames_per_batch=frames_per_batch_worker[:-1],
                 max_frames_per_traj=1000,
                 total_frames=frames_per_batch * 100,
             )
