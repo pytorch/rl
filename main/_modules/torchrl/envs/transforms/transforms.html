@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+5a13341) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+92b52a0) &#x25BC</span></a>
     </div>
     
 
@@ -9148,8 +9148,10 @@
 <div class="viewcode-block" id="ActionMask"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.ActionMask.html#torchrl.envs.transforms.ActionMask">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">ActionMask</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;An adaptive action masker.</span>
 
-<span class="sd">    This transform reads the mask from the input tensordict after the step is executed,</span>
-<span class="sd">    and adapts the mask of the one-hot / categorical action spec.</span>
+<span class="sd">    This transform is useful to ensure that randomly generated actions</span>
+<span class="sd">    respect legal actions, by masking the action specs.</span>
+<span class="sd">    It reads the mask from the input tensordict after the step is executed,</span>
+<span class="sd">    and adapts the mask of the finite action spec.</span>
 
 <span class="sd">      .. note:: This transform will fail when used without an environment.</span>
 
@@ -9195,8 +9197,6 @@
 <span class="sd">        &gt;&gt;&gt; base_env = MaskedEnv()</span>
 <span class="sd">        &gt;&gt;&gt; env = TransformedEnv(base_env, ActionMask())</span>
 <span class="sd">        &gt;&gt;&gt; r = env.rollout(10)</span>
-<span class="sd">        &gt;&gt;&gt; env = TransformedEnv(base_env, ActionMask())</span>
-<span class="sd">        &gt;&gt;&gt; r = env.rollout(10)</span>
 <span class="sd">        &gt;&gt;&gt; r[&quot;action_mask&quot;]</span>
 <span class="sd">        tensor([[ True,  True,  True,  True],</span>
 <span class="sd">                [ True,  True, False,  True],</span>
@@ -9232,15 +9232,8 @@
         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">FORWARD_NOT_IMPLEMENTED</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)))</span></div>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">action_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="n">action_spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">container</span><span class="o">.</span><span class="n">full_action_spec</span>
-        <span class="n">keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">container</span><span class="o">.</span><span class="n">action_keys</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">keys</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
-            <span class="n">action_spec</span> <span class="o">=</span> <span class="n">action_spec</span><span class="p">[</span><span class="n">keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Too many action keys for </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">keys</span><span class="si">=}</span><span class="s2">&quot;</span>
-            <span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">action_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+        <span class="n">action_spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">container</span><span class="o">.</span><span class="n">full_action_spec</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action_spec</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ACCEPTED_SPECS</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">SPEC_TYPE_ERROR</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ACCEPTED_SPECS</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">action_spec</span><span class="p">))</span>
@@ -9248,29 +9241,20 @@
         <span class="k">return</span> <span class="n">action_spec</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
-        <span class="n">parent</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span>
-        <span class="k">if</span> <span class="n">parent</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="si">}</span><span class="s2">.parent cannot be None: make sure this transform is executed within an environment.&quot;</span>
             <span class="p">)</span>
+
         <span class="n">mask</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
-        <span class="n">action_spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span>
-        <span class="n">action_spec</span><span class="o">.</span><span class="n">update_mask</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">action_spec</span><span class="o">.</span><span class="n">device</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span><span class="o">.</span><span class="n">update_mask</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span><span class="o">.</span><span class="n">device</span><span class="p">))</span>
+
         <span class="k">return</span> <span class="n">next_tensordict</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_reset</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">:</span> <span class="n">TensorDictBase</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
-        <span class="n">action_spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span>
-        <span class="n">mask</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">mask</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">action_spec</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
-        <span class="n">action_spec</span><span class="o">.</span><span class="n">update_mask</span><span class="p">(</span><span class="n">mask</span><span class="p">)</span>
-
-        <span class="c1"># TODO: Check that this makes sense</span>
-        <span class="k">with</span> <span class="n">_set_missing_tolerance</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
-            <span class="n">tensordict_reset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_call</span><span class="p">(</span><span class="n">tensordict_reset</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">tensordict_reset</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_call</span><span class="p">(</span><span class="n">tensordict_reset</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="VecGymEnvTransform"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.VecGymEnvTransform.html#torchrl.envs.transforms.VecGymEnvTransform">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">VecGymEnvTransform</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
