@@ -91,6 +91,7 @@ class UCBScore(MCTSScore):
         )
         return node
 
+
 class EXP3Score(MCTSScore):
     def __init__(
         self,
@@ -198,6 +199,10 @@ class EXP3Score(MCTSScore):
         else:
             weights[..., action_idx] = new_weight
         node.set(self.weights_key, weights)
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
 
 class MCTSScores(Enum):
     PUCT = functools.partial(PUCTScore, c=5)  # AlphaGo default value
