@@ -21,7 +21,6 @@ class MCTSScore(TensorDictModuleBase):
     def forward(self, node):
         pass
 
-
 class PUCTScore(MCTSScore):
     c: float
 
@@ -61,7 +60,6 @@ class PUCTScore(MCTSScore):
         )
         return node
 
-
 class UCBScore(MCTSScore):
     c: float
 
@@ -92,7 +90,6 @@ class UCBScore(MCTSScore):
             (win_count / visits) + self.c * n_total.sqrt() / (1 + visits),
         )
         return node
-
 
 class EXP3Score(MCTSScore):
     def __init__(
@@ -201,7 +198,6 @@ class EXP3Score(MCTSScore):
         else:
             weights[..., action_idx] = new_weight
         node.set(self.weights_key, weights)
-
 
 class MCTSScores(Enum):
     PUCT = functools.partial(PUCTScore, c=5)  # AlphaGo default value
