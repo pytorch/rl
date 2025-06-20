@@ -8726,8 +8726,10 @@ class Reward2GoTransform(Transform):
 class ActionMask(Transform):
     """An adaptive action masker.
 
-    This transform reads the mask from the input tensordict after the step is executed,
-    and adapts the mask of the one-hot / categorical action spec.
+    This transform is useful to ensure that randomly generated actions
+    respect legal actions, by masking the action specs.
+    It reads the mask from the input tensordict after the step is executed,
+    and adapts the mask of the finite action spec.
 
       .. note:: This transform will fail when used without an environment.
 
@@ -8773,8 +8775,6 @@ class ActionMask(Transform):
         >>> base_env = MaskedEnv()
         >>> env = TransformedEnv(base_env, ActionMask())
         >>> r = env.rollout(10)
-        >>> env = TransformedEnv(base_env, ActionMask())
-        >>> r = env.rollout(10)
         >>> r["action_mask"]
         tensor([[ True,  True,  True,  True],
                 [ True,  True, False,  True],
@@ -8810,15 +8810,8 @@ class ActionMask(Transform):
         raise RuntimeError(FORWARD_NOT_IMPLEMENTED.format(type(self)))
 
     @property
-    def action_spec(self):
-        action_spec = self.container.full_action_spec
-        keys = self.container.action_keys
-        if len(keys) == 1:
-            action_spec = action_spec[keys[0]]
-        else:
-            raise ValueError(
-                f"Too many action keys for {self.__class__.__name__}: {keys=}"
-            )
+    def action_spec(self) -> TensorSpec:
+        action_spec = self.container.full_action_spec[self.in_keys[0]]
         if not isinstance(action_spec, self.ACCEPTED_SPECS):
             raise ValueError(
                 self.SPEC_TYPE_ERROR.format(self.ACCEPTED_SPECS, type(action_spec))
@@ -8826,29 +8819,20 @@ class ActionMask(Transform):
         return action_spec
 
     def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
-        parent = self.parent
-        if parent is None:
+        if self.parent is None:
             raise RuntimeError(
                 f"{type(self)}.parent cannot be None: make sure this transform is executed within an environment."
             )
+
         mask = next_tensordict.get(self.in_keys[1])
-        action_spec = self.action_spec
-        action_spec.update_mask(mask.to(action_spec.device))
+        self.action_spec.update_mask(mask.to(self.action_spec.device))
+
         return next_tensordict
 
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
-        action_spec = self.action_spec
-        mask = tensordict.get(self.in_keys[1], None)
-        if mask is not None:
-            mask = mask.to(action_spec.device)
-        action_spec.update_mask(mask)
-
-        # TODO: Check that this makes sense
-        with _set_missing_tolerance(self, True):
-            tensordict_reset = self._call(tensordict_reset)
-        return tensordict_reset
+        return self._call(tensordict_reset)
 
 
 class VecGymEnvTransform(Transform):
