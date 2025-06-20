@@ -22,12 +22,14 @@ from .transforms import (
     KLRewardTransform,
     MCPToolTransform,
     PythonInterpreter,
+    RetrieveLogProb,
     TemplateTransform,
     Tokenizer,
 )
 
 __all__ = [
     "BrowserTransform",
+    "RetrieveLogProb",
     "ChatEnv",
     "DataLoadingPrimer",
     "DatasetChatEnv",

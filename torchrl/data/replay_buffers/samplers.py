@@ -291,23 +291,61 @@ class SamplerWithoutReplacement(Sampler):
 
 
 class PrioritizedSampler(Sampler):
-    """Prioritized sampler for replay buffer.
+    r"""Prioritized sampler for replay buffer.
 
-    Presented in "Schaul, T.; Quan, J.; Antonoglou, I.; and Silver, D. 2015. Prioritized experience replay." (https://arxiv.org/abs/1511.05952)
+    This sampler implements Prioritized Experience Replay (PER) as presented in
+    "Schaul, T.; Quan, J.; Antonoglou, I.; and Silver, D. 2015. Prioritized experience replay."
+    (https://arxiv.org/abs/1511.05952)
+
+    **Core Idea**: Instead of sampling experiences uniformly from the replay buffer,
+    PER samples experiences with probability proportional to their "importance" - typically
+    measured by the magnitude of their temporal-difference (TD) error. This prioritization
+    can lead to faster learning by focusing on experiences that are most informative.
+
+    **How it works**:
+    1. Each experience is assigned a priority based on its TD error: :math:`p_i = |\delta_i| + \epsilon`
+    2. Sampling probability is computed as: :math:`P(i) = \frac{p_i^\alpha}{\sum_j p_j^\alpha}`
+    3. Importance sampling weights correct for the bias: :math:`w_i = (N \cdot P(i))^{-\beta}`
 
     Args:
         max_capacity (int): maximum capacity of the buffer.
-        alpha (:obj:`float`): exponent α determines how much prioritization is used,
-            with α = 0 corresponding to the uniform case.
-        beta (:obj:`float`): importance sampling negative exponent.
-        eps (:obj:`float`, optional): delta added to the priorities to ensure that the buffer
-            does not contain null priorities. Defaults to 1e-8.
+        alpha (:obj:`float`): exponent :math:`\alpha` determines how much prioritization is used.
+            - :math:`\alpha = 0`: uniform sampling (no prioritization)
+            - :math:`\alpha = 1`: full prioritization based on TD error magnitude
+            - Typical values: 0.4-0.7 for balanced prioritization
+            - Higher :math:`\alpha` means more aggressive prioritization of high-error experiences
+        beta (:obj:`float`): importance sampling negative exponent :math:`\beta`.
+            - :math:`\beta` controls the correction for the bias introduced by prioritization
+            - :math:`\beta = 0`: no correction (biased towards high-priority samples)
+            - :math:`\beta = 1`: full correction (unbiased but potentially unstable)
+            - Typical values: start at 0.4-0.6 and anneal to 1.0 during training
+            - Lower :math:`\beta` early in training provides stability, higher :math:`\beta` later reduces bias
+        eps (:obj:`float`, optional): small constant added to priorities to ensure
+            no experience has zero priority. This prevents experiences from never
+            being sampled. Defaults to 1e-8.
         reduction (str, optional): the reduction method for multidimensional
             tensordicts (ie stored trajectory). Can be one of "max", "min",
             "median" or "mean".
         max_priority_within_buffer (bool, optional): if ``True``, the max-priority
             is tracked within the buffer. When ``False``, the max-priority tracks
             the maximum value since the instantiation of the sampler.
+
+    **Parameter Guidelines**:
+    - **:math:`\alpha` (alpha)**: Controls how much to prioritize high-error experiences
+        - 0.4-0.7: Good balance between learning speed and stability
+        - 1.0: Maximum prioritization (may be unstable)
+        - 0.0: Uniform sampling (no prioritization benefit)
+
+    - **:math:`\beta` (beta)**: Controls importance sampling correction
+        - Start at 0.4-0.6 for training stability
+        - Anneal to 1.0 over training to reduce bias
+        - Lower values = more stable but biased
+        - Higher values = less biased but potentially unstable
+
+    - **:math:`\epsilon`**: Small constant to prevent zero priorities
+        - 1e-8: Good default value
+        - Too small: may cause numerical issues
+        - Too large: reduces prioritization effect
 
     Examples:
         >>> from torchrl.data.replay_buffers import ReplayBuffer, LazyTensorStorage, PrioritizedSampler
@@ -412,7 +450,7 @@ class PrioritizedSampler(Sampler):
             )
         return super().__getstate__()
 
-    def _init(self):
+    def _init(self) -> None:
         if self.dtype in (torch.float, torch.FloatType, torch.float32):
             self._sum_tree = SumSegmentTreeFp32(self._max_capacity)
             self._min_tree = MinSegmentTreeFp32(self._max_capacity)
@@ -425,21 +463,23 @@ class PrioritizedSampler(Sampler):
             )
         self._max_priority = None
 
-    def _empty(self):
+    def _empty(self) -> None:
         self._init()
 
     @property
-    def _max_priority(self):
+    def _max_priority(self) -> tuple[float | None, int | None]:
         max_priority_index = self.__dict__.get("_max_priority")
         if max_priority_index is None:
             return (None, None)
         return max_priority_index
 
     @_max_priority.setter
-    def _max_priority(self, value):
+    def _max_priority(self, value: tuple[float | None, int | None]) -> None:
         self.__dict__["_max_priority"] = value
 
-    def _maybe_erase_max_priority(self, index):
+    def _maybe_erase_max_priority(
+        self, index: torch.Tensor | int | slice | tuple
+    ) -> None:
         if not self._max_priority_within_buffer:
             return
         max_priority_index = self._max_priority[1]
@@ -1839,11 +1879,21 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
 
 
 class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
-    """Samples slices of data along the first dimension, given start and stop signals, using prioritized sampling.
+    r"""Samples slices of data along the first dimension, given start and stop signals, using prioritized sampling.
 
-    This class samples sub-trajectories with replacement following a priority weighting presented in "Schaul, T.; Quan, J.; Antonoglou, I.; and Silver, D. 2015.
-        Prioritized experience replay."
-        (https://arxiv.org/abs/1511.05952)
+    This class combines trajectory sampling with Prioritized Experience Replay (PER) as presented in
+    "Schaul, T.; Quan, J.; Antonoglou, I.; and Silver, D. 2015. Prioritized experience replay."
+    (https://arxiv.org/abs/1511.05952)
+
+    **Core Idea**: Instead of sampling trajectory slices uniformly, this sampler prioritizes
+    trajectory start points based on the importance of the transitions at those positions.
+    This allows focusing learning on the most informative parts of trajectories.
+
+    **How it works**:
+    1. Each transition is assigned a priority based on its TD error: :math:`p_i = |\\delta_i| + \\epsilon`
+    2. Trajectory start points are sampled with probability: :math:`P(i) = \frac{p_i^\alpha}{\\sum_j p_j^\alpha}`
+    3. Importance sampling weights correct for bias: :math:`w_i = (N \\cdot P(i))^{-\beta}`
+    4. Complete trajectory slices are extracted from the sampled start points
 
     For more info see :class:`~torchrl.data.replay_buffers.samplers.SliceSampler` and :class:`~torchrl.data.replay_buffers.samplers.PrioritizedSampler`.
 
@@ -1855,14 +1905,41 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         :meth:`update_priority`.
 
     Args:
-        alpha (:obj:`float`): exponent α determines how much prioritization is used,
-            with α = 0 corresponding to the uniform case.
-        beta (:obj:`float`): importance sampling negative exponent.
-        eps (:obj:`float`, optional): delta added to the priorities to ensure that the buffer
-            does not contain null priorities. Defaults to 1e-8.
+        max_capacity (int): maximum capacity of the buffer.
+        alpha (:obj:`float`): exponent :math:`\alpha` determines how much prioritization is used.
+            - :math:`\alpha = 0`: uniform sampling of trajectory start points
+            - :math:`\alpha = 1`: full prioritization based on TD error magnitude at start points
+            - Typical values: 0.4-0.7 for balanced prioritization
+            - Higher :math:`\alpha` means more aggressive prioritization of high-error trajectory regions
+        beta (:obj:`float`): importance sampling negative exponent :math:`\beta`.
+            - :math:`\beta` controls the correction for the bias introduced by prioritization
+            - :math:`\beta = 0`: no correction (biased towards high-priority trajectory regions)
+            - :math:`\beta = 1`: full correction (unbiased but potentially unstable)
+            - Typical values: start at 0.4-0.6 and anneal to 1.0 during training
+            - Lower :math:`\beta` early in training provides stability, higher :math:`\beta` later reduces bias
+        eps (:obj:`float`, optional): small constant added to priorities to ensure
+            no transition has zero priority. This prevents trajectory regions from never
+            being sampled. Defaults to 1e-8.
         reduction (str, optional): the reduction method for multidimensional
             tensordicts (i.e., stored trajectory). Can be one of "max", "min",
             "median" or "mean".
+
+    **Parameter Guidelines**:
+    - **:math:`\alpha` (alpha)**: Controls how much to prioritize high-error trajectory regions
+        - 0.4-0.7: Good balance between learning speed and stability
+        - 1.0: Maximum prioritization (may be unstable)
+        - 0.0: Uniform sampling (no prioritization benefit)
+
+    - **:math:`\beta` (beta)**: Controls importance sampling correction
+        - Start at 0.4-0.6 for training stability
+        - Anneal to 1.0 over training to reduce bias
+        - Lower values = more stable but biased
+        - Higher values = less biased but potentially unstable
+
+    - **:math:`\\epsilon`**: Small constant to prevent zero priorities
+        - 1e-8: Good default value
+        - Too small: may cause numerical issues
+        - Too large: reduces prioritization effect
 
     Keyword Args:
         num_slices (int): the number of slices to be sampled. The batch-size

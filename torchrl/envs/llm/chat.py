@@ -206,7 +206,10 @@ class ChatEnv(EnvBase):
                 if lh.role != self.policy_role:
                     raise ValueError(
                         "The role received in the last block parsed from the policy "
-                        f"output does not match the expected policy role: received {lh.role} but expected {self.policy_role}."
+                        f"output does not match the expected policy role: received {lh.role} but expected {self.policy_role}.\n"
+                        f"Parsed input: {text=}\n"
+                        f"Parsed history: {parsed_history=}\n"
+                        f"Final element: {local_history=}"
                     )
         # Append history item
         history = history.append(local_history, inplace=False)

@@ -134,6 +134,9 @@ class RayLLMCollector(LLMCollector):
             verbose=verbose,
         )
 
+    def set_postproc(self, postproc: Callable[[TensorDictBase], TensorDictBase]):
+        return ray.get(self._collector.set_postproc.remote(postproc))
+
     def _next_remote(self) -> None:
         return self._collector.next.remote()
 

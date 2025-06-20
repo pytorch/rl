@@ -6,7 +6,7 @@
 from .browser import BrowserTransform
 from .dataloading import as_nested_tensor, as_padded_tensor, DataLoadingPrimer
 from .format import TemplateTransform
-from .kl import KLRewardTransform
+from .kl import KLRewardTransform, RetrieveLogProb
 from .policy_version import PolicyVersion
 from .tokenizer import Tokenizer
 from .tools import MCPToolTransform, PythonInterpreter
@@ -15,6 +15,7 @@ __all__ = [
     "BrowserTransform",
     "DataLoadingPrimer",
     "KLRewardTransform",
+    "RetrieveLogProb",
     "MCPToolTransform",
     "PolicyVersion",
     "PythonInterpreter",

@@ -4,15 +4,25 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import contextlib
+import gc
+
 from copy import copy
 
 import torch
-from tensordict import NestedKey, TensorDictBase, unravel_key
+from tensordict import NestedKey, set_list_to_stack, TensorDictBase, unravel_key
 from tensordict.nn import ProbabilisticTensorDictModule
-from tensordict.utils import is_seq_of_nested_key
+from tensordict.utils import _zip_strict, is_seq_of_nested_key
 from torchrl.data import Composite, Unbounded
+from torchrl.data.llm.chat import History
 from torchrl.envs import EnvBase, Transform
 from torchrl.envs.transforms.utils import _set_missing_tolerance
+from torchrl.modules.llm.policies.common import CategoricalSequential
+
+try:
+    import transformers
+except ImportError:
+    transformers = None
 
 
 class KLRewardTransform(Transform):
@@ -141,8 +151,8 @@ class KLRewardTransform(Transform):
                 f"action_key is required. Please set a parent for the {type(self).__name__} to recover the action keys automatically, "
                 f"or pass the action_key argument directly to {type(self).__name__} constructor."
             )
-        action = tensordict.get(action_key, None)
-        if action is None:
+        response_txt = tensordict.get(action_key, None)
+        if response_txt is None:
             if not self.missing_tolerance:
                 raise RuntimeError(
                     f"Action with key {action_key} not found data {tensordict}"
@@ -269,3 +279,229 @@ class KLRewardTransform(Transform):
         observation_spec[self.out_keys[1]] = reward_spec.clone()
 
         return output_spec
+
+
+class RetrieveLogProb(Transform):
+    """A transform to retrieve the log-probs of a text given a reference model.
+
+    Args:
+        actor (CategoricalSequential): the reference model.
+
+    Keyword Args:
+        history_key (NestedKey): the key where the history is stored. Defaults to `"history"`.
+        log_prob_key (NestedKey): the key where the log-probs are stored. Defaults to `"ref_log_prob"`.
+        assistant_only (bool): whether to only retrieve the log-probs of the assistant tokens (i.e., steps of history
+            where the role is `"assistant"`). Defaults to `False`.
+
+            .. note:: The template must accommodate the `return_assistant_tokens_mask` keyword argument.
+                This may not be the case for all templates. In this case, you can pass a custom template to the `apply_chat_template` method
+                via the `tokenizer_kwargs` argument: `tokenizer_kwargs = {"chat_template_name": "qwen"}` or `tokenizer_kwargs = {"chat_template": my_template}.
+
+        tokenizer_kwargs (dict): the keyword arguments to pass to the tokenizer to be used to apply the chat template to the history when `assistant_only` is `True`.
+            To control the tokenization in the actor, pass the tokenizer kwargs to the actor constructor.
+            Defaults to `{"return_assistant_tokens_mask": True, "tokenize": True, "return_tensors": "pt", "padding": True, "add_generation_prompt": False}`.
+        tokenizer (transformers.AutoTokenizer): the tokenizer to be used to tokenize the input and compute the assitant mask. If not provided, the tokenizer will be inferred from the `actor`.
+        detach (bool): whether to exclude the log-probs from the gradient computation. Defaults to `True`.
+        device (torch.device): the device to use for tensor creation. Defaults to `None`.
+
+    Examples:
+        >>> from torchrl.data.llm.chat import History, _CHAT_TEMPLATES
+        >>> from torchrl.modules.llm import TransformersWrapper
+        >>> from torchrl.objectives.llm.sft import SFTLoss
+        >>> from transformers import AutoTokenizer, OPTConfig, OPTForCausalLM
+        >>> from tensordict import TensorDict, lazy_stack, set_list_to_stack
+        >>> import torch
+        >>>
+        >>> set_list_to_stack(True).set()
+        >>>
+        >>> # Create chat data
+        >>> chats = [
+        ...     [
+        ...         {"role": "system", "content": "You are a helpful assistant."},
+        ...         {"role": "user", "content": "Hello, how are you?"},
+        ...         {"role": "assistant", "content": "I'm doing well, thank you!"},
+        ...     ],
+        ...     [
+        ...         {"role": "system", "content": "You are a helpful assistant."},
+        ...         {"role": "user", "content": "What's the weather like?"},
+        ...         {"role": "assistant", "content": "I can't check the weather for you."},
+        ...     ],
+        ... ]
+        >>> history = History.from_chats(chats)
+        >>> print(f"Created history with shape: {history.shape}")
+        Created history with shape: torch.Size([2, 3])
+        >>>
+        >>> # Setup tokenizer and model
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
+        >>> tokenizer.pad_token = tokenizer.eos_token
+        >>> tokenizer.chat_template = _CHAT_TEMPLATES["chatml_format"]
+        >>> model = OPTForCausalLM(OPTConfig()).eval()
+        >>>
+        >>> # Create training and reference policies
+        >>> policy_train = TransformersWrapper(
+        ...     model,
+        ...     tokenizer=tokenizer,
+        ...     generate=False,
+        ...     from_text=True,
+        ...     chat_template_name="qwen",
+        ... )
+        >>> policy_ref = TransformersWrapper(
+        ...     model,
+        ...     tokenizer=tokenizer,
+        ...     generate=False,
+        ...     from_text=True,
+        ...     return_log_probs=True,
+        ...     chat_template_name="qwen",
+        ... )
+        >>>
+        >>> # Create the RetrieveLogProb transform
+        >>> transform = RetrieveLogProb(
+        ...     policy_ref,
+        ...     assistant_only=True,
+        ...     tokenizer_kwargs={"chat_template_name": "qwen"},
+        ...     tokenizer=tokenizer,
+        ... )
+        >>>
+        >>> # Prepare data
+        >>> text = history[:, :-1].apply_chat_template(
+        ...     tokenizer=tokenizer, chat_template_name="qwen", add_generation_prompt=True
+        ... )
+        >>> text_response = history.apply_chat_template(
+        ...     tokenizer=tokenizer, chat_template_name="qwen", add_generation_prompt=False
+        ... )
+        >>> text_response = [
+        ...     txt[len(txt_start):] for txt, txt_start in zip(text_response, text)
+        ... ]
+        >>> td = TensorDict(
+        ...     text=text,
+        ...     text_response=text_response,
+        ...     history=history,
+        ...     next=TensorDict(
+        ...         reward=torch.randn(2, 1),
+        ...         done=torch.zeros(2, dtype=torch.bool),
+        ...         history=history,
+        ...     ),
+        ...     batch_size=(2,),
+        ... )
+        >>> data = lazy_stack(list(td.unbind(0)))
+        >>>
+        >>> # Apply the transform to get reference log probabilities
+        >>> data = transform(data)
+        >>> # You can get a padded tensor for batching:
+        >>> ref_log_probs = data.get(("next", "ref_log_prob"), as_padded_tensor=True)
+        >>> print(f"Type: {type(ref_log_probs)}, Length: {len(ref_log_probs)}")
+        Type: <class 'torch.Tensor'>, Length: 2
+        >>> print(f"Example shapes: {[x.shape for x in ref_log_probs]}")
+        Example shapes: [torch.Size([35]), torch.Size([35])]
+        >>> print(ref_log_probs.shape)  # (batch, max_seq_len)
+        torch.Size([2, 35])
+        >>>
+        >>> # Use with SFTLoss for KL regularization
+        >>> loss = SFTLoss(
+        ...     actor_network=policy_train,
+        ...     tokenizer=tokenizer,
+        ...     reduction="mean",
+        ...     normalize_by_seq_length=True,
+        ...     kl_to_ref_coeff=0.1,
+        ...     tokenizer_kwargs={"chat_template_name": "qwen"},
+        ... )
+        >>> loss_vals = loss(data)
+        >>> print(f"SFT Loss: {loss_vals.loss_sft.item():.4f}")
+        SFT Loss: 10.7856
+        >>> print(f"KL to Reference Loss: {loss_vals.loss_kl_to_ref.item():.4f}")
+        KL to Reference Loss: 0.0000
+        >>> print(f"Total Loss: {loss_vals.sum(reduce=True).item():.4f}")
+        Total Loss: 10.7856
+
+    Note:
+        By default, the log-probabilities are stored as a list of tensors (one per sample, with variable length).
+        Use `as_padded_tensor=True` in `.get()` to obtain a batchable tensor (with padding).
+        The reference log probabilities are computed only for assistant tokens when `assistant_only=True`.
+
+    """
+
+    def __init__(
+        self,
+        actor: CategoricalSequential,
+        *,
+        history_key: NestedKey | None = None,
+        log_prob_key: NestedKey = "ref_log_prob",
+        assistant_only: bool = False,
+        tokenizer_kwargs: dict | None = None,
+        detach: bool = True,
+        device: torch.device | None = None,
+        tokenizer: transformers.AutoTokenizer | None = None,
+    ):
+        if history_key is None:
+            history_key = "history"
+        self.history_key = history_key
+        self.log_prob_key = log_prob_key
+        super().__init__(in_keys=[history_key], out_keys=[log_prob_key])
+        self.actor = actor
+        if not getattr(actor, "return_log_probs", True):
+            raise ValueError(
+                "The actor must have `return_log_probs=True` to use the `AssistantLogProb` transform."
+            )
+        if getattr(actor, "generate", True):
+            raise ValueError(
+                "The actor must have `generate=False` to use the `AssistantLogProb` transform."
+            )
+        if not getattr(actor, "from_text", False):
+            raise ValueError(
+                "The actor must have `from_text=True` to use the `AssistantLogProb` transform. If `from_text=False` is required, please file an issue on GitHub."
+            )
+        # if getattr(self.actor, "tokenizer_kwargs", {}).get("add_generation_prompt", True):
+        # raise ValueError("The actor must have `tokenizer_kwargs['add_generation_prompt']=False` to use the `AssistantLogProb` transform.")
+        self.assistant_only = assistant_only
+        if tokenizer_kwargs is None:
+            tokenizer_kwargs = {}
+        tokenizer_kwargs.setdefault("return_assistant_tokens_mask", True)
+        tokenizer_kwargs.setdefault("tokenize", True)
+        tokenizer_kwargs.setdefault("return_tensors", "pt")
+        tokenizer_kwargs.setdefault("padding", False)
+        tokenizer_kwargs.setdefault("add_generation_prompt", False)
+        self.tokenizer_kwargs = tokenizer_kwargs
+        self.tokenizer = tokenizer
+        self.detach = detach
+        self.device = device
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        next_td = self._step(tensordict, tensordict.get("next"))
+        return tensordict.set("next", next_td)
+
+    @set_list_to_stack(True)
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        td = next_tensordict.select(self.history_key)
+        with torch.device(
+            self.device
+        ) if self.device is not None else contextlib.nullcontext(), torch.no_grad() if self.detach else contextlib.nullcontext():
+            result = self.actor(td.select(self.history_key))
+            td.update(result.select(getattr(self.actor, "log_prob_key", "log_probs")))
+            td.rename_key_(
+                getattr(self.actor, "log_prob_key", "log_probs"), self.log_prob_key
+            )
+            if torch.cuda.is_available():
+                gc.collect()
+                torch.cuda.empty_cache()
+        if self.assistant_only:
+            with torch.device(
+                self.device
+            ) if self.device is not None else contextlib.nullcontext():
+                # Get assistant mask
+                history: History = td.get(self.history_key)
+                proc = history.apply_chat_template(
+                    tokenizer=self.actor.tokenizer
+                    if self.tokenizer is None
+                    else self.tokenizer,
+                    **self.tokenizer_kwargs,
+                )
+                assistant_masks = proc.get("assistant_masks", as_list=True)
+                log_probs = td.get(self.log_prob_key, as_list=True)
+                log_probs = [
+                    lp[mask.bool()]
+                    for lp, mask in _zip_strict(log_probs, assistant_masks)
+                ]
+                td = td.set(self.log_prob_key, log_probs)
+        return next_tensordict.update(td)

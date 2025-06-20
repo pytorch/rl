@@ -74,6 +74,9 @@ class vLLMWrapper(CategoricalSequential):
             conserve type, batch-size, and device). Defaults to `True` when generating a single sample, `False`
             otherwise.
 
+        chat_template_name (str | None, optional): The name of the chat template to use for the history. Defaults to `None`.
+        chat_template (str | None, optional): The chat template to use for the history. Defaults to `None`.
+
     .. note:: The tokenizer is used when `from_text` is `True` to convert input text into token sequences. It is also
         required (or retrieved) when `pad_output` is `True` or when using text inputs with `generate=False` to ensure proper
         tokenization and padding.
@@ -120,6 +123,7 @@ class vLLMWrapper(CategoricalSequential):
     token_response_key: NestedKey = ("tokens_response",)
     text_response_key: NestedKey = ("text_response",)
     attention_mask_key: NestedKey = ("attention_mask",)
+    history_key: NestedKey = ("history",)
 
     def __init__(
         self,
@@ -137,6 +141,8 @@ class vLLMWrapper(CategoricalSequential):
         tokenizer_kwargs: dict | None = None,
         pad_output: bool = False,
         inplace: Literal[True, False, "empty"] | None = None,
+        chat_template_name: str | None = None,
+        chat_template: str | None = None,
     ):
         super().__init__()
 
@@ -149,6 +155,8 @@ class vLLMWrapper(CategoricalSequential):
         self._device = device
         self.generate = generate
         self.pad_output = pad_output
+        self.chat_template_name = chat_template_name
+        self.chat_template = chat_template
         padding_value = None
 
         if not tokenizer_kwargs:
@@ -329,7 +337,12 @@ class vLLMWrapper(CategoricalSequential):
             history = td.get(self.history_key)
             if history is None:
                 raise ValueError("No text or history provided to the vLLMWrapper.")
-            text = history.apply_chat_template(self.tokenizer)
+            tokenizer_kwargs = {}
+            if self.chat_template_name is not None:
+                tokenizer_kwargs["chat_template_name"] = self.chat_template_name
+            if self.chat_template is not None:
+                tokenizer_kwargs["chat_template"] = self.chat_template
+            text = history.apply_chat_template(self.tokenizer, **tokenizer_kwargs)
         if self.pad_output:
             tokenizer_kwargs = self.tokenizer_kwargs
             if not isinstance(text, (list, str)):
@@ -385,15 +398,35 @@ class vLLMWrapper(CategoricalSequential):
 
     def _from_vllm_logprobs_text(self, td, sampling_params, out):
         text_prompt = td.get(self.text_key)
-        if text_prompt is None:
+        text_response = td.get(self.text_response_key)
+        if text_response is None or text_prompt is None:
+            if text_response is not None and text_prompt is not None:
+                raise ValueError(
+                    "No text or history provided to the vLLMWrapper. Either both are provided or none of them."
+                )
             # Fallback on history parsing
             history = td.get(self.history_key)
             if history is None:
-                raise ValueError("No text or history provided to the vLLMWrapper.")
-            text_prompt = history.apply_chat_template(self.tokenizer)
+                raise ValueError(
+                    "No text or history provided to the TransformersWrapper."
+                )
+            tokenizer_kwargs = {}
+            if self.chat_template_name is not None:
+                tokenizer_kwargs.setdefault(
+                    "chat_template_name", self.chat_template_name
+                )
+            if self.chat_template is not None:
+                tokenizer_kwargs.setdefault("chat_template", self.chat_template)
+            tokenizer_kwargs.setdefault("add_generation_prompt", False)
+            text_response = history.apply_chat_template(
+                tokenizer=self.tokenizer, **tokenizer_kwargs
+            )
+            if isinstance(text_response, list):
+                text_prompt = ["" for _ in text_response]
+            else:
+                text_prompt = ""
         if not isinstance(text_prompt, list):
             text_prompt = text_prompt.tolist()
-        text_response = td.get(self.text_response_key)
         if not isinstance(text_response, list):
             text_response = text_response.tolist()
         text = [_x + _y for _x, _y in _zip_strict(text_prompt, text_response)]

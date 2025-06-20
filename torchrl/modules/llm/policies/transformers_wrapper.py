@@ -65,6 +65,10 @@ class TransformersWrapper(CategoricalSequential):
             operations. If `True`, operations will be performed in-place. If `False`, a new TensorDict instance will be
             created. If `"empty"`, the output data structure will be initialized with `input.empty()` (i.e., it will
             conserve type, batch-size, and device). Defaults to `True`.
+        chat_template_name (Literal["chatml_format", "qwen"] | None, optional): The name of the chat template to use when
+            applying the chat template to the history. Defaults to `None`.
+        chat_template (str | None, optional): The chat template to use when applying the chat template to the history.
+            Defaults to `None`.
 
     .. note:: The tokenizer is used when `from_text` is `True` to convert input text into token sequences. It is also
         required (or retrieved) when `pad_output` is `True` or when using text inputs with `generate=False` to ensure proper
@@ -131,6 +135,8 @@ class TransformersWrapper(CategoricalSequential):
         tokenizer_kwargs: dict | None = None,
         pad_output: bool = True,
         inplace: Literal[True, False, "empty"] | None = True,
+        chat_template_name: Literal["chatml_format", "qwen"] | None = None,
+        chat_template: str | None = None,
     ):
         super().__init__()
 
@@ -143,6 +149,8 @@ class TransformersWrapper(CategoricalSequential):
         self.inplace = inplace
         self.pad_output = pad_output
         padding_value = None
+        self.chat_template_name = chat_template_name
+        self.chat_template = chat_template
 
         if not tokenizer_kwargs:
             tokenizer_kwargs = {}
@@ -300,7 +308,17 @@ class TransformersWrapper(CategoricalSequential):
                 raise ValueError(
                     "No text or history provided to the TransformersWrapper."
                 )
-            text = history.apply_chat_template(self.tokenizer)
+            tokenizer_kwargs = {}
+            if self.chat_template_name is not None:
+                tokenizer_kwargs.setdefault(
+                    "chat_template_name", self.chat_template_name
+                )
+            if self.chat_template is not None:
+                tokenizer_kwargs.setdefault("chat_template", self.chat_template)
+            tokenizer_kwargs.setdefault("add_generation_prompt", False)
+            text = history.apply_chat_template(
+                tokenizer=self.tokenizer, **tokenizer_kwargs
+            )
         if not isinstance(text, (list, str)):
             text = text.tolist()
         tokens_in = self.tokenizer(text, **self.tokenizer_kwargs)
@@ -325,7 +343,7 @@ class TransformersWrapper(CategoricalSequential):
             logits = torch.stack(list(tokens_out["logits"]), 1)
             logits = _unpad_tensors(logits, mask_sequences, as_nested=False)
             log_probs, logits = self._log_probs_generate(
-                sequences, logits, pad_val=pad_val
+                sequences, logits, pad_val=-100
             )
         response_text = self.tokenizer.batch_decode(
             sequences, skip_special_tokens=False
@@ -407,17 +425,36 @@ class TransformersWrapper(CategoricalSequential):
         pad_val = self.tokenizer.pad_token_id
 
         prompt_txt = td.get(self.text_key)
-        if prompt_txt is None:
+        response_txt = td.get(self.text_response_key)
+        if prompt_txt is None or response_txt is None:
+            if prompt_txt is not None and response_txt is not None:
+                raise ValueError(
+                    "No text or history provided to the TransformersWrapper. Either both are provided or none of them."
+                )
             # Fallback on history parsing
             history = td.get(self.history_key)
             if history is None:
                 raise ValueError(
                     "No text or history provided to the TransformersWrapper."
                 )
-            prompt_txt = history.apply_chat_template(self.tokenizer)
+            tokenizer_kwargs = {}
+            if self.chat_template_name is not None:
+                tokenizer_kwargs.setdefault(
+                    "chat_template_name", self.chat_template_name
+                )
+            if self.chat_template is not None:
+                tokenizer_kwargs.setdefault("chat_template", self.chat_template)
+            tokenizer_kwargs.setdefault("add_generation_prompt", False)
+            response_txt = history.apply_chat_template(
+                tokenizer=self.tokenizer, **tokenizer_kwargs
+            )
+            if isinstance(response_txt, list):
+                prompt_txt = ["" for _ in response_txt]
+            else:
+                prompt_txt = ""
+
         if not isinstance(prompt_txt, (list, str)):
             prompt_txt = prompt_txt.tolist()
-        response_txt = td.get(self.text_response_key)
         if not isinstance(response_txt, (list, str)):
             response_txt = response_txt.tolist()
         total_txt = [x + y for x, y in _zip_strict(prompt_txt, response_txt)]
@@ -450,6 +487,8 @@ class TransformersWrapper(CategoricalSequential):
         )
         sequences = [
             _total_input_ids[_prompt_input_ids.shape[-1] :]
+            if _prompt_input_ids.shape[-1] > 0
+            else _total_input_ids
             for _total_input_ids, _prompt_input_ids in zip(
                 total_input_ids, prompt_input_ids
             )
@@ -484,7 +523,7 @@ class TransformersWrapper(CategoricalSequential):
 
         total_input_ids = [
             torch.cat([_prompt_input_ids, _response_input_ids], -1)
-            for _prompt_input_ids, _response_input_ids in zip(
+            for _prompt_input_ids, _response_input_ids in _zip_strict(
                 prompt_input_ids, response_input_ids
             )
         ]
@@ -512,7 +551,7 @@ class TransformersWrapper(CategoricalSequential):
             total_input_ids, attention_mask=total_attention_mask, **kwargs
         )
         log_probs, logits = self._log_probs_from_logits(
-            total_tokens_out, response_input_ids, pad_val=pad_val
+            total_tokens_out, response_input_ids, pad_val=-100
         )
         # for i in range(log_probs.size(0)):
         #     assert log_probs[i].shape[-1] == response_input_ids[i].shape[-1]
@@ -522,7 +561,7 @@ class TransformersWrapper(CategoricalSequential):
         return out
 
     @classmethod
-    def _log_probs_from_logits(cls, total_tokens_out, response_input_ids, pad_val):
+    def _log_probs_from_logits(cls, total_tokens_out, response_input_ids, pad_val=-100):
         response_input_ids = pad_sequence(
             response_input_ids,
             padding_value=pad_val,
@@ -532,10 +571,21 @@ class TransformersWrapper(CategoricalSequential):
         pad_mask = response_input_ids != pad_val
 
         logits = total_tokens_out["logits"]
-        logits = logits.log_softmax(dim=-1)
-        logits = logits[:, -response_input_ids.shape[-1] - 1 : -1, :]
+        # logits = logits.log_softmax(dim=-1)
+        if logits.shape[-2] != response_input_ids.shape[-1]:
+            logits = logits[..., -response_input_ids.shape[-1] - 1 : -1, :]
 
-        log_probs = logits.gather(-1, response_input_ids.unsqueeze(-1)).squeeze(-1)
+        td = TensorDict(
+            logits=logits, response_input_ids=response_input_ids
+        ).auto_batch_size_()
+        with td.flatten() as tdflat:
+            tdflat["log_probs"] = -torch.nn.functional.cross_entropy(
+                tdflat["logits"],
+                tdflat["response_input_ids"],
+                reduce=False,
+                ignore_index=pad_val,
+            )
+        log_probs = td["log_probs"]
 
         # Recover the list
         log_probs = _unpad_tensors(log_probs, pad_mask)
@@ -543,7 +593,7 @@ class TransformersWrapper(CategoricalSequential):
         return log_probs, logits
 
     @classmethod
-    def _log_probs_generate(cls, sequences, logits, pad_val):
+    def _log_probs_generate(cls, sequences, logits, pad_val=-100):
         tokens = pad_sequence(
             sequences,
             padding_value=pad_val,
@@ -557,6 +607,12 @@ class TransformersWrapper(CategoricalSequential):
             padding_side="left",
         )
 
-        logits = logits.log_softmax(dim=-1)
-        log_probs = logits.gather(-1, tokens.unsqueeze(-1)).squeeze(-1)
+        # logits = logits.log_softmax(dim=-1)
+        # log_probs = logits.gather(-1, tokens.unsqueeze(-1)).squeeze(-1)
+        td = TensorDict(logits=logits, tokens=tokens).auto_batch_size_()
+        with td.flatten() as tdflat:
+            tdflat["log_probs"] = -torch.nn.functional.cross_entropy(
+                tdflat["logits"], tdflat["tokens"], reduce=False, ignore_index=pad_val
+            )
+        log_probs = td["log_probs"]
         return log_probs, logits

@@ -1,0 +1,13 @@
+# @package _global_
+train:
+  # Mode-specific setting
+  sync: true  # Force synchronous mode
+  
+  # Number of epochs to train for, every time a batch is collected.
+  epochs: 4
+
+  # Update policy weights every N global (gradient) steps. If blank, we update the weights after each batch.
+  weight_update_frequency:  
+
+  # Mode-specific values
+  sync_iter: true

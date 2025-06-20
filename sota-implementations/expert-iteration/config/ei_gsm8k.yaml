@@ -7,33 +7,53 @@ defaults:
 
 # Environment configuration
 env:
-  dataset: ifeval  # choices: [gsm8k, ifeval]
+  dataset: gsm8k  # choices: [gsm8k, ifeval]
   # Number of environments to run in parallel. This determines the batch size passed to vLLM.
-  # More envs consume more GPU memory.
-  num_envs: 4
+  #  More envs consume more GPU memory.
+  num_envs: 8  # Reduced from 8 to save memory
   # Number of times to repeat the same prompt for GRPO. This does not affect the GPU memory usage.
-  repeats: 16
+  repeats: 32
 
 # Base model configuration
 model:
-  # A 7B model works well for this task.
-  name: Qwen/Qwen2.5-7b
+  # A 3B model is sufficient for this task:
+  name: Qwen/Qwen2.5-3B
   compile: false
 
 # Base training configuration - will be merged with mode-specific settings
 train:
   # Some fields are defined in mode configs (async.yaml and sync.yaml)
   # The following fields are task-specific:
-  exp_name: "grpo-ifeval"
+  exp_name: "grpo-gsm8k"
 
   # Whether to use mixed precision training.
   mixed_precision: true
+
+  # Number of top-k rewards to select for training.
+  topk_size: 4
 
   # Total number of dialog turns to collect during training.
   total_dialog_turns: 100_000
 
   # Number of steps in each batch. Higher values will cause the inference step to be slower, but won't use more GPU memory.
-  dialog_turns_per_batch: 64
+  # Dynamically set based on mode: 256 for sync mode, env.repeats for async mode
+  # Can be overridden by explicitly setting this value
+  dialog_turns_per_batch: # Default value, will be overridden by mode-specific configs
+
+  # Replay buffer size. For a given prompt, we will query the LLM a total of `env.repeats` times.
+  # Then, the top-k rewards will be selected from these `env.repeats` rewards.
+  # A single batch collected has size `train.dialog_turns_per_batch`, and the fraction written to the replay buffer is `train.topk_size / env.repeats`.
+  # If `buffer_size` is not set, it will default to `train.dialog_turns_per_batch * train.topk_size / env.repeats` in sync mode, and 256 in async mode.
+  buffer_size: 
+
+  # Prioritized sampling
+  prioritized_sampling: true
+  # Prioritized sampling alpha - higher values prioritize more high-reward experiences
+  prioritized_sampling_alpha: 0.8
+  # Prioritized sampling beta
+  prioritized_sampling_beta: 0.4
+  # Prioritized sampling epsilon
+  prioritized_sampling_epsilon: 1e-6
 
   # Number of gradient accumulation steps. Higher values will use less GPU memory (comparing with bigger batches and lower gradient_accumulation_steps), 
   # but will make the optimization step slower.
@@ -42,24 +62,27 @@ train:
   # Fields used by both scripts but with different semantics
   checkpoint_frequency: 100  # Save checkpoint every N steps/batches
 
-  # Batch size for optimization. Higher values will use more GPU memory.
-  optim_batch_size: 2
+  # Batch size for optimization (pre-gradient accumulation). Higher values will use more GPU memory.
+  optim_batch_size: 4
 
-  # Whether to include the KL coefficient in the loss function. Alternatively, the KL ref-to-train will be added to the reward.
-  kl_coef_in_loss: false 
+  # Maximum policy age. If the policy age is greater than this value, the batch will be skipped.
+  max_policy_age: null
 
   # KL coefficients for the KL divergence to the reference and inference policies
-  kl_to_ref_coeff: 1e-1
-  kl_to_inference_coeff: 1e-1
-  entropy_coeff: 0.01
-  
+  kl_to_ref_coeff: 2.0
+
+  # Loss function to use (sft or minor_sft)
+  loss_function: minor_sft
+  # Beta parameter for MinorSFT loss
+  minor_sft_beta: 0.001
+
   # Fields used only by grpo-async.py / grpo-sync.py
-  logging_frequency: 1  # Log metrics every N steps - here at each optimization step
+  logging_frequency: 1  # Log metrics every N steps
 
 # Training model configuration
 train_model:
   gradient_checkpointing: true  # Enabled for memory efficiency
-  num_devices: 4  # Number of devices to use
+  num_devices: 1  # Number of devices to use
   lora:
     enabled: true  # Using LoRA for memory efficiency
     r: 8  # LoRA rank - controls capacity of adaptations
@@ -69,24 +92,26 @@ train_model:
     enabled: false  # Enable 4-bit quantization for base model
   attn_implementation: sdpa  # Using flash attention for memory efficiency
   torch_dtype: bfloat16
+  # Whether to use the model in eval mode. Typically, we want to use the model in train mode.
+  eval: false
 
 # Inference model configuration
 inference_model:
-  num_devices: 2  # Number of devices to use
+  num_devices: 1  # Number of devices to use
   quantization:
     enabled: false  # Enable 4-bit quantization for base model
   attn_implementation: sdpa  # Using flash attention for memory efficiency
   torch_dtype: bfloat16
-  gpu_memory_utilization: 0.5  # Limit GPU memory usage
+  gpu_memory_utilization: 0.75  # Limit GPU memory usage
   temperature: 0.8
-  max_tokens: 2048
+  max_tokens: 1024
   include_stop_str_in_output: true
   enforce_eager: false
 
 # Reference model configuration
 ref_model:
   gradient_checkpointing: false  # Always false, no backprop
-  num_devices: 2  # Number of devices to use
+  num_devices: 1  # Number of devices to use
   lora:
     enabled: true  # Using LoRA for memory efficiency
     r: 8  # LoRA rank - controls capacity of adaptations
@@ -101,8 +126,14 @@ ref_model:
 optimizer:
   name: AdamW
   lr: 1e-5
-  clip_grad_norm: 10.0
-  weight_decay: 0.0
+  clip_grad_norm: 1.0
+  weight_decay: 0.01
+  # Scheduler configuration
+  scheduler:
+    enabled: true
+    type: "cosine_with_warmup"
+    warmup_steps: 100
+    num_cycles: 0.5
 
 # Ray configuration
 ray:
@@ -118,7 +149,7 @@ ray:
       object_store_full_delay_ms: 100  # Delay when store is full
       object_store_full_max_retries: 3  # Max retries when store is full
   collector_config:
-    num_cpus: 24  # CPUs for inference and ref model (co-located)
+    num_cpus: 24  # CPUs for inference and ref model
   train_handler_config:
     num_cpus: 24  # Dedicated CPUs for training
   replay_buffer_config:

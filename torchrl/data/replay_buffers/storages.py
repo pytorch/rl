@@ -230,15 +230,38 @@ class ListStorage(Storage):
         max_size (int, optional): the maximum number of elements stored in the storage.
             If not provided, an unlimited storage is created.
 
+    Keyword Args:
+        compilable (bool, optional): if ``True``, the storage will be made compatible with :func:`~torch.compile` at
+            the cost of being executable in multiprocessed settings.
+        device (str, optional): the device to use for the storage. Defaults to `None` (inputs are not moved to the device).
+
     """
 
     _default_checkpointer = ListStorageCheckpointer
 
-    def __init__(self, max_size: int | None = None, compilable: bool = False):
+    def __init__(
+        self,
+        max_size: int | None = None,
+        *,
+        compilable: bool = False,
+        device: torch.device | str | int | None = None,
+    ):
         if max_size is None:
             max_size = torch.iinfo(torch.int64).max
         super().__init__(max_size, compilable=compilable)
         self._storage = []
+        self.device = device
+
+    def _to_device(self, data: Any) -> Any:
+        """Utility method to move data to the device."""
+        if self.device is not None:
+            if hasattr(data, "to"):
+                data = data.to(self.device)
+            else:
+                data = tree_map(
+                    lambda x: x.to(self.device) if hasattr(x, "to") else x, data
+                )
+        return data
 
     def set(
         self,
@@ -254,6 +277,7 @@ class ListStorage(Storage):
                 self.set(int(cursor), data, set_cursor=set_cursor)
                 return
             if isinstance(cursor, slice):
+                data = self._to_device(data)
                 self._storage[cursor] = data
                 return
             if isinstance(
@@ -290,6 +314,7 @@ class ListStorage(Storage):
                     f"maximum capacity is {self.max_size} "
                     f"and the index of the item to be set is {cursor}."
                 )
+            data = self._to_device(data)
             if cursor == len(self._storage):
                 self._storage.append(data)
             else:
@@ -387,6 +412,7 @@ class LazyStackStorage(ListStorage):
         compilable (bool, optional): if ``True``, the storage will be made compatible with :func:`~torch.compile` at
             the cost of being executable in multiprocessed settings.
         stack_dim (int, optional): the stack dimension in terms of TensorDict batch sizes. Defaults to `0`.
+        device (str, optional): the device to use for the storage. Defaults to `None` (inputs are not moved to the device).
 
     Examples:
         >>> import torch
@@ -421,8 +447,9 @@ class LazyStackStorage(ListStorage):
         *,
         compilable: bool = False,
         stack_dim: int = 0,
+        device: torch.device | str | int | None = None,
     ):
-        super().__init__(max_size=max_size, compilable=compilable)
+        super().__init__(max_size=max_size, compilable=compilable, device=device)
         self.stack_dim = stack_dim
 
     def get(self, index: int | Sequence[int] | slice) -> Any:
