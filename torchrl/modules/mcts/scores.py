@@ -207,5 +207,5 @@ class MCTSScores(Enum):
     PUCT = functools.partial(PUCTScore, c=5)  # AlphaGo default value
     UCB = functools.partial(UCBScore, c=math.sqrt(2))  # default from Auer et al. 2002
     UCB1_TUNED = "UCB1-Tuned"
-    EXP3 = "EXP3"
+    EXP3 = functool.partial(EXP3Score, gamma=0.1)
     PUCT_VARIANT = "PUCT-Variant"
