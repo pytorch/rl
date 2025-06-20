@@ -350,7 +350,7 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
             # Add a "done" entry
             if self.split_trajs:
                 with td_data.unlock_():
-                    from torchrl.objectives.utils import split_trajectories
+                    from torchrl.collectors.utils import split_trajectories
 
                     td_data = split_trajectories(td_data).memmap_(self.data_path)
             with open(self.metadata_path, "w") as metadata_file:
