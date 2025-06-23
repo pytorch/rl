@@ -738,7 +738,7 @@ class Transform(nn.Module):
         self.__dict__.update(state)
 
     @property
-    def parent(self) -> EnvBase | None:
+    def parent(self) -> TransformedEnv | None:
         """Returns the parent env of the transform.
 
         The parent env is the env that contains all the transforms up until the current one.
@@ -1249,6 +1249,7 @@ but got an object of type {type(transform)}."""
     def empty_cache(self):
         self.__dict__["_output_spec"] = None
         self.__dict__["_input_spec"] = None
+        self.transform.empty_cache()
         super().empty_cache()
 
     def append_transform(
@@ -1429,6 +1430,50 @@ class Compose(Transform):
         for t in transforms:
             t.set_container(self)
 
+    def pop(self, index: int | None = None) -> Transform:
+        """Pop a transform from the chain.
+
+        Args:
+            index (int, optional): The index of the transform to pop. If None, the last transform is popped.
+
+        Returns:
+            The popped transform.
+        """
+        if index is None:
+            index = len(self.transforms) - 1
+        result = self.transforms.pop(index)
+        parent = self.parent
+        self.empty_cache()
+        if parent is not None:
+            parent.empty_cache()
+        return result
+
+    def __delitem__(self, index: int | slice | list):
+        """Delete a transform in the chain.
+
+        :class:`~torchrl.envs.transforms.Transform` or callable are accepted.
+        """
+        del self.transforms[index]
+        parent = self.parent
+        self.empty_cache()
+        if parent is not None:
+            parent.empty_cache()
+
+    def __setitem__(
+        self,
+        index: int | slice | list,
+        value: Transform | Callable[[TensorDictBase], TensorDictBase],
+    ):
+        """Set a transform in the chain.
+
+        :class:`~torchrl.envs.transforms.Transform` or callable are accepted.
+        """
+        self.transforms[index] = value
+        parent = self.parent
+        self.empty_cache()
+        if parent is not None:
+            parent.empty_cache()
+
     def close(self):
         """Close the transform."""
         for t in self.transforms:
@@ -1594,6 +1639,9 @@ class Compose(Transform):
         else:
             self.transforms.append(transform)
         transform.set_container(self)
+        parent = self.parent
+        if parent is not None:
+            parent.empty_cache()
 
     def set_container(self, container: Transform | EnvBase) -> None:
         self.reset_parent()
@@ -1626,6 +1674,9 @@ class Compose(Transform):
 
         # empty cache of all transforms to reset parents and specs
         self.empty_cache()
+        parent = self.parent
+        if parent is not None:
+            parent.empty_cache()
         if index < 0:
             index = index + len(self.transforms)
         transform.eval()

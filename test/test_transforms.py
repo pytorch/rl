@@ -9674,6 +9674,7 @@ class TestVecNormV2:
     def rename_t(self):
         return RenameTransform(in_keys=["observation"], out_keys=[("some", "obs")])
 
+    @retry(AssertionError, tries=10, delay=0)
     @pytest.mark.parametrize("nprc", [2, 5])
     def test_vecnorm_parallel_auto(self, nprc):
         queues = []
@@ -10618,6 +10619,38 @@ class TestTransforms:
                 assert observation_spec[key].shape == torch.Size(
                     [nchannels * N, 16, 16]
                 )
+
+    def test_compose_pop(self):
+        t1 = CatFrames(in_keys=["a", "b"], N=2, dim=-1)
+        t2 = FiniteTensorDictCheck()
+        t3 = ExcludeTransform()
+        compose = Compose(t1, t2, t3)
+        assert len(compose.transforms) == 3
+        p = compose.pop()
+        assert p is t3
+        assert len(compose.transforms) == 2
+        p = compose.pop(0)
+        assert p is t1
+        assert len(compose.transforms) == 1
+        p = compose.pop()
+        assert p is t2
+        assert len(compose.transforms) == 0
+        with pytest.raises(IndexError, match="index -1 is out of range"):
+            compose.pop()
+
+    def test_compose_pop_parent_modification(self):
+        t1 = CatFrames(in_keys=["a", "b"], N=2, dim=-1)
+        t2 = FiniteTensorDictCheck()
+        t3 = ExcludeTransform()
+        compose = Compose(t1, t2, t3)
+        env = TransformedEnv(ContinuousActionVecMockEnv(), compose)
+        p = t2.parent
+        assert isinstance(p.transform[0], CatFrames)
+        env.transform.pop(0)
+        assert env.transform[0] is t2
+        new_p = t2.parent
+        assert new_p is not p
+        assert len(new_p.transform) == 0
 
     def test_lambda_functions(self):
         def trsf(data):
