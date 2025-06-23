@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+77dbc6c) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+205243c) &#x25BC</span></a>
     </div>
     
 
@@ -1174,10 +1174,10 @@
 
         <span class="n">explained_variance</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_explained_variance</span><span class="p">:</span>
-            <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>                               <span class="c1"># &lt;‑‑ break grad‐flow</span>
-                <span class="n">tgt</span>   <span class="o">=</span> <span class="n">target_return</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
-                <span class="n">pred</span>  <span class="o">=</span> <span class="n">state_value</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
-                <span class="n">eps</span>   <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">finfo</span><span class="p">(</span><span class="n">tgt</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">eps</span>
+            <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>  <span class="c1"># &lt;‑‑ break grad‐flow</span>
+                <span class="n">tgt</span> <span class="o">=</span> <span class="n">target_return</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+                <span class="n">pred</span> <span class="o">=</span> <span class="n">state_value</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+                <span class="n">eps</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">finfo</span><span class="p">(</span><span class="n">tgt</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">eps</span>
                 <span class="n">resid</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">var</span><span class="p">(</span><span class="n">tgt</span> <span class="o">-</span> <span class="n">pred</span><span class="p">,</span> <span class="n">unbiased</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
                 <span class="n">total</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">var</span><span class="p">(</span><span class="n">tgt</span><span class="p">,</span> <span class="n">unbiased</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
                 <span class="n">explained_variance</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="n">resid</span> <span class="o">/</span> <span class="p">(</span><span class="n">total</span> <span class="o">+</span> <span class="n">eps</span><span class="p">)</span>
@@ -1241,7 +1241,9 @@
                 <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;entropy&quot;</span><span class="p">,</span> <span class="n">entropy</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>  <span class="c1"># for logging</span>
             <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;loss_entropy&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weighted_loss_entropy</span><span class="p">(</span><span class="n">entropy</span><span class="p">))</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_has_critic</span><span class="p">:</span>
-            <span class="n">loss_critic</span><span class="p">,</span> <span class="n">value_clip_fraction</span><span class="p">,</span> <span class="n">explained_variance</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_critic</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+            <span class="n">loss_critic</span><span class="p">,</span> <span class="n">value_clip_fraction</span><span class="p">,</span> <span class="n">explained_variance</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_critic</span><span class="p">(</span>
+                <span class="n">tensordict</span>
+            <span class="p">)</span>
             <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;loss_critic&quot;</span><span class="p">,</span> <span class="n">loss_critic</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">value_clip_fraction</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;value_clip_fraction&quot;</span><span class="p">,</span> <span class="n">value_clip_fraction</span><span class="p">)</span>
@@ -1611,7 +1613,9 @@
                 <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;entropy&quot;</span><span class="p">,</span> <span class="n">entropy</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>  <span class="c1"># for logging</span>
             <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;loss_entropy&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weighted_loss_entropy</span><span class="p">(</span><span class="n">entropy</span><span class="p">))</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_has_critic</span><span class="p">:</span>
-            <span class="n">loss_critic</span><span class="p">,</span> <span class="n">value_clip_fraction</span><span class="p">,</span> <span class="n">explained_variance</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_critic</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+            <span class="n">loss_critic</span><span class="p">,</span> <span class="n">value_clip_fraction</span><span class="p">,</span> <span class="n">explained_variance</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_critic</span><span class="p">(</span>
+                <span class="n">tensordict</span>
+            <span class="p">)</span>
             <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;loss_critic&quot;</span><span class="p">,</span> <span class="n">loss_critic</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">value_clip_fraction</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;value_clip_fraction&quot;</span><span class="p">,</span> <span class="n">value_clip_fraction</span><span class="p">)</span>
@@ -1959,7 +1963,9 @@
                 <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;entropy&quot;</span><span class="p">,</span> <span class="n">entropy</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>  <span class="c1"># for logging</span>
             <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;loss_entropy&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weighted_loss_entropy</span><span class="p">(</span><span class="n">entropy</span><span class="p">))</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_has_critic</span><span class="p">:</span>
-            <span class="n">loss_critic</span><span class="p">,</span> <span class="n">value_clip_fraction</span><span class="p">,</span> <span class="n">explained_variance</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_critic</span><span class="p">(</span><span class="n">tensordict_copy</span><span class="p">)</span>
+            <span class="n">loss_critic</span><span class="p">,</span> <span class="n">value_clip_fraction</span><span class="p">,</span> <span class="n">explained_variance</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_critic</span><span class="p">(</span>
+                <span class="n">tensordict_copy</span>
+            <span class="p">)</span>
             <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;loss_critic&quot;</span><span class="p">,</span> <span class="n">loss_critic</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">value_clip_fraction</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;value_clip_fraction&quot;</span><span class="p">,</span> <span class="n">value_clip_fraction</span><span class="p">)</span>
