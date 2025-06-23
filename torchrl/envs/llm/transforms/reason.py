@@ -40,6 +40,11 @@ class AddThinkingPrompt(Transform):
             is added. If `None`, defaults to the value of `edit_last_turn`. Defaults to the same value as `edit_last_turn`.
         undo_done (bool, optional): Whether to undo the done flag when the thinking prompt
             is added. Defaults to `True`.
+        log_probs_model (Callable[[TensorDictBase], TensorDictBase], optional): A function that takes a tensordict and returns a tensordict with the log-probs
+            of the assistant's response, whenever role is `"assistant"`. If not provided, the log-probs will be left unchanged, if present.
+
+            .. note:: Recomputing the log-probs is useful for training with KL divergence, or in on-policy training such as GRPO.
+                If a `log_probs_model` is not provided and the last turn is edited, the log-probs initially computed will have the wrong shape and a warning will be raised.
 
     Examples:
         >>> from torchrl.envs.llm.transforms import AddThinkingPrompt
@@ -109,6 +114,7 @@ class AddThinkingPrompt(Transform):
         edit_last_turn: bool = True,
         zero_reward: bool | None = None,
         undo_done: bool = True,
+        log_probs_model: Callable[[TensorDictBase], TensorDictBase] | None = None,
     ) -> None:
         super().__init__()
 
@@ -167,7 +173,21 @@ class AddThinkingPrompt(Transform):
             history: History = next_tensordict["history"]
             last_turn = history[..., -1]
 
+            # Make sure we delete the `"text_response"` entry - we need to do this because KLRewardTransform
+            #  would otherwise use the previous text response to compute the KL divergence.
+            del next_tensordict["text_response"]
+
+            if (
+                self.edit_last_turn
+                and self.log_probs_model is None
+                and "log_probs" in tensordict.keys()
+            ):
+                warnings.warn(
+                    "No log_probs_model provided. The log-probs will be left unchanged, if present."
+                )
+
             if self.edit_last_turn:
+
                 # Edit the last assistant response
                 content = last_turn.content
                 modified_content = self._replace_answer_with_prompt(content)
@@ -183,6 +203,12 @@ class AddThinkingPrompt(Transform):
                 # Replace the last turn in history
                 history = history[..., :-1].append(new_turn)
                 next_tensordict["history"] = history
+
+                if self.log_probs_model is not None:
+                    log_probs = self.log_probs_model(
+                        next_tensordict.select("history")
+                    ).get("log_probs")
+                    tensordict.set("log_probs", log_probs)
 
             else:
                 # Add a new message

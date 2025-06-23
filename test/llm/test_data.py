@@ -418,6 +418,250 @@ The result is""",
                 ], "Case 5 should have last message incomplete"
                 assert history[2].role == "tool"
 
+    @pytest.mark.parametrize(
+        "model_name, expected_template",
+        [
+            ("Qwen/Qwen2.5-0.5B", "qwen"),
+            ("microsoft/phi-2", "chatml_format"),
+            ("mosaicml/mpt-7b-instruct", "chatml_format"),
+            ("facebook/opt-125m", "chatml_format"),
+            ("gpt2", "chatml_format"),
+            ("EleutherAI/pythia-70m", "chatml_format"),
+            ("bigscience/bloom-560m", "chatml_format"),
+            ("deepseek-ai/deepseek-coder-6.7b-base", "deepseek"),
+        ],
+    )
+    def test_assistant_mask_model_families(self, model_name, expected_template):
+        """Test assistant token masking support across different model families."""
+        from transformers import AutoTokenizer
+
+        print(f"\nTesting {model_name} with {expected_template} template")
+        tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+
+        # Create a simple history
+        history = History.from_chats(
+            [
+                [
+                    {"role": "user", "content": "Hello"},
+                    {"role": "assistant", "content": "Hi there!"},
+                ]
+            ]
+        )
+
+        # Test with expected template
+        result = history.apply_chat_template(
+            tokenizer=tokenizer,
+            chat_template_name=expected_template,
+            add_generation_prompt=False,
+            return_dict=True,
+            return_assistant_tokens_mask=True,
+        )
+
+        # Verify assistant mask is present
+        assert (
+            "assistant_masks" in result
+        ), f"Model {model_name} should support assistant masking"
+        assert (
+            result["assistant_masks"].shape[0] == 1
+        ), "Should have batch dimension of 1"
+        assert result["assistant_masks"].shape[1] > 0, "Should have sequence length > 0"
+
+        # Verify some assistant tokens are masked
+        assistant_token_count = result["assistant_masks"].sum().item()
+        assert (
+            assistant_token_count > 0
+        ), f"Model {model_name} should have assistant tokens masked"
+        torchrl_logger.info(
+            f"  ✓ {model_name}: {assistant_token_count} assistant tokens masked"
+        )
+
+    @pytest.mark.parametrize(
+        "template_name", ["qwen", "dialogpt", "falcon", "deepseek"]
+    )
+    def test_assistant_mask_with_custom_templates(self, template_name):
+        """Test that models with custom templates can still use assistant masking."""
+        from transformers import AutoTokenizer
+
+        # Test Qwen with its custom template
+        tokenizer = AutoTokenizer.from_pretrained(
+            "Qwen/Qwen2.5-0.5B", trust_remote_code=True
+        )
+
+        history = History.from_chats(
+            [
+                [
+                    {"role": "user", "content": "Hello"},
+                    {"role": "assistant", "content": "Hi there!"},
+                ]
+            ]
+        )
+
+        # Test with Qwen's custom template
+        result = history.apply_chat_template(
+            tokenizer=tokenizer,
+            chat_template_name=template_name,
+            add_generation_prompt=False,
+            return_dict=True,
+            return_assistant_tokens_mask=True,
+        )
+
+        assert "assistant_masks" in result
+        assert result["assistant_masks"].sum().item() > 0
+
+    @pytest.mark.parametrize(
+        "model_name, template_name",
+        [
+            ("Qwen/Qwen2.5-0.5B", "qwen"),
+            ("microsoft/DialoGPT-medium", "dialogpt"),
+            ("tiiuae/falcon-7b-instruct", "falcon"),
+            ("deepseek-ai/deepseek-coder-6.7b-base", "deepseek"),
+        ],
+    )
+    def test_custom_template_equivalence(self, model_name, template_name):
+        """Test that our custom templates produce the same output as the model's default template (except for masking)."""
+        import re
+
+        import transformers
+
+        # Simple multi-turn chat for each model
+        def norm(s):
+            if isinstance(s, list):
+                return [re.sub(r"\s+", " ", x.strip()) for x in s]
+            elif isinstance(s, str):
+                return re.sub(r"\s+", " ", s.strip())
+            else:
+                return s
+
+        chat = [
+            {"role": "user", "content": "Hello"},
+            {"role": "assistant", "content": "Hi there!"},
+            {"role": "user", "content": "How are you?"},
+            {"role": "assistant", "content": "I'm good, thanks!"},
+        ]
+
+        tokenizer = transformers.AutoTokenizer.from_pretrained(
+            model_name, trust_remote_code=True
+        )
+        history = History.from_chats([chat])
+
+        # Output with model's default template
+        try:
+            default_out = history.apply_chat_template(
+                tokenizer=tokenizer,
+                add_generation_prompt=False,
+                chat_template=tokenizer.chat_template,  # Use model's default
+                chat_template_name=None,
+                tokenize=False,
+            )
+        except Exception as e:
+            default_out = None
+            print(f"[WARN] Could not get default template for {model_name}: {e}")
+
+        # Output with our custom template
+        custom_out = history.apply_chat_template(
+            tokenizer=tokenizer,
+            add_generation_prompt=False,
+            chat_template_name=template_name,
+            chat_template=None,
+            tokenize=False,
+        )
+
+        if default_out is not None:
+            assert norm(default_out) == norm(custom_out), (
+                f"Custom template for {model_name} does not match default!\n"
+                f"Default: {default_out}\nCustom: {custom_out}"
+            )
+        else:
+            print(
+                f"[INFO] Skipped equivalence check for {model_name} (no default template available)"
+            )
+
+    def test_add_chat_template_parameters_used(self):
+        """Test that add_chat_template actually uses inverse_parser and model_family_keywords parameters with a real tokenizer."""
+        import re
+
+        from torchrl.data.llm.chat import add_chat_template, History
+        from transformers import AutoTokenizer
+
+        # Track if the inverse parser is called
+        inverse_parser_called = {"called": False}
+
+        # Create a custom template (trivially different from Qwen)
+        custom_template = """
+        {% for message in messages %}
+        {%- if message['role'] == 'user' %}
+        [USER] {{ message['content'] }}
+        {%- elif message['role'] == 'assistant' %}
+        {% generation %}[ASSISTANT] {{ message['content'] }}{% endgeneration %}
+        {%- endif %}
+        {% endfor %}
+        """
+
+        # Custom inverse parser
+        def custom_inverse_parser(text: str) -> History:
+            inverse_parser_called["called"] = True
+            user_msgs = re.findall(
+                r"\[USER\] (.*?)(?=\[ASSISTANT\]|$)", text, re.DOTALL
+            )
+            assistant_msgs = re.findall(
+                r"\[ASSISTANT\] (.*?)(?=\[USER\]|$)", text, re.DOTALL
+            )
+            messages = []
+            for i, user_content in enumerate(user_msgs):
+                messages.append(History(role="user", content=user_content.strip()))
+                if i < len(assistant_msgs):
+                    messages.append(
+                        History(role="assistant", content=assistant_msgs[i].strip())
+                    )
+            return lazy_stack(messages)
+
+        # Register the custom template and parser for Qwen
+        add_chat_template(
+            template_name="qwen_custom",
+            template=custom_template,
+            inverse_parser=custom_inverse_parser,
+            model_family_keywords=["qwen"],
+        )
+
+        # Use a real Qwen tokenizer
+        tokenizer = AutoTokenizer.from_pretrained(
+            "Qwen/Qwen2.5-3B", trust_remote_code=True
+        )
+        history = History.from_chats(
+            [
+                [
+                    {"role": "user", "content": "Hello"},
+                    {"role": "assistant", "content": "Hi there!"},
+                ]
+            ]
+        )
+
+        # This should trigger auto-detection using our custom template
+        result = history.apply_chat_template(
+            tokenizer=tokenizer,
+            add_generation_prompt=False,
+            tokenize=False,
+        )
+        print(result)
+        # The result should use our custom format
+        if isinstance(result, list):
+            result_str = result[0]
+        else:
+            result_str = result
+        assert "[USER]" in result_str
+        assert "[ASSISTANT]" in result_str
+
+        # Test that inverse parser works
+        parsed = History.from_text(result, chat_template_name="qwen_custom")
+        print(parsed)
+        print(history)
+        assert inverse_parser_called["called"], "Inverse parser was not called"
+        assert parsed.role == history.role
+        assert parsed.content == history.content
+        print(
+            "✓ add_chat_template parameters are being used correctly with a real tokenizer"
+        )
+
 
 class TestTopK:
     @pytest.mark.parametrize("per_token_reward", [True, False])

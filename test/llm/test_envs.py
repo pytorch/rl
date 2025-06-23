@@ -1177,11 +1177,11 @@ class TestThinkingPrompt:
         assert reset[0]["history"][-1].content.startswith(
             "Natalia sold clips to 48 of her friends in April"
         )
-        policy_anser = (
+        policy_answer = (
             "<think>Let me solve this step by step. Natalia sold clips to 48 friends in April. Then she sold half as many in May. Half of 48 is 24. So in May she sold 24 clips. "
             "To find the total, I need to add April and May: 48 + 24 = 72. Therefore, Natalia sold 72 clips altogether in April and May.</think>\n<answer>322 clips</answer><|im_end|>"
         )
-        reset["text_response"] = [policy_anser]
+        reset["text_response"] = [policy_answer]
         s = env.step(reset)
         if zero_reward:
             assert (s["next", "reward"] == 0).all()
@@ -1240,11 +1240,11 @@ class TestThinkingPrompt:
         assert reset[0]["history"][-1].content.startswith(
             "Natalia sold clips to 48 of her friends in April"
         )
-        policy_anser = (
+        policy_answer = (
             "<think>Let me solve this step by step. Natalia sold clips to 48 friends in April. Then she sold half as many in May. Half of 48 is 24. So in May she sold 24 clips. "
             "To find the total, I need to add April and May: 48 + 24 = 72. Therefore, Natalia sold 72 clips altogether in April and May.</think>\n<answer>72</answer><|im_end|>"
         )
-        reset["text_response"] = [policy_anser]
+        reset["text_response"] = [policy_answer]
         s = env.step(reset)
         assert (s["next", "reward"] != 0).all(), s["next", "reward"]
         assert s[0]["next", "history", "role"][-1] == "assistant"

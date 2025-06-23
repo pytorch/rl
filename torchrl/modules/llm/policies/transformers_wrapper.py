@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from contextlib import nullcontext
+
 from copy import copy
 
 from typing import Literal
@@ -19,6 +21,7 @@ from tensordict import (
 )
 from tensordict.utils import _zip_strict
 from torch.nn.utils.rnn import pad_sequence
+from torchrl.data.llm.chat import History
 
 from torchrl.modules.llm.policies.common import CategoricalSequential
 from torchrl.modules.utils.utils import _unpad_tensors
@@ -39,12 +42,18 @@ class TransformersWrapper(CategoricalSequential):
         tokenizer (transformers.tokenization_utils.PreTrainedTokenizer | None, optional): The tokenizer to use for
             encoding and decoding text. If `None`, the tokenizer associated with the model will be used. Defaults to
             `None`.
+        use_history (bool, NestedKey, optional): Whether to use the history key as input. If `True`, the input is expected to
+            be a history object (under the `"history"` key). If `False`, the input is expected to be a text string, with
+            the `"text"` and `"text_response"` key pair. If a `NestedKey` is passed, it will be used as the key for the
+            history object. Defaults to `None`: first attempts to use the `("next", "history")` key, then the `"history"` key,
+            then finally the `"text"` and `"text_response"` key pair.
         from_text (bool, optional): Indicates whether the input is in text format. If `True`, the input is expected to
             be text that will be tokenized. If `False`, the input is expected to be token sequences. Defaults to `True`.
 
             .. note:: If `from_text` is `True`, the input text can be provided in the `"text"` key or in the `"history"` key.
                 If using the `"history"` key, the history will be parsed from a :class:`~torchrl.data.llm.History` object to a
                 text string using the tokenizer.
+                See the `use_history` keyword argument for more details.
 
         device (torch.device | None, optional): The device to use for computation. If `None`, the default device will
             be used. Defaults to `None`.
@@ -69,6 +78,11 @@ class TransformersWrapper(CategoricalSequential):
             applying the chat template to the history. Defaults to `None`.
         chat_template (str | None, optional): The chat template to use when applying the chat template to the history.
             Defaults to `None`.
+        assistant_only (bool, optional): Whether to only use the assistant tokens in the history when computing the log-probs.
+            Defaults to `True`.
+            Without effect if the history is not used.
+
+            .. note:: This presumes that the chat format supports the `return_assistant_tokens_mask` argument, which is not the case for all chat formats.
 
     .. note:: The tokenizer is used when `from_text` is `True` to convert input text into token sequences. It is also
         required (or retrieved) when `pad_output` is `True` or when using text inputs with `generate=False` to ensure proper
@@ -137,6 +151,8 @@ class TransformersWrapper(CategoricalSequential):
         inplace: Literal[True, False, "empty"] | None = True,
         chat_template_name: Literal["chatml_format", "qwen"] | None = None,
         chat_template: str | None = None,
+        use_history: bool | NestedKey | None = None,
+        assistant_only: bool = True,
     ):
         super().__init__()
 
@@ -151,6 +167,13 @@ class TransformersWrapper(CategoricalSequential):
         padding_value = None
         self.chat_template_name = chat_template_name
         self.chat_template = chat_template
+        self.assistant_only = assistant_only
+        if isinstance(use_history, (str, tuple)):  # equivalent to NestedKey but faster
+            self.history_key = use_history
+            self.use_history = True
+        else:
+            self.history_key = None
+            self.use_history = use_history  # None means "maybe"
 
         if not tokenizer_kwargs:
             tokenizer_kwargs = {}
@@ -300,8 +323,20 @@ class TransformersWrapper(CategoricalSequential):
     def _from_transformers_generate_text(self, td, out, cfg=None):
         pad_val = self.tokenizer.pad_token_id
 
-        text = td.get(self.text_key)
-        if text is None:
+        # Should we use the history?
+        if self.use_history is None or (
+            self.use_history is True and self.history_key is None
+        ):
+            # eagerly attempt to use the history key
+            history_key = self.history_key
+            if history_key is None:
+                history_key = ("next", "history")
+                if history_key not in td:
+                    history_key = "history"
+            use_history = bool(self.use_history) or history_key in td
+        else:
+            use_history = self.use_history
+        if use_history:
             # Fallback on history parsing
             history = td.get(self.history_key)
             if history is None:
@@ -319,6 +354,13 @@ class TransformersWrapper(CategoricalSequential):
             text = history.apply_chat_template(
                 tokenizer=self.tokenizer, **tokenizer_kwargs
             )
+        else:
+            text = td.get(self.text_key)
+            if text is None:
+                raise ValueError(
+                    "No text or history provided to the TransformersWrapper and the 'text' key is not present."
+                )
+
         if not isinstance(text, (list, str)):
             text = text.tolist()
         tokens_in = self.tokenizer(text, **self.tokenizer_kwargs)
@@ -424,15 +466,28 @@ class TransformersWrapper(CategoricalSequential):
     def _from_transformers_logprobs_text(self, td, out, cfg=None):
         pad_val = self.tokenizer.pad_token_id
 
-        prompt_txt = td.get(self.text_key)
-        response_txt = td.get(self.text_response_key)
-        if prompt_txt is None or response_txt is None:
-            if prompt_txt is not None and response_txt is not None:
-                raise ValueError(
-                    "No text or history provided to the TransformersWrapper. Either both are provided or none of them."
-                )
+        # Should we use the history?
+        if self.use_history is None or (
+            self.use_history is True and self.history_key is None
+        ):
+            # eagerly attempt to use the history key
+            history_key = self.history_key
+            if history_key is None:
+                history_key = ("next", "history")
+                if history_key not in td:
+                    history_key = "history"
+            use_history = bool(self.use_history) or history_key in td
+        else:
+            use_history = self.use_history
+            history_key = self.history_key
+
+        if use_history:
             # Fallback on history parsing
-            history = td.get(self.history_key)
+            if history_key is None:
+                history_key = ("next", "history")
+                if history_key not in td:
+                    history_key = "history"
+            history: History = td.get(history_key)
             if history is None:
                 raise ValueError(
                     "No text or history provided to the TransformersWrapper."
@@ -445,29 +500,63 @@ class TransformersWrapper(CategoricalSequential):
             if self.chat_template is not None:
                 tokenizer_kwargs.setdefault("chat_template", self.chat_template)
             tokenizer_kwargs.setdefault("add_generation_prompt", False)
-            response_txt = history.apply_chat_template(
-                tokenizer=self.tokenizer, **tokenizer_kwargs
+            tokenizer_kwargs.setdefault(
+                "return_assistant_tokens_mask", self.assistant_only
             )
-            if isinstance(response_txt, list):
-                prompt_txt = ["" for _ in response_txt]
-            else:
-                prompt_txt = ""
+            tokenizer_kwargs.setdefault("tokenize", True)
+            tokenizer_kwargs.setdefault("padding", False)
+            tokenizer_kwargs.setdefault("return_dict", True)
+            with torch.device(
+                self._device
+            ) if self._device is not None else nullcontext():
+                response_tokens = history.apply_chat_template(
+                    tokenizer=self.tokenizer, **tokenizer_kwargs
+                )
+                # unfortunately HF wants us to use padded tensors
+                total_input_ids = response_tokens.get(
+                    "input_ids",
+                    as_padded_tensor=True,
+                    padding_side="left",
+                    padding_value=pad_val,
+                )
+                total_attention_mask = response_tokens.get(
+                    "attention_mask",
+                    as_padded_tensor=True,
+                    padding_side="left",
+                    padding_value=0,
+                )
+                if self.assistant_only:
+                    assistant_masks = response_tokens.get(
+                        "assistant_masks",
+                        as_padded_tensor=True,
+                        padding_side="left",
+                        padding_value=0,
+                    ).bool()
+                else:
+                    assistant_masks = None
+        else:
+            prompt_txt = td.get(self.text_key)
+            response_txt = td.get(self.text_response_key)
+            if prompt_txt is None or response_txt is None:
+                raise ValueError(
+                    "No text or history provided to the TransformersWrapper and the text keys are not present."
+                )
 
-        if not isinstance(prompt_txt, (list, str)):
-            prompt_txt = prompt_txt.tolist()
-        if not isinstance(response_txt, (list, str)):
-            response_txt = response_txt.tolist()
-        total_txt = [x + y for x, y in _zip_strict(prompt_txt, response_txt)]
-        total_tokens_in = self.tokenizer(total_txt, **self.tokenizer_kwargs)
-        prompt_tokens_in = self.tokenizer(prompt_txt, **self.tokenizer_kwargs)
-        if self._device is not None:
-            total_tokens_in = total_tokens_in.to(self._device)
-            prompt_tokens_in = prompt_tokens_in.to(self._device)
+            if not isinstance(prompt_txt, (list, str)):
+                prompt_txt = prompt_txt.tolist()
+            if not isinstance(response_txt, (list, str)):
+                response_txt = response_txt.tolist()
+            total_txt = [x + y for x, y in _zip_strict(prompt_txt, response_txt)]
+            total_tokens_in = self.tokenizer(total_txt, **self.tokenizer_kwargs)
+            prompt_tokens_in = self.tokenizer(prompt_txt, **self.tokenizer_kwargs)
+            if self._device is not None:
+                total_tokens_in = total_tokens_in.to(self._device)
+                prompt_tokens_in = prompt_tokens_in.to(self._device)
 
-        total_input_ids = total_tokens_in["input_ids"]
-        total_attention_mask = total_tokens_in["attention_mask"]
-        prompt_input_ids = prompt_tokens_in["input_ids"]
-        prompt_attention_mask = prompt_tokens_in["attention_mask"]
+            total_input_ids = total_tokens_in["input_ids"]
+            total_attention_mask = total_tokens_in["attention_mask"]
+            prompt_input_ids = prompt_tokens_in["input_ids"]
+            prompt_attention_mask = prompt_tokens_in["attention_mask"]
 
         if cfg is not None:
             kwargs = copy(self.generate_kwargs)
@@ -478,31 +567,63 @@ class TransformersWrapper(CategoricalSequential):
         total_tokens_out = self.model(
             total_input_ids, attention_mask=total_attention_mask, **kwargs
         )
-
-        total_input_ids = _unpad_tensors(
-            total_input_ids, total_attention_mask, as_nested=False
-        )
-        prompt_input_ids = _unpad_tensors(
-            prompt_input_ids, prompt_attention_mask, as_nested=False
-        )
-        sequences = [
-            _total_input_ids[_prompt_input_ids.shape[-1] :]
-            if _prompt_input_ids.shape[-1] > 0
-            else _total_input_ids
-            for _total_input_ids, _prompt_input_ids in zip(
-                total_input_ids, prompt_input_ids
+        if not use_history:
+            total_input_ids = _unpad_tensors(
+                total_input_ids, total_attention_mask, as_nested=False
             )
-        ]
-        # response_attention_mask = total_attention_mask[
-        #     :, prompt_attention_mask.shape[-1] :
-        # ]
-        log_probs, logits = self._log_probs_from_logits(
-            total_tokens_out, sequences, pad_val=pad_val
-        )
+            prompt_input_ids = _unpad_tensors(
+                prompt_input_ids, prompt_attention_mask, as_nested=False
+            )
+            sequences = [
+                _total_input_ids[_prompt_input_ids.shape[-1] :]
+                if _prompt_input_ids.shape[-1] > 0
+                else _total_input_ids
+                for _total_input_ids, _prompt_input_ids in zip(
+                    total_input_ids, prompt_input_ids
+                )
+            ]
+            log_probs, logits = self._log_probs_from_logits(
+                total_tokens_out, sequences, pad_val=pad_val
+            )
+            out.set(self.token_response_key, sequences)
+        else:
+            # things are a bit simpler: first, remove last logits
+            logits = total_tokens_out["logits"]
+            if logits.shape[-2] != total_input_ids.shape[-1]:
+                logits = logits[..., :-1, :]
+            # check that the shape is correct
+            if logits.shape[-2] != total_input_ids.shape[-1]:
+                raise ValueError(
+                    f"The logits shape {logits.shape} does not match the total input ids shape {total_input_ids.shape}"
+                )
+            # then, compute the log probs
+            td = TensorDict(
+                logits=logits, tokens=total_input_ids, assistant_masks=assistant_masks
+            ).auto_batch_size_()
+            with td.flatten() as tdflat:
+                tdflat["log_probs"] = -torch.nn.functional.cross_entropy(
+                    tdflat["logits"],
+                    tdflat["tokens"],
+                    reduce=False,
+                    ignore_index=pad_val,
+                )
+
+            log_probs = td["log_probs"]
+            logits = td["logits"]
+            # Now we can select: since we're using history, either we take the whole logits (self.assistant_only=False)
+            # or we take the logits of the assistant tokens (self.assistant_only=True)
+            if self.assistant_only:
+                assistant_masks = td["assistant_masks"]
+                log_probs = [
+                    lp[am] for lp, am in _zip_strict(td["log_probs"], assistant_masks)
+                ]
+                logits = [
+                    logit[am]
+                    for logit, am in _zip_strict(td["logits"], assistant_masks)
+                ]
 
         out.set("logits", logits)
         out.set(self.log_prob_key, log_probs)
-        out.set(self.token_response_key, sequences)
         return out
 
     def _from_transformers_logprobs_tokens(self, td, out, cfg=None):

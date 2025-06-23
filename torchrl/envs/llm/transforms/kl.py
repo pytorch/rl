@@ -6,16 +6,24 @@ from __future__ import annotations
 
 import contextlib
 import gc
-
+import warnings
 from copy import copy
+from typing import Any
 
 import torch
-from tensordict import NestedKey, set_list_to_stack, TensorDictBase, unravel_key
+from tensordict import (
+    lazy_stack,
+    NestedKey,
+    set_list_to_stack,
+    TensorDictBase,
+    unravel_key,
+)
 from tensordict.nn import ProbabilisticTensorDictModule
 from tensordict.utils import _zip_strict, is_seq_of_nested_key
 from torchrl.data import Composite, Unbounded
 from torchrl.data.llm.chat import History
 from torchrl.envs import EnvBase, Transform
+from torchrl.envs.transforms.transforms import Compose
 from torchrl.envs.transforms.utils import _set_missing_tolerance
 from torchrl.modules.llm.policies.common import CategoricalSequential
 
@@ -28,6 +36,9 @@ except ImportError:
 class KLRewardTransform(Transform):
     """A transform to add a KL[pi_current||pi_0] correction term to the reward.
 
+    .. warning:: This class is deprecated. Please use the :class:`~torchrl.envs.llm.transforms.RetrieveLogProb`
+        transform instead.
+
     This transform is used to constrain the policy to remain close to its original
     configuration which limits overfitting when fine-tuning using RLHF.
 
@@ -36,13 +47,20 @@ class KLRewardTransform(Transform):
             have the following features: it must have a set of input (``in_keys``)
             and output keys (``out_keys``). It must have a ``get_dist`` method
             that outputs the distribution of the action.
+
+    Keyword Args:
         coef (:obj:`float`): the coefficient of the KL term. Defaults to ``1.0``.
         in_keys (str or list of str/tuples of str): the input key where the
             reward should be fetched. Defaults to ``"reward"``.
         out_keys (str or list of str/tuples of str): the output key where the
             reward should be written. Defaults to ``["reward", "kl_penalty", "ref_log_prob"]``.
         add_to_reward (bool): whether to add the reward term to the reward.
-            Defaults to ``True``.
+            Defaults to ``True``.\
+        action_key (str): the key where the text response is stored. Defaults to ``"text_response"``.
+        log_prob_key (str): the key where the log-probs are stored. Defaults to ``"log_probs"``.
+        device (torch.device): the device to use for tensor creation. Defaults to `None`.
+        tokenizer (transformers.AutoTokenizer, optional): a tokenizer to parse the text response from the chat history.
+            If not provided, the tokenizer will be inferred from the `actor`.
 
     .. note:: If the parameters are not differentiable (default), they will *not*
         follow the module when dtype or device casting operations will be called
@@ -63,13 +81,15 @@ class KLRewardTransform(Transform):
     def __init__(
         self,
         actor: ProbabilisticTensorDictModule,
+        *,
         coef=1.0,
         in_keys=None,
         out_keys=None,
         log_prob_key: NestedKey = "log_probs",
-        action_key: NestedKey | None = None,
+        action_key: NestedKey | None = "text_response",
         device: torch.device | None = None,
         add_to_reward: bool = True,
+        tokenizer: transformers.AutoTokenizer | None = None,
     ):
         if in_keys is None:
             in_keys = self.DEFAULT_IN_KEYS
@@ -94,6 +114,11 @@ class KLRewardTransform(Transform):
             )
         self._out_keys = [unravel_key(out_key) for out_key in self._out_keys]
 
+        if getattr(actor, "generate", False):
+            raise ValueError(
+                "The actor is configured to generate text, not compute the log-probs."
+            )
+
         # update the in_keys for dispatch etc
         self.in_keys = self.in_keys + actor.in_keys
         self.in_keys = [unravel_key(in_key) for in_key in self.in_keys]
@@ -110,6 +135,8 @@ class KLRewardTransform(Transform):
         # find the sample log-prob key
         self.sample_log_prob_key = log_prob_key
 
+        self._tokenizer = tokenizer
+
         def find_sample_log_prob(module):
             if hasattr(module, "log_prob_key"):
                 self.sample_log_prob_key = module.log_prob_key
@@ -119,6 +146,18 @@ class KLRewardTransform(Transform):
         if not isinstance(coef, torch.Tensor):
             coef = torch.as_tensor(coef)
         self.register_buffer("coef", coef)
+
+    @property
+    def tokenizer(self):
+        tokenizer = self._tokenizer
+        if tokenizer is not None:
+            return tokenizer
+        try:
+            return self.actor.tokenizer
+        except AttributeError:
+            raise AttributeError(
+                "The actor does not have a tokenizer. Please pass the tokenizer to the constructor."
+            )
 
     def set_container(self, container: Transform | EnvBase) -> None:
         result = super().set_container(container)
@@ -141,21 +180,98 @@ class KLRewardTransform(Transform):
             tensordict_reset = self._step(tensordict_reset, tensordict_reset)
         return tensordict_reset
 
+    def _get_text_response(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        """Attempt to get the text response.
+
+        As a first attempt, the text will be isolated from the `"history"` key in the next tensordict, if it exists.
+        In this case, To reconstruct the text, the `"history"` elements up to the last `"assistant"` turn (not included) will be
+        parsed to a `"text"` prompt, and the `"text_response"` will be isolated from the last `"assistant"` turn.
+
+        As a fallback, the text will be isolated from the `"text_response"` key in the tensordict, if it exists.
+
+        Returns:
+            The input `tensordict` with the `"text_response"` entry added, modified or unchanged.
+        """
+        if tensordict.ndim:
+            return lazy_stack(
+                [
+                    self._get_text_response(s, s_)
+                    for s, s_ in _zip_strict(
+                        tensordict.unbind(0), next_tensordict.unbind(0)
+                    )
+                ]
+            )
+        action_key = self.action_key
+        if action_key != "text_response":
+            warnings.warn(
+                f"action_key is not 'text_response', but {action_key}. This may cause issues when reconstructing the text response."
+            )
+        if (
+            "history" not in next_tensordict.keys()
+            or "history" not in tensordict.keys()
+        ):
+            text_response = tensordict.get(action_key)
+            if text_response is not None:
+                # We're good, the text response is already in the tensordict
+                return tensordict
+            else:
+                raise ValueError(
+                    "No text response found in the tensordict - no fallback to reconstruct the text response."
+                )
+        # If the text response is not found, we need to reconstruct it from the history
+        history = next_tensordict.get("history", None)
+        # Find the last assistant turn in the history
+        last_assistant_turn = -1
+        while (
+            history.shape[-1] > abs(last_assistant_turn)
+            and history[..., last_assistant_turn].role != "assistant"
+        ):
+            last_assistant_turn -= 1
+        if history.shape[-1] == abs(last_assistant_turn):
+            raise ValueError(
+                "No new dialog turns found in the history - no fallback to reconstruct the text response."
+            )
+        # Make the index positive
+        last_assistant_turn = history.shape[-1] + last_assistant_turn
+        self.tokenizer
+        history_txt = history[..., :last_assistant_turn].apply_chat_template(
+            tokenizer=self.tokenizer,
+            # We want the text to be as similar as possible to the original text prompt
+            add_generation_prompt=True,
+        )
+        # Let's get the entire text(s) and isolate the response
+        text_response = history[..., : last_assistant_turn + 1].apply_chat_template(
+            tokenizer=self.tokenizer,
+            add_generation_prompt=False,
+        )
+
+        def isolate_response(
+            txt: str | list[str], response_txt: str | list[str]
+        ) -> str | list[str]:
+            if isinstance(txt, list):
+                return [isolate_response(t, r) for t, r in zip(txt, response_txt)]
+            if not response_txt.startswith(txt):
+                raise ValueError(
+                    f'The response text """\n{response_txt}""" does not start with the text """\n{txt}"""'
+                )
+            return response_txt[len(txt) :]
+
+        text_response = isolate_response(history_txt, text_response)
+        tensordict.set(action_key, text_response)
+        tensordict.set("text", history_txt)
+        return tensordict
+
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
-        # run the actor on the tensordict
-        action_key = self.action_key
-        if action_key is None:
-            raise ValueError(
-                f"action_key is required. Please set a parent for the {type(self).__name__} to recover the action keys automatically, "
-                f"or pass the action_key argument directly to {type(self).__name__} constructor."
-            )
-        response_txt = tensordict.get(action_key, None)
+        tensordict = self._get_text_response(tensordict, next_tensordict)
+        response_txt = tensordict.get(self.action_key, None)
         if response_txt is None:
             if not self.missing_tolerance:
                 raise RuntimeError(
-                    f"Action with key {action_key} not found data {tensordict}"
+                    f"Action with key {self.action_key} not found data {tensordict}"
                 )
             # being called after reset or without action, skipping
             if self.out_keys[0] != "reward" and self.parent is not None:
@@ -303,6 +419,12 @@ class RetrieveLogProb(Transform):
         tokenizer (transformers.AutoTokenizer): the tokenizer to be used to tokenize the input and compute the assitant mask. If not provided, the tokenizer will be inferred from the `actor`.
         detach (bool): whether to exclude the log-probs from the gradient computation. Defaults to `True`.
         device (torch.device): the device to use for tensor creation. Defaults to `None`.
+        compute_kl (bool): whether to compute the KL divergence. Requires the `ref_log_prob` and `log_probs` keys to be present in the tensordict.
+            Defaults to `False`, or `True` if `add_kl_to_reward` is `True`.
+        add_kl_to_reward (bool): whether to add the KL divergence to the reward.
+            Requires the `ref_log_prob` and `log_probs` keys to be present in the tensordict.
+            Without effect if `compute_kl` is `False`.
+            Defaults to `False`.
 
     Examples:
         >>> from torchrl.data.llm.chat import History, _CHAT_TEMPLATES
@@ -431,11 +553,22 @@ class RetrieveLogProb(Transform):
         detach: bool = True,
         device: torch.device | None = None,
         tokenizer: transformers.AutoTokenizer | None = None,
+        compute_kl: bool | None = None,
+        add_kl_to_reward: bool | None = None,
     ):
         if history_key is None:
             history_key = "history"
         self.history_key = history_key
         self.log_prob_key = log_prob_key
+
+        # If compute_kl is not provided, we default to add_kl_to_reward if it is provided, otherwise we default to False
+        self.add_kl_to_reward = (
+            add_kl_to_reward if add_kl_to_reward is not None else False
+        )
+        self.compute_kl = (
+            compute_kl if compute_kl is not None else self.add_kl_to_reward
+        )
+
         super().__init__(in_keys=[history_key], out_keys=[log_prob_key])
         self.actor = actor
         if not getattr(actor, "return_log_probs", True):
@@ -498,10 +631,160 @@ class RetrieveLogProb(Transform):
                     **self.tokenizer_kwargs,
                 )
                 assistant_masks = proc.get("assistant_masks", as_list=True)
+                attention_mask = proc.get("attention_mask", as_list=True)
                 log_probs = td.get(self.log_prob_key, as_list=True)
                 log_probs = [
-                    lp[mask.bool()]
-                    for lp, mask in _zip_strict(log_probs, assistant_masks)
+                    lp[mask.bool() & atten.bool()]
+                    for lp, mask, atten in _zip_strict(
+                        log_probs, assistant_masks, attention_mask
+                    )
                 ]
                 td = td.set(self.log_prob_key, log_probs)
-        return next_tensordict.update(td)
+        next_tensordict.update(td)
+        if self.compute_kl:
+            log_probs = next_tensordict.get("log_probs", as_list=True)
+            if log_probs is None:
+                raise ValueError(
+                    "The log-probs are not present in the tensordict. Please compute them first."
+                )
+            ref_log_probs = next_tensordict.get("ref_log_prob", as_list=True)
+            if ref_log_probs is None:
+                raise ValueError(
+                    "The reference log-probs are not present in the tensordict. Please compute them first."
+                )
+
+            if isinstance(log_probs, list):
+                kl = [
+                    lp - ref_lp for lp, ref_lp in _zip_strict(log_probs, ref_log_probs)
+                ]
+            else:
+                kl = log_probs - ref_log_probs
+            next_tensordict.set("kl", kl)
+            if self.add_kl_to_reward:
+                rewards = next_tensordict.get(self.parent.reward_keys[0], as_list=True)
+                if isinstance(rewards, list):
+                    if rewards[0].ndim != kl[0].ndim + 1:
+                        raise ValueError(
+                            "The rewards have shape {rewards[0].shape} but the kl has shape {kl[0].shape}. The rewards should have one more dimension than the KL."
+                        )
+                    rewards = [r - k.unsqueeze(-1) for r, k in _zip_strict(rewards, kl)]
+                else:
+                    if rewards.ndim != kl.ndim + 1:
+                        raise ValueError(
+                            "The rewards have shape {rewards.shape} but the kl has shape {kl.shape}. The rewards should have one more dimension than the KL."
+                        )
+                    rewards = rewards - kl.unsqueeze(-1)
+                next_tensordict.set(self.parent.reward_keys[0], rewards)
+        return next_tensordict
+
+    def transform_observation_spec(self, observation_spec: Composite) -> Composite:
+        # Add kl if compute_kl is True
+        if self.compute_kl:
+            observation_spec["kl"] = Unbounded(
+                device=observation_spec.device,
+                shape=observation_spec.shape,
+            )
+        return observation_spec
+
+    def transform_reward_spec(self, full_reward_spec: Composite) -> Composite:
+        if self.compute_kl and self.add_kl_to_reward:
+            shape = full_reward_spec.shape
+            reward_spec = full_reward_spec["reward"]
+            # For LLMs, the shape of the reward is (batch, -1, 1)
+            shape = (*shape, -1, 1)
+            reward_spec = reward_spec.clone()
+            reward_spec.shape = torch.Size(shape)
+            full_reward_spec["reward"] = reward_spec
+        return full_reward_spec
+
+
+class RetrieveKL(Compose):
+    """A transform to retrieve the KL divergence between the current and reference log-probs, given these two models.
+
+    Args:
+        gen_actor (CategoricalSequential): the generation model, wrapped in such a way that it does not generate but computes the log-probs.
+        ref_actor (CategoricalSequential): the reference model, wrapped in such a way that it does not generate but computes the log-probs.
+        assistant_only (bool): whether to only retrieve the log-probs of the assistant tokens (i.e., steps of history
+            where the role is `"assistant"`). Defaults to `None` (takes the opposite value from the `gen_actor` and `ref_actor` if they match, as
+            selection needs to happen only once, or `False` if not specified within the models).
+        gen_log_prob_key (str): the key where the log-probs of the generation model are stored. Defaults to `"log_probs"`.
+        ref_log_prob_key (str): the key where the log-probs of the reference model are stored. Defaults to `"ref_log_prob"`.
+        history_key (str): the key where the history is stored. Defaults to `"history"`.
+        tokenizer_kwargs (dict): the keyword arguments to pass to the tokenizer to be used to apply the chat template to the history when `assistant_only` is `True`.
+            To control the tokenization in the actor, pass the tokenizer kwargs to the actor constructor.
+            Defaults to `{"return_assistant_tokens_mask": True, "tokenize": True, "return_tensors": "pt", "padding": True, "add_generation_prompt": False}`.
+        detach (bool): whether to exclude the log-probs from the gradient computation. Defaults to `True`.
+        device (torch.device): the device to use for tensor creation. Defaults to `None`.
+        tokenizer (transformers.AutoTokenizer): the tokenizer to be used to tokenize the input and compute the assitant mask. If not provided, the tokenizer will be inferred from the `actor`.
+        **kwargs: additional arguments to pass to the `RetrieveLogProb` transform.
+
+    """
+
+    def __init__(
+        self,
+        gen_actor: CategoricalSequential,
+        ref_actor: CategoricalSequential,
+        assistant_only: bool | None = None,
+        gen_log_prob_key: str = "log_probs",
+        ref_log_prob_key: str = "ref_log_prob",
+        history_key: str = "history",
+        tokenizer_kwargs: dict[str, Any] | None = None,
+        detach: bool = True,
+        device: torch.device | None = None,
+        tokenizer: transformers.AutoTokenizer | None = None,
+        **kwargs,
+    ):
+        if not getattr(gen_actor, "return_log_probs", True):
+            raise ValueError(
+                "The generation model must have `return_log_probs=True` to use the `RetrieveKL` transform."
+            )
+        if not getattr(ref_actor, "return_log_probs", True):
+            raise ValueError(
+                "The reference model must have `return_log_probs=True` to use the `RetrieveKL` transform."
+            )
+        if getattr(gen_actor, "generate", False):
+            raise ValueError(
+                "The generation model must have `generate=False` to use the `RetrieveKL` transform."
+            )
+        if getattr(ref_actor, "generate", False):
+            raise ValueError(
+                "The reference model must have `generate=False` to use the `RetrieveKL` transform."
+            )
+        if assistant_only is None:
+            assistant_only_gen = not getattr(gen_actor, "assistant_only", False)
+            assistant_only_ref = not getattr(
+                ref_actor, "assistant_only", assistant_only_gen
+            )
+            if assistant_only_gen != assistant_only_ref:
+                raise ValueError(
+                    "The generation and reference models must have the same `assistant_only` value to use the `RetrieveKL` transform."
+                )
+            assistant_only = assistant_only_gen
+        super().__init__(
+            RetrieveLogProb(
+                gen_actor,
+                assistant_only=assistant_only,
+                add_kl_to_reward=False,
+                compute_kl=False,
+                log_prob_key=gen_log_prob_key,
+                history_key=history_key,
+                tokenizer_kwargs=tokenizer_kwargs,
+                detach=detach,
+                device=device,
+                tokenizer=tokenizer,
+                **kwargs,
+            ),
+            RetrieveLogProb(
+                ref_actor,
+                assistant_only=assistant_only,
+                add_kl_to_reward=True,
+                compute_kl=True,
+                log_prob_key=ref_log_prob_key,
+                history_key=history_key,
+                tokenizer_kwargs=tokenizer_kwargs,
+                detach=detach,
+                device=device,
+                tokenizer=tokenizer,
+                **kwargs,
+            ),
+        )
