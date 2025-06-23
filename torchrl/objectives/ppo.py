@@ -752,10 +752,10 @@ class PPOLoss(LossModule):
 
         explained_variance = None
         if self.log_explained_variance:
-            with torch.no_grad():                               # <‑‑ break grad‐flow
-                tgt   = target_return.detach()
-                pred  = state_value.detach()
-                eps   = torch.finfo(tgt.dtype).eps
+            with torch.no_grad():  # <‑‑ break grad‐flow
+                tgt = target_return.detach()
+                pred = state_value.detach()
+                eps = torch.finfo(tgt.dtype).eps
                 resid = torch.var(tgt - pred, unbiased=False, dim=0)
                 total = torch.var(tgt, unbiased=False, dim=0)
                 explained_variance = 1.0 - resid / (total + eps)
@@ -819,7 +819,9 @@ class PPOLoss(LossModule):
                 td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", self._weighted_loss_entropy(entropy))
         if self._has_critic:
-            loss_critic, value_clip_fraction, explained_variance = self.loss_critic(tensordict)
+            loss_critic, value_clip_fraction, explained_variance = self.loss_critic(
+                tensordict
+            )
             td_out.set("loss_critic", loss_critic)
             if value_clip_fraction is not None:
                 td_out.set("value_clip_fraction", value_clip_fraction)
@@ -1189,7 +1191,9 @@ class ClipPPOLoss(PPOLoss):
                 td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", self._weighted_loss_entropy(entropy))
         if self._has_critic:
-            loss_critic, value_clip_fraction, explained_variance = self.loss_critic(tensordict)
+            loss_critic, value_clip_fraction, explained_variance = self.loss_critic(
+                tensordict
+            )
             td_out.set("loss_critic", loss_critic)
             if value_clip_fraction is not None:
                 td_out.set("value_clip_fraction", value_clip_fraction)
@@ -1537,7 +1541,9 @@ class KLPENPPOLoss(PPOLoss):
                 td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", self._weighted_loss_entropy(entropy))
         if self._has_critic:
-            loss_critic, value_clip_fraction, explained_variance = self.loss_critic(tensordict_copy)
+            loss_critic, value_clip_fraction, explained_variance = self.loss_critic(
+                tensordict_copy
+            )
             td_out.set("loss_critic", loss_critic)
             if value_clip_fraction is not None:
                 td_out.set("value_clip_fraction", value_clip_fraction)
