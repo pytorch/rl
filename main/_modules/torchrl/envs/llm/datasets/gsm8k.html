@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+205243c) &#x25BC</span></a>
+      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+ed051bc) &#x25BC</span></a>
     </div>
     
 
@@ -557,6 +557,7 @@
 
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        dataset (str, optional): The name of the dataset. Defaults to `&quot;gsm8k&quot;`.</span>
+<span class="sd">        shuffle (bool, optional): Whether to shuffle the dataset. Defaults to `True`.</span>
 <span class="sd">        num_envs (int, optional): The number of environments to create. Defaults to `1`.</span>
 <span class="sd">        repeats (int | None, optional): The number of times to repeat each sample from the dataset (mainly for Monte-Carlo</span>
 <span class="sd">            based value estimation). If `None`, the dataset is not repeated. Defaults to `None`.</span>
@@ -706,12 +707,13 @@
     <span class="n">SYSTEM_PROMPT</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;A conversation between User and Assistant. The user asks a question, and the Assistant solves it.</span>
 <span class="s2">The assistant first thinks about the reasoning process in the mind and then provides the user with the answer.</span>
 <span class="s2">The reasoning process and answer are enclosed within &lt;think&gt;&lt;/think&gt; and &lt;answer&gt;&lt;/answer&gt; tags, respectively,</span>
-<span class="s2">i.e., &lt;think&gt;reasoning process here&lt;/think&gt; &lt;answer&gt;answer here&lt;/answer&gt;.&quot;&quot;&quot;</span>
+<span class="s2">i.e., &lt;think&gt;reasoning process here&lt;/think&gt; &lt;answer&gt;answer here&lt;/answer&gt;. The answer should be a number.&quot;&quot;&quot;</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">dataset</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;gsm8k&quot;</span><span class="p">,</span>
+        <span class="n">shuffle</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">num_envs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">repeats</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">batch_size_dl</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
@@ -729,6 +731,7 @@
             <span class="n">collate_fn</span> <span class="o">=</span> <span class="n">_collate_fn</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
             <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">,</span>
+            <span class="n">shuffle</span><span class="o">=</span><span class="n">shuffle</span><span class="p">,</span>
             <span class="n">name</span><span class="o">=</span><span class="s2">&quot;main&quot;</span><span class="p">,</span>
             <span class="n">num_envs</span><span class="o">=</span><span class="n">num_envs</span><span class="p">,</span>
             <span class="n">repeats</span><span class="o">=</span><span class="n">repeats</span><span class="p">,</span>

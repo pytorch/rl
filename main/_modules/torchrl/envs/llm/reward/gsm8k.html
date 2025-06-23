@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+205243c) &#x25BC</span></a>
+      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+ed051bc) &#x25BC</span></a>
     </div>
     
 
@@ -442,6 +442,7 @@
 <span class="sd">        in_keys (list of NestedKey): the input keys. Defaults to `[&quot;text_response&quot;, &quot;answer&quot;]`.</span>
 <span class="sd">        out_keys (list of NestedKey): the output keys. Defaults to `[ &quot;reward_answer&quot;, &quot;reward_think&quot;, &quot;reward_right&quot;, &quot;reward_contained&quot;, &quot;reward&quot;, &quot;success&quot;]`.</span>
 <span class="sd">        eos_token (str): the end of sentence token. Defaults to `tokenizer.eos_token` if not provided.</span>
+<span class="sd">        set_done_if_answer (bool): whether to set the done flag to `True` when an answer is present. Defaults to `True`.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
@@ -451,10 +452,18 @@
         <span class="n">in_keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">out_keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">eos_token</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">set_done_if_answer</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span> <span class="o">=</span> <span class="n">tokenizer</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">eos_token</span> <span class="o">=</span> <span class="n">eos_token</span> <span class="k">if</span> <span class="n">eos_token</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">tokenizer</span><span class="o">.</span><span class="n">eos_token</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">eos_token</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">eos_token</span>
+            <span class="k">if</span> <span class="n">eos_token</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="n">tokenizer</span><span class="o">.</span><span class="n">eos_token</span>
+            <span class="k">if</span> <span class="n">tokenizer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">set_done_if_answer</span> <span class="o">=</span> <span class="n">set_done_if_answer</span>
         <span class="k">if</span> <span class="n">in_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">in_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;text_response&quot;</span><span class="p">,</span> <span class="s2">&quot;answer&quot;</span><span class="p">]</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">in_keys</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">in_keys</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
@@ -540,7 +549,20 @@
             <span class="n">tds</span> <span class="o">=</span> <span class="n">tds</span><span class="o">.</span><span class="n">add</span><span class="p">(</span>
                 <span class="n">next_td_exist</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((),</span> <span class="n">device</span><span class="o">=</span><span class="n">next_tensordict</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
             <span class="p">)</span>
-        <span class="k">return</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">tds</span><span class="p">)</span>
+        <span class="n">next_tensordict</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">tds</span><span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">set_done_if_answer</span>
+            <span class="ow">and</span> <span class="p">(</span><span class="n">reward_answer</span> <span class="o">:=</span> <span class="p">(</span><span class="n">next_tensordict</span><span class="p">[</span><span class="s2">&quot;reward_answer&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">))</span><span class="o">.</span><span class="n">any</span><span class="p">()</span>
+        <span class="p">):</span>
+            <span class="n">done</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;done&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">done</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;done&quot;</span><span class="p">,</span> <span class="n">reward_answer</span><span class="o">.</span><span class="n">view_as</span><span class="p">(</span><span class="n">done</span><span class="p">)</span> <span class="o">|</span> <span class="n">done</span><span class="p">)</span>
+            <span class="n">terminated</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;terminated&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">terminated</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                    <span class="s2">&quot;terminated&quot;</span><span class="p">,</span> <span class="n">reward_answer</span><span class="o">.</span><span class="n">view_as</span><span class="p">(</span><span class="n">terminated</span><span class="p">)</span> <span class="o">|</span> <span class="n">terminated</span>
+                <span class="p">)</span>
+        <span class="k">return</span> <span class="n">next_tensordict</span>
 
 <div class="viewcode-block" id="GSM8KRewardParser.transform_reward_spec"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.GSM8KRewardParser.html#torchrl.envs.llm.GSM8KRewardParser.transform_reward_spec">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">transform_reward_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reward_spec</span><span class="p">:</span> <span class="n">Composite</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Composite</span><span class="p">:</span>
         <span class="n">shape</span> <span class="o">=</span> <span class="n">reward_spec</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
