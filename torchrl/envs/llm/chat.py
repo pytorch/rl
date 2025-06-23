@@ -284,6 +284,7 @@ class DatasetChatEnv(TransformedEnv):
 
     Keyword Args:
         dataset (str): The name of the dataset.
+        shuffle (bool, optional): Whether to shuffle the dataset. Defaults to `True`.
         name (str, optional): name of the dataset configuration.
         split (str, optional): the split to use (usually from `"train"`, `"val"` or `"test"`). Defaults to `None` (no split).
         num_envs (int, optional): The number of environments to create. Defaults to `1`.
@@ -317,6 +318,7 @@ class DatasetChatEnv(TransformedEnv):
         self,
         *,
         dataset: str,
+        shuffle: bool = True,
         name: str | None = None,
         split: Literal["train", "val", "test"] | None = None,
         num_envs: int = 1,
@@ -355,7 +357,7 @@ class DatasetChatEnv(TransformedEnv):
         dataloader = DataLoader(  # noqa: TOR401
             dataset,
             batch_size=batch_size_dl,
-            shuffle=True,
+            shuffle=shuffle,
             collate_fn=collate_fn,
             generator=generator,
         )
@@ -375,3 +377,14 @@ class DatasetChatEnv(TransformedEnv):
             apply_template=apply_template,
         )
         return super().__init__(env_base, primer)
+
+    def reset_dataloader(self):
+        """Reset the dataloader.
+
+        This is useful when the dataloader is not infinite and we want to reset it.
+
+        Returns:
+            self: The environment itself.
+        """
+        self.transform[0].reset_dataloader()
+        return self

@@ -41,6 +41,7 @@ class IFEvalEnv(DatasetChatEnv):
 
     Keyword Args:
         dataset (str, optional): The name of the dataset. Defaults to `"google/IFeval"`.
+        shuffle (bool, optional): Whether to shuffle the dataset. Defaults to `True`.
         num_envs (int, optional): The number of environments to create. Defaults to `1`.
         repeats (int | None, optional): The number of times to repeat each sample from the dataset (mainly for Monte-Carlo
             based value estimation). If `None`, the dataset is not repeated. Defaults to `None`.
@@ -146,6 +147,7 @@ You will be assessed by the content of the answer block only, so make sure it co
         self,
         *,
         dataset: str = "google/IFeval",
+        shuffle: bool = True,
         num_envs: int = 1,
         repeats: int | None = None,
         batch_size_dl: int = 1,
@@ -163,6 +165,7 @@ You will be assessed by the content of the answer block only, so make sure it co
             collate_fn = _collate_fn
         super().__init__(
             dataset=dataset,
+            shuffle=shuffle,
             num_envs=num_envs,
             repeats=repeats,
             batch_size_dl=batch_size_dl,

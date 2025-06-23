@@ -20,6 +20,7 @@ class GSM8KRewardParser(Transform):
         in_keys (list of NestedKey): the input keys. Defaults to `["text_response", "answer"]`.
         out_keys (list of NestedKey): the output keys. Defaults to `[ "reward_answer", "reward_think", "reward_right", "reward_contained", "reward", "success"]`.
         eos_token (str): the end of sentence token. Defaults to `tokenizer.eos_token` if not provided.
+        set_done_if_answer (bool): whether to set the done flag to `True` when an answer is present. Defaults to `True`.
 
     """
 
@@ -29,10 +30,18 @@ class GSM8KRewardParser(Transform):
         in_keys: list[NestedKey] | None = None,
         out_keys: list[NestedKey] | None = None,
         eos_token: str | None = None,
+        set_done_if_answer: bool = True,
     ):
         super().__init__()
         self.tokenizer = tokenizer
-        self.eos_token = eos_token if eos_token is not None else tokenizer.eos_token
+        self.eos_token = (
+            eos_token
+            if eos_token is not None
+            else tokenizer.eos_token
+            if tokenizer is not None
+            else None
+        )
+        self.set_done_if_answer = set_done_if_answer
         if in_keys is None:
             in_keys = ["text_response", "answer"]
         if not isinstance(in_keys, list) or len(in_keys) != 2:
@@ -118,7 +127,20 @@ class GSM8KRewardParser(Transform):
             tds = tds.add(
                 next_td_exist, default=torch.zeros((), device=next_tensordict.device)
             )
-        return next_tensordict.update(tds)
+        next_tensordict = next_tensordict.update(tds)
+        if (
+            self.set_done_if_answer
+            and (reward_answer := (next_tensordict["reward_answer"] > 0)).any()
+        ):
+            done = next_tensordict.get("done")
+            if done is not None:
+                next_tensordict.set("done", reward_answer.view_as(done) | done)
+            terminated = next_tensordict.get("terminated")
+            if terminated is not None:
+                next_tensordict.set(
+                    "terminated", reward_answer.view_as(terminated) | terminated
+                )
+        return next_tensordict
 
     def transform_reward_spec(self, reward_spec: Composite) -> Composite:
         shape = reward_spec.shape + (1, 1)
