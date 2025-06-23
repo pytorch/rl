@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .chat import ContentBase, History
+from .chat import add_chat_template, ContentBase, History
 from .common import LLMData
 from .dataset import (
     create_infinite_iterator,
@@ -24,6 +24,7 @@ __all__ = [
     "LLMData",
     "PairwiseDataset",
     "PromptData",
+    "add_chat_template",
     "PromptTensorDictTokenizer",
     "RewardData",
     "RolloutFromModel",

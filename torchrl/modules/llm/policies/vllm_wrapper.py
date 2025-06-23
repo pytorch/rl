@@ -28,10 +28,7 @@ class vLLMWrapper(CategoricalSequential):
     """A wrapper class for vLLM models, providing a consistent interface for text generation and log probability computation, similar to the Hugging Face Transformers interface.
 
     This class allows for handling both text and token inputs, enabling text generation and log probability
-    computation based on the specified configuration.
-
-    .. note:: The default arguments of the `vLLMWrapper` class are set to make it easy to run this backend with
-        the :class:`~torchrl.envs.custom.llm.LLMEnv` class.
+    computation based on the specified configuration. Unlike Transformers, vLLM can handle both padded and non-padded tensors.
 
     Args:
         model (vllm.LLM): The vLLM model to wrap.
@@ -44,10 +41,18 @@ class vLLMWrapper(CategoricalSequential):
             `None`.
         from_text (bool, optional): Indicates whether the input is in text format. If `True`, the input is expected to
             be text that will be tokenized. If `False`, the input is expected to be token sequences. Defaults to `True`.
+        use_history (bool, NestedKey, optional): Whether to use the history key as input. If `True`, the input is expected to
+            be a history object (under the `"history"` key). If `False`, the input is expected to be a text string, with
+            the `"text"` and `"text_response"` key pair. If a `NestedKey` is passed, it will be used as the key for the
+            history object. Defaults to `None`: first attempts to use the `("next", "history")` key, then the `"history"` key,
+            then finally the `"text"` and `"text_response"` key pair.
+        from_text (bool, optional): Indicates whether the input is in text format. If `True`, the input is expected to
+            be text that will be tokenized. If `False`, the input is expected to be token sequences. Defaults to `True`.
 
             .. note:: If `from_text` is `True`, the input text can be provided in the `"text"` key or in the `"history"` key.
                 If using the `"history"` key, the history will be parsed from a :class:`~torchrl.data.llm.History` object to a
                 text string using the tokenizer.
+                See the `use_history` keyword argument for more details.
 
         device (torch.device | None, optional): The device to use for computation. If `None`, the default device will
             be used. Defaults to `None`.
@@ -76,6 +81,11 @@ class vLLMWrapper(CategoricalSequential):
 
         chat_template_name (str | None, optional): The name of the chat template to use for the history. Defaults to `None`.
         chat_template (str | None, optional): The chat template to use for the history. Defaults to `None`.
+        assistant_only (bool, optional): Whether to only use the assistant tokens in the history when computing the log-probs.
+            Defaults to `True`.
+            Without effect if the history is not used.
+
+            .. note:: This presumes that the chat format supports the `return_assistant_tokens_mask` argument, which is not the case for all chat formats.
 
     .. note:: The tokenizer is used when `from_text` is `True` to convert input text into token sequences. It is also
         required (or retrieved) when `pad_output` is `True` or when using text inputs with `generate=False` to ensure proper
@@ -143,6 +153,8 @@ class vLLMWrapper(CategoricalSequential):
         inplace: Literal[True, False, "empty"] | None = None,
         chat_template_name: str | None = None,
         chat_template: str | None = None,
+        use_history: bool | NestedKey | None = None,
+        assistant_only: bool = True,
     ):
         super().__init__()
 
@@ -157,7 +169,15 @@ class vLLMWrapper(CategoricalSequential):
         self.pad_output = pad_output
         self.chat_template_name = chat_template_name
         self.chat_template = chat_template
+        self.assistant_only = assistant_only
         padding_value = None
+
+        if isinstance(use_history, (str, tuple)):  # equivalent to NestedKey but faster
+            self.history_key = use_history
+            self.use_history = True
+        else:
+            self.history_key = None
+            self.use_history = use_history  # None means "maybe"
 
         if not tokenizer_kwargs:
             tokenizer_kwargs = {}
@@ -200,6 +220,7 @@ class vLLMWrapper(CategoricalSequential):
         else:
             generate_kwargs = dict(generate_kwargs)
 
+        self.num_samples = None
         if generate_kwargs.get("n", 1) > 1:
             if inplace in (True, "empty"):
                 raise ValueError(
@@ -207,6 +228,7 @@ class vLLMWrapper(CategoricalSequential):
                 )
             if inplace is None:
                 inplace = False
+            self.num_samples = generate_kwargs.get("n", 1)
         elif inplace is None:
             inplace = True
 
@@ -278,14 +300,26 @@ class vLLMWrapper(CategoricalSequential):
         if tensordict.device:
             tensordict = tensordict.copy().clear_device_()
 
-        out = LazyStackedTensorDict(
-            *[
-                TensorDict(
-                    device=tensordict.device, batch_size=tensordict.batch_size[1:]
-                )
-                for _ in range(tensordict.shape[0])
-            ]
-        )
+        if self.generate and self.num_samples is not None:
+            n = self.num_samples
+            out = LazyStackedTensorDict(
+                *[
+                    TensorDict(
+                        device=tensordict.device,
+                        batch_size=(n,) + tensordict.batch_size[1:],
+                    ).to_lazystack()
+                    for _ in range(tensordict.shape[0])
+                ]
+            )
+        else:
+            out = LazyStackedTensorDict(
+                *[
+                    TensorDict(
+                        device=tensordict.device, batch_size=tensordict.batch_size[1:]
+                    )
+                    for _ in range(tensordict.shape[0])
+                ]
+            )
         if self.from_text:
             if self.generate:
                 out = self._from_vllm_generate_text(
@@ -331,10 +365,29 @@ class vLLMWrapper(CategoricalSequential):
         args = ()
         input_ids = None
         attention_mask = None
-        text = td.get(self.text_key)
-        if text is None:
+
+        # Should we use the history?
+        if self.use_history is None or (
+            self.use_history is True and self.history_key is None
+        ):
+            # eagerly attempt to use the history key
+            history_key = self.history_key
+            if history_key is None:
+                history_key = ("next", "history")
+                if history_key not in td:
+                    history_key = "history"
+            use_history = bool(self.use_history) or history_key in td
+        else:
+            use_history = self.use_history
+            history_key = self.history_key
+
+        if use_history:
             # Fallback on history parsing
-            history = td.get(self.history_key)
+            if history_key is None:
+                history_key = ("next", "history")
+                if history_key not in td:
+                    history_key = "history"
+            history = td.get(history_key)
             if history is None:
                 raise ValueError("No text or history provided to the vLLMWrapper.")
             tokenizer_kwargs = {}
@@ -342,7 +395,16 @@ class vLLMWrapper(CategoricalSequential):
                 tokenizer_kwargs["chat_template_name"] = self.chat_template_name
             if self.chat_template is not None:
                 tokenizer_kwargs["chat_template"] = self.chat_template
-            text = history.apply_chat_template(self.tokenizer, **tokenizer_kwargs)
+            text = history.apply_chat_template(
+                tokenizer=self.tokenizer, **tokenizer_kwargs
+            )
+        else:
+            text = td.get(self.text_key)
+            if text is None:
+                raise ValueError(
+                    "No text or history provided to the vLLMWrapper and the 'text' key is not present."
+                )
+
         if self.pad_output:
             tokenizer_kwargs = self.tokenizer_kwargs
             if not isinstance(text, (list, str)):
@@ -356,7 +418,6 @@ class vLLMWrapper(CategoricalSequential):
             prompt_token_ids = self._to_list(input_ids, attention_mask)
             kwargs["prompt_token_ids"] = prompt_token_ids
         else:
-            text = td.get(self.text_key)
             if not isinstance(text, (list, str)):
                 text = text.tolist()
             args = (text,)
@@ -383,6 +444,8 @@ class vLLMWrapper(CategoricalSequential):
             self.token_key,
             self.attention_mask_key,
         ]
+        print("tokens_out", tokens_out)
+        print("out", out)
         out = out.update(tokens_out.select(*in_keys, strict=False))
         # We might already have the tokens
         if input_ids is not None and self.token_key not in out:
@@ -397,19 +460,30 @@ class vLLMWrapper(CategoricalSequential):
         return out
 
     def _from_vllm_logprobs_text(self, td, sampling_params, out):
-        text_prompt = td.get(self.text_key)
-        text_response = td.get(self.text_response_key)
-        if text_response is None or text_prompt is None:
-            if text_response is not None and text_prompt is not None:
-                raise ValueError(
-                    "No text or history provided to the vLLMWrapper. Either both are provided or none of them."
-                )
+        # Should we use the history?
+        if self.use_history is None or (
+            self.use_history is True and self.history_key is None
+        ):
+            # eagerly attempt to use the history key
+            history_key = self.history_key
+            if history_key is None:
+                history_key = ("next", "history")
+                if history_key not in td:
+                    history_key = "history"
+            use_history = bool(self.use_history) or history_key in td
+        else:
+            use_history = self.use_history
+            history_key = self.history_key
+
+        if use_history:
             # Fallback on history parsing
-            history = td.get(self.history_key)
+            if history_key is None:
+                history_key = ("next", "history")
+                if history_key not in td:
+                    history_key = "history"
+            history = td.get(history_key)
             if history is None:
-                raise ValueError(
-                    "No text or history provided to the TransformersWrapper."
-                )
+                raise ValueError("No text or history provided to the vLLMWrapper.")
             tokenizer_kwargs = {}
             if self.chat_template_name is not None:
                 tokenizer_kwargs.setdefault(
@@ -418,47 +492,60 @@ class vLLMWrapper(CategoricalSequential):
             if self.chat_template is not None:
                 tokenizer_kwargs.setdefault("chat_template", self.chat_template)
             tokenizer_kwargs.setdefault("add_generation_prompt", False)
-            text_response = history.apply_chat_template(
+            tokenizer_kwargs.setdefault(
+                "return_assistant_tokens_mask", self.assistant_only
+            )
+            tokenizer_kwargs.setdefault("tokenize", True)
+            tokenizer_kwargs.setdefault("padding", False)
+            tokenizer_kwargs.setdefault("return_dict", True)
+
+            response_tokens = history.apply_chat_template(
                 tokenizer=self.tokenizer, **tokenizer_kwargs
             )
-            if isinstance(text_response, list):
-                text_prompt = ["" for _ in text_response]
+            # unfortunately vLLM wants us to use padded tensors
+            total_input_ids = response_tokens.get(
+                "input_ids",
+                as_padded_tensor=True,
+                padding_side="left",
+                padding_value=self.padding_value,
+            )
+            total_attention_mask = response_tokens.get(
+                "attention_mask",
+                as_padded_tensor=True,
+                padding_side="left",
+                padding_value=0,
+            )
+            if self.assistant_only:
+                assistant_masks = response_tokens.get(
+                    "assistant_masks",
+                    as_padded_tensor=True,
+                    padding_side="left",
+                    padding_value=0,
+                ).bool()
             else:
-                text_prompt = ""
-        if not isinstance(text_prompt, list):
-            text_prompt = text_prompt.tolist()
-        if not isinstance(text_response, list):
-            text_response = text_response.tolist()
-        text = [_x + _y for _x, _y in _zip_strict(text_prompt, text_response)]
-
-        tokenized_total = self.tokenizer(text, **self.tokenizer_kwargs)
-        tokenized_prompt_only = self.tokenizer(text_prompt, **self.tokenizer_kwargs)
-
-        input_ids_total = tokenized_total["input_ids"]
-        attention_mask_total = tokenized_total["attention_mask"]
-
-        if not self.pad_output:
-            input_ids_prompt = tokenized_prompt_only["input_ids"]
-            attention_mask_prompt = tokenized_prompt_only["attention_mask"]
-            input_ids_response = []
-            for token_total, token_prompt in zip(input_ids_total, input_ids_prompt):
-                input_ids_response.append(token_total[len(token_prompt) :])
-            attention_mask_response = []
-            for mask, mask_prompt in zip(attention_mask_total, attention_mask_prompt):
-                attention_mask_response.append(mask[len(mask_prompt) :])
+                assistant_masks = None
         else:
-            input_ids_prompt: torch.Tensor = tokenized_prompt_only["input_ids"]
-            # attention_mask_prompt: torch.Tensor = tokenized_prompt_only[
-            #     "attention_mask"
-            # ]
-            input_ids_response: torch.Tensor = input_ids_total[
-                :, input_ids_prompt.shape[1] :
-            ]
-            # response_attention_mask: torch.Tensor = attention_mask_total[
-            #     :, attention_mask_prompt.shape[1] :
-            # ]
+            text_prompt = td.get(self.text_key)
+            text_response = td.get(self.text_response_key)
+            if text_response is None or text_prompt is None:
+                raise ValueError(
+                    "No text or history provided to the vLLMWrapper and the text keys are not present."
+                )
 
-        input_ids_total = self._to_list(input_ids_total, attention_mask_total)
+            if not isinstance(text_prompt, list):
+                text_prompt = text_prompt.tolist()
+            if not isinstance(text_response, list):
+                text_response = text_response.tolist()
+            text = [_x + _y for _x, _y in _zip_strict(text_prompt, text_response)]
+
+            tokenized_total = self.tokenizer(text, **self.tokenizer_kwargs)
+            tokenized_prompt_only = self.tokenizer(text_prompt, **self.tokenizer_kwargs)
+
+            total_input_ids = tokenized_total["input_ids"]
+            total_attention_mask = tokenized_total["attention_mask"]
+            assistant_masks = None
+
+        input_ids_total = self._to_list(total_input_ids, total_attention_mask)
         kwargs = {"sampling_params": sampling_params}
         if self.tokenizer is not None:
             kwargs.update({"prompt_token_ids": input_ids_total})
@@ -483,23 +570,73 @@ class vLLMWrapper(CategoricalSequential):
             lps = tokens_out.get(
                 "prompt_logprobs", as_padded_tensor=True, padding_side="left"
             )
-            lps = lps[..., -input_ids_response.shape[1] :]
-            padded = input_ids_response == self.padding_value
-            lps = torch.where(~padded, lps, 0.0)
+            if not use_history:
+                # For text/text_response mode, we need to extract response tokens
+                tokenized_prompt_only = self.tokenizer(
+                    text_prompt, **self.tokenizer_kwargs
+                )
+                input_ids_prompt = tokenized_prompt_only["input_ids"]
+                input_ids_response = total_input_ids[:, input_ids_prompt.shape[1] :]
+                lps = lps[..., -input_ids_response.shape[1] :]
+                padded = input_ids_response == self.padding_value
+                lps = torch.where(~padded, lps, 0.0)
+                input_ids_response_final = input_ids_response
+            else:
+                # For history mode, we take all tokens
+                lps = lps[..., -total_input_ids.shape[1] :]
+                padded = total_input_ids == self.padding_value
+                lps = torch.where(~padded, lps, 0.0)
+                input_ids_response_final = total_input_ids
+
+                # Apply assistant mask if needed
+                if self.assistant_only and assistant_masks is not None:
+                    # Select only assistant tokens
+                    lps = [lp[am] for lp, am in _zip_strict(lps, assistant_masks)]
+                    input_ids_response_final = [
+                        ids[am]
+                        for ids, am in _zip_strict(total_input_ids, assistant_masks)
+                    ]
         else:
             lps = tokens_out.get(
                 "prompt_logprobs",
                 as_list=True,
             )
-            # We use a nested tensor as it will be unbound during writing
-            lps = torch.nested.nested_tensor(
-                [lp[..., -len(tr) :] for lp, tr in zip(lps, input_ids_response)]
-            )
+            if not use_history:
+                # For text/text_response mode
+                tokenized_prompt_only = self.tokenizer(
+                    text_prompt, **self.tokenizer_kwargs
+                )
+                input_ids_prompt = tokenized_prompt_only["input_ids"]
+                input_ids_response = []
+                for token_total, token_prompt in zip(total_input_ids, input_ids_prompt):
+                    input_ids_response.append(token_total[len(token_prompt) :])
+                # We use a nested tensor as it will be unbound during writing
+                lps = torch.nested.nested_tensor(
+                    [lp[..., -len(tr) :] for lp, tr in zip(lps, input_ids_response)]
+                )
+                input_ids_response_final = input_ids_response
+            else:
+                # For history mode
+                lps = torch.nested.nested_tensor(
+                    [lp[..., -len(tr) :] for lp, tr in zip(lps, total_input_ids)]
+                )
+                input_ids_response_final = total_input_ids
+
+                # Apply assistant mask if needed
+                if self.assistant_only and assistant_masks is not None:
+                    # Select only assistant tokens
+                    lps = [lp[am] for lp, am in _zip_strict(lps, assistant_masks)]
+                    input_ids_response_final = [
+                        ids[am]
+                        for ids, am in _zip_strict(total_input_ids, assistant_masks)
+                    ]
 
         out = out.update(tokens_out.empty(recurse=True))
-        if isinstance(input_ids_response, list):
-            input_ids_response = torch.nested.nested_tensor(input_ids_response)
-        out["tokens_response"] = input_ids_response
+        if isinstance(input_ids_response_final, list):
+            input_ids_response_final = torch.nested.nested_tensor(
+                input_ids_response_final
+            )
+        out["tokens_response"] = input_ids_response_final
         out[self.log_prob_key] = lps
         inputs = td.select(*self.in_keys, strict=False)
         if inputs.ndim < out.ndim:

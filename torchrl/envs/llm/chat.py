@@ -194,7 +194,7 @@ class ChatEnv(EnvBase):
         # Isolate last element, which should be our action
         local_history = parsed_history[..., -1]
         # Get previous history
-        history = tensordict["history"]
+        history = tensordict["history"].copy()
         # Check that history has one more item than before
         if history.shape[-1] <= parsed_history.shape[-1]:
             warnings.warn(

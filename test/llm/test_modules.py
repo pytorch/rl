@@ -19,61 +19,66 @@ from tensordict import (
     TensorDict,
 )
 from torchrl.collectors.llm import LLMCollector
-from torchrl.data.llm import LLMData
+from torchrl.data.llm import History, LLMData
 from torchrl.envs.llm import LLMEnv
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
-from transformers import OPTForCausalLM
 
 _has_transformers = importlib.util.find_spec("transformers")
 _has_vllm = importlib.util.find_spec("vllm")
 
 
+@pytest.fixture(scope="module", autouse=True)
+def set_list_to_stack_fixture():
+    with set_list_to_stack(True):
+        yield
+
+
 @pytest.mark.skipif(not _has_transformers, reason="missing transformers dependencies")
 @pytest.mark.skipif(not _has_vllm, reason="missing vllm dependencies")
 class TestLLMActor:
-    @pytest.fixture(scope="module")
+    @pytest.fixture(scope="class")
     def vllm_instance(self):
         try:
             import vllm
         except ImportError:
             pytest.skip(reason="missing vllm")
 
-        llm_model = vllm.LLM("facebook/opt-125m")
+        llm_model = vllm.LLM("Qwen/Qwen2.5-0.5B")
         tokenizer = llm_model.get_tokenizer()
         tokenizer.pad_token = tokenizer.eos_token
-        return llm_model
+        return llm_model, tokenizer
 
-    @pytest.fixture(scope="module")
+    @pytest.fixture(scope="class")
     def transformers_instance(self):
-        from transformers import AutoTokenizer
+        from transformers import AutoModelForCausalLM, AutoTokenizer
 
         # tokenizer = AutoTokenizer.from_pretrained("gpt2")
         # model = GPT2LMHeadModel(GPT2Config()).eval()
         # tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
         # model = OPTModel(OPTConfig("facebook/opt-125m"))
-        tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
-        model = OPTForCausalLM.from_pretrained("facebook/opt-125m")
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B")
 
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
 
-        return model, tokenizer
+        yield model, tokenizer
 
-    @pytest.fixture(scope="module")
+    @pytest.fixture(scope="class")
     def transformers_instance_pretrained(self):
-        from transformers import AutoTokenizer, OPTForCausalLM
+        from transformers import AutoModelForCausalLM, AutoTokenizer
 
         # tokenizer = AutoTokenizer.from_pretrained("gpt2")
         # model = GPT2LMHeadModel(GPT2Config())
         # tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
         # model = OPTModel(OPTConfig("facebook/opt-125m"))
-        tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
-        model = OPTForCausalLM.from_pretrained("facebook/opt-125m")
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B")
 
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
 
-        return model, tokenizer
+        yield model, tokenizer
 
     @pytest.mark.parametrize(
         "from_text, generate, return_log_probs, tokens, attention_mask",
@@ -165,9 +170,10 @@ class TestLLMActor:
     ):
         torch.manual_seed(0)
 
-        model = vllm_instance
+        model, tokenizer = vllm_instance
         m = vLLMWrapper(
             model,
+            tokenizer=tokenizer,
             from_text=from_text,
             generate=generate,
             return_log_probs=return_log_probs,
@@ -345,16 +351,21 @@ class TestLLMActor:
     ):
         torch.manual_seed(0)
 
-        model = vllm_instance
+        model, tokenizer = vllm_instance
         m_generate = vLLMWrapper(
             model,
+            tokenizer=tokenizer,
             from_text=from_text,
             generate=True,
             return_log_probs=True,
             pad_output=pad_output,
         )
         m_logprobs = vLLMWrapper(
-            model, from_text=from_text, generate=False, pad_output=pad_output
+            model,
+            tokenizer=tokenizer,
+            from_text=from_text,
+            generate=False,
+            pad_output=pad_output,
         )
         self._check_lps(
             m_generate,
@@ -408,9 +419,11 @@ class TestLLMActor:
     @pytest.mark.parametrize("generate", [True, False])
     @pytest.mark.parametrize("use_tensorclass", [True, False])
     def test_vllm_batch_run(self, pad, generate, use_tensorclass, vllm_instance):
+        model, tokenizer = vllm_instance
         # Test generate - padding combinations
         policy = vLLMWrapper(
-            vllm_instance,
+            model,
+            tokenizer=tokenizer,
             from_text=True,
             generate=generate,
             return_log_probs=True,
@@ -478,13 +491,14 @@ class TestLLMActor:
     @pytest.mark.skip_if_nightly
     @pytest.mark.parametrize("from_text", [True])
     def test_vllm_collection(self, vllm_instance, from_text):
+        model, tokenizer = vllm_instance
         policy = vLLMWrapper(
-            vllm_instance,
+            model,
+            tokenizer=tokenizer,
             return_log_probs=True,
             generate_kwargs={"max_tokens": 32},
             from_text=from_text in (True, None),
         )
-        tokenizer = vllm_instance.get_tokenizer()
         self._run_check_collector(policy, from_text=from_text, tokenizer=tokenizer)
 
     def test_transformers_collection(self):
@@ -542,18 +556,19 @@ class TestLLMActor:
 
     @pytest.mark.skip_if_nightly
     def test_vllm_generate_multiple_trajs(self, vllm_instance):
+        model, tokenizer = vllm_instance
         policy = vLLMWrapper(
-            vllm_instance,
+            model,
+            tokenizer=tokenizer,
             return_log_probs=True,
             generate_kwargs={"n": 10, "max_tokens": 1024},
             inplace=False,
         )
         data = TensorDict(
             text=NonTensorStack("a string", "another very long string"), batch_size=2
-        )
+        ).to_lazystack()
         data = policy(data)
 
-    @set_list_to_stack(True)
     @pytest.mark.parametrize("from_text", [True, False])
     @pytest.mark.parametrize("generate", [True, False])
     def test_transformers_long_sequences(
@@ -609,6 +624,233 @@ class TestLLMActor:
             assert (
                 data_policy.get_item_shape("tokens_response")[-1] == -1
             )  # TODO: this fails
+
+    @pytest.mark.parametrize("assistant_only", [True, False])
+    @pytest.mark.parametrize("use_history_key", [("next", "history"), "history"])
+    def test_transformers_wrapper_with_history(
+        self, assistant_only, use_history_key, transformers_instance
+    ):
+        """Test TransformersWrapper with history mode for multi-turn conversations."""
+        torch.manual_seed(0)
+        model, tokenizer = transformers_instance
+
+        # Create a multi-turn conversation
+        chats = [
+            [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Hello, how are you?"},
+                {"role": "assistant", "content": "I'm doing well, thank you!"},
+                {"role": "user", "content": "What is 2 + 2?"},
+                {"role": "assistant", "content": "2 + 2 equals 4."},
+            ]
+        ]
+        history = History.from_chats(chats)
+
+        # Test generation mode with history
+        m_generate = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            from_text=True,
+            generate=True,
+            return_log_probs=True,
+            chat_template_name="qwen",
+            use_history=use_history_key,
+            assistant_only=assistant_only,
+        )
+
+        # Test log-probs mode with history
+        m_logprobs = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            from_text=True,
+            generate=False,
+            return_log_probs=True,
+            chat_template_name="qwen",
+            use_history=use_history_key,
+            assistant_only=assistant_only,
+        )
+
+        # Create test data with history
+        if use_history_key == ("next", "history"):
+            tdin = TensorDict(
+                history=history[..., :2],  # First part of conversation
+                next=TensorDict(
+                    history=history,  # Full conversation
+                ),
+                batch_size=(1,),
+            )
+        else:
+            tdin = TensorDict(
+                history=history,  # Full conversation
+                batch_size=(1,),
+            )
+
+        # Test generation
+        td_generate = m_generate(tdin)
+        assert td_generate["tokens_response"] is not None
+        assert td_generate["text_response"] is not None
+        if m_generate.return_log_probs:
+            assert td_generate["log_probs"] is not None
+
+        # Test log-probs computation
+        td_logprobs = m_logprobs(tdin)
+        assert td_logprobs["tokens_response"] is not None
+        assert td_logprobs["log_probs"] is not None
+
+        # If assistant_only=True, we should have log-probs for assistant tokens only
+        if assistant_only:
+            # The log-probs should correspond to assistant responses
+            assert td_logprobs["log_probs"].shape[-1] > 0
+
+    @pytest.mark.skip_if_nightly
+    @pytest.mark.parametrize("assistant_only", [True, False])
+    @pytest.mark.parametrize("use_history_key", [("next", "history"), "history"])
+    def test_vllm_wrapper_with_history(
+        self, assistant_only, use_history_key, vllm_instance
+    ):
+        """Test vLLMWrapper with history mode for multi-turn conversations."""
+        torch.manual_seed(0)
+        model, tokenizer = vllm_instance
+
+        # Create a multi-turn conversation
+        chats = [
+            [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Hello, how are you?"},
+                {"role": "assistant", "content": "I'm doing well, thank you!"},
+                {"role": "user", "content": "What is 2 + 2?"},
+                {"role": "assistant", "content": "2 + 2 equals 4."},
+            ]
+        ]
+        history = History.from_chats(chats)
+
+        # Test generation mode with history
+        m_generate = vLLMWrapper(
+            model,
+            tokenizer=tokenizer,
+            from_text=True,
+            generate=True,
+            return_log_probs=True,
+            chat_template_name="qwen",
+            use_history=use_history_key,
+            assistant_only=assistant_only,
+        )
+
+        # Test log-probs mode with history
+        m_logprobs = vLLMWrapper(
+            model,
+            from_text=True,
+            generate=False,
+            return_log_probs=True,
+            chat_template_name="qwen",
+            use_history=use_history_key,
+            assistant_only=assistant_only,
+        )
+
+        # Create test data with history
+        if use_history_key == ("next", "history"):
+            tdin = TensorDict(
+                history=history[..., :2],  # First part of conversation
+                next=TensorDict(
+                    history=history,  # Full conversation
+                ),
+                batch_size=(1,),
+            )
+        else:
+            tdin = TensorDict(
+                history=history,  # Full conversation
+                batch_size=(1,),
+            )
+
+        # Test generation
+        td_generate = m_generate(tdin)
+        assert td_generate["tokens_response"] is not None
+        assert td_generate["text_response"] is not None
+        if m_generate.return_log_probs:
+            assert td_generate["log_probs"] is not None
+
+        # Test log-probs computation
+        td_logprobs = m_logprobs(tdin)
+        assert td_logprobs["tokens_response"] is not None
+        assert td_logprobs["log_probs"] is not None
+
+        # If assistant_only=True, we should have log-probs for assistant tokens only
+        if assistant_only:
+            # The log-probs should correspond to assistant responses
+            assert td_logprobs["log_probs"].shape[-1] > 0
+
+    def test_wrapper_history_detection(self, transformers_instance):
+        """Test that wrappers correctly detect and use history vs text mode."""
+        torch.manual_seed(0)
+        model, tokenizer = transformers_instance
+
+        # Test with explicit use_history=False (should use text/text_response)
+        m_text_mode = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            from_text=True,
+            generate=False,
+            return_log_probs=True,
+            use_history=False,
+        )
+
+        # Test with explicit use_history=True (should use history)
+        m_history_mode = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            from_text=True,
+            generate=False,
+            return_log_probs=True,
+            use_history=True,
+            chat_template_name="qwen",
+        )
+
+        # Test with use_history=None (should auto-detect)
+        m_auto_detect = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            from_text=True,
+            generate=False,
+            return_log_probs=True,
+            use_history=None,
+            chat_template_name="qwen",
+        )
+
+        # Create text/text_response data
+        text_data = TensorDict(
+            text="What is 2 + 2?",
+            text_response="2 + 2 equals 4.",
+            batch_size=(1,),
+        )
+
+        # Create history data
+        chats = [
+            [
+                {"role": "user", "content": "What is 2 + 2?"},
+                {"role": "assistant", "content": "2 + 2 equals 4."},
+            ]
+        ]
+        history = History.from_chats(chats)
+        history_data = TensorDict(
+            history=history,
+            batch_size=(1,),
+        )
+
+        # Test text mode
+        result_text = m_text_mode(text_data)
+        assert result_text["log_probs"] is not None
+
+        # Test history mode
+        result_history = m_history_mode(history_data)
+        assert result_history["log_probs"] is not None
+
+        # Test auto-detect with text data
+        result_auto_text = m_auto_detect(text_data)
+        assert result_auto_text["log_probs"] is not None
+
+        # Test auto-detect with history data
+        result_auto_history = m_auto_detect(history_data)
+        assert result_auto_history["log_probs"] is not None
 
 
 if __name__ == "__main__":

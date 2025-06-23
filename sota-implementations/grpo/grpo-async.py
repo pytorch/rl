@@ -100,14 +100,25 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
             repeats=cfg.env.repeats,
             tokenizer=train_tokenizer,
             num_envs=cfg.env.num_envs,
+            max_steps=cfg.env.max_steps,
         )
     else:  # ifeval
         env = IFEvalEnv(
             repeats=cfg.env.repeats,
             tokenizer=train_tokenizer,
             num_envs=cfg.env.num_envs,
+            max_steps=cfg.env.max_steps,
         )
-
+    if cfg.env.reasoning:
+        env = env.append_transform(
+            AddThinkingPrompt(
+                cond=lambda td: td["reward"] <= 20,
+                role="assistant",
+                edit_last_turn=True,
+                zero_reward=True,
+                undo_done=True,
+            )
+        )
     # Pass device directly to KLRewardTransform - Since, for Ray, the local device is always 0
     # we can just use 0 here.
     device = torch.device("cuda:0")
