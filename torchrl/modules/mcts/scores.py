@@ -203,9 +203,88 @@ class EXP3Score(MCTSScore):
         node.set(self.weights_key, weights)
 
 
+class UCB1TunedScore(MCTSScore):
+    def __init__(
+        self,
+        *,
+        win_count_key: NestedKey = "win_count",
+        visits_key: NestedKey = "visits",
+        total_visits_key: NestedKey = "total_visits",
+        sum_squared_rewards_key: NestedKey = "sum_squared_rewards",
+        score_key: NestedKey = "score",
+        exploration_constant: float = 2.0,
+    ):
+        super().__init__()
+        self.win_count_key = win_count_key
+        self.visits_key = visits_key
+        self.total_visits_key = total_visits_key
+        self.sum_squared_rewards_key = sum_squared_rewards_key
+        self.score_key = score_key
+        self.exploration_constant = exploration_constant
+
+        self.in_keys = [
+            self.win_count_key,
+            self.visits_key,
+            self.total_visits_key,
+            self.sum_squared_rewards_key,
+        ]
+        self.out_keys = [self.score_key]
+
+    def forward(self, node: TensorDictBase) -> TensorDictBase:
+        q_sum_i = node.get(self.win_count_key)
+        n_i = node.get(self.visits_key)
+        n_parent = node.get(self.total_visits_key)
+        sum_sq_rewards_i = node.get(self.sum_squared_rewards_key)
+
+        if n_parent.ndim > 0 and n_parent.ndim < q_sum_i.ndim:
+            n_parent_expanded = n_parent.unsqueeze(-1)
+        else:
+            n_parent_expanded = n_parent
+
+        safe_n_parent_for_log = torch.clamp(n_parent_expanded, min=1.0)
+        log_n_parent = torch.log(safe_n_parent_for_log)
+
+        scores = torch.zeros_like(q_sum_i, device=q_sum_i.device)
+
+        visited_mask = n_i > 0
+
+        if torch.any(visited_mask):
+            q_sum_i_v = q_sum_i[visited_mask]
+            n_i_v = n_i[visited_mask]
+            sum_sq_rewards_i_v = sum_sq_rewards_i[visited_mask]
+
+            log_n_parent_v = log_n_parent.expand_as(n_i)[visited_mask]
+
+            avg_reward_i_v = q_sum_i_v / n_i_v
+
+            empirical_variance_v = (sum_sq_rewards_i_v / n_i_v) - avg_reward_i_v.pow(2)
+            bias_correction_v = (
+                self.exploration_constant * log_n_parent_v / n_i_v
+            ).sqrt()
+
+            v_i_v = empirical_variance_v + bias_correction_v
+            v_i_v.clamp(min=0)
+
+            min_variance_term_v = torch.min(torch.full_like(v_i_v, 0.25), v_i_v)
+            exploration_component_v = (
+                log_n_parent_v / n_i_v * min_variance_term_v
+            ).sqrt()
+
+            scores[visited_mask] = avg_reward_i_v + exploration_component_v
+
+        unvisited_mask = ~visited_mask
+        if torch.any(unvisited_mask):
+            scores[unvisited_mask] = torch.finfo(scores.dtype).max / 10.0
+
+        node.set(self.score_key, scores)
+        return node
+
+
 class MCTSScores(Enum):
     PUCT = functools.partial(PUCTScore, c=5)  # AlphaGo default value
     UCB = functools.partial(UCBScore, c=math.sqrt(2))  # default from Auer et al. 2002
-    UCB1_TUNED = "UCB1-Tuned"
+    UCB1_TUNED = functools.partial(
+        UCB1TunedScore, exploration_constant=2.0
+    )  # Auer et al. (2002) C=2 for rewards in [0,1]
     EXP3 = functools.partial(EXP3Score, gamma=0.1)
     PUCT_VARIANT = "PUCT-Variant"
