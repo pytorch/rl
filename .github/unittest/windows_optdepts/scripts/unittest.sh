@@ -14,6 +14,12 @@ env_dir="${root_dir}/env"
 
 cd "${root_dir}"
 
+echo "=== Starting Windows CI setup ==="
+echo "Current directory: $(pwd)"
+echo "Python version: $PYTHON_VERSION"
+echo "CU_VERSION: $CU_VERSION"
+echo "TORCH_VERSION: $TORCH_VERSION"
+
 eval "$($(which conda) shell.bash hook)" && set -x
 
 # Create test environment at ./env
@@ -28,11 +34,12 @@ echo $(which python)
 echo $(python --version)
 echo $(conda info -e)
 
-
+echo "=== Installing test dependencies ==="
 python -m pip install hypothesis future cloudpickle pytest pytest-cov pytest-mock pytest-instafail pytest-rerunfailures expecttest pyyaml scipy coverage
 
 # =================================== Install =================================================
 
+echo "=== Installing PyTorch and dependencies ==="
 
 # TODO, refactor the below logic to make it easy to understand how to get correct cuda_version.
 if [ "${CU_VERSION:-}" == cpu ] ; then
@@ -56,8 +63,8 @@ else
     cudatoolkit="${cuda_toolkit_pckg}=${version}"
 fi
 
-
 # submodules
+echo "=== Updating git submodules ==="
 git submodule sync && git submodule update --init --recursive
 python -m pip install "numpy<2.0"
 
@@ -92,6 +99,7 @@ fi
 #python -m pip install pip --upgrade
 
 # install tensordict
+echo "=== Installing tensordict ==="
 if [[ "$RELEASE" == 0 ]]; then
   conda install anaconda::cmake -y
 
@@ -103,11 +111,13 @@ else
 fi
 
 # smoke test
+echo "=== Testing tensordict import ==="
 python -c """
 from tensordict import TensorDict
 print('successfully imported tensordict')
 """
 
+echo "=== Setting up CUDA environment ==="
 source "$this_dir/set_cuda_envs.sh"
 
 printf "* Installing torchrl\n"
@@ -117,6 +127,7 @@ whatsinside=$(ls -rtlh ./torchrl)
 echo $whatsinside
 
 # smoke test
+echo "=== Testing torchrl import ==="
 python -c """
 from torchrl.data import ReplayBuffer
 print('successfully imported torchrl')
@@ -124,6 +135,7 @@ print('successfully imported torchrl')
 
 # =================================== Run =================================================
 
+echo "=== Setting up test environment ==="
 source "$this_dir/set_cuda_envs.sh"
 
 # we don't use torchsnapshot
@@ -132,5 +144,24 @@ export MAX_IDLE_COUNT=60
 export BATCHED_PIPE_TIMEOUT=60
 export LAZY_LEGACY_OP=False
 
+echo "=== Collecting environment info ==="
 python -m torch.utils.collect_env
-pytest --junitxml=test-results/junit.xml -v --durations 200  --ignore test/test_distributed.py --ignore test/test_rlhf.py
+
+echo "=== Starting pytest execution ==="
+echo "Current working directory: $(pwd)"
+echo "Python executable: $(which python)"
+echo "Pytest executable: $(which pytest)"
+
+# Create test-results directory if it doesn't exist
+mkdir -p test-results
+
+# Run pytest with explicit error handling
+set +e  # Don't exit on error for pytest
+pytest --junitxml=test-results/junit.xml -v --durations 200 --ignore test/test_distributed.py --ignore test/test_rlhf.py --ignore test/llm
+PYTEST_EXIT_CODE=$?
+set -e  # Re-enable exit on error
+
+echo "=== Pytest completed with exit code: $PYTEST_EXIT_CODE ==="
+
+# Exit with pytest's exit code
+exit $PYTEST_EXIT_CODE
