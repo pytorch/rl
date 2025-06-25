@@ -1252,7 +1252,9 @@ class GAE(ValueEstimatorBase):
     Args:
         gamma (scalar): exponential mean discount.
         lmbda (scalar): trajectory discount.
-        value_network (TensorDictModule): value operator used to retrieve the value estimates.
+        value_network (TensorDictModule, optional): value operator used to retrieve the value estimates.
+            If ``None``, this module will expect the ``"state_value"`` keys to be already filled, and
+            will not call the value network to produce it.
         average_gae (bool): if ``True``, the resulting GAE values will be standardized.
             Default is ``False``.
         differentiable (bool, optional): if ``True``, gradients are propagated through
@@ -1327,7 +1329,7 @@ class GAE(ValueEstimatorBase):
         *,
         gamma: float | torch.Tensor,
         lmbda: float | torch.Tensor,
-        value_network: TensorDictModule,
+        value_network: TensorDictModule | None,
         average_gae: bool = False,
         differentiable: bool = False,
         vectorized: bool | None = None,
@@ -1498,6 +1500,15 @@ class GAE(ValueEstimatorBase):
         else:
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
+
+            if value is None:
+                raise ValueError(
+                    f"The tensor with key {self.tensor_keys.value} is missing, and no value network was provided."
+                )
+            if next_value is None:
+                raise ValueError(
+                    f"The tensor with key {('next', self.tensor_keys.value)} is missing, and no value network was provided."
+                )
 
         done = tensordict.get(("next", self.tensor_keys.done))
         terminated = tensordict.get(("next", self.tensor_keys.terminated), default=done)
