@@ -865,7 +865,7 @@ class History(TensorClass["nocast"]):
         lines = text.strip().split("\n")
         parsed_messages = []
 
-        for i, line in enumerate(lines):
+        for line in lines:
             line = line.strip()
             if not line:
                 continue

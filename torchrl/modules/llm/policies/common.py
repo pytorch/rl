@@ -4,22 +4,137 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from typing import overload
+
 import torch
 from tensordict import NestedKey, TensorDictBase
 from tensordict.nn import TensorDictModuleBase, TensorDictSequential
+from tensordict.tensorclass import TensorClass
 from torch import distributions as D
 from torch.distributions import Categorical
 from torchrl.modules import MaskedCategorical
 
 
+class Tokens(TensorClass["nocast"]):
+    """A Tokens container.
+
+    Args:
+        prompt (torch.Tensor | None): The prompt tokens.
+        response (torch.Tensor | None): The response tokens.
+        full (torch.Tensor | None): The tokens across prompt and response.
+        padded (bool | None): Whether the tokens are padded.
+    """
+
+    prompt: torch.Tensor | None = None
+    response: torch.Tensor | None = None
+    full: torch.Tensor | None = None
+    padded: bool | None = None
+
+
+class Masks(TensorClass["nocast"]):
+    """A Masks container.
+
+    Args:
+        all_attention_mask (torch.Tensor | None): The attention mask across all tokens.
+        all_assistant_mask (torch.Tensor | None): The assistant mask across all tokens.
+        padded (bool | None): Whether the masks are padded.
+    """
+
+    all_attention_mask: torch.Tensor | None = None
+    all_assistant_mask: torch.Tensor | None = None
+    padded: bool | None = None
+
+
+class LogProbs(TensorClass["nocast"]):
+    """A log-probability container.
+
+    Args:
+        prompt (torch.Tensor | None): The prompt log-probabilities.
+        response (torch.Tensor | None): The response log-probabilities.
+        full (torch.Tensor | None): The log-probabilities across prompt and response.
+        padded (bool | None): Whether the log-probabilities are padded.
+    """
+
+    prompt: torch.Tensor | None = None
+    response: torch.Tensor | None = None
+    full: torch.Tensor | None = None
+    padded: bool | None = None
+
+
+class Text(TensorClass["nocast"]):
+    """A text container.
+
+    Args:
+        prompt (str | None): The prompt text.
+        response (str | None): The response text.
+        full (str | None): The text across prompt and response.
+        padded (bool | None): Whether the text is padded.
+    """
+
+    prompt: str | None = None
+    response: str | None = None
+    full: str | None = None
+    padded: bool | None = None
+
+
 class CategoricalSequential(TensorDictModuleBase):
     """A ProbabilisticTensorDictSequential subclass meant to work with LLMs.
 
-    .. seealso:: :class:`~tensordict.nn.ProbabilisticTensorDictSequential` class.
+    This class provides a consistent interface for LLM wrappers with the following features:
+    - Support for different input modalities (history, text, tokens)
+    - Consistent output structure using TensorClass objects (Text, Tokens, Masks, LogProbs)
+    - Configurable generation and log-probability computation
 
+    Args:
+        model: The underlying model to wrap.
+        tokenizer: The tokenizer to use for encoding and decoding text.
+        input_mode: The input modality to use. Must be one of "history", "text", or "tokens".
+        input_key: The key for the input data. If None, defaults to the input_mode name.
+        attention_mask_key: The key for attention masks (used in "tokens" mode).
+        generate: Whether to enable text generation.
+        return_log_probs: Whether to return log probabilities.
+        return_text: Whether to return text outputs.
+        return_tokens: Whether to return token outputs.
+        return_masks: Whether to return mask outputs.
+        generate_kwargs: Additional arguments to pass to the model's generate method.
+        tokenizer_kwargs: Additional arguments to pass to the tokenizer.
+        pad_output: Whether to pad the output sequences to a uniform length.
+        inplace: Determines how the module should handle in-place operations.
+        device: The device to use for computation.
+        layout: The layout to use for the output tensors when pad_output=False.
+        num_samples: The number of samples to generate.
+
+    .. seealso:: :class:`~tensordict.nn.ProbabilisticTensorDictSequential` class.
     """
 
     generate: bool
+
+    @overload
+    def __init__(
+        self,
+        model,
+        *,
+        tokenizer=None,
+        input_mode: str = "history",
+        input_key: str | None = None,
+        attention_mask_key: str = "attention_mask",
+        generate: bool = True,
+        return_log_probs: bool = False,
+        return_text: bool = True,
+        return_tokens: bool = True,
+        return_masks: bool = True,
+        generate_kwargs: dict | None = None,
+        tokenizer_kwargs: dict | None = None,
+        pad_output: bool = False,
+        inplace=None,
+        device: torch.device | None = None,
+        layout: torch.layout | None = None,
+        num_samples: int | None = None,
+    ):
+        ...
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
     def get_dist(
         self,

@@ -70,8 +70,9 @@ class GSM8KPrepareQuestion(Transform):
 
 
 def _collate_fn(batch):
+    print("batch", batch)
     batch = torch.stack([TensorDict.from_dict(_batch) for _batch in batch])
-    batch.rename_key_("question", "text")
+    batch.rename_key_("question", "query")
     return batch
 
 

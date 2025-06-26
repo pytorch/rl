@@ -608,7 +608,6 @@ class PPOLoss(LossModule):
             with self.actor_network_params.to_module(
                 self.actor_network
             ) if self.functional else contextlib.nullcontext():
-                print(f"getting dist from {tensordict=}")
                 dist = self.actor_network.get_dist(tensordict)
             is_composite = isinstance(dist, CompositeDistribution)
 

@@ -179,7 +179,6 @@ class GRPOLoss(ClipPPOLoss):
                     tokens = tokens[attention_mask]
                 tensordict.set("attention_mask", attention_mask)
                 tensordict.set(self.tensor_keys.action, tokens)
-                print(f"{tensordict=}")
             else:
                 text_response = tensordict.get("text_response")
                 if text_response is not None:

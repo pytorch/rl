@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import re
+import warnings
 from typing import Callable, Literal
 
 from tensordict import lazy_stack, TensorDictBase

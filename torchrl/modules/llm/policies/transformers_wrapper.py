@@ -5,186 +5,219 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
-
 from copy import copy
-
 from typing import Literal
 
 import torch
+
 from tensordict import (
     lazy_stack,
-    LazyStackedTensorDict,
-    NestedKey,
+    MetaData,
     set_list_to_stack,
     TensorDict,
     TensorDictBase,
 )
 from tensordict.utils import _zip_strict
 from torch.nn.utils.rnn import pad_sequence
-from torchrl.data.llm.chat import History
 
-from torchrl.modules.llm.policies.common import CategoricalSequential
+from torchrl.modules.llm.policies.common import (
+    CategoricalSequential,
+    LogProbs,
+    Masks,
+    Text,
+    Tokens,
+)
 from torchrl.modules.utils.utils import _unpad_tensors
+
+# TODOs:
+# - [ ] Remove the useless view(-1) calls when num_samples is not > 1
+# - [ ] Remove as_list=True and use a context manager to handle that
+# - [ ] Make sure tensordict can handle nested lazy tds that have a get(key, as_list=True) - I think it breaks atm
 
 
 class TransformersWrapper(CategoricalSequential):
     """A wrapper class for Hugging Face Transformers models, providing a consistent interface for text generation and log probability computation.
 
-    This class handles both text and token inputs, enabling text generation and log probability computation based on
-    the specified configuration. Unlike vLLM, Transformers require padded tensors for input and output sequences.
+    This class provides a unified API for handling different input modalities (history, text, tokens) with consistent
+    output structure using :class:`~tensordict.TensorClass` objects.
 
     Args:
-        model (transformers.LLM): The Hugging Face Transformers model to wrap.
+        model (transformers.AutoModelForCausalLM | str): The Hugging Face Transformers model to wrap.
+            If a string, it will be passed to `transformers.AutoModelForCausalLM.from_pretrained`.
 
     Keyword Args:
-        return_log_probs (bool | None, optional): Whether to return log probabilities of the generated tokens.
+        tokenizer (transformers.tokenization_utils.PreTrainedTokenizer | str | None, optional): The tokenizer to use for
+            encoding and decoding text. If `None`, the tokenizer associated with the model will be used.
+            If a string, it will be passed to `transformers.AutoTokenizer.from_pretrained`. Defaults to `None`.
+        input_mode (str, optional): The input modality to use. Must be one of `"history"`, `"text"`, or `"tokens"`.
+            Defaults to `"history"`.
+        input_key (str | None, optional): The key for the input data. If `None`, defaults to the `input_mode` name.
             Defaults to `None`.
-        tokenizer (transformers.tokenization_utils.PreTrainedTokenizer | None, optional): The tokenizer to use for
-            encoding and decoding text. If `None`, the tokenizer associated with the model will be used. Defaults to
-            `None`.
-        use_history (bool, NestedKey, optional): Whether to use the history key as input. If `True`, the input is expected to
-            be a history object (under the `"history"` key). If `False`, the input is expected to be a text string, with
-            the `"text"` and `"text_response"` key pair. If a `NestedKey` is passed, it will be used as the key for the
-            history object. Defaults to `None`: first attempts to use the `("next", "history")` key, then the `"history"` key,
-            then finally the `"text"` and `"text_response"` key pair.
-        from_text (bool, optional): Indicates whether the input is in text format. If `True`, the input is expected to
-            be text that will be tokenized. If `False`, the input is expected to be token sequences. Defaults to `True`.
-
-            .. note:: If `from_text` is `True`, the input text can be provided in the `"text"` key or in the `"history"` key.
-                If using the `"history"` key, the history will be parsed from a :class:`~torchrl.data.llm.History` object to a
-                text string using the tokenizer.
-                See the `use_history` keyword argument for more details.
-
-        device (torch.device | None, optional): The device to use for computation. If `None`, the default device will
-            be used. Defaults to `None`.
+        attention_mask_key (str, optional): The key for attention masks (used in `"tokens"` mode). Defaults to `"attention_mask"`.
         generate (bool, optional): Whether to enable text generation. If `True`, the model will generate text based on
-            the input. If `False`, only log probabilities will be computed for the response tokens/text. Defaults to `True`.
-        generate_kwargs (dict | None, optional): Additional arguments to pass to the model's generate method. These
-            arguments can control aspects of the generation process, such as temperature and top-k sampling. Defaults
-            to `None`.
-
-            .. note:: Sampling params can be overwritten at runtime using the kwargs of the forward method.
-                See `the full list of accepted keyword arguments here <https://huggingface.co/docs/transformers/v4.51.1/en/main_classes/text_generation#transformers.GenerationConfig>`__.
-
-        tokenizer_kwargs (dict | None, optional): Additional arguments to pass to the tokenizer. These arguments can
-            control aspects of the tokenization process, such as padding and truncation. Defaults to `None`.
+            the input. If `False`, only log probabilities will be computed. Defaults to `True`.
+        return_log_probs (bool, optional): Whether to return log probabilities. Defaults to `False`.
+        return_text (bool, optional): Whether to return text outputs. Defaults to `True`.
+        return_tokens (bool, optional): Whether to return token outputs. Defaults to `True`.
+        return_masks (bool, optional): Whether to return mask outputs. Defaults to `True`.
+        generate_kwargs (dict | None, optional): Additional arguments to pass to the model's generate method. Defaults to `None`.
+        tokenizer_kwargs (dict | None, optional): Additional arguments to pass to the tokenizer. Defaults to `None`.
         pad_output (bool, optional): Whether to pad the output sequences to a uniform length. Transformers require
             `pad_output=True`, and the output sequences will be padded and represented as tensors. Defaults to `True`.
         inplace (Literal[True, False, "empty"] | None, optional): Determines how the module should handle in-place
-            operations. If `True`, operations will be performed in-place. If `False`, a new TensorDict instance will be
-            created. If `"empty"`, the output data structure will be initialized with `input.empty()` (i.e., it will
-            conserve type, batch-size, and device). Defaults to `True`.
+            operations. Defaults to `True` when generating a single sample, `False` otherwise.
+        device (torch.device | None, optional): The device to use for computation. Defaults to `None`.
+        layout (torch.layout | None, optional): The layout to use for the output tensors when `pad_output=False`. Defaults to `torch.strided`.
+        num_samples (int | None, optional): The number of samples to generate. Defaults to `None` (one sample, and no batch-dimension for it).
+            Can also be set via the `generate_kwargs["num_return_sequences"] = value` argument.
         chat_template_name (Literal["chatml_format", "qwen"] | None, optional): The name of the chat template to use when
             applying the chat template to the history. Defaults to `None`.
+            For `input_mode="history"` only.
         chat_template (str | None, optional): The chat template to use when applying the chat template to the history.
             Defaults to `None`.
-        assistant_only (bool, optional): Whether to only use the assistant tokens in the history when computing the log-probs.
-            Defaults to `True`.
-            Without effect if the history is not used.
-
-            .. note:: This presumes that the chat format supports the `return_assistant_tokens_mask` argument, which is not the case for all chat formats.
-
-    .. note:: The tokenizer is used when `from_text` is `True` to convert input text into token sequences. It is also
-        required (or retrieved) when `pad_output` is `True` or when using text inputs with `generate=False` to ensure proper
-        tokenization and padding.
+            For `input_mode="history"` only.
 
     Input Keys:
-
-    - If `from_text` is `True`:
-
-        - `"text"`: The input text to be tokenized.
-        - `"text_response"`: the response text (if `generate=False` as the log probabilities are computed for the response.)
-
-    - If `from_text` is `False`:
-
-        - "tokens": The input token sequences.
-        - "attention_mask": The attention mask for the tokens.
-        - "tokens_response": The response token sequences (if `generate=False` as the log probabilities are
-          computed for the response.)
+        - If `input_mode="history"`: `input_key` (defaults to `"history"`)
+        - If `input_mode="text"`: `input_key` (defaults to `"text"`)
+        - If `input_mode="tokens"`: `input_key` (defaults to `"tokens"`)
 
     Output Keys:
-
-        - `"tokens_response"`: The generated token sequences.
-        - `"log_probs"`: The log probabilities of the generated tokens (if `return_log_probs` is `True`).
-        - `"text_response"`: The generated text (if `from_text` is `True` and `generate` is `True`).
+        Always returns a TensorDict with the following structure:
+        ```
+        TensorDict(
+            text=Text(...),      # if return_text=True
+            masks=Masks(...),    # if return_masks=True
+            tokens=Tokens(...),  # if return_tokens=True
+            log_probs=LogProbs(...)  # if return_log_probs=True
+        )
+        ```
 
     Example:
         >>> from transformers import AutoModelForCausalLM, AutoTokenizer
+        >>> from torchrl.data.llm import History
+        >>>
         >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
         >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        >>>
+        >>> # History input (recommended for RL environments)
         >>> wrapper = TransformersWrapper(
         ...     model,
         ...     tokenizer=tokenizer,
-        ...     from_text=True,
-        ...     generate=True
+        ...     input_mode="history",
+        ...     generate=True,
+        ...     return_log_probs=True
         ... )
-        >>> input_data = TensorDict({"text": ["Hello, world!", "This is another text"]}, batch_size=1)
-        >>> output_data = wrapper(input_data)
-        >>> print(output_data["text_response"])
+        >>>
+        >>> history = History.from_chats([[
+        ...     {"role": "user", "content": "Hello"},
+        ...     {"role": "assistant", "content": "Hi there!"}
+        ... ]])
+        >>> result = wrapper(TensorDict(history=history, batch_size=(1,)))
+        >>> print(result["text"].response)
+        >>> print(result["log_probs"].response)
 
-    .. seealso:: :func:`~torchrl.modules.vLLMWrapper` for a similar interface using vLLM.
-
+    .. seealso:: :class:`~torchrl.modules.llm.vLLMWrapper` for a similar interface using vLLM.
     """
-
-    text_key: NestedKey = ("text",)
-    history_key: NestedKey = ("history",)
-    token_key: NestedKey = ("tokens",)
-    token_response_key: NestedKey = ("tokens_response",)
-    text_response_key: NestedKey = ("text_response",)
-    attention_mask_key: NestedKey = ("attention_mask",)
 
     def __init__(
         self,
-        model: transformers.LLM,  # noqa
-        # noqa
+        model,
         *,
-        return_log_probs: bool | None = None,
-        tokenizer: transformers.tokenization_utils.PreTrainedTokenizer  # noqa
-        | None = None,
-        # noqa
-        from_text: bool = True,
-        device: torch.device | None = None,
+        tokenizer=None,
+        input_mode: str = "history",
+        input_key: str | None = None,
+        attention_mask_key: str = "attention_mask",
         generate: bool = True,
+        return_log_probs: bool = False,
+        return_text: bool = True,
+        return_tokens: bool = True,
+        return_masks: bool = True,
         generate_kwargs: dict | None = None,
         tokenizer_kwargs: dict | None = None,
         pad_output: bool = True,
-        inplace: Literal[True, False, "empty"] | None = True,
+        inplace: Literal[True, False, "empty"] | None = None,
+        device: torch.device | None = None,
+        layout: torch.layout | None = None,
+        num_samples: int | None = None,
         chat_template_name: Literal["chatml_format", "qwen"] | None = None,
         chat_template: str | None = None,
-        use_history: bool | NestedKey | None = None,
-        assistant_only: bool = True,
     ):
         super().__init__()
 
-        self.model = model
-        self.from_text = from_text
-        if device is not None:
-            device = torch.device(device)
-        self._device = device
-        self.generate = generate
-        self.inplace = inplace
-        self.pad_output = pad_output
-        padding_value = None
-        self.chat_template_name = chat_template_name
-        self.chat_template = chat_template
-        self.assistant_only = assistant_only
-        if isinstance(use_history, (str, tuple)):  # equivalent to NestedKey but faster
-            self.history_key = use_history
-            self.use_history = True
-        else:
-            self.history_key = None
-            self.use_history = use_history  # None means "maybe"
+        if isinstance(model, str):
+            from transformers import AutoModelForCausalLM
 
+            model = AutoModelForCausalLM.from_pretrained(model)
+
+        if isinstance(tokenizer, str):
+            from transformers import AutoTokenizer
+
+            tokenizer = AutoTokenizer.from_pretrained(tokenizer)
+
+        # Validate input_mode
+        if input_mode not in ["history", "text", "tokens"]:
+            raise ValueError(
+                f"input_mode must be one of 'history', 'text', 'tokens'. Got '{input_mode}'"
+            )
+
+        self.model = model
+        self.input_mode = input_mode
+        self.attention_mask_key = attention_mask_key
+        self.generate = generate
+        self.return_log_probs = return_log_probs
+        self.return_text = return_text
+        self.return_tokens = return_tokens
+        self.return_masks = return_masks
+        if not isinstance(pad_output, bool):
+            raise ValueError("pad_output must be a boolean")
+        if return_masks and not return_tokens:
+            raise ValueError("return_masks cannot be True if return_tokens is False")
+        self.pad_output = pad_output
+        self._device = device
+        if not pad_output and layout is None:
+            layout = torch.strided
+        self.layout = layout
+        padding_value = None
+
+        # Auto-determine input_key if not provided
+        if input_key is None:
+            input_key = input_mode
+        self.input_key = input_key
+
+        # Set input keys based on mode
+        if input_mode == "history":
+            self.in_keys = [input_key]
+        elif input_mode == "text":
+            self.in_keys = [input_key]
+        elif input_mode == "tokens":
+            self.in_keys = [input_key]
+
+        # Set output keys based on return flags
+        self.out_keys = []
+        if return_text:
+            self.out_keys.append("text")
+        if return_masks:
+            self.out_keys.append("masks")
+        if return_tokens:
+            self.out_keys.append("tokens")
+        if return_log_probs:
+            self.out_keys.append("log_probs")
+
+        # Tokenizer setup
         if not tokenizer_kwargs:
             tokenizer_kwargs = {}
         if not tokenizer_kwargs.setdefault("return_attention_mask", True):
-            raise RuntimeError
+            raise RuntimeError("return_attention_mask must be True")
 
         # If we don't pad, we use lists
-        if not self.pad_output:
-            raise NotImplementedError("transformers requires `pad_output=True`.")
-        if tokenizer_kwargs.setdefault("return_tensors", "pt") != "pt":
-            raise RuntimeError
+        return_tensors = "pt" if self.pad_output else False
+        if return_tensors:
+            if (
+                tokenizer_kwargs.setdefault("return_tensors", return_tensors)
+                != return_tensors
+            ):
+                raise RuntimeError
         if tokenizer_kwargs.setdefault("padding", self.pad_output) not in (
             self.pad_output,
         ):
@@ -193,14 +226,15 @@ class TransformersWrapper(CategoricalSequential):
             raise RuntimeError
 
         self.tokenizer_kwargs = tokenizer_kwargs
-        if (pad_output or (from_text and not generate)) and tokenizer is None:
-            # We need a tokenizer if we pad or when using text inputs with generate=False
-            #  The latter case is due to the fact that we want the log-probs for the response only,
-            #  but if the response is presented as a text we have to tokenize the whole prompt + response and
-            #  identify where the prompt ends and where the response starts.
+
+        # Get tokenizer if needed
+        if (
+            pad_output or (input_mode in ["text", "history"] and not generate)
+        ) and tokenizer is None:
             tokenizer = model.get_tokenizer()
         self.tokenizer = tokenizer
-        if tokenizer is not None and (
+
+        if self.tokenizer is not None and (
             not hasattr(self.tokenizer, "pad_token") or self.tokenizer.pad_token is None
         ):
             self.tokenizer.pad_token = self.tokenizer.eos_token
@@ -208,40 +242,53 @@ class TransformersWrapper(CategoricalSequential):
             padding_value = self.tokenizer(self.tokenizer.pad_token)["input_ids"][0]
         self.padding_value = padding_value
 
+        # Generate kwargs setup
         if generate_kwargs is None:
             generate_kwargs = {}
         else:
             generate_kwargs = dict(generate_kwargs)
 
-        if not generate:
-            # TODO
-            if return_log_probs in (None, True):
-                return_log_probs = True
-            else:
+        self.num_samples = num_samples
+        if (
+            generate_kwargs.get("num_return_sequences", 1) > 1
+            or num_samples is not None
+        ):
+            if inplace in (True, "empty"):
                 raise ValueError(
-                    "return_log_probs must be True or None when generate=False."
+                    "inplace must be False (or None) when generating more than one sample."
                 )
-        elif return_log_probs in (None, False):
-            return_log_probs = False
-        self.return_log_probs = return_log_probs
+            if inplace is None:
+                inplace = False
+            if (
+                generate_kwargs.get("num_return_sequences", 1) > 1
+                and num_samples is not None
+                and generate_kwargs.get("num_return_sequences", 1) != num_samples
+            ):
+                raise ValueError("num_samples differs from generate_kwargs['n'].")
+            elif num_samples is None:
+                self.num_samples = generate_kwargs.get("num_return_sequences", 1)
+            generate_kwargs["num_return_sequences"] = self.num_samples
+        elif inplace is None:
+            inplace = True
+
+        self.inplace = inplace
+
+        if not generate:
+            # We want only the log-probs, we generate a single token (that we then discard)
+            # and retrieve the prompt log-probs
+            generate_kwargs["max_tokens"] = 1
+            if not return_log_probs:
+                raise ValueError("return_log_probs must be True when generate=False.")
 
         generate_kwargs.setdefault("tokenizer", self.tokenizer)
         generate_kwargs.setdefault("output_logits", self.return_log_probs)
         generate_kwargs.setdefault("return_dict_in_generate", True)
-        if not generate:
-            generate_kwargs.setdefault("return_dict_in_generate", True)
 
         self.generate_kwargs = generate_kwargs
 
-        if from_text:
-            self.in_keys = [self.text_key]
-        else:
-            self.in_keys = [self.token_key, self.attention_mask_key]
-        self.out_keys = [self.token_response_key]
-        if from_text:
-            self.out_keys += [self.text_response_key, self.token_key]
-        if self.return_log_probs:
-            self.out_keys += [self.log_prob_key, "logits"]
+        # Additional transformers-specific settings
+        self.chat_template_name = chat_template_name
+        self.chat_template = chat_template
 
     @set_list_to_stack(True)
     def forward(
@@ -274,393 +321,320 @@ class TransformersWrapper(CategoricalSequential):
         else:
             cfg = None
 
-        out = LazyStackedTensorDict(
-            *[
+        if self.num_samples is not None:
+            out = (
                 TensorDict(
-                    device=tensordict.device, batch_size=tensordict.batch_size[1:]
+                    device=tensordict.device,
+                    batch_size=(
+                        tensordict.batch_size[0],
+                        self.num_samples,
+                        *tensordict.batch_size[1:],
+                    ),
                 )
-                for _ in range(tensordict.shape[0])
-            ]
-        )
-        if self.from_text:
-            if self.generate:
-                out = self._from_transformers_generate_text(
-                    tensordict, out=out, cfg=cfg
-                )
-            else:
-                out = self._from_transformers_logprobs_text(
-                    tensordict, out=out, cfg=cfg
-                )
+                .to_lazystack(1)
+                .to_lazystack(0)
+            )
         else:
+            out = TensorDict(
+                device=tensordict.device, batch_size=tensordict.batch_size
+            ).to_lazystack(0)
+
+        if self.input_mode == "history":
             if self.generate:
-                out = self._from_transformers_generate_tokens(
-                    tensordict, out=out, cfg=cfg
-                )
+                out = self._from_transformers_generate_history(tensordict, cfg, out)
             else:
-                out = self._from_transformers_logprobs_tokens(
-                    tensordict, out=out, cfg=cfg
-                )
+                out = self._from_transformers_logprobs_history(tensordict, cfg, out)
+        elif self.input_mode == "text":
+            if self.generate:
+                out = self._from_transformers_generate_text(tensordict, cfg, out)
+            else:
+                out = self._from_transformers_logprobs_text(tensordict, cfg, out)
+        elif self.input_mode == "tokens":
+            if self.generate:
+                out = self._from_transformers_generate_tokens(tensordict, cfg, out)
+            else:
+                out = self._from_transformers_logprobs_tokens(tensordict, cfg, out)
+
         if _source_device:
             out = out.to(_source_device)
 
         if tensordict_out is None:
             if self.inplace is True:
+                # The output is the input
                 tensordict_out = tensordict
             elif self.inplace is False:
-                tensordict_out = TensorDict()
+                # The output is the new structure
+                tensordict_out = out
             elif self.inplace == "empty":
+                # The output is empty
                 tensordict_out = tensordict.empty()
 
-        if tensordict_out is not None:
+        if tensordict_out is not None and tensordict_out is not out:
             result = tensordict_out
             result.update(out, keys_to_update=self.out_keys)
-        else:
+        elif tensordict_out is out:
+            return out.select(*self.out_keys)
+        elif self.inplace:
             result = out
             keys = list(set(self.out_keys + list(tensordict.keys(True, True))))
             return tensordict.update(result, keys_to_update=keys)
         return result
 
-    def _from_transformers_generate_text(self, td, out, cfg=None):
-        pad_val = self.tokenizer.pad_token_id
+    def _from_transformers_generate_history(self, td, cfg, out) -> TensorDictBase:
+        """Generate text from history input."""
+        from torchrl.data.llm import History
 
-        # Should we use the history?
-        if self.use_history is None or (
-            self.use_history is True and self.history_key is None
-        ):
-            # eagerly attempt to use the history key
-            history_key = self.history_key
-            if history_key is None:
-                history_key = ("next", "history")
-                if history_key not in td:
-                    history_key = "history"
-            use_history = bool(self.use_history) or history_key in td
-        else:
-            use_history = self.use_history
-        if use_history:
-            # Fallback on history parsing
-            history = td.get(self.history_key)
-            if history is None:
-                raise ValueError(
-                    "No text or history provided to the TransformersWrapper."
-                )
-            tokenizer_kwargs = {}
-            if self.chat_template_name is not None:
-                tokenizer_kwargs.setdefault(
-                    "chat_template_name", self.chat_template_name
-                )
-            if self.chat_template is not None:
-                tokenizer_kwargs.setdefault("chat_template", self.chat_template)
-            tokenizer_kwargs.setdefault("add_generation_prompt", False)
-            text = history.apply_chat_template(
+        # Validate input
+        if self.input_key not in td:
+            raise ValueError(
+                f"Expected '{self.input_key}' key for history input mode, "
+                f"but found keys: {list(td.keys())}"
+            )
+
+        history = td.get(self.input_key)
+        if not isinstance(history, History):
+            raise TypeError(
+                f"Expected History object for '{self.input_key}', got {type(history)}"
+            )
+
+        # Apply chat template
+        tokenizer_kwargs = {}
+        if self.chat_template_name is not None:
+            tokenizer_kwargs.setdefault("chat_template_name", self.chat_template_name)
+        if self.chat_template is not None:
+            tokenizer_kwargs.setdefault("chat_template", self.chat_template)
+        tokenizer_kwargs.setdefault("add_generation_prompt", True)
+        text = history.apply_chat_template(tokenizer=self.tokenizer, **tokenizer_kwargs)
+
+        # Generate using text path
+        return self._generate_from_text(text, cfg, out)
+
+    def _from_transformers_logprobs_history(self, td, cfg, out):
+        """Compute log-probs from history input."""
+        from torchrl.data.llm import History
+
+        # Validate input
+        if self.input_key not in td:
+            raise ValueError(
+                f"Expected '{self.input_key}' key for history input mode, "
+                f"but found keys: {list(td.keys())}"
+            )
+
+        history = td.get(self.input_key)
+        if not isinstance(history, History):
+            raise TypeError(
+                f"Expected History object for '{self.input_key}', got {type(history)}"
+            )
+
+        # Apply chat template
+        tokenizer_kwargs = {}
+        if self.chat_template_name is not None:
+            tokenizer_kwargs.setdefault("chat_template_name", self.chat_template_name)
+        if self.chat_template is not None:
+            tokenizer_kwargs.setdefault("chat_template", self.chat_template)
+        tokenizer_kwargs.setdefault("add_generation_prompt", False)
+        tokenizer_kwargs.setdefault("return_assistant_tokens_mask", True)
+        tokenizer_kwargs.setdefault("tokenize", True)
+        tokenizer_kwargs.setdefault("padding", False)
+        tokenizer_kwargs.setdefault("return_dict", True)
+
+        with torch.device(self._device) if self._device is not None else nullcontext():
+            response_tokens = history.apply_chat_template(
                 tokenizer=self.tokenizer, **tokenizer_kwargs
             )
-        else:
-            text = td.get(self.text_key)
-            if text is None:
-                raise ValueError(
-                    "No text or history provided to the TransformersWrapper and the 'text' key is not present."
-                )
+        print(f"{response_tokens.get('input_ids')=}")
+        return self._logprobs_from_history_tokens(response_tokens, cfg, out)
 
-        if not isinstance(text, (list, str)):
+    def _cat_text(self, text, response_text):
+        """Concatenate text and response text."""
+        if isinstance(text, list):
+            return [self._cat_text(t, t_) for t, t_ in _zip_strict(text, response_text)]
+        else:
+            return text + response_text
+
+    def _generate_from_text(self, text, cfg, out) -> TensorDictBase:
+        """Generate text from text input."""
+        pad_val = self.tokenizer.pad_token_id
+
+        # Convert text to list format
+        if isinstance(text, str):
+            text = [text]
+        elif not isinstance(text, list):
             text = text.tolist()
+
         tokens_in = self.tokenizer(text, **self.tokenizer_kwargs)
         if self._device is not None:
             tokens_in = tokens_in.to(self._device)
-        input_ids = tokens_in["input_ids"]
-        attention_mask = tokens_in["attention_mask"]
-        if cfg is not None:
-            kwargs = copy(self.generate_kwargs)
-            kwargs["generation_config"] = cfg
-        else:
-            kwargs = self.generate_kwargs
-        tokens_out = self.model.generate(
-            input_ids=input_ids, attention_mask=attention_mask, **kwargs
+        # We are going to map this tokens_in to a tensordict to facilitate the padding in case we need it
+        tokens_in = (
+            TensorDict(batch_size=len(tokens_in["input_ids"]))
+            .to_lazystack(0)
+            .update(dict(tokens_in))
         )
-        sequences = tokens_out["sequences"]
-        sequences = sequences[..., input_ids.shape[-1] :]
-
-        mask_sequences = sequences != pad_val
-        sequences = _unpad_tensors(sequences, mask_sequences, as_nested=False)
-        if self.return_log_probs:
-            logits = torch.stack(list(tokens_out["logits"]), 1)
-            logits = _unpad_tensors(logits, mask_sequences, as_nested=False)
-            log_probs, logits = self._log_probs_generate(
-                sequences, logits, pad_val=-100
-            )
-        response_text = self.tokenizer.batch_decode(
-            sequences, skip_special_tokens=False
-        )
-        out.set(self.token_response_key, sequences)
-        out.set(
-            self.token_key, _unpad_tensors(input_ids, attention_mask, as_nested=False)
-        )
-        out.set(self.text_response_key, list(response_text))
-        out.set(
-            self.attention_mask_key,
-            _unpad_tensors(attention_mask, attention_mask, as_nested=False),
-        )
-        if self.return_log_probs:
-            out.set(
-                self.log_prob_key,
-                _unpad_tensors(log_probs, mask_sequences, as_nested=False),
-            )
-            out.set("logits", _unpad_tensors(logits, mask_sequences, as_nested=False))
-        return out
-
-    def _from_transformers_generate_tokens(self, td, out, cfg=None):
-        pad_val = self.tokenizer.pad_token_id
-
-        input_ids = td.get(
-            self.token_key,
+        input_ids = tokens_in.get(
+            "input_ids",
             as_padded_tensor=True,
             padding_side="left",
             padding_value=pad_val,
         )
-        attention_mask = td.get(
-            self.attention_mask_key,
+        attention_mask = tokens_in.get(
+            "attention_mask",
             as_padded_tensor=True,
             padding_side="left",
             padding_value=0,
         )
-        if attention_mask is None:
-            attention_mask = (input_ids != pad_val).to(torch.int64)
+
         if cfg is not None:
             kwargs = copy(self.generate_kwargs)
             kwargs["generation_config"] = cfg
         else:
             kwargs = self.generate_kwargs
+
         tokens_out = self.model.generate(
             input_ids=input_ids, attention_mask=attention_mask, **kwargs
         )
-        sequences = tokens_out["sequences"]
-        sequences = sequences[:, input_ids.shape[-1] :]
+        full_sequences = tokens_out["sequences"]
+        sequences = full_sequences[..., input_ids.shape[-1] :]
+
         mask_sequences = sequences != pad_val
-        sequences = _unpad_tensors(sequences, mask_sequences, as_nested=False)
+        sequences_unpadded = _unpad_tensors(sequences, mask_sequences, as_nested=False)
 
         if self.return_log_probs:
-            logits = tokens_out["logits"]
-            logits = torch.stack(list(logits), 1)
-            logits = _unpad_tensors(logits, mask_sequences, as_nested=False)
+            # These are only for the new tokens, not for the prompt - to get that, we'd need to run the forward pass again
+            logits = torch.stack(list(tokens_out["logits"]), 1)
             log_probs, logits = self._log_probs_generate(
-                sequences, logits, pad_val=pad_val
+                sequences, logits, pad_val=-100, pad=False
             )
-        out.set(
-            self.token_response_key,
-            sequences,
-        )
-        out.set(
-            self.token_key, _unpad_tensors(input_ids, attention_mask, as_nested=False)
-        )
-        out.set(
-            self.attention_mask_key,
-            _unpad_tensors(attention_mask, attention_mask, as_nested=False),
-        )
-        if self.return_log_probs:
-            out.set(
-                self.log_prob_key,
-                _unpad_tensors(log_probs, mask_sequences, as_nested=False),
-            )
-            out.set("logits", _unpad_tensors(logits, mask_sequences, as_nested=False))
-        return out
 
-    def _from_transformers_logprobs_text(self, td, out, cfg=None):
-        pad_val = self.tokenizer.pad_token_id
+        response_text = self.tokenizer.batch_decode(
+            sequences_unpadded, skip_special_tokens=False
+        )
 
-        # Should we use the history?
-        if self.use_history is None or (
-            self.use_history is True and self.history_key is None
-        ):
-            # eagerly attempt to use the history key
-            history_key = self.history_key
-            if history_key is None:
-                history_key = ("next", "history")
-                if history_key not in td:
-                    history_key = "history"
-            use_history = bool(self.use_history) or history_key in td
-        else:
-            use_history = self.use_history
-            history_key = self.history_key
+        # Build output TensorClass objects
+        if self.return_text:
+            if self.num_samples is not None:
+                text = [txt for txt in text for _ in range(self.num_samples)]
+            text_obj = Text._from_tensordict(out.empty())
+            with text_obj.view(-1) as text_obj_flat:
+                text_obj_flat.prompt = text
+                text_obj_flat.response = response_text
+                text_obj_flat.full = self._cat_text(text, response_text)
+            text_obj.padded = MetaData(self.pad_output)
+            out.set("text", text_obj)
 
-        if use_history:
-            # Fallback on history parsing
-            if history_key is None:
-                history_key = ("next", "history")
-                if history_key not in td:
-                    history_key = "history"
-            history: History = td.get(history_key)
-            if history is None:
-                raise ValueError(
-                    "No text or history provided to the TransformersWrapper."
+        if self.return_tokens:
+            tokens_obj = Tokens._from_tensordict(out.empty())
+            if self.pad_output:
+                prompt = input_ids
+            else:
+                prompt = _unpad_tensors(input_ids, attention_mask, as_nested=False)
+            if tokens_obj.ndim == 2:
+                for i in range(self.num_samples):
+                    tokens_obj[:, i].prompt = prompt
+            else:
+                tokens_obj.prompt = prompt
+            with tokens_obj.view(-1) as tokens_obj_flat:
+                if not self.pad_output:
+                    response = tokens_obj_flat.response = sequences_unpadded
+                else:
+                    response = tokens_obj_flat.response = sequences
+                tokens_obj_flat.full = self._cat_tensors(
+                    tokens_obj_flat.prompt, response
                 )
-            tokenizer_kwargs = {}
-            if self.chat_template_name is not None:
-                tokenizer_kwargs.setdefault(
-                    "chat_template_name", self.chat_template_name
+            tokens_obj.padded = MetaData(self.pad_output)
+            out.set("tokens", tokens_obj)
+
+        if self.return_masks:
+            masks_obj = Masks._from_tensordict(out.empty())
+            if out.ndim == 2:
+                attention_mask = attention_mask.unsqueeze(1).expand(
+                    attention_mask.shape[0], self.num_samples, *attention_mask.shape[1:]
                 )
-            if self.chat_template is not None:
-                tokenizer_kwargs.setdefault("chat_template", self.chat_template)
-            tokenizer_kwargs.setdefault("add_generation_prompt", False)
-            tokenizer_kwargs.setdefault(
-                "return_assistant_tokens_mask", self.assistant_only
-            )
-            tokenizer_kwargs.setdefault("tokenize", True)
-            tokenizer_kwargs.setdefault("padding", False)
-            tokenizer_kwargs.setdefault("return_dict", True)
-            with torch.device(
-                self._device
-            ) if self._device is not None else nullcontext():
-                response_tokens = history.apply_chat_template(
-                    tokenizer=self.tokenizer, **tokenizer_kwargs
-                )
-                # unfortunately HF wants us to use padded tensors
-                total_input_ids = response_tokens.get(
-                    "input_ids",
+            if self.pad_output:
+                response = tokens_obj.get(
+                    "response",
                     as_padded_tensor=True,
-                    padding_side="left",
-                    padding_value=pad_val,
-                )
-                total_attention_mask = response_tokens.get(
-                    "attention_mask",
-                    as_padded_tensor=True,
-                    padding_side="left",
+                    padding_side="right",
                     padding_value=0,
                 )
-                if self.assistant_only:
-                    assistant_masks = response_tokens.get(
-                        "assistant_masks",
-                        as_padded_tensor=True,
-                        padding_side="left",
-                        padding_value=0,
-                    ).bool()
+                masks_obj.all_attention_mask = self._cat_tensors(
+                    attention_mask, response, cast=torch.bool
+                )  # _unpad_tensors(attention_mask, attention_mask, as_nested=False)
+            else:
+                if out.ndim == 2:
+                    with tokens_obj.view(-1) as tokens_obj_flat, masks_obj.view(
+                        -1
+                    ) as masks_obj_flat:
+                        masks_obj_flat.all_attention_mask = self._cat_tensors(
+                            attention_mask.flatten(0, 1),
+                            tokens_obj_flat.get("response", as_list=True),
+                            cast=torch.bool,
+                        )
                 else:
-                    assistant_masks = None
-        else:
-            prompt_txt = td.get(self.text_key)
-            response_txt = td.get(self.text_response_key)
-            if prompt_txt is None or response_txt is None:
-                raise ValueError(
-                    "No text or history provided to the TransformersWrapper and the text keys are not present."
-                )
+                    masks_obj.all_attention_mask = self._cat_tensors(
+                        attention_mask,
+                        tokens_obj.get("response", as_list=True),
+                        cast=torch.bool,
+                    )  # _unpad_tensors(attention_mask, attention_mask, as_nested=False)
+            masks_obj.all_assistant_mask = None
+            masks_obj.padded = MetaData(self.pad_output)
+            out.set("masks", masks_obj)
 
-            if not isinstance(prompt_txt, (list, str)):
-                prompt_txt = prompt_txt.tolist()
-            if not isinstance(response_txt, (list, str)):
-                response_txt = response_txt.tolist()
-            total_txt = [x + y for x, y in _zip_strict(prompt_txt, response_txt)]
-            total_tokens_in = self.tokenizer(total_txt, **self.tokenizer_kwargs)
-            prompt_tokens_in = self.tokenizer(prompt_txt, **self.tokenizer_kwargs)
-            if self._device is not None:
-                total_tokens_in = total_tokens_in.to(self._device)
-                prompt_tokens_in = prompt_tokens_in.to(self._device)
+        if self.return_log_probs:
+            log_probs_obj = LogProbs._from_tensordict(out.empty())
+            with log_probs_obj.view(-1) as log_probs_obj_flat:
+                # Unfortunate but we only have the log-probs for the new tokens, not for the prompt - to get that, we'd need to run the forward pass again
+                if self.pad_output:
+                    log_probs_obj_flat.prompt = None
+                    log_probs_obj_flat.response = log_probs
+                    log_probs_obj_flat.full = None
+                else:
+                    log_probs_unpadded = _unpad_tensors(
+                        log_probs, mask_sequences, as_nested=False
+                    )
+                    log_probs_obj_flat.prompt = None
+                    log_probs_obj_flat.response = log_probs_unpadded
+                    log_probs_obj_flat.full = None
+            log_probs_obj.padded = MetaData(self.pad_output)
+            out.set("log_probs", log_probs_obj)
 
-            total_input_ids = total_tokens_in["input_ids"]
-            total_attention_mask = total_tokens_in["attention_mask"]
-            prompt_input_ids = prompt_tokens_in["input_ids"]
-            prompt_attention_mask = prompt_tokens_in["attention_mask"]
-
-        if cfg is not None:
-            kwargs = copy(self.generate_kwargs)
-            kwargs["generation_config"] = cfg
-        else:
-            kwargs = self.generate_kwargs
-
-        total_tokens_out = self.model(
-            total_input_ids, attention_mask=total_attention_mask, **kwargs
-        )
-        if not use_history:
-            total_input_ids = _unpad_tensors(
-                total_input_ids, total_attention_mask, as_nested=False
-            )
-            prompt_input_ids = _unpad_tensors(
-                prompt_input_ids, prompt_attention_mask, as_nested=False
-            )
-            sequences = [
-                _total_input_ids[_prompt_input_ids.shape[-1] :]
-                if _prompt_input_ids.shape[-1] > 0
-                else _total_input_ids
-                for _total_input_ids, _prompt_input_ids in zip(
-                    total_input_ids, prompt_input_ids
-                )
-            ]
-            log_probs, logits = self._log_probs_from_logits(
-                total_tokens_out, sequences, pad_val=pad_val
-            )
-            out.set(self.token_response_key, sequences)
-        else:
-            # things are a bit simpler: first, remove last logits
-            logits = total_tokens_out["logits"]
-            if logits.shape[-2] != total_input_ids.shape[-1]:
-                logits = logits[..., :-1, :]
-            # check that the shape is correct
-            if logits.shape[-2] != total_input_ids.shape[-1]:
-                raise ValueError(
-                    f"The logits shape {logits.shape} does not match the total input ids shape {total_input_ids.shape}"
-                )
-            # then, compute the log probs
-            td = TensorDict(
-                logits=logits, tokens=total_input_ids, assistant_masks=assistant_masks
-            ).auto_batch_size_()
-            with td.flatten() as tdflat:
-                tdflat["log_probs"] = -torch.nn.functional.cross_entropy(
-                    tdflat["logits"],
-                    tdflat["tokens"],
-                    reduce=False,
-                    ignore_index=pad_val,
-                )
-
-            log_probs = td["log_probs"]
-            logits = td["logits"]
-            # Now we can select: since we're using history, either we take the whole logits (self.assistant_only=False)
-            # or we take the logits of the assistant tokens (self.assistant_only=True)
-            if self.assistant_only:
-                assistant_masks = td["assistant_masks"]
-                log_probs = [
-                    lp[am] for lp, am in _zip_strict(td["log_probs"], assistant_masks)
-                ]
-                logits = [
-                    logit[am]
-                    for logit, am in _zip_strict(td["logits"], assistant_masks)
-                ]
-
-        out.set("logits", logits)
-        out.set(self.log_prob_key, log_probs)
         return out
 
-    def _from_transformers_logprobs_tokens(self, td, out, cfg=None):
+    def _cat_tensors(
+        self,
+        tokens: torch.Tensor | list[torch.Tensor],
+        response_tokens: torch.Tensor | list[torch.Tensor],
+        cast: torch.dtype | None = None,
+    ):
+        """Concatenate tokens and response tokens."""
+        if isinstance(tokens, list) or isinstance(response_tokens, list):
+            return [
+                self._cat_tensors(t, t_, cast=cast)
+                for t, t_ in _zip_strict(tokens, response_tokens)
+            ]
+        else:
+            result = torch.cat([tokens, response_tokens], dim=-1)
+            if cast is not None:
+                result = result.to(cast)
+            return result
+
+    def _logprobs_from_history_tokens(self, response_tokens, cfg, out):
+        """Compute log-probs from history tokens."""
         pad_val = self.tokenizer.pad_token_id
 
-        prompt_input_ids = td.get(
-            self.token_key,
-            as_list=True,
-        )
-        response_input_ids = td.get(
-            self.token_response_key,
-            as_list=True,
-        )
-        # prompt_attention_mask = td.get(
-        #     self.attention_mask_key,
-        #     as_list=True,
-        # )
-
-        total_input_ids = [
-            torch.cat([_prompt_input_ids, _response_input_ids], -1)
-            for _prompt_input_ids, _response_input_ids in _zip_strict(
-                prompt_input_ids, response_input_ids
-            )
-        ]
-        total_input_ids = pad_sequence(
-            total_input_ids,
-            padding_value=pad_val,
+        # unfortunately HF wants us to use padded tensors
+        total_input_ids = response_tokens.get(
+            "input_ids",
+            as_padded_tensor=True,
             padding_side="left",
-            batch_first=True,
+            padding_value=pad_val,
         )
-        total_attention_mask = (total_input_ids != pad_val).to(torch.int64)
-
-        # if prompt_attention_mask is None:
-        #     prompt_attention_mask = [
-        #         (_prompt_input_ids != pad_val).to(torch.int64)
-        #         for _prompt_input_ids in prompt_input_ids
-        #     ]
+        total_attention_mask = response_tokens.get(
+            "attention_mask",
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=0,
+        )
 
         if cfg is not None:
             kwargs = copy(self.generate_kwargs)
@@ -671,62 +645,478 @@ class TransformersWrapper(CategoricalSequential):
         total_tokens_out = self.model(
             total_input_ids, attention_mask=total_attention_mask, **kwargs
         )
-        log_probs, logits = self._log_probs_from_logits(
-            total_tokens_out, response_input_ids, pad_val=-100
-        )
-        # for i in range(log_probs.size(0)):
-        #     assert log_probs[i].shape[-1] == response_input_ids[i].shape[-1]
-
-        out.set("logits", logits)
-        out.set(self.log_prob_key, log_probs)
-        return out
-
-    @classmethod
-    def _log_probs_from_logits(cls, total_tokens_out, response_input_ids, pad_val=-100):
-        response_input_ids = pad_sequence(
-            response_input_ids,
-            padding_value=pad_val,
-            batch_first=True,
-            padding_side="left",
-        )
-        pad_mask = response_input_ids != pad_val
 
         logits = total_tokens_out["logits"]
-        # logits = logits.log_softmax(dim=-1)
-        if logits.shape[-2] != response_input_ids.shape[-1]:
-            logits = logits[..., -response_input_ids.shape[-1] - 1 : -1, :]
+        logits = logits[:, :-1, :]
+        logits = torch.cat([torch.zeros_like(logits[:, :1]), logits], 1)
+        
+        total_input_ids = total_input_ids[:, 1:]
+        total_input_ids = torch.cat([torch.zeros_like(total_input_ids[:, :1]), total_input_ids], 1)
+        
+        total_attention_mask = total_attention_mask[:, :1:]
+        total_attention_mask = torch.cat([torch.zeros_like(total_attention_mask[:, :1]), total_attention_mask], 1)
 
-        td = TensorDict(
-            logits=logits, response_input_ids=response_input_ids
-        ).auto_batch_size_()
+        # check that the shape is correct
+        if logits.shape[-2] != total_input_ids.shape[-1]:
+            raise ValueError(
+                f"The logits shape {logits.shape} does not match the total input ids shape {total_input_ids.shape}"
+            )
+        # then, compute the log probs
+        td = TensorDict(logits=logits, tokens=total_input_ids).auto_batch_size_()
         with td.flatten() as tdflat:
             tdflat["log_probs"] = -torch.nn.functional.cross_entropy(
                 tdflat["logits"],
-                tdflat["response_input_ids"],
+                tdflat["tokens"],
                 reduce=False,
                 ignore_index=pad_val,
             )
-        log_probs = td["log_probs"]
+        td["log_probs"][:, 0] = 0
 
-        # Recover the list
-        log_probs = _unpad_tensors(log_probs, pad_mask)
-        logits = _unpad_tensors(logits, pad_mask)
-        return log_probs, logits
+        log_probs = td["log_probs"]
+        logits = td["logits"]
+
+        # Build output TensorClass objects
+        if self.return_text:
+            text_obj = Text._from_tensordict(
+                TensorDict(batch_size=out.batch_size).to_lazystack(0)
+            )
+            text_obj.prompt = None
+            text_obj.response = None
+            text_obj.full = None
+            text_obj.padded = MetaData(self.pad_output)
+            out.set("text", text_obj)
+
+        if self.return_tokens:
+            tokens_obj = Tokens._from_tensordict(
+                TensorDict(batch_size=out.batch_size).to_lazystack(0)
+            )
+            if self.pad_output:
+                tokens_obj.full = tokens_obj.prompt = total_input_ids
+            else:
+                tokens_obj.full = tokens_obj.prompt = _unpad_tensors(
+                    total_input_ids, total_attention_mask, as_nested=False
+                )
+            tokens_obj.response = None
+            tokens_obj.padded = MetaData(self.pad_output)
+            out.set("tokens", tokens_obj)
+
+        if self.return_masks:
+            masks_obj = Masks._from_tensordict(
+                TensorDict(batch_size=out.batch_size).to_lazystack(0)
+            )
+            if self.pad_output:
+                masks_obj.all_attention_mask = total_attention_mask
+            else:
+                masks_obj.all_attention_mask = _unpad_tensors(
+                    total_attention_mask, total_attention_mask, as_nested=False
+                )
+            masks_obj.all_assistant_mask = None
+            masks_obj.padded = MetaData(self.pad_output)
+            out.set("masks", masks_obj)
+
+        if self.return_log_probs:
+            log_probs_obj = LogProbs._from_tensordict(
+                TensorDict(batch_size=out.batch_size).to_lazystack(0)
+            )
+            if self.pad_output:
+                log_probs_obj.full = log_probs_obj.prompt = log_probs
+            else:
+                log_probs_obj.full = log_probs_obj.prompt = _unpad_tensors(
+                    log_probs, total_attention_mask, as_nested=False
+                )
+            log_probs_obj.response = None
+            log_probs_obj.padded = MetaData(self.pad_output)
+            out.set("log_probs", log_probs_obj)
+
+        return out
+
+    def _from_transformers_generate_text(self, td, cfg, out) -> TensorDictBase:
+        """Generate text from text input."""
+        # Validate input
+        if self.input_key not in td:
+            raise ValueError(
+                f"Expected '{self.input_key}' key for text input mode, "
+                f"but found keys: {list(td.keys())}"
+            )
+
+        text = td.get(self.input_key)
+        if text is None:
+            raise ValueError(f"Expected '{self.input_key}' key for text input mode")
+
+        return self._generate_from_text(text, cfg, out)
+
+    def _from_transformers_logprobs_text(self, td, cfg, out):
+        """Compute log-probs from text input."""
+        # Validate input
+        if self.input_key not in td:
+            raise ValueError(
+                f"Expected '{self.input_key}' key for text input mode, "
+                f"but found keys: {list(td.keys())}"
+            )
+
+        text = td.get(self.input_key)
+        if text is None:
+            raise ValueError(f"Expected '{self.input_key}' key for text input mode")
+
+        # Tokenize the text
+        if self.tokenizer is None:
+            raise ValueError(
+                "Tokenizer is required for log-probs computation with text input"
+            )
+
+        # Convert text to list format
+        if isinstance(text, str):
+            text = [text]
+        elif not isinstance(text, list):
+            text = text.tolist()
+
+        # Tokenize the text
+        print("text", text)
+        tokens_in = self.tokenizer(text, **self.tokenizer_kwargs)
+
+        if cfg is not None:
+            kwargs = copy(self.generate_kwargs)
+            kwargs["generation_config"] = cfg
+        else:
+            kwargs = self.generate_kwargs
+
+        # We are going to map this tokens_in to a tensordict to facilitate the padding in case we need it
+        tokens_in = (
+            TensorDict(batch_size=len(tokens_in["input_ids"]))
+            .to_lazystack(0)
+            .update(dict(tokens_in))
+        )
+        input_ids = tokens_in.get(
+            "input_ids",
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=self.padding_value,
+        )
+        attention_mask = tokens_in.get(
+            "attention_mask",
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=0,
+        )
+
+        total_tokens_out = self.model(
+            input_ids, attention_mask=attention_mask, **kwargs
+        )
+
+        # Compute log-probs for the input tokens
+        logits = total_tokens_out["logits"]
+        logits = logits[..., :-1, :]
+        logits = torch.cat([torch.zeros_like(logits[:, :1]), logits], 1)
+
+        input_ids = input_ids[:, 1:]
+        input_ids = torch.cat([torch.zeros_like(input_ids[:, :1]), input_ids], 1)
+
+        attention_mask = attention_mask[:, 1:]
+        attention_mask = torch.cat([torch.zeros_like(attention_mask[:, :1]), attention_mask], 1)
+
+        td_logits = TensorDict(logits=logits, tokens=input_ids).auto_batch_size_()
+        with td_logits.flatten() as tdflat:
+            tdflat["log_probs"] = -torch.nn.functional.cross_entropy(
+                tdflat["logits"],
+                tdflat["tokens"],
+                reduce=False,
+                ignore_index=self.tokenizer.pad_token_id,
+            )
+        td_logits["log_probs"][:, 0] = 0
+        log_probs = td_logits["log_probs"]
+
+        # Build output TensorClass objects
+        if self.return_text:
+            text_obj = Text._from_tensordict(
+                TensorDict(batch_size=out.batch_size).to_lazystack(0)
+            )
+            text_obj.prompt = text
+            text_obj.response = None
+            text_obj.full = text
+            text_obj.padded = MetaData(self.pad_output)
+            out.set("text", text_obj)
+
+        if self.return_tokens:
+            tokens_obj = Tokens._from_tensordict(
+                TensorDict(batch_size=out.batch_size).to_lazystack(0)
+            )
+            if self.pad_output:
+                tokens_obj.full = tokens_obj.prompt = input_ids
+            else:
+                tokens_obj.full = tokens_obj.prompt = _unpad_tensors(
+                    input_ids, attention_mask, as_nested=False
+                )
+            tokens_obj.response = None
+            tokens_obj.padded = MetaData(self.pad_output)
+            out.set("tokens", tokens_obj)
+
+        if self.return_masks:
+            masks_obj = Masks._from_tensordict(
+                TensorDict(batch_size=out.batch_size).to_lazystack(0)
+            )
+            if self.pad_output:
+                masks_obj.all_attention_mask = attention_mask
+            else:
+                masks_obj.all_attention_mask = _unpad_tensors(
+                    attention_mask, attention_mask, as_nested=False
+                )
+            masks_obj.all_assistant_mask = None
+            masks_obj.padded = MetaData(self.pad_output)
+            out.set("masks", masks_obj)
+
+        if self.return_log_probs:
+            log_probs_obj = LogProbs._from_tensordict(
+                TensorDict(batch_size=out.batch_size).to_lazystack(0)
+            )
+            print("log_probs", log_probs.shape)
+            if self.pad_output:
+                log_probs_obj.full = log_probs_obj.prompt = log_probs
+            else:
+                log_probs_obj.full = log_probs_obj.prompt = _unpad_tensors(
+                    log_probs, attention_mask, as_nested=False
+                )
+            log_probs_obj.response = None
+            log_probs_obj.padded = MetaData(self.pad_output)
+            out.set("log_probs", log_probs_obj)
+
+        return out
+
+    def _from_transformers_generate_tokens(self, td, cfg, out) -> TensorDictBase:
+        """Generate text from tokens input."""
+        # Validate input
+        if self.input_key not in td:
+            raise ValueError(
+                f"Expected '{self.input_key}' key for tokens input mode, "
+                f"but found keys: {list(td.keys())}"
+            )
+
+        pad_val = self.tokenizer.pad_token_id
+
+        input_ids = td.get(
+            self.input_key,
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=pad_val,
+        )
+        attention_mask = (input_ids != pad_val).to(torch.int64)
+
+        if cfg is not None:
+            kwargs = copy(self.generate_kwargs)
+            kwargs["generation_config"] = cfg
+        else:
+            kwargs = self.generate_kwargs
+
+        tokens_out = self.model.generate(
+            input_ids=input_ids, attention_mask=attention_mask, **kwargs
+        )
+        full_sequences = tokens_out["sequences"]
+        sequences = full_sequences[:, input_ids.shape[-1] :]
+        mask_sequences = sequences != pad_val
+        sequences_unpadded = _unpad_tensors(sequences, mask_sequences, as_nested=False)
+
+        if self.return_log_probs:
+            # These are only for the new tokens, not for the prompt - to get that, we'd need to run the forward pass again
+            logits = tokens_out["logits"]
+            logits = torch.stack(list(logits), 1)
+            # logits = _unpad_tensors(logits, mask_sequences, as_nested=False)
+            print("logits", logits.shape)
+            log_probs, logits = self._log_probs_generate(
+                sequences, logits, pad_val=pad_val, pad=False
+            )
+            print("log_probs", log_probs.shape, "logits", logits.shape)
+
+        response_text = self.tokenizer.batch_decode(
+            sequences_unpadded, skip_special_tokens=False
+        )
+
+        # Build output TensorClass objects
+        if self.return_text:
+            text_obj = Text._from_tensordict(out.empty())
+            text_obj.prompt = None  # We don't have text in tokens mode
+            with text_obj.view(-1) as text_obj_flat:
+                text_obj_flat.response = response_text
+            text_obj.full = (
+                None  # we don't have text in tokens mode so no all_text either
+            )
+            text_obj.padded = MetaData(self.pad_output)
+            out.set("text", text_obj)
+
+        if self.return_tokens:
+            tokens_obj = Tokens._from_tensordict(out.empty())
+            if not self.pad_output:
+                input_ids = td.get(self.input_key, as_list=True)
+            if self.num_samples is not None:
+                # replicate tokens
+                for i in range(self.num_samples):
+                    tokens_obj[:, i].prompt = input_ids
+            else:
+                tokens_obj.prompt = input_ids
+            with tokens_obj.view(-1) as tokens_obj_flat:
+                if self.pad_output:
+                    tokens_obj_flat.response = sequences
+                    tokens_obj_flat.full = self._cat_tensors(
+                        tokens_obj_flat.prompt, tokens_obj_flat.response
+                    )
+                else:
+                    tokens_obj_flat.response = sequences_unpadded
+                    tokens_obj_flat.full = self._cat_tensors(
+                        tokens_obj_flat.prompt,
+                        tokens_obj_flat.get("response", as_list=True),
+                    )
+            tokens_obj.padded = MetaData(self.pad_output)
+            out.set("tokens", tokens_obj)
+
+        if self.return_masks:
+            masks_obj = Masks._from_tensordict(out.empty())
+            # self.return_tokens must be True
+            if self.pad_output:
+                # Get "real" attention masks
+                response_attention_masks = tokens_obj.get("full") != self.padding_value
+                masks_obj.all_attention_mask = response_attention_masks
+            else:
+                # Get "real" attention masks
+                # We can use select to avoid batch-size problems
+                _td = torch.ones_like(
+                    out.select(("tokens", "full"))
+                    .copy()
+                    .rename_key_(("tokens", "full"), "all_attention_mask")
+                )
+                del _td["tokens"]
+                masks_obj.update(_td)
+            masks_obj.all_assistant_mask = None
+            masks_obj.padded = MetaData(self.pad_output)
+            out.set("masks", masks_obj)
+
+        if self.return_log_probs:
+            log_probs_obj = LogProbs._from_tensordict(out.empty())
+            with log_probs_obj.view(-1) as log_probs_obj_flat:
+                if self.pad_output:
+                    log_probs_obj_flat.response = log_probs
+                else:
+                    log_probs_obj_flat.response = _unpad_tensors(
+                        log_probs, mask_sequences, as_nested=False
+                    )
+            log_probs_obj.padded = MetaData(self.pad_output)
+            out.set("log_probs", log_probs_obj)
+
+        return out
+
+    def _from_transformers_logprobs_tokens(self, td, cfg, out):
+        """Compute log-probs from tokens input."""
+        # Validate input
+        if self.input_key not in td:
+            raise ValueError(
+                f"Expected '{self.input_key}' key for tokens input mode, "
+                f"but found keys: {list(td.keys())}"
+            )
+
+        pad_val = self.tokenizer.pad_token_id
+
+        input_ids = td.get(
+            self.input_key,
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=pad_val,
+        )
+        attention_mask = (input_ids != pad_val).to(torch.int64)
+
+        if cfg is not None:
+            kwargs = copy(self.generate_kwargs)
+            kwargs["generation_config"] = cfg
+        else:
+            kwargs = self.generate_kwargs
+
+        total_tokens_out = self.model(
+            input_ids, attention_mask=attention_mask, **kwargs
+        )
+
+        # Compute log-probs for the input tokens
+        logits = total_tokens_out["logits"]
+        logits = logits[:, :-1, :]
+        logits = torch.cat([torch.zeros_like(logits[:, :1]), logits], 1)
+
+        input_ids = input_ids[:, 1:]
+        input_ids = torch.cat([torch.zeros_like(input_ids[:, :1]), input_ids], 1)
+
+        attention_mask = attention_mask[:, 1:]
+        attention_mask = torch.cat([torch.zeros_like(attention_mask[:, :1]), attention_mask], 1)
+
+        td_logits = TensorDict(logits=logits, tokens=input_ids).auto_batch_size_()
+        with td_logits.flatten() as tdflat:
+            tdflat["log_probs"] = -torch.nn.functional.cross_entropy(
+                tdflat["logits"],
+                tdflat["tokens"],
+                reduce=False,
+                ignore_index=pad_val,
+            )
+        td_logits["log_probs"][:, 0] = 0
+        log_probs = td_logits["log_probs"]
+
+        # Build output TensorClass objects
+        if self.return_text:
+            text_obj = Text._from_tensordict(
+                TensorDict(batch_size=out.batch_size).to_lazystack(0)
+            )
+            text_obj.prompt = None
+            text_obj.response = None
+            text_obj.full = None
+            text_obj.padded = MetaData(self.pad_output)
+            out.set("text", text_obj)
+
+        if self.return_tokens:
+            tokens_obj = Tokens._from_tensordict(
+                TensorDict(batch_size=out.batch_size).to_lazystack(0)
+            )
+            if not self.pad_output:
+                tokens = td.get(self.input_key, as_list=True)
+            else:
+                tokens = input_ids
+            tokens_obj.prompt = tokens
+            tokens_obj.response = None
+            tokens_obj.full = tokens
+            tokens_obj.padded = MetaData(self.pad_output)
+            out.set("tokens", tokens_obj)
+
+        if self.return_masks:
+            masks_obj = Masks._from_tensordict(
+                TensorDict(batch_size=out.batch_size).to_lazystack(0)
+            )
+            masks_obj.all_attention_mask = None
+            masks_obj.all_assistant_mask = None
+            masks_obj.padded = MetaData(self.pad_output)
+            out.set("masks", masks_obj)
+
+        if self.return_log_probs:
+            log_probs_obj = LogProbs._from_tensordict(
+                TensorDict(batch_size=out.batch_size).to_lazystack(0)
+            )
+            if self.pad_output:
+                log_probs_obj.full = log_probs_obj.prompt = log_probs
+            else:
+                log_probs_obj.full = log_probs_obj.prompt = _unpad_tensors(
+                    log_probs, attention_mask, as_nested=False
+                )
+            log_probs_obj.response = None
+            log_probs_obj.padded = MetaData(self.pad_output)
+            out.set("log_probs", log_probs_obj)
+
+        return out
 
     @classmethod
-    def _log_probs_generate(cls, sequences, logits, pad_val=-100):
-        tokens = pad_sequence(
-            sequences,
-            padding_value=pad_val,
-            batch_first=True,
-            padding_side="left",
-        )
-        logits = pad_sequence(
-            logits,
-            padding_value=0.0,
-            batch_first=True,
-            padding_side="left",
-        )
+    def _log_probs_generate(cls, tokens, logits, pad_val=-100, pad: bool = True):
+        if pad:
+            tokens = pad_sequence(
+                tokens,
+                padding_value=pad_val,
+                batch_first=True,
+                padding_side="left",
+            )
+            logits = pad_sequence(
+                logits,
+                padding_value=0.0,
+                batch_first=True,
+                padding_side="left",
+            )
 
         # logits = logits.log_softmax(dim=-1)
         # log_probs = logits.gather(-1, tokens.unsqueeze(-1)).squeeze(-1)
@@ -735,5 +1125,6 @@ class TransformersWrapper(CategoricalSequential):
             tdflat["log_probs"] = -torch.nn.functional.cross_entropy(
                 tdflat["logits"], tdflat["tokens"], reduce=False, ignore_index=pad_val
             )
+        td["log_probs"][:, 0] = 0
         log_probs = td["log_probs"]
         return log_probs, logits

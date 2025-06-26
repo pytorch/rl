@@ -5806,6 +5806,7 @@ class Composite(TensorSpec):
     def update(self, dict_or_spec: Composite | dict[str, TensorSpec]) -> None:
         for key, item in dict_or_spec.items():
             if key in self.keys(True) and isinstance(self[key], Composite):
+                print("updating", key, item, "to", self[key])
                 self[key].update(item)
                 continue
             try:

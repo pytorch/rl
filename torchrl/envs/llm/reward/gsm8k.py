@@ -17,7 +17,7 @@ class GSM8KRewardParser(Transform):
 
     Args:
         tokenizer (AutoTokenizer from transformers): the tokenizer asssociated with the model.
-        in_keys (list of NestedKey): the input keys. Defaults to `["text_response", "answer"]`.
+        in_keys (list of NestedKey): the input keys. Defaults to `[("text", "response"), "answer"]`.
         out_keys (list of NestedKey): the output keys. Defaults to `[ "reward_answer", "reward_think", "reward_right", "reward_contained", "reward", "success"]`.
         eos_token (str): the end of sentence token. Defaults to `tokenizer.eos_token` if not provided.
         set_done_if_answer (bool): whether to set the done flag to `True` when an answer is present. Defaults to `True`.
@@ -43,7 +43,7 @@ class GSM8KRewardParser(Transform):
         )
         self.set_done_if_answer = set_done_if_answer
         if in_keys is None:
-            in_keys = ["text_response", "answer"]
+            in_keys = [("text", "response"), "answer"]
         if not isinstance(in_keys, list) or len(in_keys) != 2:
             raise ValueError(
                 f"{type(self).__name__} requires in_keys to be of type list and have 2 elements."
