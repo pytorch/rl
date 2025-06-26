@@ -283,7 +283,6 @@ class TestPPO4LLMs:
             assert p.requires_grad
 
         reset = env.reset()
-        print(reset["text"])
         policy_answer = (
             "<think>Let me solve this step by step. Natalia sold clips to 48 friends in April. Then she sold half as many in May. Half of 48 is 24. So in May she sold 24 clips. "
             "To find the total, I need to add April and May: 48 + 24 = 72. Therefore, Natalia sold 72 clips altogether in April and May.</think>\n<answer>72</answer><|im_end|>"

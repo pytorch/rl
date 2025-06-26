@@ -361,7 +361,7 @@ The result is""",
         for i, test_case in enumerate(self.TEST_CASES):
             history = History.from_text(test_case, chat_template_name="qwen")
 
-            # Print details about each message
+            # torchrl_logger.info details about each message
             for j, (role, content, is_complete) in enumerate(
                 zip(history.role, history.content, history.is_complete)
             ):
@@ -435,7 +435,7 @@ The result is""",
         """Test assistant token masking support across different model families."""
         from transformers import AutoTokenizer
 
-        print(f"\nTesting {model_name} with {expected_template} template")
+        torchrl_logger.info(f"\nTesting {model_name} with {expected_template} template")
         tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
 
         # Create a simple history
@@ -555,7 +555,9 @@ The result is""",
             )
         except Exception as e:
             default_out = None
-            print(f"[WARN] Could not get default template for {model_name}: {e}")
+            torchrl_logger.info(
+                f"[WARN] Could not get default template for {model_name}: {e}"
+            )
 
         # Output with our custom template
         custom_out = history.apply_chat_template(
@@ -572,7 +574,7 @@ The result is""",
                 f"Default: {default_out}\nCustom: {custom_out}"
             )
         else:
-            print(
+            torchrl_logger.info(
                 f"[INFO] Skipped equivalence check for {model_name} (no default template available)"
             )
 
@@ -642,7 +644,6 @@ The result is""",
             add_generation_prompt=False,
             tokenize=False,
         )
-        print(result)
         # The result should use our custom format
         if isinstance(result, list):
             result_str = result[0]
@@ -653,14 +654,9 @@ The result is""",
 
         # Test that inverse parser works
         parsed = History.from_text(result, chat_template_name="qwen_custom")
-        print(parsed)
-        print(history)
         assert inverse_parser_called["called"], "Inverse parser was not called"
         assert parsed.role == history.role
         assert parsed.content == history.content
-        print(
-            "✓ add_chat_template parameters are being used correctly with a real tokenizer"
-        )
 
 
 class TestTopK:

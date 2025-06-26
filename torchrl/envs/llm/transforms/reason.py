@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import re
+import warnings
 from typing import Callable, Literal
 
 from tensordict import lazy_stack, TensorDictBase
@@ -159,7 +160,6 @@ class AddThinkingPrompt(Transform):
         Returns:
             The modified next_tensordict
         """
-        print("Reward", next_tensordict["reward"])
         # Handle batch dimensions
         if next_tensordict.batch_dims >= 1:
             ntds = []
