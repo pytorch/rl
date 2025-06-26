@@ -33,6 +33,7 @@ from torchrl.modules.utils.utils import _unpad_tensors
 try:
     import transformers
     import vllm
+    from vllm.sampling_params import SamplingParams
 except ImportError:
     vllm = None
     transformers = None
@@ -391,18 +392,22 @@ class vLLMWrapper(CategoricalSequential):
             return tensordict.update(result, keys_to_update=keys)
         return result
 
-    def _from_vllm_generate_history(self, td, sampling_params, out) -> TensorDictBase:
+    def _from_vllm_generate_history(self, tensordict_input: TensorDictBase, sampling_params: SamplingParams, out: TensorDictBase) -> TensorDictBase:
         """Generate text from history input."""
         from torchrl.data.llm import History
 
+        assert isinstance(tensordict_input, TensorDictBase), f"tensordict_input must be TensorDictBase, got {type(tensordict_input)}"
+        assert isinstance(sampling_params, SamplingParams), f"sampling_params must be SamplingParams, got {type(sampling_params)}"
+        assert isinstance(out, TensorDictBase), f"out must be TensorDictBase, got {type(out)}"
+
         # Validate input
-        if self.input_key not in td:
+        if self.input_key not in tensordict_input:
             raise ValueError(
                 f"Expected '{self.input_key}' key for history input mode, "
-                f"but found keys: {list(td.keys())}"
+                f"but found keys: {list(tensordict_input.keys())}"
             )
 
-        history = td.get(self.input_key)
+        history = tensordict_input.get(self.input_key)
         if not isinstance(history, History):
             raise TypeError(
                 f"Expected History object for '{self.input_key}', got {type(history)}"
@@ -420,18 +425,22 @@ class vLLMWrapper(CategoricalSequential):
         # Generate using text path
         return self._generate_from_text(text, sampling_params, out)
 
-    def _from_vllm_logprobs_history(self, td, sampling_params, out):
+    def _from_vllm_logprobs_history(self, tensordict_input: TensorDictBase, sampling_params: SamplingParams, out: TensorDictBase) -> TensorDictBase:
         """Compute log-probs from history input."""
+        assert isinstance(tensordict_input, TensorDictBase), f"tensordict_input must be TensorDictBase, got {type(tensordict_input)}"
+        assert isinstance(sampling_params, SamplingParams), f"sampling_params must be SamplingParams, got {type(sampling_params)}"
+        assert isinstance(out, TensorDictBase), f"out must be TensorDictBase, got {type(out)}"
+
         from torchrl.data.llm import History
 
         # Validate input
-        if self.input_key not in td:
+        if self.input_key not in tensordict_input:
             raise ValueError(
                 f"Expected '{self.input_key}' key for history input mode, "
-                f"but found keys: {list(td.keys())}"
+                f"but found keys: {list(tensordict_input.keys())}"
             )
 
-        history = td.get(self.input_key)
+        history = tensordict_input.get(self.input_key)
         if not isinstance(history, History):
             raise TypeError(
                 f"Expected History object for '{self.input_key}', got {type(history)}"
@@ -496,7 +505,7 @@ class vLLMWrapper(CategoricalSequential):
             )
 
         tokens = td.get(self.input_key)
-
+        assert isinstance(tokens, torch.Tensor), f"tokens must be torch.Tensor, got {type(tokens)}"
         return self._generate_from_tokens(tokens, sampling_params, out)
 
     def _from_vllm_logprobs_tokens(self, td, sampling_params, out):
@@ -521,16 +530,21 @@ class vLLMWrapper(CategoricalSequential):
         else:
             return text + response_text
 
-    def _generate_from_text(self, text, sampling_params, out) -> TensorDictBase:
+    def _generate_from_text(self, text: str | list[str] | NonTensorStack, sampling_params: SamplingParams, out: TensorDictBase) -> TensorDictBase:
         """Generate text from text input."""
-        kwargs = {"sampling_params": sampling_params}
-        args = ()
 
         # Convert text to list format
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list):
             text = text.tolist()
+
+        assert isinstance(text, (str, list)), f"text must be str or list, got {type(text)}"
+        assert isinstance(sampling_params, SamplingParams), f"sampling_params must be SamplingParams, got {type(sampling_params)}"
+        assert isinstance(out, TensorDictBase), f"out must be TensorDictBase, got {type(out)}"
+
+        kwargs = {"sampling_params": sampling_params}
+        args = ()
 
         if not self._remote_calls:
             tokens_out = self.model.generate(text, *args, **kwargs)
@@ -620,13 +634,8 @@ class vLLMWrapper(CategoricalSequential):
 
         return out
 
-    def _logprobs_from_text(self, text, sampling_params, out):
+    def _logprobs_from_text(self, text: str | list[str] | NonTensorStack, sampling_params: SamplingParams, out: TensorDictBase) -> TensorDictBase:
         """Compute log-probs from text input."""
-        # Tokenize the text
-        if self.tokenizer is None:
-            raise ValueError(
-                "Tokenizer is required for log-probs computation with text input"
-            )
 
         # Convert text to list format
         if isinstance(text, str):
@@ -634,8 +643,17 @@ class vLLMWrapper(CategoricalSequential):
         elif not isinstance(text, list):
             text = text.tolist()
 
+        assert isinstance(text, (str, list)), f"text must be str or list, got {type(text)}"
+        assert isinstance(sampling_params, SamplingParams), f"sampling_params must be SamplingParams, got {type(sampling_params)}"
+        assert isinstance(out, TensorDictBase), f"out must be TensorDictBase, got {type(out)}"
+
         # Tokenize the text
-        print("text", text)
+        if self.tokenizer is None:
+            raise ValueError(
+                "Tokenizer is required for log-probs computation with text input"
+            )
+
+        # Tokenize the text
         tokenized = self.tokenizer(text, **self.tokenizer_kwargs)
         input_ids = tokenized["input_ids"]
         attention_mask = tokenized["attention_mask"]
@@ -750,7 +768,7 @@ class vLLMWrapper(CategoricalSequential):
 
         return out
 
-    def _cat_tensors(self, tokens, response_tokens):
+    def _cat_tensors(self, tokens: list[torch.Tensor] | torch.Tensor, response_tokens: list[torch.Tensor] | torch.Tensor) -> list[torch.Tensor] | torch.Tensor:
         """Concatenate tokens and response tokens."""
         if isinstance(tokens, list) or isinstance(response_tokens, list):
             return [
@@ -760,12 +778,16 @@ class vLLMWrapper(CategoricalSequential):
         else:
             return torch.cat([tokens, response_tokens], dim=-1)
 
-    def _generate_from_tokens(self, tokens, sampling_params, out) -> TensorDictBase:
+    def _generate_from_tokens(self, tokens: torch.Tensor, sampling_params: SamplingParams, out: TensorDictBase) -> TensorDictBase:
         """Generate text from tokens input."""
+        assert isinstance(tokens, torch.Tensor), f"tokens must be torch.Tensor, got {type(tokens)}"
+        assert isinstance(sampling_params, SamplingParams), f"sampling_params must be SamplingParams, got {type(sampling_params)}"
+        assert isinstance(out, TensorDictBase), f"out must be TensorDictBase, got {type(out)}"
+
         kwargs = {"sampling_params": sampling_params}
         args = ()
 
-        input_ids_list = self._to_list(tokens, None)
+        input_ids_list = self._to_list(tokens, tokens != self.padding_value)
         kwargs.update({"prompt_token_ids": input_ids_list})
 
         if not self._remote_calls:
@@ -896,9 +918,14 @@ class vLLMWrapper(CategoricalSequential):
         return out
 
     def _logprobs_from_tokens(
-        self, *, response_struct=None, tokens=None, sampling_params=None, out=None
-    ):
+        self, *, response_struct: TensorDictBase | None = None, tokens: torch.Tensor | list[torch.Tensor] | None = None, sampling_params: SamplingParams | None = None, out: TensorDictBase | None = None
+    ) -> TensorDictBase:
         """Compute log-probs from tokens input."""
+        assert isinstance(response_struct, (TensorDictBase, type(None))), f"response_struct must be TensorDictBase or None, got {type(response_struct)}"
+        assert isinstance(tokens, (torch.Tensor, list, type(None))), f"tokens must be torch.Tensor or list, got {type(tokens)}"
+        assert isinstance(sampling_params, (SamplingParams, type(None))), f"sampling_params must be SamplingParams or None, got {type(sampling_params)}"
+        assert isinstance(out, (TensorDictBase, type(None))), f"out must be TensorDictBase or None, got {type(out)}"
+
         # Convert to list format for vLLM
         if response_struct is not None:
             tokens = response_struct.get("input_ids", as_padded_tensor=True, padding_value=self.padding_value, padding_side="left")
@@ -1075,6 +1102,8 @@ class vLLMWrapper(CategoricalSequential):
                         ]
                     )
             tokens = parent
+        else:
+            raise ValueError("tokens must be a tensor")
         return tokens
 
     @_classproperty
