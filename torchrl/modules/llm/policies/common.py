@@ -21,12 +21,14 @@ class Tokens(TensorClass["nocast"]):
     Args:
         prompt (torch.Tensor | None): The prompt tokens.
         response (torch.Tensor | None): The response tokens.
+        assistant (torch.Tensor | None): The assistant tokens.
         full (torch.Tensor | None): The tokens across prompt and response.
         padded (bool | None): Whether the tokens are padded.
     """
 
     prompt: torch.Tensor | None = None
     response: torch.Tensor | None = None
+    assistant: torch.Tensor | None = None
     full: torch.Tensor | None = None
     padded: bool | None = None
 
@@ -51,12 +53,14 @@ class LogProbs(TensorClass["nocast"]):
     Args:
         prompt (torch.Tensor | None): The prompt log-probabilities.
         response (torch.Tensor | None): The response log-probabilities.
+        assistant (torch.Tensor | None): The assistant log-probabilities.
         full (torch.Tensor | None): The log-probabilities across prompt and response.
         padded (bool | None): Whether the log-probabilities are padded.
     """
 
     prompt: torch.Tensor | None = None
     response: torch.Tensor | None = None
+    assistant: torch.Tensor | None = None
     full: torch.Tensor | None = None
     padded: bool | None = None
 

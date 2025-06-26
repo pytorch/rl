@@ -442,7 +442,6 @@ class TransformersWrapper(CategoricalSequential):
             response_tokens = history.apply_chat_template(
                 tokenizer=self.tokenizer, **tokenizer_kwargs
             )
-        print(f"{response_tokens.get('input_ids')=}")
         return self._logprobs_from_history_tokens(response_tokens, cfg, out)
 
     def _cat_text(self, text, response_text):
@@ -646,34 +645,9 @@ class TransformersWrapper(CategoricalSequential):
             total_input_ids, attention_mask=total_attention_mask, **kwargs
         )
 
-        logits = total_tokens_out["logits"]
-        logits = logits[:, :-1, :]
-        logits = torch.cat([torch.zeros_like(logits[:, :1]), logits], 1)
-        
-        total_input_ids = total_input_ids[:, 1:]
-        total_input_ids = torch.cat([torch.zeros_like(total_input_ids[:, :1]), total_input_ids], 1)
-        
-        total_attention_mask = total_attention_mask[:, :1:]
-        total_attention_mask = torch.cat([torch.zeros_like(total_attention_mask[:, :1]), total_attention_mask], 1)
-
-        # check that the shape is correct
-        if logits.shape[-2] != total_input_ids.shape[-1]:
-            raise ValueError(
-                f"The logits shape {logits.shape} does not match the total input ids shape {total_input_ids.shape}"
-            )
-        # then, compute the log probs
-        td = TensorDict(logits=logits, tokens=total_input_ids).auto_batch_size_()
-        with td.flatten() as tdflat:
-            tdflat["log_probs"] = -torch.nn.functional.cross_entropy(
-                tdflat["logits"],
-                tdflat["tokens"],
-                reduce=False,
-                ignore_index=pad_val,
-            )
-        td["log_probs"][:, 0] = 0
-
-        log_probs = td["log_probs"]
-        logits = td["logits"]
+        log_probs, logits = self._compute_log_probs_from_model_output(
+            total_tokens_out, total_input_ids, total_attention_mask, pad_val
+        )
 
         # Build output TensorClass objects
         if self.return_text:
@@ -686,33 +660,62 @@ class TransformersWrapper(CategoricalSequential):
             text_obj.padded = MetaData(self.pad_output)
             out.set("text", text_obj)
 
-        if self.return_tokens:
-            tokens_obj = Tokens._from_tensordict(
-                TensorDict(batch_size=out.batch_size).to_lazystack(0)
-            )
-            if self.pad_output:
-                tokens_obj.full = tokens_obj.prompt = total_input_ids
-            else:
-                tokens_obj.full = tokens_obj.prompt = _unpad_tensors(
-                    total_input_ids, total_attention_mask, as_nested=False
-                )
-            tokens_obj.response = None
-            tokens_obj.padded = MetaData(self.pad_output)
-            out.set("tokens", tokens_obj)
-
+        all_assistant_mask = response_tokens.get(
+            "assistant_masks",
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=0,
+        )
+        if all_assistant_mask is not None:
+            all_assistant_mask = all_assistant_mask.bool()
         if self.return_masks:
             masks_obj = Masks._from_tensordict(
                 TensorDict(batch_size=out.batch_size).to_lazystack(0)
             )
             if self.pad_output:
                 masks_obj.all_attention_mask = total_attention_mask
+                if all_assistant_mask is not None:
+                    masks_obj.all_assistant_mask = all_assistant_mask
             else:
                 masks_obj.all_attention_mask = _unpad_tensors(
                     total_attention_mask, total_attention_mask, as_nested=False
                 )
-            masks_obj.all_assistant_mask = None
+                if all_assistant_mask is not None:
+                    masks_obj.all_assistant_mask = _unpad_tensors(
+                        all_assistant_mask, total_attention_mask, as_nested=False
+                    )
             masks_obj.padded = MetaData(self.pad_output)
             out.set("masks", masks_obj)
+
+        if self.return_tokens:
+            tokens_obj = Tokens._from_tensordict(
+                TensorDict(batch_size=out.batch_size).to_lazystack(0)
+            )
+            if self.pad_output:
+                tokens_obj.full = tokens_obj.prompt = total_input_ids
+                if all_assistant_mask is not None:
+                    tokens_obj.assistant = pad_sequence(
+                        [
+                            t[mask]
+                            for t, mask in _zip_strict(
+                                total_input_ids, all_assistant_mask
+                            )
+                        ],
+                        padding_value=self.padding_value,
+                        batch_first=True,
+                        padding_side="left",
+                    )
+            else:
+                tokens_obj.full = tokens_obj.prompt = _unpad_tensors(
+                    total_input_ids, total_attention_mask, as_nested=False
+                )
+                if all_assistant_mask is not None:
+                    tokens_obj.assistant = _unpad_tensors(
+                        total_input_ids, all_assistant_mask, as_nested=False
+                    )
+            tokens_obj.response = None
+            tokens_obj.padded = MetaData(self.pad_output)
+            out.set("tokens", tokens_obj)
 
         if self.return_log_probs:
             log_probs_obj = LogProbs._from_tensordict(
@@ -720,10 +723,25 @@ class TransformersWrapper(CategoricalSequential):
             )
             if self.pad_output:
                 log_probs_obj.full = log_probs_obj.prompt = log_probs
+                # We can set the log-probs of the assistant
+                if all_assistant_mask is not None:
+                    log_probs_obj.assistant = pad_sequence(
+                        [
+                            lp[mask]
+                            for lp, mask in _zip_strict(log_probs, all_assistant_mask)
+                        ],
+                        padding_value=0,
+                        batch_first=True,
+                        padding_side="left",
+                    )
             else:
                 log_probs_obj.full = log_probs_obj.prompt = _unpad_tensors(
                     log_probs, total_attention_mask, as_nested=False
                 )
+                if all_assistant_mask is not None:
+                    log_probs_obj.assistant = _unpad_tensors(
+                        log_probs, all_assistant_mask, as_nested=False
+                    )
             log_probs_obj.response = None
             log_probs_obj.padded = MetaData(self.pad_output)
             out.set("log_probs", log_probs_obj)
@@ -804,26 +822,9 @@ class TransformersWrapper(CategoricalSequential):
         )
 
         # Compute log-probs for the input tokens
-        logits = total_tokens_out["logits"]
-        logits = logits[..., :-1, :]
-        logits = torch.cat([torch.zeros_like(logits[:, :1]), logits], 1)
-
-        input_ids = input_ids[:, 1:]
-        input_ids = torch.cat([torch.zeros_like(input_ids[:, :1]), input_ids], 1)
-
-        attention_mask = attention_mask[:, 1:]
-        attention_mask = torch.cat([torch.zeros_like(attention_mask[:, :1]), attention_mask], 1)
-
-        td_logits = TensorDict(logits=logits, tokens=input_ids).auto_batch_size_()
-        with td_logits.flatten() as tdflat:
-            tdflat["log_probs"] = -torch.nn.functional.cross_entropy(
-                tdflat["logits"],
-                tdflat["tokens"],
-                reduce=False,
-                ignore_index=self.tokenizer.pad_token_id,
-            )
-        td_logits["log_probs"][:, 0] = 0
-        log_probs = td_logits["log_probs"]
+        log_probs, logits = self._compute_log_probs_from_model_output(
+            total_tokens_out, input_ids, attention_mask, self.tokenizer.pad_token_id
+        )
 
         # Build output TensorClass objects
         if self.return_text:
@@ -1031,26 +1032,9 @@ class TransformersWrapper(CategoricalSequential):
         )
 
         # Compute log-probs for the input tokens
-        logits = total_tokens_out["logits"]
-        logits = logits[:, :-1, :]
-        logits = torch.cat([torch.zeros_like(logits[:, :1]), logits], 1)
-
-        input_ids = input_ids[:, 1:]
-        input_ids = torch.cat([torch.zeros_like(input_ids[:, :1]), input_ids], 1)
-
-        attention_mask = attention_mask[:, 1:]
-        attention_mask = torch.cat([torch.zeros_like(attention_mask[:, :1]), attention_mask], 1)
-
-        td_logits = TensorDict(logits=logits, tokens=input_ids).auto_batch_size_()
-        with td_logits.flatten() as tdflat:
-            tdflat["log_probs"] = -torch.nn.functional.cross_entropy(
-                tdflat["logits"],
-                tdflat["tokens"],
-                reduce=False,
-                ignore_index=pad_val,
-            )
-        td_logits["log_probs"][:, 0] = 0
-        log_probs = td_logits["log_probs"]
+        log_probs, logits = self._compute_log_probs_from_model_output(
+            total_tokens_out, input_ids, attention_mask, self.tokenizer.pad_token_id
+        )
 
         # Build output TensorClass objects
         if self.return_text:
@@ -1128,3 +1112,52 @@ class TransformersWrapper(CategoricalSequential):
         td["log_probs"][:, 0] = 0
         log_probs = td["log_probs"]
         return log_probs, logits
+
+    def _compute_log_probs_from_model_output(
+        self, model_output, input_ids, attention_mask, pad_val
+    ):
+        """Compute log-probs from model output without modifying original tensors.
+
+        Args:
+            model_output: Output from the model containing logits
+            input_ids: Original input token ids
+            attention_mask: Original attention mask
+            pad_val: Padding token value to ignore in loss computation
+
+        Returns:
+            tuple: (log_probs, shifted_logits) where log_probs are the computed log probabilities
+                   and shifted_logits are the logits shifted to align with tokens
+        """
+        logits = model_output["logits"]
+
+        # Create shifted versions for log-prob computation without modifying originals
+        shifted_logits = logits[:, :-1, :]
+        shifted_logits = torch.cat(
+            [torch.zeros_like(shifted_logits[:, :1]), shifted_logits], 1
+        )
+
+        shifted_input_ids = input_ids[:, 1:]
+        shifted_input_ids = torch.cat(
+            [torch.zeros_like(shifted_input_ids[:, :1]), shifted_input_ids], 1
+        )
+
+        # Check that the shape is correct
+        if shifted_logits.shape[-2] != shifted_input_ids.shape[-1]:
+            raise ValueError(
+                f"The logits shape {shifted_logits.shape} does not match the input ids shape {shifted_input_ids.shape}"
+            )
+
+        # Compute log-probs
+        td = TensorDict(
+            logits=shifted_logits, tokens=shifted_input_ids
+        ).auto_batch_size_()
+        with td.flatten() as tdflat:
+            tdflat["log_probs"] = -torch.nn.functional.cross_entropy(
+                tdflat["logits"],
+                tdflat["tokens"],
+                reduce=False,
+                ignore_index=pad_val,
+            )
+        td["log_probs"][:, 0] = 0
+
+        return td["log_probs"], shifted_logits
