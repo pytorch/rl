@@ -9,6 +9,7 @@ import importlib.util
 
 import os
 
+from more_itertools import padded
 import pytest
 import torch
 from tensordict import set_list_to_stack, TensorDict
@@ -84,6 +85,25 @@ def sample_history():
     ]
     return History.from_chats(chats)
 
+@pytest.fixture
+def sample_history_assistant():
+    """Create sample conversation history for testing."""
+    chats = [
+        [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "What is the capital of France, if not Paris?"},
+            {"role": "assistant", "content": "Paris is the capital of France."},
+        ],
+        [
+            {
+                "role": "system",
+                "content": "You are a helpful assistant, but more handsome.",
+            },
+            {"role": "user", "content": "What is the capital of Canada?"},
+            {"role": "assistant", "content": "Ottawa is the capital of Canada."},
+        ],
+    ]
+    return History.from_chats(chats)
 
 @pytest.fixture
 def sample_text():
@@ -150,6 +170,14 @@ def check_output_shapes(out, pad_output):
         if tokens is not None and tokens.prompt is not None:
             shapes.add(tokens.prompt.shape)
 
+        # Check the assistant tensors
+        shapes = set()
+        if log_probs is not None and log_probs.assistant is not None:
+            shapes.add(log_probs.assistant.shape)
+        if tokens is not None and tokens.assistant is not None:
+            shapes.add(tokens.assistant.shape)
+        assert len(shapes) <= 1, (shapes, out)
+
         if (
             log_probs is not None
             and log_probs.response is not None
@@ -194,6 +222,7 @@ class TestVLLMWrapper:
         self,
         vllm_instance,
         sample_history,
+        sample_history_assistant,
         generate,
         return_log_probs,
         return_text,
@@ -239,7 +268,7 @@ class TestVLLMWrapper:
         assert wrapper.out_keys == expected_out_keys
 
         # Create input data
-        data = TensorDict(history=sample_history, batch_size=(2,))
+        data = TensorDict(history=sample_history if generate else sample_history_assistant, batch_size=(2,))
 
         # Run wrapper
         result = wrapper(data)
@@ -304,6 +333,17 @@ class TestVLLMWrapper:
                 assert hasattr(log_probs_obj, "full")
                 assert hasattr(log_probs_obj, "padded")
             assert all(log_probs_obj.padded) == pad_output
+
+        if not generate:
+            if return_log_probs:
+                assert log_probs_obj.get("assistant", as_list=True) is not None
+            if return_tokens:
+                assert tokens_obj.get("assistant", as_list=True) is not None
+            if pad_output and return_masks:
+                if return_log_probs:
+                    assert (log_probs_obj.full[masks_obj.all_assistant_mask] == log_probs_obj.assistant[log_probs_obj.assistant != 0]).all()
+                if return_tokens:
+                    assert (tokens_obj.full[masks_obj.all_assistant_mask] == tokens_obj.assistant[tokens_obj.assistant != wrapper.padding_value]).all()
 
     # ================================================
     # Text Input Mode Tests
@@ -862,6 +902,7 @@ class TestTransformersWrapper:
         self,
         transformers_instance,
         sample_history,
+        sample_history_assistant,
         generate,
         return_log_probs,
         return_text,
@@ -908,7 +949,7 @@ class TestTransformersWrapper:
         assert wrapper.out_keys == expected_out_keys
 
         # Create input data
-        data = TensorDict(history=sample_history, batch_size=(2,))
+        data = TensorDict(history=sample_history if generate else sample_history_assistant, batch_size=(2,))
 
         # Run wrapper
         result = wrapper(data)
@@ -973,6 +1014,18 @@ class TestTransformersWrapper:
                 assert hasattr(log_probs_obj, "full")
                 assert hasattr(log_probs_obj, "padded")
             assert all(log_probs_obj.padded) == pad_output
+
+
+        if not generate:
+            if return_log_probs:
+                assert log_probs_obj.get("assistant", as_list=True) is not None
+            if return_tokens:
+                assert tokens_obj.get("assistant", as_list=True) is not None
+            if pad_output and return_masks:
+                if return_log_probs:
+                    assert (log_probs_obj.full[masks_obj.all_assistant_mask] == log_probs_obj.assistant[log_probs_obj.assistant != 0]).all()
+                if return_tokens:
+                    assert (tokens_obj.full[masks_obj.all_assistant_mask] == tokens_obj.assistant[tokens_obj.assistant != wrapper.padding_value]).all()
 
     # ================================================
     # Text Input Mode Tests
@@ -1554,11 +1607,13 @@ class TestLogProbsComparison:
     @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
     @pytest.mark.parametrize("input_mode", ["history", "text", "tokens"])
     @pytest.mark.parametrize("pad_output", [True, False])
-    def test_log_probs_consistency(self, vllm_instance, transformers_instance, input_mode, pad_output):
+    def test_log_probs_consistency(
+        self, vllm_instance, transformers_instance, input_mode, pad_output
+    ):
         """Test that log-probabilities are consistent between vLLM and Transformers wrappers."""
         vllm_model, vllm_tokenizer = vllm_instance
         tf_model, tf_tokenizer = transformers_instance
-        
+
         # Create test data based on input mode
         if input_mode == "history":
             chats = [
@@ -1582,12 +1637,12 @@ class TestLogProbsComparison:
             prompts = ["What is 2+2?", "What is 3+3?"]
             tokenized = vllm_tokenizer(prompts, return_tensors="pt", padding=True)
             data = TensorDict(
-                input_ids=tokenized["input_ids"], 
-                attention_mask=tokenized["attention_mask"], 
-                batch_size=(2,)
+                input_ids=tokenized["input_ids"],
+                attention_mask=tokenized["attention_mask"],
+                batch_size=(2,),
             )
             input_key = "input_ids"
-        
+
         # Create vLLM wrapper for generation
         vllm_gen_wrapper = vLLMWrapper(
             vllm_model,
@@ -1602,7 +1657,7 @@ class TestLogProbsComparison:
             pad_output=pad_output,
             generate_kwargs={"max_tokens": 5, "temperature": 0.0},  # Deterministic
         )
-        
+
         # Create Transformers wrapper for generation
         tf_gen_wrapper = TransformersWrapper(
             tf_model,
@@ -1615,15 +1670,19 @@ class TestLogProbsComparison:
             return_tokens=True,
             return_masks=True,
             pad_output=pad_output,
-            generate_kwargs={"max_new_tokens": 5, "do_sample": False, "temperature": 0.0},  # Deterministic
+            generate_kwargs={
+                "max_new_tokens": 5,
+                "do_sample": False,
+                "temperature": 0.0,
+            },  # Deterministic
         )
-        
+
         # Step 1: Generate tokens with both wrappers
         print(f"\n=== Testing {input_mode} input mode with pad_output={pad_output} ===")
         print("data", data)
         vllm_gen_result = vllm_gen_wrapper(data.copy())
-        tf_gen_result = tf_gen_wrapper(data.copy())
-        
+        tf_gen_wrapper(data.copy())
+
         # Step 2: Extract generated tokens and create new input for log-probs computation
         if input_mode == "history":
             # For history mode, we need to create new history with generated responses
@@ -1638,7 +1697,9 @@ class TestLogProbsComparison:
             # For text mode, concatenate original text with generated text
             original_texts = data["text"]
             generated_texts = vllm_gen_result["text"].response
-            new_texts = [orig + gen for orig, gen in zip(original_texts, generated_texts)]
+            new_texts = [
+                orig + gen for orig, gen in zip(original_texts, generated_texts)
+            ]
             new_data = TensorDict(text=new_texts, batch_size=(2,))
         elif input_mode == "tokens":
             # For tokens mode, concatenate original tokens with generated tokens
@@ -1659,7 +1720,7 @@ class TestLogProbsComparison:
                     combined = torch.cat([original_tokens[i], generated_tokens[i]])
                     new_tokens.append(combined)
             new_data = TensorDict(input_ids=new_tokens, batch_size=(2,))
-        
+
         # Step 3: Create log-probs only wrappers
         vllm_lp_wrapper = vLLMWrapper(
             vllm_model,
@@ -1673,7 +1734,7 @@ class TestLogProbsComparison:
             return_masks=True,
             pad_output=pad_output,
         )
-        
+
         tf_lp_wrapper = TransformersWrapper(
             tf_model,
             tokenizer=tf_tokenizer,
@@ -1686,107 +1747,20 @@ class TestLogProbsComparison:
             return_masks=True,
             pad_output=pad_output,
         )
-        
+
         # Step 4: Compute log-probs for the full sequence (original + generated)
         print("1 new_data", new_data)
         vllm_lp_result = vllm_lp_wrapper(new_data.copy())
         print("2 new_data", new_data)
         tf_lp_result = tf_lp_wrapper(new_data.copy())
-        
+
         from tensordict import assert_close
+
         print(vllm_lp_result["log_probs"].to_dict())
         print(tf_lp_result["log_probs"].to_dict())
-        assert_close(vllm_lp_result["log_probs"], tf_lp_result["log_probs"], atol=1e-1, rtol=1e-1, intersection=True)
-        
-        # # Step 5: Extract log-probs from generation results
-        # vllm_gen_lp = vllm_gen_result["log_probs"].response
-        # tf_gen_lp = tf_gen_result["log_probs"].response
-        
-        # # Step 6: Extract log-probs for the generated portion from full sequence
-        # if input_mode == "history":
-        #     # For history, we need to get assistant tokens only
-        #     vllm_full_lp = vllm_lp_result["log_probs"].response
-        #     tf_full_lp = tf_lp_result["log_probs"].response
-        # elif input_mode == "text":
-        #     # For text, we need to get the log-probs for the generated portion
-        #     original_lengths = [len(vllm_tokenizer.encode(text)) for text in data["text"]]
-        #     vllm_full_lp = vllm_lp_result["log_probs"].full
-        #     tf_full_lp = tf_lp_result["log_probs"].full
-            
-        #     if pad_output:
-        #         vllm_gen_lp_from_full = []
-        #         tf_gen_lp_from_full = []
-        #         for i, orig_len in enumerate(original_lengths):
-        #             vllm_gen_lp_from_full.append(vllm_full_lp[i, orig_len:])
-        #             tf_gen_lp_from_full.append(tf_full_lp[i, orig_len:])
-        #     else:
-        #         vllm_gen_lp_from_full = []
-        #         tf_gen_lp_from_full = []
-        #         for i, orig_len in enumerate(original_lengths):
-        #             vllm_gen_lp_from_full.append(vllm_full_lp[i][orig_len:])
-        #             tf_gen_lp_from_full.append(tf_full_lp[i][orig_len:])
-        # elif input_mode == "tokens":
-        #     # For tokens, we need to get the log-probs for the generated portion
-        #     original_lengths = [len(tokens) for tokens in data["input_ids"]]
-        #     vllm_full_lp = vllm_lp_result["log_probs"].full
-        #     tf_full_lp = tf_lp_result["log_probs"].full
-            
-        #     if pad_output:
-        #         vllm_gen_lp_from_full = []
-        #         tf_gen_lp_from_full = []
-        #         for i, orig_len in enumerate(original_lengths):
-        #             vllm_gen_lp_from_full.append(vllm_full_lp[i, orig_len:])
-        #             tf_gen_lp_from_full.append(tf_full_lp[i, orig_len:])
-        #     else:
-        #         vllm_gen_lp_from_full = []
-        #         tf_gen_lp_from_full = []
-        #         for i, orig_len in enumerate(original_lengths):
-        #             vllm_gen_lp_from_full.append(vllm_full_lp[i][orig_len:])
-        #             tf_gen_lp_from_full.append(tf_full_lp[i][orig_len:])
-        
-        # # Step 7: Compare vLLM vs Transformers log-probs using tensordict.assert_close
-        # if input_mode == "text" or input_mode == "tokens":
-        #     # For text and tokens modes, we can compare the generated portion
-        #     if pad_output:
-        #         # Convert to tensors for comparison
-        #         vllm_gen_tensor = torch.stack(vllm_gen_lp_from_full)
-        #         tf_gen_tensor = torch.stack(tf_gen_lp_from_full)
-                
-        #         # Create TensorDicts for comparison
-        #         vllm_td = TensorDict({"log_probs": vllm_gen_tensor}, batch_size=vllm_gen_tensor.shape[:1])
-        #         tf_td = TensorDict({"log_probs": tf_gen_tensor}, batch_size=tf_gen_tensor.shape[:1])
-                
-        #         # Compare using tensordict.assert_close
-        #         from tensordict import assert_close
-        #         assert_close(vllm_td, tf_td, atol=1e-3, rtol=1e-3, intersection=True)
-        #         print("✓ vLLM and Transformers log-probs are consistent!")
-                
-        #         # Also verify that generation log-probs match full sequence log-probs (within each wrapper)
-        #         vllm_gen_td = TensorDict({"log_probs": vllm_gen_lp}, batch_size=vllm_gen_lp.shape[:1])
-        #         tf_gen_td = TensorDict({"log_probs": tf_gen_lp}, batch_size=tf_gen_lp.shape[:1])
-                
-        #         assert_close(vllm_td, vllm_gen_td, atol=1e-3, rtol=1e-3, intersection=True)
-        #         assert_close(tf_td, tf_gen_td, atol=1e-3, rtol=1e-3, intersection=True)
-        #         print("✓ Generation log-probs match full sequence log-probs within each wrapper!")
-                
-        #     else:
-        #         # For unpadded case, compare each sequence individually
-        #         for i in range(len(vllm_gen_lp_from_full)):
-        #             vllm_seq = vllm_gen_lp_from_full[i]
-        #             tf_seq = tf_gen_lp_from_full[i]
-                    
-        #             assert len(vllm_seq) == len(tf_seq), f"Length mismatch for sequence {i}"
-                    
-        #             # Create TensorDicts for comparison
-        #             vllm_td = TensorDict({"log_probs": vllm_seq.unsqueeze(0)}, batch_size=(1,))
-        #             tf_td = TensorDict({"log_probs": tf_seq.unsqueeze(0)}, batch_size=(1,))
-                    
-        #             from tensordict import assert_close
-        #             assert_close(vllm_td, tf_td, atol=1e-3, rtol=1e-3, intersection=True)
-                
-        #         print("✓ vLLM and Transformers log-probs are consistent!")
-        
-        # print(f"✓ All log-probability tests passed for {input_mode} input mode!")
+        assert_close(
+            vllm_lp_result, tf_lp_result, atol=1e-1, rtol=1e-1, intersection=True
+        )
 
 
 if __name__ == "__main__":
