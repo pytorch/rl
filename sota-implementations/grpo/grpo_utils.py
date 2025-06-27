@@ -12,6 +12,8 @@ from torch import device as torch_device, dtype as torch_dtype
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
+from torchrl.envs.llm import AddThinkingPrompt, GSM8KEnv, KLRewardTransform
+from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from transformers.tokenization_utils import PreTrainedTokenizer
@@ -93,9 +95,10 @@ def get_train_model(
     policy_training = TransformersWrapper(
         train_model,
         tokenizer=train_tokenizer,
-        from_text=False,
+        input_mode="tokens",
         generate=False,
         return_log_probs=True,
+        device=torch.device("cuda:0"),
     )
     # Ensure model stays in eval mode after wrapping
     policy_training.model.eval()
@@ -104,7 +107,10 @@ def get_train_model(
 
 
 def get_inference_model(
-    cfg: DictConfig, devices: list[int] | None = None, make_ray_worker: bool = True
+    cfg: DictConfig,
+    devices: list[int] | None = None,
+    make_ray_worker: bool = True,
+    tokenizer: PreTrainedTokenizer | None = None,
 ) -> vLLMWrapper:
     """Creates the vLLM-based inference model for fast generation.
 
@@ -116,7 +122,9 @@ def get_inference_model(
         cfg (DictConfig): The hydra configuration object containing model settings.
             Expected to have inference_model section with vLLM-specific parameters
             like gpu_memory_utilization and generation settings.
-        make_ray_worker (bool, optional): Whether to make a ray worker. Default: True
+        devices (list[int], optional): The devices to use for the inference model. Default: `None`.
+        make_ray_worker (bool, optional): Whether to make a ray worker. Default: `True`.
+        tokenizer (PreTrainedTokenizer, optional): The tokenizer to use with the inference model. Default: `None`.
 
     Returns:
         vLLMWrapper: The wrapped vLLM model ready for inference.
@@ -149,10 +157,19 @@ def get_inference_model(
         enforce_eager=cfg.inference_model.enforce_eager,
     )
     assert inference_server is not None
+    if tokenizer is None:
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        if tokenizer.pad_token == tokenizer.eos_token:
+            tokenizer.pad_token = "PAD"
+        tokenizer.padding_side = "left"
     policy = vLLMWrapper(
         inference_server,
-        from_text=True,
+        input_mode="history",
+        chat_template_name="qwen",
         return_log_probs=True,
+        tokenizer=tokenizer,
         generate_kwargs={
             "max_tokens": cfg.inference_model.max_tokens,
             "include_stop_str_in_output": cfg.inference_model.include_stop_str_in_output,
@@ -218,10 +235,11 @@ def get_ref_model(
     TensorDict.from_module(ref_model).data.to_module(ref_model)
     ref_model = TransformersWrapper(
         ref_model,
+        input_mode="text",
         tokenizer=tokenizer,
-        from_text=False,
         generate=False,
         return_log_probs=True,
+        device=torch.device("cuda:0"),
     )
     return ref_model
 
@@ -473,3 +491,114 @@ def compute_device_allocation(cfg):
         "ray_num_gpus": ray_num_gpus,
         "cuda_visible_devices": cuda_visible_devices,
     }
+
+
+def make_env_sync(cfg: DictConfig, devices: list[int] | None = None):
+    """Create the environment with proper device allocation.
+
+    Args:
+        cfg: The configuration object
+
+    Returns:
+        The configured environment
+    """
+    # Create reference model with proper device allocation
+    # For the collector actor, we want inference_model devices first, then ref_model devices
+    train_tokenizer = get_tokenizer(cfg)
+
+    # Get device information
+    num_inf_devices = cfg.inference_model.num_devices
+    num_ref_devices = cfg.ref_model.num_devices
+    num_inf_devices + num_ref_devices
+
+    # Create a new config with adjusted device assignments
+    ref_cfg = DictConfig(dict(cfg))
+    ref_model = get_ref_model(ref_cfg, train_tokenizer, devices=devices)
+
+    # Setup environment
+    if cfg.env.dataset == "gsm8k":
+        env = GSM8KEnv(
+            repeats=cfg.env.repeats,
+            tokenizer=train_tokenizer,
+            num_envs=cfg.env.num_envs,
+        )
+    else:  # ifeval
+        env = IFEvalEnv(
+            repeats=cfg.env.repeats,
+            tokenizer=train_tokenizer,
+            num_envs=cfg.env.num_envs,
+        )
+
+    # Pass device directly to KLRewardTransform - Since, for Ray, the local device is always 0
+    # we can just use 0 here.
+    device = torch.device("cuda:0")
+    env = env.append_transform(
+        KLRewardTransform(
+            actor=ref_model,
+            coef=cfg.train.kl_to_ref_coeff,
+            add_to_reward=not cfg.train.kl_coef_in_loss,
+            device=device,
+        )
+    )
+    return env
+
+
+def make_env_async(cfg: DictConfig, devices: list[int] | None = None):
+    """Create the environment with proper device allocation.
+
+    Args:
+        cfg: The configuration object
+
+    Returns:
+        The configured environment
+    """
+    # Create reference model with proper device allocation
+    # For the collector actor, we want inference_model devices first, then ref_model devices
+    train_tokenizer = get_tokenizer(cfg)
+
+    # Get device information
+    num_inf_devices = cfg.inference_model.num_devices
+    num_ref_devices = cfg.ref_model.num_devices
+    num_inf_devices + num_ref_devices
+
+    # Create a new config with adjusted device assignments
+    ref_cfg = DictConfig(dict(cfg))
+    ref_model = get_ref_model(ref_cfg, train_tokenizer, devices=devices)
+
+    # Setup environment
+    if cfg.env.dataset == "gsm8k":
+        env = GSM8KEnv(
+            repeats=cfg.env.repeats,
+            tokenizer=train_tokenizer,
+            num_envs=cfg.env.num_envs,
+            max_steps=cfg.env.max_steps,
+        )
+    else:  # ifeval
+        env = IFEvalEnv(
+            repeats=cfg.env.repeats,
+            tokenizer=train_tokenizer,
+            num_envs=cfg.env.num_envs,
+            max_steps=cfg.env.max_steps,
+        )
+    if cfg.env.reasoning:
+        env = env.append_transform(
+            AddThinkingPrompt(
+                cond=lambda td: td["reward"] <= 20,
+                role="assistant",
+                edit_last_turn=True,
+                zero_reward=True,
+                undo_done=True,
+            )
+        )
+    # Pass device directly to KLRewardTransform - Since, for Ray, the local device is always 0
+    # we can just use 0 here.
+    device = torch.device("cuda:0")
+    env = env.append_transform(
+        KLRewardTransform(
+            actor=ref_model,
+            coef=cfg.train.kl_to_ref_coeff,
+            add_to_reward=not cfg.train.kl_coef_in_loss,
+            device=device,
+        )
+    )
+    return env

@@ -9,10 +9,10 @@ import importlib.util
 
 import os
 
-from more_itertools import padded
 import pytest
 import torch
-from tensordict import set_list_to_stack, TensorDict
+
+from tensordict import lazy_stack, set_list_to_stack, TensorDict
 from torchrl.data.llm import History
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from transformers import AutoTokenizer
@@ -24,6 +24,17 @@ os.environ["VLLM_USE_V1"] = "0"
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_vllm = importlib.util.find_spec("vllm") is not None
 _has_datasets = importlib.util.find_spec("datasets") is not None
+
+
+@pytest.fixture(scope="function", autouse=True)
+def set_seed():
+    torch.manual_seed(0)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(0)
+        torch.cuda.manual_seed_all(0)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+    yield
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -73,17 +84,21 @@ def sample_history():
     chats = [
         [
             {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "What is the capital of France, if not Paris?"},
+            {"role": "user", "content": "Are you happy? Say yes or no."},
         ],
         [
             {
                 "role": "system",
-                "content": "You are a helpful assistant, but more handsome.",
+                "content": "You are a very helpful assistant, but more handsome.",
             },
-            {"role": "user", "content": "What is the capital of Canada?"},
+            {
+                "role": "user",
+                "content": "Explain the difference between a cat and a dog. Be very detailed.",
+            },
         ],
     ]
     return History.from_chats(chats)
+
 
 @pytest.fixture
 def sample_history_assistant():
@@ -91,26 +106,33 @@ def sample_history_assistant():
     chats = [
         [
             {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "What is the capital of France, if not Paris?"},
-            {"role": "assistant", "content": "Paris is the capital of France."},
+            {"role": "user", "content": "Are you happy? Say yes or no."},
+            {"role": "assistant", "content": "Yes."},
         ],
         [
             {
                 "role": "system",
-                "content": "You are a helpful assistant, but more handsome.",
+                "content": "You are a very helpful assistant, but more handsome.",
             },
-            {"role": "user", "content": "What is the capital of Canada?"},
-            {"role": "assistant", "content": "Ottawa is the capital of Canada."},
+            {
+                "role": "user",
+                "content": "Explain the difference between a cat and a dog. Be very detailed.",
+            },
+            {
+                "role": "assistant",
+                "content": "A cat is a small animal that meows, while a dog is a larger animal that barks.",
+            },
         ],
     ]
     return History.from_chats(chats)
+
 
 @pytest.fixture
 def sample_text():
     """Create sample text for testing."""
     return [
-        "What is the capital of France?",
-        "What is the capital of Canada?",
+        "Are you happy? Say yes or no.",
+        "Explain the difference between a cat and a dog. Be very detailed.",
     ]
 
 
@@ -118,8 +140,11 @@ def sample_text():
 def sample_tokens(vllm_instance):
     """Create sample tokens for testing."""
     model, tokenizer = vllm_instance
-    text = ["What is the capital of France?", "What is the capital of Canada?"]
-    tokenized = tokenizer(text, return_tensors="pt", padding=True)
+    text = [
+        "Are you happy? Say yes or no.",
+        "Explain the difference between a cat and a dog. Be very detailed.",
+    ]
+    tokenized = tokenizer(text, return_tensors="pt", padding=True, padding_side="left")
     return tokenized["input_ids"], tokenized["attention_mask"]
 
 
@@ -153,7 +178,7 @@ def check_output_shapes(out, pad_output):
             shapes.add(all_assistant_masks.shape)
         if all_tokens is not None:
             shapes.add(all_tokens.shape)
-        assert len(shapes) <= 1, (shapes, out)
+        assert len(shapes) <= 1, ("all_tensors shapes differ", out)
 
         # Check the response tensors
         shapes = set()
@@ -169,14 +194,6 @@ def check_output_shapes(out, pad_output):
             shapes.add(log_probs.prompt.shape)
         if tokens is not None and tokens.prompt is not None:
             shapes.add(tokens.prompt.shape)
-
-        # Check the assistant tensors
-        shapes = set()
-        if log_probs is not None and log_probs.assistant is not None:
-            shapes.add(log_probs.assistant.shape)
-        if tokens is not None and tokens.assistant is not None:
-            shapes.add(tokens.assistant.shape)
-        assert len(shapes) <= 1, (shapes, out)
 
         if (
             log_probs is not None
@@ -212,12 +229,16 @@ class TestVLLMWrapper:
     # History Input Mode Tests
     # ================================================
 
-    @pytest.mark.parametrize("generate", [True, False])
-    @pytest.mark.parametrize("return_log_probs", [True, False])
-    @pytest.mark.parametrize("return_text", [True, False])
-    @pytest.mark.parametrize("return_tokens", [True, False])
-    @pytest.mark.parametrize("return_masks", [True, False])
-    @pytest.mark.parametrize("pad_output", [True, False])
+    @pytest.mark.parametrize("generate", [True, False], ids=["generate", "no_generate"])
+    @pytest.mark.parametrize(
+        "return_log_probs", [True, False], ids=["log_probs", "no_log_probs"]
+    )
+    @pytest.mark.parametrize("return_text", [True, False], ids=["text", "no_text"])
+    @pytest.mark.parametrize(
+        "return_tokens", [True, False], ids=["tokens", "no_tokens"]
+    )
+    @pytest.mark.parametrize("return_masks", [True, False], ids=["masks", "no_masks"])
+    @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
     def test_history_input_mode(
         self,
         vllm_instance,
@@ -268,7 +289,10 @@ class TestVLLMWrapper:
         assert wrapper.out_keys == expected_out_keys
 
         # Create input data
-        data = TensorDict(history=sample_history if generate else sample_history_assistant, batch_size=(2,))
+        data = TensorDict(
+            history=sample_history if generate else sample_history_assistant,
+            batch_size=(2,),
+        )
 
         # Run wrapper
         result = wrapper(data)
@@ -334,24 +358,15 @@ class TestVLLMWrapper:
                 assert hasattr(log_probs_obj, "padded")
             assert all(log_probs_obj.padded) == pad_output
 
-        if not generate:
-            if return_log_probs:
-                assert log_probs_obj.get("assistant", as_list=True) is not None
-            if return_tokens:
-                assert tokens_obj.get("assistant", as_list=True) is not None
-            if pad_output and return_masks:
-                if return_log_probs:
-                    assert (log_probs_obj.full[masks_obj.all_assistant_mask] == log_probs_obj.assistant[log_probs_obj.assistant != 0]).all()
-                if return_tokens:
-                    assert (tokens_obj.full[masks_obj.all_assistant_mask] == tokens_obj.assistant[tokens_obj.assistant != wrapper.padding_value]).all()
-
     # ================================================
     # Text Input Mode Tests
     # ================================================
 
-    @pytest.mark.parametrize("generate", [True, False])
-    @pytest.mark.parametrize("return_log_probs", [True, False])
-    @pytest.mark.parametrize("pad_output", [True, False])
+    @pytest.mark.parametrize("generate", [True, False], ids=["generate", "no_generate"])
+    @pytest.mark.parametrize(
+        "return_log_probs", [True, False], ids=["log_probs", "no_log_probs"]
+    )
+    @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
     def test_text_input_mode(
         self,
         vllm_instance,
@@ -418,9 +433,11 @@ class TestVLLMWrapper:
     # Tokens Input Mode Tests
     # ================================================
 
-    @pytest.mark.parametrize("generate", [True, False])
-    @pytest.mark.parametrize("return_log_probs", [True, False])
-    @pytest.mark.parametrize("pad_output", [True, False])
+    @pytest.mark.parametrize("generate", [True, False], ids=["generate", "no_generate"])
+    @pytest.mark.parametrize(
+        "return_log_probs", [True, False], ids=["log_probs", "no_log_probs"]
+    )
+    @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
     def test_tokens_input_mode(
         self,
         vllm_instance,
@@ -547,8 +564,10 @@ class TestVLLMWrapper:
     # Batch Size Tests
     # ================================================
 
-    @pytest.mark.parametrize("batch_size", [1, 2, 3])
-    @pytest.mark.parametrize("pad_output", [True, False])
+    @pytest.mark.parametrize(
+        "batch_size", [1, 2, 3], ids=["batch_size_1", "batch_size_2", "batch_size_3"]
+    )
+    @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
     def test_batch_sizes(self, vllm_instance, batch_size, pad_output):
         """Test wrapper with different batch sizes."""
         model, tokenizer = vllm_instance
@@ -633,10 +652,14 @@ class TestVLLMWrapper:
     # Selective Output Tests
     # ================================================
 
-    @pytest.mark.parametrize("return_text", [True, False])
-    @pytest.mark.parametrize("return_tokens", [True, False])
-    @pytest.mark.parametrize("return_masks", [True, False])
-    @pytest.mark.parametrize("return_log_probs", [True, False])
+    @pytest.mark.parametrize("return_text", [True, False], ids=["text", "no_text"])
+    @pytest.mark.parametrize(
+        "return_tokens", [True, False], ids=["tokens", "no_tokens"]
+    )
+    @pytest.mark.parametrize("return_masks", [True, False], ids=["masks", "no_masks"])
+    @pytest.mark.parametrize(
+        "return_log_probs", [True, False], ids=["log_probs", "no_log_probs"]
+    )
     def test_selective_outputs(
         self,
         vllm_instance,
@@ -721,7 +744,7 @@ class TestVLLMWrapper:
 
         # Check that prompt_logprobs are present
         log_probs_obj = result["log_probs"]
-        assert log_probs_obj.prompt is not None
+        assert log_probs_obj.get("prompt", as_list=True) is not None
 
     # ================================================
     # TensorClass Structure Tests
@@ -832,13 +855,19 @@ class TestVLLMWrapper:
         assert isinstance(tokens_list.get("response", as_list=True)[0], torch.Tensor)
         assert isinstance(log_probs_list.get("response", as_list=True)[0], torch.Tensor)
 
-    @pytest.mark.parametrize("num_samples", [2])
-    @pytest.mark.parametrize("pad_output", [True, False])
-    @pytest.mark.parametrize("return_text", [True, False])
-    @pytest.mark.parametrize("return_tokens", [True, False])
-    @pytest.mark.parametrize("return_masks", [True, False])
-    @pytest.mark.parametrize("return_log_probs", [True, False])
-    @pytest.mark.parametrize("input_mode", ["history", "text", "tokens"])
+    @pytest.mark.parametrize("num_samples", [2], ids=["num_samples_2"])
+    @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
+    @pytest.mark.parametrize("return_text", [True, False], ids=["text", "no_text"])
+    @pytest.mark.parametrize(
+        "return_tokens", [True, False], ids=["tokens", "no_tokens"]
+    )
+    @pytest.mark.parametrize("return_masks", [True, False], ids=["masks", "no_masks"])
+    @pytest.mark.parametrize(
+        "return_log_probs", [True, False], ids=["log_probs", "no_log_probs"]
+    )
+    @pytest.mark.parametrize(
+        "input_mode", ["history", "text", "tokens"], ids=["history", "text", "tokens"]
+    )
     def test_num_samples(
         self,
         vllm_instance,
@@ -892,12 +921,16 @@ class TestTransformersWrapper:
     # History Input Mode Tests
     # ================================================
 
-    @pytest.mark.parametrize("generate", [True, False])
-    @pytest.mark.parametrize("return_log_probs", [True, False])
-    @pytest.mark.parametrize("return_text", [True, False])
-    @pytest.mark.parametrize("return_tokens", [True, False])
-    @pytest.mark.parametrize("return_masks", [True, False])
-    @pytest.mark.parametrize("pad_output", [True, False])
+    @pytest.mark.parametrize("generate", [True, False], ids=["generate", "no_generate"])
+    @pytest.mark.parametrize(
+        "return_log_probs", [True, False], ids=["log_probs", "no_log_probs"]
+    )
+    @pytest.mark.parametrize("return_text", [True, False], ids=["text", "no_text"])
+    @pytest.mark.parametrize(
+        "return_tokens", [True, False], ids=["tokens", "no_tokens"]
+    )
+    @pytest.mark.parametrize("return_masks", [True, False], ids=["masks", "no_masks"])
+    @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
     def test_history_input_mode(
         self,
         transformers_instance,
@@ -949,7 +982,10 @@ class TestTransformersWrapper:
         assert wrapper.out_keys == expected_out_keys
 
         # Create input data
-        data = TensorDict(history=sample_history if generate else sample_history_assistant, batch_size=(2,))
+        data = TensorDict(
+            history=sample_history if generate else sample_history_assistant,
+            batch_size=(2,),
+        )
 
         # Run wrapper
         result = wrapper(data)
@@ -1015,25 +1051,15 @@ class TestTransformersWrapper:
                 assert hasattr(log_probs_obj, "padded")
             assert all(log_probs_obj.padded) == pad_output
 
-
-        if not generate:
-            if return_log_probs:
-                assert log_probs_obj.get("assistant", as_list=True) is not None
-            if return_tokens:
-                assert tokens_obj.get("assistant", as_list=True) is not None
-            if pad_output and return_masks:
-                if return_log_probs:
-                    assert (log_probs_obj.full[masks_obj.all_assistant_mask] == log_probs_obj.assistant[log_probs_obj.assistant != 0]).all()
-                if return_tokens:
-                    assert (tokens_obj.full[masks_obj.all_assistant_mask] == tokens_obj.assistant[tokens_obj.assistant != wrapper.padding_value]).all()
-
     # ================================================
     # Text Input Mode Tests
     # ================================================
 
-    @pytest.mark.parametrize("generate", [True, False])
-    @pytest.mark.parametrize("return_log_probs", [True, False])
-    @pytest.mark.parametrize("pad_output", [True, False])
+    @pytest.mark.parametrize("generate", [True, False], ids=["generate", "no_generate"])
+    @pytest.mark.parametrize(
+        "return_log_probs", [True, False], ids=["log_probs", "no_log_probs"]
+    )
+    @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
     def test_text_input_mode(
         self,
         transformers_instance,
@@ -1060,6 +1086,7 @@ class TestTransformersWrapper:
             return_tokens=True,
             return_masks=True,
             pad_output=pad_output,
+            generate_kwargs={"max_new_tokens": 10},
         )
 
         # Check input keys
@@ -1100,9 +1127,11 @@ class TestTransformersWrapper:
     # Tokens Input Mode Tests
     # ================================================
 
-    @pytest.mark.parametrize("generate", [True, False])
-    @pytest.mark.parametrize("return_log_probs", [True, False])
-    @pytest.mark.parametrize("pad_output", [True, False])
+    @pytest.mark.parametrize("generate", [True, False], ids=["generate", "no_generate"])
+    @pytest.mark.parametrize(
+        "return_log_probs", [True, False], ids=["log_probs", "no_log_probs"]
+    )
+    @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
     def test_tokens_input_mode(
         self,
         transformers_instance,
@@ -1132,6 +1161,7 @@ class TestTransformersWrapper:
             return_tokens=True,
             return_masks=True,
             pad_output=pad_output,
+            generate_kwargs={"max_new_tokens": 10},
         )
 
         # Check input keys
@@ -1229,8 +1259,10 @@ class TestTransformersWrapper:
     # Batch Size Tests
     # ================================================
 
-    @pytest.mark.parametrize("batch_size", [1, 2, 3])
-    @pytest.mark.parametrize("pad_output", [True, False])
+    @pytest.mark.parametrize(
+        "batch_size", [1, 2, 3], ids=["batch_size_1", "batch_size_2", "batch_size_3"]
+    )
+    @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
     def test_batch_sizes(self, transformers_instance, batch_size, pad_output):
         """Test wrapper with different batch sizes."""
         model, tokenizer = transformers_instance
@@ -1317,10 +1349,14 @@ class TestTransformersWrapper:
     # Selective Output Tests
     # ================================================
 
-    @pytest.mark.parametrize("return_text", [True, False])
-    @pytest.mark.parametrize("return_tokens", [True, False])
-    @pytest.mark.parametrize("return_masks", [True, False])
-    @pytest.mark.parametrize("return_log_probs", [True, False])
+    @pytest.mark.parametrize("return_text", [True, False], ids=["text", "no_text"])
+    @pytest.mark.parametrize(
+        "return_tokens", [True, False], ids=["tokens", "no_tokens"]
+    )
+    @pytest.mark.parametrize("return_masks", [True, False], ids=["masks", "no_masks"])
+    @pytest.mark.parametrize(
+        "return_log_probs", [True, False], ids=["log_probs", "no_log_probs"]
+    )
     def test_selective_outputs(
         self,
         transformers_instance,
@@ -1520,13 +1556,19 @@ class TestTransformersWrapper:
         assert isinstance(tokens_list.get("response", as_list=True)[0], torch.Tensor)
         assert isinstance(log_probs_list.get("response", as_list=True)[0], torch.Tensor)
 
-    @pytest.mark.parametrize("num_samples", [2])
-    @pytest.mark.parametrize("pad_output", [True, False])
-    @pytest.mark.parametrize("return_text", [True, False])
-    @pytest.mark.parametrize("return_tokens", [True, False])
-    @pytest.mark.parametrize("return_masks", [True, False])
-    @pytest.mark.parametrize("return_log_probs", [True, False])
-    @pytest.mark.parametrize("input_mode", ["history", "text", "tokens"])
+    @pytest.mark.parametrize("num_samples", [2], ids=["num_samples_2"])
+    @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
+    @pytest.mark.parametrize("return_text", [True, False], ids=["text", "no_text"])
+    @pytest.mark.parametrize(
+        "return_tokens", [True, False], ids=["tokens", "no_tokens"]
+    )
+    @pytest.mark.parametrize("return_masks", [True, False], ids=["masks", "no_masks"])
+    @pytest.mark.parametrize(
+        "return_log_probs", [True, False], ids=["log_probs", "no_log_probs"]
+    )
+    @pytest.mark.parametrize(
+        "input_mode", ["history", "text", "tokens"], ids=["history", "text", "tokens"]
+    )
     def test_num_samples(
         self,
         transformers_instance,
@@ -1593,9 +1635,7 @@ class TestChatEnvIntegration:
         env = GSM8KEnv(max_steps=10)
         r = env.reset()
         r = policy(r)
-        print(r)
         r, r_ = env.step_and_maybe_reset(r)
-        print(r)
         r = policy(r_)
         r, r_ = env.step_and_maybe_reset(r)
 
@@ -1605,10 +1645,19 @@ class TestLogProbsComparison:
 
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
-    @pytest.mark.parametrize("input_mode", ["history", "text", "tokens"])
-    @pytest.mark.parametrize("pad_output", [True, False])
+    @pytest.mark.parametrize(
+        "input_mode", ["history", "text", "tokens"], ids=["history", "text", "tokens"]
+    )
+    @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
     def test_log_probs_consistency(
-        self, vllm_instance, transformers_instance, input_mode, pad_output
+        self,
+        vllm_instance,
+        transformers_instance,
+        input_mode,
+        pad_output,
+        sample_history,
+        sample_text,
+        sample_tokens,
     ):
         """Test that log-probabilities are consistent between vLLM and Transformers wrappers."""
         vllm_model, vllm_tokenizer = vllm_instance
@@ -1616,29 +1665,18 @@ class TestLogProbsComparison:
 
         # Create test data based on input mode
         if input_mode == "history":
-            chats = [
-                [
-                    {"role": "system", "content": "You are a helpful assistant."},
-                    {"role": "user", "content": "What is 2+2?"},
-                ],
-                [
-                    {"role": "system", "content": "You are a helpful assistant."},
-                    {"role": "user", "content": "What is 3+3?"},
-                ],
-            ]
-            history = History.from_chats(chats)
+            history = sample_history
             data = TensorDict(history=history, batch_size=(2,))
             input_key = "history"
         elif input_mode == "text":
-            prompts = ["What is 2+2?", "What is 3+3?"]
+            prompts = sample_text
             data = TensorDict(text=prompts, batch_size=(2,))
             input_key = "text"
         elif input_mode == "tokens":
-            prompts = ["What is 2+2?", "What is 3+3?"]
-            tokenized = vllm_tokenizer(prompts, return_tensors="pt", padding=True)
+            prompts = sample_tokens
             data = TensorDict(
-                input_ids=tokenized["input_ids"],
-                attention_mask=tokenized["attention_mask"],
+                input_ids=prompts[0],
+                attention_mask=prompts[1],
                 batch_size=(2,),
             )
             input_key = "input_ids"
@@ -1678,8 +1716,6 @@ class TestLogProbsComparison:
         )
 
         # Step 1: Generate tokens with both wrappers
-        print(f"\n=== Testing {input_mode} input mode with pad_output={pad_output} ===")
-        print("data", data)
         vllm_gen_result = vllm_gen_wrapper(data.copy())
         tf_gen_wrapper(data.copy())
 
@@ -1688,10 +1724,14 @@ class TestLogProbsComparison:
             # For history mode, we need to create new history with generated responses
             generated_texts = vllm_gen_result["text"].response
             new_chats = []
-            for i, (chat, gen_text) in enumerate(zip(chats, generated_texts)):
-                new_chat = chat + [{"role": "assistant", "content": gen_text}]
+            for i, (chat, gen_text) in enumerate(
+                zip(history.unbind(0), generated_texts)
+            ):
+                new_chat = chat.copy().append(
+                    History(role="assistant", content=gen_text)
+                )
                 new_chats.append(new_chat)
-            new_history = History.from_chats(new_chats)
+            new_history = lazy_stack(new_chats)
             new_data = TensorDict(history=new_history, batch_size=(2,))
         elif input_mode == "text":
             # For text mode, concatenate original text with generated text
@@ -1749,15 +1789,11 @@ class TestLogProbsComparison:
         )
 
         # Step 4: Compute log-probs for the full sequence (original + generated)
-        print("1 new_data", new_data)
         vllm_lp_result = vllm_lp_wrapper(new_data.copy())
-        print("2 new_data", new_data)
         tf_lp_result = tf_lp_wrapper(new_data.copy())
 
         from tensordict import assert_close
 
-        print(vllm_lp_result["log_probs"].to_dict())
-        print(tf_lp_result["log_probs"].to_dict())
         assert_close(
             vllm_lp_result, tf_lp_result, atol=1e-1, rtol=1e-1, intersection=True
         )

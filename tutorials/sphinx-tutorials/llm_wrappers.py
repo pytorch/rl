@@ -216,9 +216,9 @@ try:
     )
 
     result_tf_lp = transformers_logprobs_wrapper(data_history)
-    print(f"Transformers Log Probabilities:")
+    print("Transformers Log Probabilities:")
     print(
-        f"Prompt log-probs shape: {result_tf_lp['log_probs'].prompt.shape if result_tf_lp['log_probs'].prompt is not None else 'None'}"
+        "Prompt log-probs shape: {result_tf_lp['log_probs'].prompt.shape if result_tf_lp['log_probs'].prompt is not None else 'None'}"
     )
 
 except NameError:

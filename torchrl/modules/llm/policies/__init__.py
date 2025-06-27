@@ -5,9 +5,9 @@
 
 from __future__ import annotations
 
-from .common import CategoricalSequential
+from .common import CategoricalSequential, Text, LogProbs, Masks, Tokens
 from .transformers_wrapper import TransformersWrapper
 
 from .vllm_wrapper import vLLMWrapper
 
-__all__ = ["TransformersWrapper", "vLLMWrapper", "CategoricalSequential"]
+__all__ = ["TransformersWrapper", "vLLMWrapper", "CategoricalSequential", "Text", "LogProbs", "Masks", "Tokens"]
