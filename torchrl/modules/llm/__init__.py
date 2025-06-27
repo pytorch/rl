@@ -11,7 +11,7 @@ from .backends import (
     vLLMWorker,
 )
 
-from .policies import CategoricalSequential, TransformersWrapper, vLLMWrapper
+from .policies import CategoricalSequential, TransformersWrapper, vLLMWrapper, Text, LogProbs, Masks, Tokens
 
 __all__ = [
     "CategoricalSequential",
@@ -21,4 +21,8 @@ __all__ = [
     "stateless_init_process_group",
     "vLLMWorker",
     "vLLMWrapper",
+    "Text",
+    "LogProbs",
+    "Masks",
+    "Tokens",
 ]

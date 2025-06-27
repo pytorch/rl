@@ -5,12 +5,14 @@
 from __future__ import annotations
 
 import collections
-from typing import Literal
+import warnings
+from typing import Any, Literal
 
 import torch
 from tensordict import (
     lazy_stack,
     MetaData,
+    NonTensorStack,
     set_list_to_stack,
     TensorDict,
     TensorDictBase,
@@ -33,10 +35,13 @@ from torchrl.modules.utils.utils import _unpad_tensors
 try:
     import transformers
     import vllm
+    from vllm.outputs import RequestOutput
     from vllm.sampling_params import SamplingParams
 except ImportError:
     vllm = None
     transformers = None
+    SamplingParams = Any  # type: ignore
+    RequestOutput = Any  # type: ignore
 
 
 class vLLMWrapper(CategoricalSequential):
@@ -54,8 +59,9 @@ class vLLMWrapper(CategoricalSequential):
             If a string, it will be passed to `transformers.AutoTokenizer.from_pretrained`. Defaults to `None`.
         input_mode (str, optional): The input modality to use. Must be one of `"history"`, `"text"`, or `"tokens"`.
             Defaults to `"history"`.
-        input_key (str | None, optional): The key for the input data. If `None`, defaults to the `input_mode` name.
-            Defaults to `None`.
+        input_key (str | None, optional): The key for the input data. If `None`, defaults to "history" for `"history"`, 
+            `("text", "prompt")` for `"text"`, and `("tokens", "prompt")` for `"tokens"`.
+            Defaults to `None`.        
         attention_mask_key (str, optional): The key for attention masks (used in `"tokens"` mode). Defaults to `"attention_mask"`.
         generate (bool, optional): Whether to enable text generation. If `True`, the model will generate text based on
             the input. If `False`, only log probabilities will be computed. Defaults to `True`.
@@ -130,7 +136,7 @@ class vLLMWrapper(CategoricalSequential):
         *,
         tokenizer: callable | str | None = None,  # type: ignore
         input_mode: str = "history",
-        input_key: str | None = None,
+        input_key: NestedKey | None = None,
         attention_mask_key: str = "attention_mask",
         generate: bool = True,
         return_log_probs: bool = False,
@@ -190,18 +196,16 @@ class vLLMWrapper(CategoricalSequential):
         self.layout = layout
         padding_value = None
 
-        # Auto-determine input_key if not provided
-        if input_key is None:
-            input_key = input_mode
-        self.input_key = input_key
-
         # Set input keys based on mode
         if input_mode == "history":
-            self.in_keys = [input_key]
+            self.in_keys = ["history" if input_key is None else input_key]
         elif input_mode == "text":
-            self.in_keys = [input_key]
+            self.in_keys = [("text", "prompt") if input_key is None else input_key]
         elif input_mode == "tokens":
-            self.in_keys = [input_key]
+            self.in_keys = [("tokens", "prompt") if input_key is None else input_key]
+        else:
+            raise ValueError(f"Invalid input_mode: {input_mode}")
+        self.input_key = self.in_keys[0]
 
         # Set output keys based on return flags
         self.out_keys = []
@@ -238,10 +242,11 @@ class vLLMWrapper(CategoricalSequential):
         self.tokenizer_kwargs = tokenizer_kwargs
 
         # Get tokenizer if needed
-        if (
-            pad_output or (input_mode in ["text", "history"] and not generate)
-        ) and tokenizer is None:
-            tokenizer = model.get_tokenizer()
+        if tokenizer is None:
+            try:
+                tokenizer = model.get_tokenizer()
+            except AttributeError:
+                warnings.warn("No tokenizer provided and no tokenizer found in model.")
         self.tokenizer = tokenizer
 
         if self.tokenizer is not None and (
@@ -382,23 +387,36 @@ class vLLMWrapper(CategoricalSequential):
                 tensordict_out = tensordict.empty()
 
         if tensordict_out is not None and tensordict_out is not out:
-            result = tensordict_out
+            result = tensordict_out.exclude(*self.out_keys, inplace=True)
             result.update(out, keys_to_update=self.out_keys)
         elif tensordict_out is out:
-            return out.select(*self.out_keys)
+            result = out.select(*self.out_keys)
         elif self.inplace:
             result = out
             keys = list(set(self.out_keys + list(tensordict.keys(True, True))))
-            return tensordict.update(result, keys_to_update=keys)
+            result = tensordict.exclude(*self.out_keys, inplace=True).update(result, keys_to_update=keys)
+        else:
+            result = out
         return result
 
-    def _from_vllm_generate_history(self, tensordict_input: TensorDictBase, sampling_params: SamplingParams, out: TensorDictBase) -> TensorDictBase:
+    def _from_vllm_generate_history(
+        self,
+        tensordict_input: TensorDictBase,
+        sampling_params: SamplingParams,
+        out: TensorDictBase,
+    ) -> TensorDictBase:
         """Generate text from history input."""
         from torchrl.data.llm import History
 
-        assert isinstance(tensordict_input, TensorDictBase), f"tensordict_input must be TensorDictBase, got {type(tensordict_input)}"
-        assert isinstance(sampling_params, SamplingParams), f"sampling_params must be SamplingParams, got {type(sampling_params)}"
-        assert isinstance(out, TensorDictBase), f"out must be TensorDictBase, got {type(out)}"
+        assert isinstance(
+            tensordict_input, TensorDictBase
+        ), f"tensordict_input must be TensorDictBase, got {type(tensordict_input)}"
+        assert isinstance(
+            sampling_params, SamplingParams
+        ), f"sampling_params must be SamplingParams, got {type(sampling_params)}"
+        assert isinstance(
+            out, TensorDictBase
+        ), f"out must be TensorDictBase, got {type(out)}"
 
         # Validate input
         if self.input_key not in tensordict_input:
@@ -425,11 +443,22 @@ class vLLMWrapper(CategoricalSequential):
         # Generate using text path
         return self._generate_from_text(text, sampling_params, out)
 
-    def _from_vllm_logprobs_history(self, tensordict_input: TensorDictBase, sampling_params: SamplingParams, out: TensorDictBase) -> TensorDictBase:
+    def _from_vllm_logprobs_history(
+        self,
+        tensordict_input: TensorDictBase,
+        sampling_params: SamplingParams,
+        out: TensorDictBase,
+    ) -> TensorDictBase:
         """Compute log-probs from history input."""
-        assert isinstance(tensordict_input, TensorDictBase), f"tensordict_input must be TensorDictBase, got {type(tensordict_input)}"
-        assert isinstance(sampling_params, SamplingParams), f"sampling_params must be SamplingParams, got {type(sampling_params)}"
-        assert isinstance(out, TensorDictBase), f"out must be TensorDictBase, got {type(out)}"
+        assert isinstance(
+            tensordict_input, TensorDictBase
+        ), f"tensordict_input must be TensorDictBase, got {type(tensordict_input)}"
+        assert isinstance(
+            sampling_params, SamplingParams
+        ), f"sampling_params must be SamplingParams, got {type(sampling_params)}"
+        assert isinstance(
+            out, TensorDictBase
+        ), f"out must be TensorDictBase, got {type(out)}"
 
         from torchrl.data.llm import History
 
@@ -465,8 +494,21 @@ class vLLMWrapper(CategoricalSequential):
             response_struct=response_struct, sampling_params=sampling_params, out=out
         )
 
-    def _from_vllm_generate_text(self, td, sampling_params, out) -> TensorDictBase:
+    def _from_vllm_generate_text(
+        self, td: TensorDictBase, sampling_params: SamplingParams, out: TensorDictBase
+    ) -> TensorDictBase:
         """Generate text from text input."""
+        # Type assertions
+        assert isinstance(
+            td, TensorDictBase
+        ), f"td must be TensorDictBase, got {type(td)}"
+        assert isinstance(
+            sampling_params, SamplingParams
+        ), f"sampling_params must be SamplingParams, got {type(sampling_params)}"
+        assert isinstance(
+            out, TensorDictBase
+        ), f"out must be TensorDictBase, got {type(out)}"
+
         # Validate input
         if self.input_key not in td:
             raise ValueError(
@@ -480,8 +522,21 @@ class vLLMWrapper(CategoricalSequential):
 
         return self._generate_from_text(text, sampling_params, out)
 
-    def _from_vllm_logprobs_text(self, td, sampling_params, out):
+    def _from_vllm_logprobs_text(
+        self, td: TensorDictBase, sampling_params: SamplingParams, out: TensorDictBase
+    ) -> TensorDictBase:
         """Compute log-probs from text input."""
+        # Type assertions
+        assert isinstance(
+            td, TensorDictBase
+        ), f"td must be TensorDictBase, got {type(td)}"
+        assert isinstance(
+            sampling_params, SamplingParams
+        ), f"sampling_params must be SamplingParams, got {type(sampling_params)}"
+        assert isinstance(
+            out, TensorDictBase
+        ), f"out must be TensorDictBase, got {type(out)}"
+
         # Validate input
         if self.input_key not in td:
             raise ValueError(
@@ -495,8 +550,21 @@ class vLLMWrapper(CategoricalSequential):
 
         return self._logprobs_from_text(text, sampling_params, out)
 
-    def _from_vllm_generate_tokens(self, td, sampling_params, out) -> TensorDictBase:
+    def _from_vllm_generate_tokens(
+        self, td: TensorDictBase, sampling_params: SamplingParams, out: TensorDictBase
+    ) -> TensorDictBase:
         """Generate text from tokens input."""
+        # Type assertions
+        assert isinstance(
+            td, TensorDictBase
+        ), f"td must be TensorDictBase, got {type(td)}"
+        assert isinstance(
+            sampling_params, SamplingParams
+        ), f"sampling_params must be SamplingParams, got {type(sampling_params)}"
+        assert isinstance(
+            out, TensorDictBase
+        ), f"out must be TensorDictBase, got {type(out)}"
+
         # Validate input
         if self.input_key not in td:
             raise ValueError(
@@ -504,34 +572,107 @@ class vLLMWrapper(CategoricalSequential):
                 f"but found keys: {list(td.keys())}"
             )
 
-        tokens = td.get(self.input_key)
-        assert isinstance(tokens, torch.Tensor), f"tokens must be torch.Tensor, got {type(tokens)}"
-        return self._generate_from_tokens(tokens, sampling_params, out)
+        tokens_prompt_padded = None
+        tokens_prompt_unpadded = None
+        if self.pad_output:
+            tokens_prompt_padded = td.get(self.input_key)
+        else:
+            tokens_prompt_unpadded = list(td.get(self.input_key, as_list=True))
+            # make sure we remove the padding tokens
+            tokens_prompt_unpadded = [
+                tokens[tokens != self.padding_value]
+                for tokens in tokens_prompt_unpadded
+            ]
 
-    def _from_vllm_logprobs_tokens(self, td, sampling_params, out):
-        """Compute log-probs from tokens input."""
-        # Validate input
-        if self.input_key not in td:
-            raise ValueError(
-                f"Expected '{self.input_key}' key for tokens input mode, "
-                f"but found keys: {list(td.keys())}"
-            )
-
-        tokens = td.get(self.input_key)
-
-        return self._logprobs_from_tokens(
-            tokens=tokens, sampling_params=sampling_params, out=out
+        return self._generate_from_tokens(
+            tokens_prompt_unpadded=tokens_prompt_unpadded,
+            tokens_prompt_padded=tokens_prompt_padded,
+            sampling_params=sampling_params,
+            out=out,
         )
 
-    def _cat_text(self, text, response_text):
+    def _from_vllm_logprobs_tokens(
+        self, td: TensorDictBase, sampling_params: SamplingParams, out: TensorDictBase
+    ) -> TensorDictBase:
+        """Compute log-probs from tokens input."""
+        # Type assertions
+        assert isinstance(
+            td, TensorDictBase
+        ), f"td must be TensorDictBase, got {type(td)}"
+        assert isinstance(
+            sampling_params, SamplingParams
+        ), f"sampling_params must be SamplingParams, got {type(sampling_params)}"
+        assert isinstance(
+            out, TensorDictBase
+        ), f"out must be TensorDictBase, got {type(out)}"
+
+        # Validate input
+        if self.input_key not in td:
+            raise ValueError(
+                f"Expected '{self.input_key}' key for tokens input mode, "
+                f"but found keys: {list(td.keys())}"
+            )
+
+        tokens_full_padded = None
+        tokens_full_unpadded = None
+        if self.pad_output:
+            tokens_full_padded = td.get(self.input_key)
+        else:
+            tokens_full_unpadded = list(td.get(self.input_key, as_list=True))
+            # make sure we remove the padding tokens
+            tokens_full_unpadded = [
+                tokens[tokens != self.padding_value] for tokens in tokens_full_unpadded
+            ]
+
+        return self._logprobs_from_tokens(
+            response_struct=None,
+            tokens_full_unpadded=tokens_full_unpadded,
+            tokens_full_padded=tokens_full_padded,
+            sampling_params=sampling_params,
+            out=out,
+        )
+
+    def _cat_text(
+        self, text: str | list[str], response_text: str | list[str]
+    ) -> str | list[str]:
         """Concatenate text and response text."""
+        assert isinstance(
+            text, (str, list)
+        ), f"text must be str or list, got {type(text)}"
+        assert isinstance(
+            response_text, (str, list)
+        ), f"response_text must be str or list, got {type(response_text)}"
+
         if isinstance(text, list):
             return [self._cat_text(t, t_) for t, t_ in _zip_strict(text, response_text)]
         else:
             return text + response_text
 
-    def _generate_from_text(self, text: str | list[str] | NonTensorStack, sampling_params: SamplingParams, out: TensorDictBase) -> TensorDictBase:
+    def _generate_from_text(
+        self,
+        text: str | list[str] | NonTensorStack,
+        sampling_params: SamplingParams,
+        out: TensorDictBase,
+    ) -> TensorDictBase:
         """Generate text from text input."""
+        # Convert text to list format
+        if isinstance(text, str):
+            text = [text]
+        elif not isinstance(text, list):
+            text = text.tolist()
+
+        assert isinstance(
+            text, (str, list)
+        ), f"text must be str or list, got {type(text)}"
+        assert isinstance(
+            sampling_params, SamplingParams
+        ), f"sampling_params must be SamplingParams, got {type(sampling_params)}"
+        assert isinstance(
+            out, TensorDictBase
+        ), f"out must be TensorDictBase, got {type(out)}"
+
+        generate_kwargs = {"sampling_params": sampling_params}
+        args = ()
 
         # Convert text to list format
         if isinstance(text, str):
@@ -539,40 +680,38 @@ class vLLMWrapper(CategoricalSequential):
         elif not isinstance(text, list):
             text = text.tolist()
 
-        assert isinstance(text, (str, list)), f"text must be str or list, got {type(text)}"
-        assert isinstance(sampling_params, SamplingParams), f"sampling_params must be SamplingParams, got {type(sampling_params)}"
-        assert isinstance(out, TensorDictBase), f"out must be TensorDictBase, got {type(out)}"
-
-        kwargs = {"sampling_params": sampling_params}
-        args = ()
-
         if not self._remote_calls:
-            tokens_out = self.model.generate(text, *args, **kwargs)
+            request_output = self.model.generate(text, *args, **generate_kwargs)
         else:
             import ray
 
-            tokens_out = ray.get(
-                self.model.generate.remote(*args, prompt=text, **kwargs)
+            request_output = ray.get(
+                self.model.generate.remote(text, *args, **generate_kwargs)
             )
 
-        tokens_out = _RequestOutput_tc.from_request_output(tokens_out)
+        request_output_tc = _RequestOutput_tc.from_request_output(request_output)
 
         # Extract response tokens and text
         outputs = (
-            tokens_out.outputs.view(-1)
+            request_output_tc.outputs.view(-1)
             if self.num_samples is not None
-            else tokens_out.outputs
+            else request_output_tc.outputs
         )
-        response_tokens = outputs.view(-1).get(
+        if self.pad_output:
+            response_tokens_padded = outputs.view(-1).get(
+                "token_ids",
+                as_padded_tensor=self.pad_output,
+                padding_value=self.padding_value,
+                padding_side="right",
+            )
+        response_tokens_list = outputs.view(-1).get(
             "token_ids",
-            as_list=not self.pad_output,
-            as_padded_tensor=self.pad_output,
-            padding_value=self.padding_value,
-            padding_side="right",
+            as_list=True,
         )
+        self._check_not_padded(response_tokens_list)
         if self.tokenizer is not None:
             response_text = self.tokenizer.batch_decode(
-                response_tokens, skip_special_tokens=False
+                response_tokens_list, skip_special_tokens=False
             )
         else:
             response_text = None
@@ -604,48 +743,64 @@ class vLLMWrapper(CategoricalSequential):
                     None  # We don't have prompt tokens in this path
                 )
                 if self.pad_output:
-                    self._check_padded(response_tokens)
+                    tokens_obj_flat.response = response_tokens_padded
+                    self._check_padded(response_tokens_padded)
                 else:
-                    self._check_not_padded(response_tokens)
-                tokens_obj_flat.response = response_tokens
+                    tokens_obj_flat.response = response_tokens_list
+                    self._check_not_padded(response_tokens_list)
                 tokens_obj_flat.full = None  # we don't have prompt tokens in this path so no all_tokens either
             tokens_obj.padded = self.pad_output
             out.set("tokens", tokens_obj)
 
         if self.return_log_probs:
-            log_probs = outputs.get(
-                "logprobs",
-                as_list=not self.pad_output,
-                as_padded_tensor=self.pad_output,
-                padding_value=self.padding_value,
-                padding_side="right",
-            )
             log_probs_obj = LogProbs._from_tensordict(out.empty())
             with log_probs_obj.view(-1) as log_probs_obj_flat:
                 if self.pad_output:
-                    self._check_padded(log_probs)
+                    log_probs_padded = outputs.get(
+                        "logprobs",
+                        as_padded_tensor=self.pad_output,
+                        padding_value=self.padding_value,
+                        padding_side="right",
+                    )
+                    self._check_padded(log_probs_padded)
+                    log_probs_obj_flat.response = log_probs_padded
+                    log_probs_obj_flat.full = log_probs_padded
                 else:
-                    self._check_not_padded(log_probs)
+                    log_probs_list = outputs.get(
+                        "logprobs",
+                        as_list=True,
+                    )
+                    self._check_not_padded(log_probs_list)
+                    log_probs_obj_flat.response = log_probs_list
+                    log_probs_obj_flat.full = log_probs_list
                 log_probs_obj_flat.prompt = None
-                log_probs_obj_flat.response = log_probs
-                log_probs_obj_flat.full = None
             log_probs_obj.padded = MetaData(self.pad_output)
             out.set("log_probs", log_probs_obj)
 
         return out
 
-    def _logprobs_from_text(self, text: str | list[str] | NonTensorStack, sampling_params: SamplingParams, out: TensorDictBase) -> TensorDictBase:
+    def _logprobs_from_text(
+        self,
+        text: str | list[str] | NonTensorStack,
+        sampling_params: SamplingParams,
+        out: TensorDictBase,
+    ) -> TensorDictBase:
         """Compute log-probs from text input."""
-
         # Convert text to list format
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list):
             text = text.tolist()
 
-        assert isinstance(text, (str, list)), f"text must be str or list, got {type(text)}"
-        assert isinstance(sampling_params, SamplingParams), f"sampling_params must be SamplingParams, got {type(sampling_params)}"
-        assert isinstance(out, TensorDictBase), f"out must be TensorDictBase, got {type(out)}"
+        assert isinstance(
+            text, (str, list)
+        ), f"text must be str or list, got {type(text)}"
+        assert isinstance(
+            sampling_params, SamplingParams
+        ), f"sampling_params must be SamplingParams, got {type(sampling_params)}"
+        assert isinstance(
+            out, TensorDictBase
+        ), f"out must be TensorDictBase, got {type(out)}"
 
         # Tokenize the text
         if self.tokenizer is None:
@@ -654,64 +809,60 @@ class vLLMWrapper(CategoricalSequential):
             )
 
         # Tokenize the text
-        tokenized = self.tokenizer(text, **self.tokenizer_kwargs)
-        input_ids = tokenized["input_ids"]
-        attention_mask = tokenized["attention_mask"]
+        tokenized_output = self.tokenizer(text, **self.tokenizer_kwargs)
+        if self.pad_output:
+            tokens_prompt_full_padded = tokenized_output["input_ids"]
+            attention_mask_full_padded = tokenized_output["attention_mask"]
+            tokens_prompt_full_list = self._to_list(
+                tokens_prompt_full_padded, attention_mask_full_padded
+            )
+        else:
+            tokens_prompt_full_unpadded = tokenized_output["input_ids"]
+            tokens_prompt_full_list = self._to_list(tokens_prompt_full_unpadded, None)
+            attention_mask_full_unpadded = tokenized_output["attention_mask"]
+            attention_mask_full_unpadded = [
+                am.bool()
+                if isinstance(am, torch.Tensor)
+                else torch.tensor(am, dtype=torch.bool)
+                for am in attention_mask_full_unpadded
+            ]
+            self._check_not_padded(attention_mask_full_unpadded)
 
         # Convert to list format for vLLM
-        input_ids_list = self._to_list(input_ids, attention_mask)
-        kwargs = {
+        generate_kwargs = {
             "sampling_params": sampling_params,
-            "prompt_token_ids": input_ids_list,
+            "prompt_token_ids": tokens_prompt_full_list,
         }
 
         # Generate with vLLM to get prompt_logprobs
         if not self._remote_calls:
-            tokens_out = self.model.generate(**kwargs)
+            request_output = self.model.generate(**generate_kwargs)
         else:
             import ray
 
-            tokens_out = ray.get(self.model.generate.remote(**kwargs))
+            request_output = ray.get(self.model.generate.remote(**generate_kwargs))
 
-        tokens_out = _RequestOutput_tc.from_request_output(tokens_out)
+        request_output_tc = _RequestOutput_tc.from_request_output(request_output)
 
         # Extract log-probs from prompt_logprobs
-        if isinstance(tokens_out, list):
-            # Handle case where stacking failed
-            if self.pad_output:
-                # For padded case, use all prompt_logprobs
-                log_probs = [output.prompt_logprobs for output in tokens_out]
-
-                # Mask out padding
-                padded = input_ids == self.padding_value
-                log_probs = [
-                    torch.where(~padded[i], lp, 0.0) for i, lp in enumerate(log_probs)
-                ]
-            else:
-                # For unpadded case, extract from each sequence
-                log_probs = []
-                for i, output in enumerate(tokens_out):
-                    if len(input_ids[i]) > 0:
-                        log_probs.append(output.prompt_logprobs)
-                    else:
-                        log_probs.append(torch.empty(0))
-        elif self.pad_output:
+        if self.pad_output:
             # For padded case, use all prompt_logprobs
-            log_probs = tokens_out.prompt_logprobs
+            log_probs_full_padded = request_output_tc.get(
+                "prompt_logprobs",
+                as_padded_tensor=True,
+                padding_value=0,
+                padding_side="left",
+            )
 
             # Mask out padding
-            padded = input_ids == self.padding_value
-            log_probs = torch.where(~padded, log_probs, 0.0)
+            log_probs_full_padded = torch.where(
+                attention_mask_full_padded.bool(), log_probs_full_padded, 0.0
+            )
         else:
-            # For unpadded case, extract from each sequence
-            log_probs = []
-            for prompt_lps, input_ids_seq in _zip_strict(
-                tokens_out.prompt_logprobs, input_ids
-            ):
-                if len(input_ids_seq) > 0:
-                    log_probs.append(prompt_lps)
-                else:
-                    log_probs.append(torch.empty(0))
+            log_probs_full_unpadded = request_output_tc.get(
+                "prompt_logprobs", as_list=True
+            )
+            self._check_not_padded(log_probs_full_unpadded)
 
         # Build output TensorClass objects
 
@@ -720,10 +871,11 @@ class vLLMWrapper(CategoricalSequential):
                 TensorDict(batch_size=out.batch_size).to_lazystack(0)
             )
             if self.pad_output:
-                self._check_padded(attention_mask)
+                self._check_padded(attention_mask_full_padded)
+                masks_obj.all_attention_mask = attention_mask_full_padded.bool()
             else:
-                self._check_not_padded(attention_mask)
-            masks_obj.all_attention_mask = attention_mask
+                self._check_not_padded(attention_mask_full_unpadded)
+                masks_obj.all_attention_mask = attention_mask_full_unpadded
             masks_obj.all_assistant_mask = None
             masks_obj.padded = MetaData(self.pad_output)
             out.set("masks", masks_obj)
@@ -743,12 +895,12 @@ class vLLMWrapper(CategoricalSequential):
                 TensorDict(batch_size=out.batch_size).to_lazystack(0)
             )
             if self.pad_output:
-                self._check_padded(input_ids)
+                self._check_padded(tokens_prompt_full_padded)
+                tokens_obj.full = tokens_obj.prompt = tokens_prompt_full_padded
             else:
-                self._check_not_padded(input_ids)
-            tokens_obj.prompt = input_ids
+                self._check_not_padded(tokens_prompt_full_unpadded)
+                tokens_obj.full = tokens_obj.prompt = tokens_prompt_full_unpadded
             tokens_obj.response = None
-            tokens_obj.full = input_ids
             tokens_obj.padded = MetaData(self.pad_output)
             out.set("tokens", tokens_obj)
 
@@ -757,18 +909,22 @@ class vLLMWrapper(CategoricalSequential):
                 TensorDict(batch_size=out.batch_size).to_lazystack(0)
             )
             if self.pad_output:
-                self._check_padded(log_probs)
+                self._check_padded(log_probs_full_padded)
+                log_probs_obj.full = log_probs_obj.prompt = log_probs_full_padded
             else:
-                self._check_not_padded(log_probs)
-            log_probs_obj.prompt = log_probs
+                self._check_not_padded(log_probs_full_unpadded)
+                log_probs_obj.full = log_probs_obj.prompt = log_probs_full_unpadded
             log_probs_obj.response = None
-            log_probs_obj.full = log_probs
             log_probs_obj.padded = MetaData(self.pad_output)
             out.set("log_probs", log_probs_obj)
 
         return out
 
-    def _cat_tensors(self, tokens: list[torch.Tensor] | torch.Tensor, response_tokens: list[torch.Tensor] | torch.Tensor) -> list[torch.Tensor] | torch.Tensor:
+    def _cat_tensors(
+        self,
+        tokens: list[torch.Tensor] | torch.Tensor,
+        response_tokens: list[torch.Tensor] | torch.Tensor,
+    ) -> list[torch.Tensor] | torch.Tensor:
         """Concatenate tokens and response tokens."""
         if isinstance(tokens, list) or isinstance(response_tokens, list):
             return [
@@ -778,43 +934,73 @@ class vLLMWrapper(CategoricalSequential):
         else:
             return torch.cat([tokens, response_tokens], dim=-1)
 
-    def _generate_from_tokens(self, tokens: torch.Tensor, sampling_params: SamplingParams, out: TensorDictBase) -> TensorDictBase:
+    def _generate_from_tokens(
+        self,
+        tokens_prompt_unpadded: list[torch.Tensor] | None,
+        tokens_prompt_padded: torch.Tensor | None,
+        sampling_params: SamplingParams,
+        out: TensorDictBase,
+    ) -> TensorDictBase:
         """Generate text from tokens input."""
-        assert isinstance(tokens, torch.Tensor), f"tokens must be torch.Tensor, got {type(tokens)}"
-        assert isinstance(sampling_params, SamplingParams), f"sampling_params must be SamplingParams, got {type(sampling_params)}"
-        assert isinstance(out, TensorDictBase), f"out must be TensorDictBase, got {type(out)}"
+        assert isinstance(
+            tokens_prompt_padded, (torch.Tensor, type(None))
+        ), f"tokens_prompt_padded must be torch.Tensor or None, got {type(tokens_prompt_padded)}"
+        assert isinstance(
+            tokens_prompt_unpadded, (list, type(None))
+        ), f"tokens_prompt_unpadded must be list or None, got {type(tokens_prompt_unpadded)}"
+        assert isinstance(
+            sampling_params, SamplingParams
+        ), f"sampling_params must be SamplingParams, got {type(sampling_params)}"
+        assert isinstance(
+            out, TensorDictBase
+        ), f"out must be TensorDictBase, got {type(out)}"
 
-        kwargs = {"sampling_params": sampling_params}
+        generate_kwargs = {"sampling_params": sampling_params}
         args = ()
 
-        input_ids_list = self._to_list(tokens, tokens != self.padding_value)
-        kwargs.update({"prompt_token_ids": input_ids_list})
+        if tokens_prompt_unpadded is None:
+            # TODO: To be on the safe side, we may do this even in the unpadded case since we're not sure
+            #  the user passed an unpadded tensor in the first place.
+            tokens_prompt_list = self._to_list(
+                tokens_prompt_padded, tokens_prompt_padded != self.padding_value
+            )
+        else:
+            tokens_prompt_list = self._to_list(tokens_prompt_unpadded, None)
+        generate_kwargs.update({"prompt_token_ids": tokens_prompt_list})
 
         if not self._remote_calls:
-            tokens_out = self.model.generate(*args, **kwargs)
+            request_output = self.model.generate(*args, **generate_kwargs)
         else:
             import ray
 
-            tokens_out = ray.get(self.model.generate.remote(*args, **kwargs))
+            request_output = ray.get(
+                self.model.generate.remote(*args, **generate_kwargs)
+            )
 
-        tokens_out = _RequestOutput_tc.from_request_output(tokens_out)
+        request_output_tc = _RequestOutput_tc.from_request_output(request_output)
 
         # Extract response tokens and text
         outputs = (
-            tokens_out.outputs.view(-1)
+            request_output_tc.outputs.view(-1)
             if self.num_samples is not None
-            else tokens_out.outputs
+            else request_output_tc.outputs
         )
-        response_tokens = outputs.get(
+        if self.pad_output:
+            tokens_response_padded = outputs.get(
+                "token_ids",
+                as_padded_tensor=self.pad_output,
+                padding_value=self.padding_value,
+                padding_side="right",
+            )
+            self._check_padded(tokens_response_padded)
+        tokens_response_unpadded = outputs.get(
             "token_ids",
-            as_list=not self.pad_output,
-            as_padded_tensor=self.pad_output,
-            padding_value=self.padding_value,
-            padding_side="right",
+            as_list=True,
         )
+        self._check_not_padded(tokens_response_unpadded)
         if self.tokenizer is not None:
             response_text = self.tokenizer.batch_decode(
-                response_tokens, skip_special_tokens=False
+                tokens_response_unpadded, skip_special_tokens=False
             )
         else:
             response_text = None
@@ -834,24 +1020,40 @@ class vLLMWrapper(CategoricalSequential):
         if self.return_tokens:
             tokens_obj = Tokens._from_tensordict(out.empty())
             if self.pad_output:
-                self._check_padded(response_tokens)
-                self._check_padded(tokens)
+                self._check_padded(tokens_response_padded)
+                self._check_padded(tokens_prompt_padded)
             else:
-                tokens = input_ids_list
-                self._check_not_padded(response_tokens)
-                self._check_not_padded(tokens)
+                self._check_not_padded(tokens_response_unpadded)
+                self._check_not_padded(tokens_prompt_unpadded)
 
             if self.num_samples is not None:
                 # replicate tokens
                 for i in range(self.num_samples):
-                    tokens_obj[:, i].prompt = tokens
+                    tokens_obj[:, i].prompt = (
+                        tokens_prompt_unpadded
+                        if not self.pad_output
+                        else tokens_prompt_padded
+                    )
             else:
-                tokens_obj.prompt = tokens
-            with tokens_obj.view(-1) as tokens_obj_flat:
-                tokens_obj_flat.response = response_tokens
-                tokens_obj_flat.full = self._cat_tensors(
-                    tokens_obj_flat.prompt, response_tokens
+                tokens_obj.prompt = (
+                    tokens_prompt_unpadded
+                    if not self.pad_output
+                    else tokens_prompt_padded
                 )
+            with tokens_obj.view(-1) as tokens_obj_flat:
+                if self.pad_output:
+                    tokens_obj_flat.response = tokens_response_padded
+                    tokens_full_padded = self._cat_tensors(
+                        tokens_obj_flat.prompt, tokens_response_padded
+                    )
+                    tokens_obj_flat.full = tokens_full_padded
+                else:
+                    tokens_obj_flat.response = tokens_response_unpadded
+                    tokens_full_unpadded = self._cat_tensors(
+                        tokens_obj_flat.get("prompt", as_list=True),
+                        tokens_response_unpadded,
+                    )
+                    tokens_obj_flat.full = tokens_full_unpadded
             tokens_obj.padded = MetaData(self.pad_output)
             out.set("tokens", tokens_obj)
 
@@ -860,8 +1062,10 @@ class vLLMWrapper(CategoricalSequential):
             # self.return_tokens must be True
             if self.pad_output:
                 # Get "real" attention masks
-                response_attention_masks = tokens_obj.get("full") != self.padding_value
-                masks_obj.all_attention_mask = response_attention_masks
+                full_attention_mask_padded = (
+                    tokens_obj.get("full") != self.padding_value
+                )
+                masks_obj.all_attention_mask = full_attention_mask_padded.bool()
             else:
                 # Get "real" attention masks
                 # We can use select to avoid batch-size problems
@@ -869,7 +1073,7 @@ class vLLMWrapper(CategoricalSequential):
                     out.select(("tokens", "full"))
                     .copy()
                     .rename_key_(("tokens", "full"), "all_attention_mask")
-                )
+                ).bool()
                 del _td["tokens"]
                 masks_obj.update(_td)
             masks_obj.all_assistant_mask = None
@@ -877,40 +1081,60 @@ class vLLMWrapper(CategoricalSequential):
             out.set("masks", masks_obj)
 
         if self.return_log_probs:
-            log_probs = outputs.get(
-                "logprobs",
-                as_list=not self.pad_output,
-                as_padded_tensor=self.pad_output,
-                padding_value=self.padding_value,
-                padding_side="right",
-            )
-            if self.num_samples is None:
-                # TODO: this is not correct, we should use the prompt_logprobs
-                #  but they're not returned by vLLM
-                prompt_logprobs = tokens_out.get(
-                    "prompt_logprobs",
-                    as_list=not self.pad_output,
+            if self.pad_output:
+                log_probs_padded = outputs.get(
+                    "logprobs",
                     as_padded_tensor=self.pad_output,
                     padding_value=self.padding_value,
                     padding_side="right",
                 )
+            else:
+                log_probs_list = outputs.get(
+                    "logprobs",
+                    as_list=True,
+                )
+                self._check_not_padded(log_probs_list)
+            if self.num_samples is None:
+                # TODO: this is not correct, we should use the prompt_logprobs
+                #  but they're not returned by vLLM
+                if self.pad_output:
+                    prompt_logprobs_padded = request_output_tc.get(
+                        "prompt_logprobs",
+                        as_padded_tensor=self.pad_output,
+                        padding_value=self.padding_value,
+                        padding_side="right",
+                    )
+                else:
+                    prompt_logprobs_list = request_output_tc.get(
+                        "prompt_logprobs",
+                        as_list=True,
+                    )
+                    self._check_not_padded(prompt_logprobs_list)
             log_probs_obj = LogProbs._from_tensordict(out.empty())
             if self.pad_output:
-                self._check_padded(log_probs)
+                self._check_padded(log_probs_padded)
                 if self.num_samples is None:
-                    self._check_padded(prompt_logprobs)
+                    self._check_padded(prompt_logprobs_padded)
+                    log_probs_obj.prompt = prompt_logprobs_padded
             else:
-                self._check_not_padded(log_probs)
+                self._check_not_padded(log_probs_list)
                 if self.num_samples is None:
-                    self._check_not_padded(prompt_logprobs)
-            if self.num_samples is None:
-                log_probs_obj.prompt = prompt_logprobs
+                    self._check_not_padded(prompt_logprobs_list)
+                    log_probs_obj.prompt = prompt_logprobs_list
             with log_probs_obj.view(-1) as log_probs_obj_flat:
-                log_probs_obj_flat.response = log_probs
+                log_probs_obj_flat.response = (
+                    log_probs_padded if self.pad_output else log_probs_list
+                )
                 if self.num_samples is None:
-                    log_probs_obj_flat.full = self._cat_tensors(
-                        log_probs_obj_flat.prompt, log_probs
-                    )
+                    if self.pad_output:
+                        log_probs_obj_flat.full = self._cat_tensors(
+                            log_probs_obj_flat.prompt, log_probs_padded
+                        )
+                    else:
+                        log_probs_obj_flat.full = self._cat_tensors(
+                            log_probs_obj_flat.get("prompt", as_list=True),
+                            log_probs_list,
+                        )
                 else:
                     log_probs_obj_flat.full = None
             log_probs_obj.padded = MetaData(self.pad_output)
@@ -918,96 +1142,150 @@ class vLLMWrapper(CategoricalSequential):
         return out
 
     def _logprobs_from_tokens(
-        self, *, response_struct: TensorDictBase | None = None, tokens: torch.Tensor | list[torch.Tensor] | None = None, sampling_params: SamplingParams | None = None, out: TensorDictBase | None = None
+        self,
+        *,
+        response_struct: TensorDictBase | None = None,
+        tokens_full_unpadded: list[torch.Tensor] | None = None,
+        tokens_full_padded: torch.Tensor | None = None,
+        sampling_params: SamplingParams | None = None,
+        out: TensorDictBase | None = None,
     ) -> TensorDictBase:
         """Compute log-probs from tokens input."""
-        assert isinstance(response_struct, (TensorDictBase, type(None))), f"response_struct must be TensorDictBase or None, got {type(response_struct)}"
-        assert isinstance(tokens, (torch.Tensor, list, type(None))), f"tokens must be torch.Tensor or list, got {type(tokens)}"
-        assert isinstance(sampling_params, (SamplingParams, type(None))), f"sampling_params must be SamplingParams or None, got {type(sampling_params)}"
-        assert isinstance(out, (TensorDictBase, type(None))), f"out must be TensorDictBase or None, got {type(out)}"
+        assert isinstance(
+            response_struct, (TensorDictBase, type(None))
+        ), f"response_struct must be TensorDictBase or None, got {type(response_struct)}"
+        assert isinstance(
+            tokens_full_unpadded, (list, type(None))
+        ), f"tokens_full_unpadded must be list or None, got {type(tokens_full_unpadded)}"
+        assert isinstance(
+            tokens_full_padded, (torch.Tensor, type(None))
+        ), f"tokens_full_padded must be torch.Tensor or None, got {type(tokens_full_padded)}"
+        assert isinstance(
+            sampling_params, (SamplingParams, type(None))
+        ), f"sampling_params must be SamplingParams or None, got {type(sampling_params)}"
+        assert isinstance(
+            out, (TensorDictBase, type(None))
+        ), f"out must be TensorDictBase or None, got {type(out)}"
 
         # Convert to list format for vLLM
         if response_struct is not None:
-            tokens = response_struct.get("input_ids", as_padded_tensor=True, padding_value=self.padding_value, padding_side="left")
-            attention_mask = response_struct.get("attention_mask", as_padded_tensor=True, padding_value=False, padding_side="left")
-        elif tokens is not None:
-            if isinstance(tokens, torch.Tensor):
-                attention_mask = tokens != self.padding_value
-            else:
-                attention_mask = pad_sequence(
-                    [t != self.padding_value for t in tokens],
-                    padding_value=False,
-                    batch_first=True,
-                    padding_side="left",
-                )
+            tokens_full_padded = response_struct.get(
+                "input_ids",
+                as_padded_tensor=True,
+                padding_value=self.padding_value,
+                padding_side="left",
+            )
+            attention_mask_full_padded = response_struct.get(
+                "attention_mask",
+                as_padded_tensor=True,
+                padding_value=False,
+                padding_side="left",
+            ).bool()
+            attention_mask_full_unpadded = _unpad_tensors(
+                attention_mask_full_padded, attention_mask_full_padded, as_nested=False
+            )
+        elif tokens_full_unpadded is not None:
+            tokens_full_padded = pad_sequence(
+                tokens_full_unpadded,
+                padding_value=self.padding_value,
+                batch_first=True,
+                padding_side="left",
+            )
+            attention_mask_full_unpadded = [
+                t != self.padding_value for t in tokens_full_unpadded
+            ]
+            attention_mask_full_padded = pad_sequence(
+                attention_mask_full_unpadded,
+                padding_value=False,
+                batch_first=True,
+                padding_side="left",
+            )
+        elif tokens_full_padded is not None:
+            attention_mask_full_padded = tokens_full_padded != self.padding_value
         else:
             raise ValueError("Either response_struct or tokens must be provided")
 
-        assert isinstance(tokens, torch.Tensor)
-        assert isinstance(attention_mask, torch.Tensor)
-        input_ids_list = self._to_list(tokens, attention_mask)
-        kwargs = {
+        assert isinstance(tokens_full_padded, torch.Tensor)
+        assert isinstance(attention_mask_full_padded, torch.Tensor)
+        if tokens_full_unpadded is None:
+            tokens_full_list = self._to_list(
+                tokens_full_padded, attention_mask_full_padded
+            )
+        else:
+            tokens_full_list = self._to_list(tokens_full_unpadded, None)
+
+        generate_kwargs = {
             "sampling_params": sampling_params,
-            "prompt_token_ids": input_ids_list,
+            "prompt_token_ids": tokens_full_list,
         }
 
         # Generate with vLLM to get prompt_logprobs
         if not self._remote_calls:
-            tokens_out = self.model.generate(**kwargs)
+            tokens_out_stuct = self.model.generate(**generate_kwargs)
         else:
             import ray
 
-            tokens_out = ray.get(self.model.generate.remote(**kwargs))
+            tokens_out_stuct = ray.get(self.model.generate.remote(**generate_kwargs))
 
-        tokens_out = _RequestOutput_tc.from_request_output(tokens_out)
+        request_output_tc = _RequestOutput_tc.from_request_output(tokens_out_stuct)
 
         # Extract log-probs from prompt_logprobs
         if self.pad_output:
             # For padded case, use all prompt_logprobs
-            log_probs = tokens_out.get("prompt_logprobs", as_padded_tensor=True, padding_value=0, padding_side="left")
+            log_probs_full_padded = request_output_tc.get(
+                "prompt_logprobs",
+                as_padded_tensor=True,
+                padding_value=0,
+                padding_side="left",
+            )
 
             # Mask out padding
-            padded = tokens == self.padding_value
-            log_probs = torch.where(~padded, log_probs, 0.0)
+            attention_mask_full_padded = tokens_full_padded != self.padding_value
+            log_probs_full_padded = torch.where(
+                attention_mask_full_padded, log_probs_full_padded, 0.0
+            )
         else:
             # For unpadded case, extract from each sequence
-            log_probs = []
-            for prompt_lps, tokens_seq in _zip_strict(
-                tokens_out.get("prompt_logprobs", as_list=True), input_ids_list
-            ):
-                if len(tokens_seq) > 0:
-                    log_probs.append(prompt_lps)
-                else:
-                    log_probs.append(torch.empty(0))
+            log_probs_full_unpadded = request_output_tc.get(
+                "prompt_logprobs", as_list=True
+            )
 
-        all_assistant_mask = None
+        assistant_mask_full_padded = None
         if response_struct is not None:
-            all_assistant_mask = response_struct.get(
+            assistant_mask_full_padded = response_struct.get(
                 "assistant_masks",
                 as_padded_tensor=True,
                 padding_side="left",
                 padding_value=0,
             )
-        if all_assistant_mask is not None:
-            all_assistant_mask = all_assistant_mask_padded = all_assistant_mask.bool()
+        if assistant_mask_full_padded is not None:
+            assistant_mask_full_padded = assistant_mask_full_padded.bool()
             if not self.pad_output:
-                all_assistant_mask = _unpad_tensors(all_assistant_mask, attention_mask, as_nested=False)
+                assistant_mask_full_unpadded = _unpad_tensors(
+                    assistant_mask_full_padded,
+                    attention_mask_full_padded,
+                    as_nested=False,
+                )
+            else:
+                assistant_mask_full_unpadded = None
+        else:
+            assistant_mask_full_unpadded = None
+
         if self.return_masks:
             masks_obj = Masks._from_tensordict(
                 TensorDict(batch_size=out.batch_size).to_lazystack(0)
             )
             if self.pad_output:
-                masks_obj.all_attention_mask = attention_mask
-                if all_assistant_mask is not None:
-                    masks_obj.all_assistant_mask = all_assistant_mask
+                masks_obj.all_attention_mask = attention_mask_full_padded.bool()
+                if assistant_mask_full_padded is not None:
+                    masks_obj.all_assistant_mask = assistant_mask_full_padded
             else:
-                masks_obj.all_attention_mask = _unpad_tensors(
-                    attention_mask, attention_mask, as_nested=False
-                )
-                if all_assistant_mask is not None:
-                    masks_obj.all_assistant_mask = all_assistant_mask
+                masks_obj.all_attention_mask = attention_mask_full_unpadded
+                if assistant_mask_full_unpadded is not None:
+                    masks_obj.all_assistant_mask = assistant_mask_full_unpadded
             masks_obj.padded = MetaData(self.pad_output)
             out.set("masks", masks_obj)
+
         # Build output TensorClass objects
         if self.return_text:
             text_obj = Text._from_tensordict(
@@ -1024,26 +1302,10 @@ class vLLMWrapper(CategoricalSequential):
                 TensorDict(batch_size=out.batch_size).to_lazystack(0)
             )
             if self.pad_output:
-                self._check_padded(tokens)
-                tokens_obj.full = tokens_obj.prompt = tokens
-                if all_assistant_mask is not None:
-                    tokens_obj.assistant = pad_sequence(
-                        [
-                            t[mask]
-                            for t, mask in _zip_strict(tokens, all_assistant_mask)
-                        ],
-                        padding_value=self.padding_value,
-                        batch_first=True,
-                        padding_side="left",
-                    )
+                self._check_padded(tokens_full_padded)
+                tokens_obj.full = tokens_obj.prompt = tokens_full_padded
             else:
-                tokens_obj.full = tokens_obj.prompt = _unpad_tensors(
-                    tokens, attention_mask, as_nested=False
-                )
-                if all_assistant_mask is not None:
-                    tokens_obj.assistant = _unpad_tensors(
-                        tokens, all_assistant_mask_padded, as_nested=False
-                    )
+                tokens_obj.full = tokens_obj.prompt = tokens_full_unpadded
             tokens_obj.response = None
             tokens_obj.padded = MetaData(self.pad_output)
             out.set("tokens", tokens_obj)
@@ -1053,58 +1315,66 @@ class vLLMWrapper(CategoricalSequential):
                 TensorDict(batch_size=out.batch_size).to_lazystack(0)
             )
             if self.pad_output:
-                log_probs = pad_sequence(
-                    log_probs, padding_value=0, batch_first=True, padding_side="left"
-                )
-                log_probs_obj.full = log_probs_obj.prompt = log_probs
-                if all_assistant_mask is not None:
-                    log_probs_obj.assistant = pad_sequence(
-                        [
-                            lp[mask]
-                            for lp, mask in _zip_strict(log_probs, all_assistant_mask)
-                        ],
-                        padding_value=0,
-                        batch_first=True,
-                        padding_side="left",
-                    )
+                log_probs_obj.full = log_probs_obj.prompt = log_probs_full_padded
             else:
-                self._check_not_padded(log_probs)
-                log_probs_obj.full = log_probs_obj.prompt = log_probs
-                if all_assistant_mask is not None:
-                    self._check_not_padded(all_assistant_mask)
-                    log_probs_obj.assistant = [
-                        lp[am] for lp, am in zip(log_probs, all_assistant_mask)
-                    ]
+                self._check_not_padded(log_probs_full_unpadded)
+                log_probs_obj.full = log_probs_obj.prompt = log_probs_full_unpadded
             log_probs_obj.response = None
             log_probs_obj.padded = MetaData(self.pad_output)
             out.set("log_probs", log_probs_obj)
 
         return out
 
-    def _to_list(self, tokens, attention_mask):
+    def _to_list(
+        self,
+        tokens_padded: torch.Tensor | list[torch.Tensor],
+        attention_mask_padded: torch.Tensor | None,
+    ) -> list[list[int]]:
         """Converts a tensor of integers into a masked list (of lists) of integers."""
-        if isinstance(tokens, torch.Tensor):
+        if isinstance(tokens_padded, torch.Tensor):
             parent = []
             queue = collections.deque()
-            if attention_mask is None:
-                attention_mask = torch.ones_like(tokens)
-            queue.append((tokens, attention_mask.bool(), parent))
+            if attention_mask_padded is None:
+                attention_mask_padded = torch.ones_like(tokens_padded)
+            queue.append((tokens_padded, attention_mask_padded.bool(), parent))
             while queue:
-                token, amask, _parent = queue.popleft()
-                if token.ndim == 1:
-                    _parent.extend(token[amask].tolist())
+                token_tensor, attention_mask_bool, _parent = queue.popleft()
+                if token_tensor.ndim == 1:
+                    _parent.extend(token_tensor[attention_mask_bool].tolist())
                 else:
-                    _parent.extend([[] for _ in range(token.shape[0])])
+                    _parent.extend([[] for _ in range(token_tensor.shape[0])])
                     queue.extend(
                         [
                             (t, m, local_parent)
-                            for t, m, local_parent in zip(token, amask, _parent)
+                            for t, m, local_parent in zip(
+                                token_tensor, attention_mask_bool, _parent
+                            )
                         ]
                     )
-            tokens = parent
-        else:
-            raise ValueError("tokens must be a tensor")
-        return tokens
+            tokens_list = parent
+        elif isinstance(tokens_padded, list):
+            parent = []
+            queue = collections.deque()
+            queue.append((tokens_padded, parent))
+            while queue:
+                tokens_list, _parent = queue.popleft()
+                if isinstance(tokens_list, list) and isinstance(
+                    tokens_list[0], (list, torch.Tensor)
+                ):
+                    _parent.extend([[] for _ in tokens_list])
+                    queue.extend(
+                        [
+                            (t, local_parent)
+                            for t, local_parent in zip(tokens_list, _parent)
+                        ]
+                    )
+                    continue
+                elif isinstance(tokens_list, torch.Tensor):
+                    tokens_list = tokens_list.tolist()
+                _parent.extend(tokens_list)
+            tokens_list = parent
+
+        return tokens_list
 
     @_classproperty
     def CompletionOutput_tc(cls):
@@ -1116,16 +1386,6 @@ class vLLMWrapper(CategoricalSequential):
         CompletionOutput_tc = from_dataclass(vllm.outputs.CompletionOutput)  # type: ignore
         cls._CompletionOutput_tc = CompletionOutput_tc
         return CompletionOutput_tc
-
-    def _check_padded(self, val):
-        if not isinstance(val, torch.Tensor):
-            raise ValueError("Not a padded tensor")
-        return val
-
-    def _check_not_padded(self, val):
-        if isinstance(val, torch.Tensor):
-            raise ValueError("Expected a list of tensors - not padded, got a tensor")
-        return val
 
 
 class _RequestOutput_tc(TensorClass["nocast"]):
@@ -1179,8 +1439,15 @@ class _RequestOutput_tc(TensorClass["nocast"]):
                     self.outputs = outputs
 
     @classmethod
-    def from_request_output(cls, requests):
+    def from_request_output(
+        cls, requests: RequestOutput | list[RequestOutput]
+    ) -> _RequestOutput_tc | list[_RequestOutput_tc]:
         """Create _RequestOutput_tc from vLLM RequestOutput."""
+        # Type assertions
+        assert isinstance(
+            requests, (RequestOutput, list)
+        ), f"requests must be RequestOutput or list, got {type(requests)}"
+
         # Check if we can stack the outputs
         try:
             out = lazy_stack(

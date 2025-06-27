@@ -14,6 +14,12 @@ from torch import distributions as D
 from torch.distributions import Categorical
 from torchrl.modules import MaskedCategorical
 
+# TODOs:
+# - [ ] Remove the useless view(-1) calls when num_samples is not > 1
+# - [ ] Remove as_list=True and use a context manager to handle that
+# - [ ] Make sure tensordict can handle nested lazy tds that have a get(key, as_list=True) - I think it breaks atm
+# - [ ] Handle packing
+
 
 class Tokens(TensorClass["nocast"]):
     """A Tokens container.
@@ -24,11 +30,17 @@ class Tokens(TensorClass["nocast"]):
         assistant (torch.Tensor | None): The assistant tokens.
         full (torch.Tensor | None): The tokens across prompt and response.
         padded (bool | None): Whether the tokens are padded.
+
+    Shapes:
+        - prompt: (batch_size, prompt_length). If padded, padded on the left.
+        - response: (batch_size, response_length). If padded, padded on the right.
+        - full: (batch_size, prompt_length + response_length). If padded, padded on the left and/or right.
+        - padded: bool.
+
     """
 
     prompt: torch.Tensor | None = None
     response: torch.Tensor | None = None
-    assistant: torch.Tensor | None = None
     full: torch.Tensor | None = None
     padded: bool | None = None
 
@@ -37,9 +49,17 @@ class Masks(TensorClass["nocast"]):
     """A Masks container.
 
     Args:
-        all_attention_mask (torch.Tensor | None): The attention mask across all tokens.
-        all_assistant_mask (torch.Tensor | None): The assistant mask across all tokens.
+        all_attention_mask (torch.Tensor | None): The attention mask across all tokens. The attention mask represents
+            the tokens that are not masked. and that the model can attend to.
+        all_assistant_mask (torch.Tensor | None): The assistant mask across all tokens, i.e. the tokens that
+            are produced by the assistant.
+            This is recovered from the the `assistant_masks` output of :meth:`~torchrl.data.llm.History.apply_chat_template`,
+            if the chat template supports it.
         padded (bool | None): Whether the masks are padded.
+
+    The masks always have the same shape as the `full` tensor in :class:`~torchrl.modules.llm.policies.common.Tokens`,
+    and :class:`~torchrl.modules.llm.policies.common.LogProbs`.
+
     """
 
     all_attention_mask: torch.Tensor | None = None
@@ -56,11 +76,17 @@ class LogProbs(TensorClass["nocast"]):
         assistant (torch.Tensor | None): The assistant log-probabilities.
         full (torch.Tensor | None): The log-probabilities across prompt and response.
         padded (bool | None): Whether the log-probabilities are padded.
+
+    Shapes:
+        - prompt: (batch_size, prompt_length). If padded, padded on the left.
+        - response: (batch_size, response_length). If padded, padded on the right.
+        - full: (batch_size, prompt_length + response_length). If padded, padded on the left and/or right.
+        - padded: bool.
+
     """
 
     prompt: torch.Tensor | None = None
     response: torch.Tensor | None = None
-    assistant: torch.Tensor | None = None
     full: torch.Tensor | None = None
     padded: bool | None = None
 
@@ -179,6 +205,23 @@ class CategoricalSequential(TensorDictModuleBase):
 
     # Sampling is taken care of by the sub-modules
     forward = TensorDictSequential.forward
+
+    def _check_padded(self, val: torch.Tensor) -> torch.Tensor:
+        """Check that a value is a padded tensor."""
+        assert isinstance(
+            val, torch.Tensor
+        ), f"val must be torch.Tensor, got {type(val)}"
+        if not isinstance(val, torch.Tensor):
+            raise ValueError("Not a padded tensor")
+        return val
+
+    def _check_not_padded(
+        self, val: list[torch.Tensor] | torch.Tensor
+    ) -> list[torch.Tensor] | torch.Tensor:
+        """Check that a value is not a padded tensor (i.e., a list of tensors)."""
+        if isinstance(val, torch.Tensor):
+            raise ValueError("Expected a list of tensors - not padded, got a tensor")
+        return val
 
     @property
     def log_prob_keys(self) -> list[NestedKey]:

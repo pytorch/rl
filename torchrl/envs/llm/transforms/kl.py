@@ -85,8 +85,8 @@ class KLRewardTransform(Transform):
         coef=1.0,
         in_keys=None,
         out_keys=None,
-        log_prob_key: NestedKey = "log_probs",
-        action_key: NestedKey | None = "text_response",
+        log_prob_key: NestedKey = ("log_probs", "response"),
+        action_key: NestedKey | None = ("text", "response"),
         device: torch.device | None = None,
         add_to_reward: bool = True,
         tokenizer: transformers.AutoTokenizer | None = None,
@@ -230,12 +230,13 @@ class KLRewardTransform(Transform):
         ):
             last_assistant_turn -= 1
         if history.shape[-1] == abs(last_assistant_turn):
+            if self.missing_tolerance:
+                return next_tensordict
             raise ValueError(
                 "No new dialog turns found in the history - no fallback to reconstruct the text response."
             )
         # Make the index positive
         last_assistant_turn = history.shape[-1] + last_assistant_turn
-        self.tokenizer
         history_txt = history[..., :last_assistant_turn].apply_chat_template(
             tokenizer=self.tokenizer,
             # We want the text to be as similar as possible to the original text prompt
@@ -260,7 +261,7 @@ class KLRewardTransform(Transform):
 
         text_response = isolate_response(history_txt, text_response)
         tensordict.set(action_key, text_response)
-        tensordict.set("text", history_txt)
+        tensordict.set(("text", "prompt"), history_txt)
         return tensordict
 
     def _step(

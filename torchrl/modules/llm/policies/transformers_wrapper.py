@@ -9,9 +9,9 @@ from copy import copy
 from typing import Literal
 
 import torch
-
+import contextlib
 from tensordict import (
-    lazy_stack,
+    lazy_stack,NonTensorStack,
     MetaData,
     set_list_to_stack,
     TensorDict,
@@ -28,11 +28,6 @@ from torchrl.modules.llm.policies.common import (
     Tokens,
 )
 from torchrl.modules.utils.utils import _unpad_tensors
-
-# TODOs:
-# - [ ] Remove the useless view(-1) calls when num_samples is not > 1
-# - [ ] Remove as_list=True and use a context manager to handle that
-# - [ ] Make sure tensordict can handle nested lazy tds that have a get(key, as_list=True) - I think it breaks atm
 
 
 class TransformersWrapper(CategoricalSequential):
@@ -51,7 +46,8 @@ class TransformersWrapper(CategoricalSequential):
             If a string, it will be passed to `transformers.AutoTokenizer.from_pretrained`. Defaults to `None`.
         input_mode (str, optional): The input modality to use. Must be one of `"history"`, `"text"`, or `"tokens"`.
             Defaults to `"history"`.
-        input_key (str | None, optional): The key for the input data. If `None`, defaults to the `input_mode` name.
+        input_key (str | None, optional): The key for the input data. If `None`, defaults to "history" for `"history"`, 
+            `("text", "prompt")` for `"text"`, and `("tokens", "prompt")` for `"tokens"`.
             Defaults to `None`.
         attention_mask_key (str, optional): The key for attention masks (used in `"tokens"` mode). Defaults to `"attention_mask"`.
         generate (bool, optional): Whether to enable text generation. If `True`, the model will generate text based on
@@ -181,17 +177,15 @@ class TransformersWrapper(CategoricalSequential):
         padding_value = None
 
         # Auto-determine input_key if not provided
-        if input_key is None:
-            input_key = input_mode
-        self.input_key = input_key
 
         # Set input keys based on mode
         if input_mode == "history":
-            self.in_keys = [input_key]
+            self.in_keys = ["history" if input_key is None else input_key]
         elif input_mode == "text":
-            self.in_keys = [input_key]
+            self.in_keys = [("text", "prompt") if input_key is None else input_key]
         elif input_mode == "tokens":
-            self.in_keys = [input_key]
+            self.in_keys = [("tokens", "prompt") if input_key is None else input_key]
+        self.input_key = self.in_keys[0]
 
         # Set output keys based on return flags
         self.out_keys = []
@@ -207,21 +201,22 @@ class TransformersWrapper(CategoricalSequential):
         # Tokenizer setup
         if not tokenizer_kwargs:
             tokenizer_kwargs = {}
+        else:
+            tokenizer_kwargs = dict(tokenizer_kwargs)
         if not tokenizer_kwargs.setdefault("return_attention_mask", True):
             raise RuntimeError("return_attention_mask must be True")
 
-        # If we don't pad, we use lists
-        return_tensors = "pt" if self.pad_output else False
+        # We always pad, so we always return tensors
+        return_tensors = "pt"
+        tokenizer_kwargs.setdefault("padding", True)
         if return_tensors:
             if (
                 tokenizer_kwargs.setdefault("return_tensors", return_tensors)
                 != return_tensors
             ):
                 raise RuntimeError
-        if tokenizer_kwargs.setdefault("padding", self.pad_output) not in (
-            self.pad_output,
-        ):
-            raise RuntimeError
+
+        # We always pad atm
         if tokenizer_kwargs.setdefault("padding_side", "left") != "left":
             raise RuntimeError
 
@@ -405,7 +400,8 @@ class TransformersWrapper(CategoricalSequential):
             tokenizer_kwargs.setdefault("chat_template", self.chat_template)
         tokenizer_kwargs.setdefault("add_generation_prompt", True)
         text = history.apply_chat_template(tokenizer=self.tokenizer, **tokenizer_kwargs)
-
+        if not isinstance(text, list):
+            raise ValueError(f"Expected list of text for history input, got {type(text)}")
         # Generate using text path
         return self._generate_from_text(text, cfg, out)
 
@@ -442,6 +438,8 @@ class TransformersWrapper(CategoricalSequential):
             response_tokens = history.apply_chat_template(
                 tokenizer=self.tokenizer, **tokenizer_kwargs
             )
+        if not isinstance(response_tokens, TensorDictBase):
+            raise ValueError(f"Expected TensorDictBase for history input, got {type(response_tokens)}")
         return self._logprobs_from_history_tokens(response_tokens, cfg, out)
 
     def _cat_text(self, text, response_text):
@@ -461,22 +459,34 @@ class TransformersWrapper(CategoricalSequential):
         elif not isinstance(text, list):
             text = text.tolist()
 
-        tokens_in = self.tokenizer(text, **self.tokenizer_kwargs)
+        tokenizer_kwargs = dict(self.tokenizer_kwargs)
+        tokenizer_kwargs.setdefault("padding", True)
+
+        with torch.device(self._device) if self._device is not None else contextlib.nullcontext():
+            tokens_in = self.tokenizer(text, **tokenizer_kwargs)
         if self._device is not None:
             tokens_in = tokens_in.to(self._device)
         # We are going to map this tokens_in to a tensordict to facilitate the padding in case we need it
+        tokens_in = dict(tokens_in)
+        for k, v in dict(tokens_in).items():
+            if isinstance(v, list):
+                if isinstance(v[0], torch.Tensor):
+                    v = torch.nested.nested_tensor(v)
+                else:
+                    v = torch.nested.nested_tensor([torch.tensor(t) for t in v])
+            tokens_in[k] = v
         tokens_in = (
-            TensorDict(batch_size=len(tokens_in["input_ids"]))
+            TensorDict(batch_size=tokens_in["input_ids"].size(0))
             .to_lazystack(0)
-            .update(dict(tokens_in))
+            .update(tokens_in)
         )
-        input_ids = tokens_in.get(
+        tokens_prompt_padded = tokens_in.get(
             "input_ids",
             as_padded_tensor=True,
             padding_side="left",
             padding_value=pad_val,
         )
-        attention_mask = tokens_in.get(
+        attention_mask_prompt_padded = tokens_in.get(
             "attention_mask",
             as_padded_tensor=True,
             padding_side="left",
@@ -490,23 +500,28 @@ class TransformersWrapper(CategoricalSequential):
             kwargs = self.generate_kwargs
 
         tokens_out = self.model.generate(
-            input_ids=input_ids, attention_mask=attention_mask, **kwargs
+            input_ids=tokens_prompt_padded,
+            attention_mask=attention_mask_prompt_padded,
+            **kwargs,
         )
-        full_sequences = tokens_out["sequences"]
-        sequences = full_sequences[..., input_ids.shape[-1] :]
+        tokens_full_padded = tokens_out["sequences"]
+        tokens_response_padded = tokens_full_padded[..., tokens_prompt_padded.shape[-1] :]
 
-        mask_sequences = sequences != pad_val
-        sequences_unpadded = _unpad_tensors(sequences, mask_sequences, as_nested=False)
+        attention_mask_full_padded = tokens_full_padded != pad_val
+        attention_mask_response_padded = tokens_response_padded != pad_val
+        tokens_response_unpadded = _unpad_tensors(
+            tokens_response_padded, attention_mask_response_padded, as_nested=False
+        )
 
         if self.return_log_probs:
             # These are only for the new tokens, not for the prompt - to get that, we'd need to run the forward pass again
             logits = torch.stack(list(tokens_out["logits"]), 1)
             log_probs, logits = self._log_probs_generate(
-                sequences, logits, pad_val=-100, pad=False
+                tokens_response_padded, logits, pad_val=-100, pad=False
             )
 
         response_text = self.tokenizer.batch_decode(
-            sequences_unpadded, skip_special_tokens=False
+            tokens_response_unpadded, skip_special_tokens=False
         )
 
         # Build output TensorClass objects
@@ -524,9 +539,11 @@ class TransformersWrapper(CategoricalSequential):
         if self.return_tokens:
             tokens_obj = Tokens._from_tensordict(out.empty())
             if self.pad_output:
-                prompt = input_ids
+                prompt = tokens_prompt_padded
             else:
-                prompt = _unpad_tensors(input_ids, attention_mask, as_nested=False)
+                prompt = _unpad_tensors(
+                    tokens_prompt_padded, attention_mask_prompt_padded, as_nested=False
+                )
             if tokens_obj.ndim == 2:
                 for i in range(self.num_samples):
                     tokens_obj[:, i].prompt = prompt
@@ -534,47 +551,46 @@ class TransformersWrapper(CategoricalSequential):
                 tokens_obj.prompt = prompt
             with tokens_obj.view(-1) as tokens_obj_flat:
                 if not self.pad_output:
-                    response = tokens_obj_flat.response = sequences_unpadded
+                    response = tokens_obj_flat.response = tokens_response_unpadded
+                    tokens_full_unpadded = _unpad_tensors(
+                        tokens_full_padded, attention_mask_full_padded, as_nested=False
+                    )
+                    tokens_obj_flat.full = tokens_full_unpadded
                 else:
-                    response = tokens_obj_flat.response = sequences
-                tokens_obj_flat.full = self._cat_tensors(
-                    tokens_obj_flat.prompt, response
-                )
+                    response = tokens_obj_flat.response = tokens_response_padded
+                    tokens_obj_flat.full = tokens_full_padded
             tokens_obj.padded = MetaData(self.pad_output)
             out.set("tokens", tokens_obj)
 
         if self.return_masks:
             masks_obj = Masks._from_tensordict(out.empty())
             if out.ndim == 2:
-                attention_mask = attention_mask.unsqueeze(1).expand(
-                    attention_mask.shape[0], self.num_samples, *attention_mask.shape[1:]
+                attention_mask_full_padded = attention_mask_full_padded.unflatten(
+                    0, (-1, self.num_samples)
                 )
             if self.pad_output:
-                response = tokens_obj.get(
-                    "response",
-                    as_padded_tensor=True,
-                    padding_side="right",
-                    padding_value=0,
-                )
-                masks_obj.all_attention_mask = self._cat_tensors(
-                    attention_mask, response, cast=torch.bool
-                )  # _unpad_tensors(attention_mask, attention_mask, as_nested=False)
+                masks_obj.all_attention_mask = attention_mask_full_padded.bool()
             else:
                 if out.ndim == 2:
                     with tokens_obj.view(-1) as tokens_obj_flat, masks_obj.view(
                         -1
                     ) as masks_obj_flat:
-                        masks_obj_flat.all_attention_mask = self._cat_tensors(
-                            attention_mask.flatten(0, 1),
-                            tokens_obj_flat.get("response", as_list=True),
-                            cast=torch.bool,
+                        attention_mask_full_unpadded = (
+                            attention_mask_full_padded.flatten(0, 1)
                         )
+                        attention_mask_full_unpadded = _unpad_tensors(
+                            attention_mask_full_unpadded.bool(),
+                            attention_mask_full_unpadded,
+                            as_nested=False,
+                        )
+                        masks_obj_flat.all_attention_mask = attention_mask_full_unpadded
                 else:
-                    masks_obj.all_attention_mask = self._cat_tensors(
-                        attention_mask,
-                        tokens_obj.get("response", as_list=True),
-                        cast=torch.bool,
-                    )  # _unpad_tensors(attention_mask, attention_mask, as_nested=False)
+                    attention_mask_full_unpadded = _unpad_tensors(
+                        attention_mask_full_padded.bool(),
+                        attention_mask_full_padded,
+                        as_nested=False,
+                    )
+                    masks_obj.all_attention_mask = attention_mask_full_unpadded
             masks_obj.all_assistant_mask = None
             masks_obj.padded = MetaData(self.pad_output)
             out.set("masks", masks_obj)
@@ -589,7 +605,7 @@ class TransformersWrapper(CategoricalSequential):
                     log_probs_obj_flat.full = None
                 else:
                     log_probs_unpadded = _unpad_tensors(
-                        log_probs, mask_sequences, as_nested=False
+                        log_probs, attention_mask_response_padded, as_nested=False
                     )
                     log_probs_obj_flat.prompt = None
                     log_probs_obj_flat.response = log_probs_unpadded
@@ -622,18 +638,22 @@ class TransformersWrapper(CategoricalSequential):
         pad_val = self.tokenizer.pad_token_id
 
         # unfortunately HF wants us to use padded tensors
-        total_input_ids = response_tokens.get(
+        tokens_full_padded = response_tokens.get(
             "input_ids",
             as_padded_tensor=True,
             padding_side="left",
             padding_value=pad_val,
         )
-        total_attention_mask = response_tokens.get(
+        if not isinstance(tokens_full_padded, torch.Tensor):
+            raise ValueError(f"Expected Tensor for tokens_full_padded, got {type(tokens_full_padded)}")
+        attention_mask_full_padded = response_tokens.get(
             "attention_mask",
             as_padded_tensor=True,
             padding_side="left",
             padding_value=0,
         )
+        if not isinstance(attention_mask_full_padded, torch.Tensor):
+            raise ValueError(f"Expected Tensor for attention_mask_full_padded, got {type(attention_mask_full_padded)}")
 
         if cfg is not None:
             kwargs = copy(self.generate_kwargs)
@@ -641,12 +661,18 @@ class TransformersWrapper(CategoricalSequential):
         else:
             kwargs = self.generate_kwargs
 
-        total_tokens_out = self.model(
-            total_input_ids, attention_mask=total_attention_mask, **kwargs
+        tokens_out_struct = self.model(
+            tokens_full_padded, attention_mask=attention_mask_full_padded, **kwargs
         )
 
-        log_probs, logits = self._compute_log_probs_from_model_output(
-            total_tokens_out, total_input_ids, total_attention_mask, pad_val
+        (
+            log_probs_full_padded,
+            logits_full_padded,
+        ) = self._compute_log_probs_from_model_output(
+            tokens_out_struct,
+            tokens_full_padded,
+            attention_mask_full_padded,
+            pad_val,
         )
 
         # Build output TensorClass objects
@@ -660,29 +686,33 @@ class TransformersWrapper(CategoricalSequential):
             text_obj.padded = MetaData(self.pad_output)
             out.set("text", text_obj)
 
-        all_assistant_mask = response_tokens.get(
+        all_assistant_mask_padded = response_tokens.get(
             "assistant_masks",
             as_padded_tensor=True,
             padding_side="left",
             padding_value=0,
         )
-        if all_assistant_mask is not None:
-            all_assistant_mask = all_assistant_mask.bool()
+        if all_assistant_mask_padded is not None:
+            all_assistant_mask_padded = all_assistant_mask_padded.bool()
         if self.return_masks:
             masks_obj = Masks._from_tensordict(
                 TensorDict(batch_size=out.batch_size).to_lazystack(0)
             )
             if self.pad_output:
-                masks_obj.all_attention_mask = total_attention_mask
-                if all_assistant_mask is not None:
-                    masks_obj.all_assistant_mask = all_assistant_mask
+                masks_obj.all_attention_mask = attention_mask_full_padded.bool()
+                if all_assistant_mask_padded is not None:
+                    masks_obj.all_assistant_mask = all_assistant_mask_padded
             else:
                 masks_obj.all_attention_mask = _unpad_tensors(
-                    total_attention_mask, total_attention_mask, as_nested=False
+                    attention_mask_full_padded.bool(),
+                    attention_mask_full_padded,
+                    as_nested=False,
                 )
-                if all_assistant_mask is not None:
+                if all_assistant_mask_padded is not None:
                     masks_obj.all_assistant_mask = _unpad_tensors(
-                        all_assistant_mask, total_attention_mask, as_nested=False
+                        all_assistant_mask_padded,
+                        attention_mask_full_padded,
+                        as_nested=False,
                     )
             masks_obj.padded = MetaData(self.pad_output)
             out.set("masks", masks_obj)
@@ -692,59 +722,29 @@ class TransformersWrapper(CategoricalSequential):
                 TensorDict(batch_size=out.batch_size).to_lazystack(0)
             )
             if self.pad_output:
-                tokens_obj.full = tokens_obj.prompt = total_input_ids
-                if all_assistant_mask is not None:
-                    tokens_obj.assistant = pad_sequence(
-                        [
-                            t[mask]
-                            for t, mask in _zip_strict(
-                                total_input_ids, all_assistant_mask
-                            )
-                        ],
-                        padding_value=self.padding_value,
-                        batch_first=True,
-                        padding_side="left",
-                    )
+                tokens_obj.full = tokens_obj.prompt = tokens_full_padded
             else:
-                tokens_obj.full = tokens_obj.prompt = _unpad_tensors(
-                    total_input_ids, total_attention_mask, as_nested=False
+                input_ids_full_unpadded = _unpad_tensors(
+                    tokens_full_padded, attention_mask_full_padded, as_nested=False
                 )
-                if all_assistant_mask is not None:
-                    tokens_obj.assistant = _unpad_tensors(
-                        total_input_ids, all_assistant_mask, as_nested=False
-                    )
+                tokens_obj.full = tokens_obj.prompt = input_ids_full_unpadded
             tokens_obj.response = None
             tokens_obj.padded = MetaData(self.pad_output)
             out.set("tokens", tokens_obj)
 
-        if self.return_log_probs:
-            log_probs_obj = LogProbs._from_tensordict(
-                TensorDict(batch_size=out.batch_size).to_lazystack(0)
+        log_probs_obj = LogProbs._from_tensordict(
+            TensorDict(batch_size=out.batch_size).to_lazystack(0)
+        )
+        if self.pad_output:
+            log_probs_obj.full = log_probs_obj.prompt = log_probs_full_padded
+        else:
+            log_probs_full_unpadded = _unpad_tensors(
+                log_probs_full_padded, attention_mask_full_padded, as_nested=False
             )
-            if self.pad_output:
-                log_probs_obj.full = log_probs_obj.prompt = log_probs
-                # We can set the log-probs of the assistant
-                if all_assistant_mask is not None:
-                    log_probs_obj.assistant = pad_sequence(
-                        [
-                            lp[mask]
-                            for lp, mask in _zip_strict(log_probs, all_assistant_mask)
-                        ],
-                        padding_value=0,
-                        batch_first=True,
-                        padding_side="left",
-                    )
-            else:
-                log_probs_obj.full = log_probs_obj.prompt = _unpad_tensors(
-                    log_probs, total_attention_mask, as_nested=False
-                )
-                if all_assistant_mask is not None:
-                    log_probs_obj.assistant = _unpad_tensors(
-                        log_probs, all_assistant_mask, as_nested=False
-                    )
-            log_probs_obj.response = None
-            log_probs_obj.padded = MetaData(self.pad_output)
-            out.set("log_probs", log_probs_obj)
+            log_probs_obj.full = log_probs_obj.prompt = log_probs_full_unpadded
+        log_probs_obj.response = None
+        log_probs_obj.padded = MetaData(self.pad_output)
+        out.set("log_probs", log_probs_obj)
 
         return out
 
@@ -760,7 +760,8 @@ class TransformersWrapper(CategoricalSequential):
         text = td.get(self.input_key)
         if text is None:
             raise ValueError(f"Expected '{self.input_key}' key for text input mode")
-
+        if not isinstance(text, list):
+            raise ValueError(f"Expected list of text for text input, got {type(text)}")
         return self._generate_from_text(text, cfg, out)
 
     def _from_transformers_logprobs_text(self, td, cfg, out):
@@ -773,9 +774,12 @@ class TransformersWrapper(CategoricalSequential):
             )
 
         text = td.get(self.input_key)
+        if isinstance(text, NonTensorStack):
+            text = text.tolist()
         if text is None:
             raise ValueError(f"Expected '{self.input_key}' key for text input mode")
-
+        if not isinstance(text, list):
+            raise ValueError(f"Expected list of text for text input, got {type(text)}")
         # Tokenize the text
         if self.tokenizer is None:
             raise ValueError(
@@ -789,8 +793,9 @@ class TransformersWrapper(CategoricalSequential):
             text = text.tolist()
 
         # Tokenize the text
-        print("text", text)
-        tokens_in = self.tokenizer(text, **self.tokenizer_kwargs)
+        tokenizer_kwargs = dict(self.tokenizer_kwargs)
+        with torch.device(self._device) if self._device is not None else contextlib.nullcontext():
+            tokens_in = self.tokenizer(text, **tokenizer_kwargs)
 
         if cfg is not None:
             kwargs = copy(self.generate_kwargs)
@@ -804,26 +809,32 @@ class TransformersWrapper(CategoricalSequential):
             .to_lazystack(0)
             .update(dict(tokens_in))
         )
-        input_ids = tokens_in.get(
+        input_ids_full_padded = tokens_in.get(
             "input_ids",
             as_padded_tensor=True,
             padding_side="left",
             padding_value=self.padding_value,
         )
-        attention_mask = tokens_in.get(
+        attention_mask_full_padded = tokens_in.get(
             "attention_mask",
             as_padded_tensor=True,
             padding_side="left",
             padding_value=0,
         )
 
-        total_tokens_out = self.model(
-            input_ids, attention_mask=attention_mask, **kwargs
+        tokens_out_struct = self.model(
+            input_ids_full_padded, attention_mask=attention_mask_full_padded, **kwargs
         )
 
         # Compute log-probs for the input tokens
-        log_probs, logits = self._compute_log_probs_from_model_output(
-            total_tokens_out, input_ids, attention_mask, self.tokenizer.pad_token_id
+        (
+            log_probs_full_padded,
+            logits_full_padded,
+        ) = self._compute_log_probs_from_model_output(
+            tokens_out_struct,
+            input_ids_full_padded,
+            attention_mask_full_padded,
+            self.tokenizer.pad_token_id,
         )
 
         # Build output TensorClass objects
@@ -842,11 +853,12 @@ class TransformersWrapper(CategoricalSequential):
                 TensorDict(batch_size=out.batch_size).to_lazystack(0)
             )
             if self.pad_output:
-                tokens_obj.full = tokens_obj.prompt = input_ids
+                tokens_obj.full = tokens_obj.prompt = input_ids_full_padded
             else:
-                tokens_obj.full = tokens_obj.prompt = _unpad_tensors(
-                    input_ids, attention_mask, as_nested=False
+                input_ids_full_unpadded = _unpad_tensors(
+                    input_ids_full_padded, attention_mask_full_padded, as_nested=False
                 )
+                tokens_obj.full = tokens_obj.prompt = input_ids_full_unpadded
             tokens_obj.response = None
             tokens_obj.padded = MetaData(self.pad_output)
             out.set("tokens", tokens_obj)
@@ -856,11 +868,14 @@ class TransformersWrapper(CategoricalSequential):
                 TensorDict(batch_size=out.batch_size).to_lazystack(0)
             )
             if self.pad_output:
-                masks_obj.all_attention_mask = attention_mask
+                masks_obj.all_attention_mask = attention_mask_full_padded.bool()
             else:
-                masks_obj.all_attention_mask = _unpad_tensors(
-                    attention_mask, attention_mask, as_nested=False
+                attention_mask_full_unpadded = _unpad_tensors(
+                    attention_mask_full_padded.bool(),
+                    attention_mask_full_padded,
+                    as_nested=False,
                 )
+                masks_obj.all_attention_mask = attention_mask_full_unpadded
             masks_obj.all_assistant_mask = None
             masks_obj.padded = MetaData(self.pad_output)
             out.set("masks", masks_obj)
@@ -869,13 +884,13 @@ class TransformersWrapper(CategoricalSequential):
             log_probs_obj = LogProbs._from_tensordict(
                 TensorDict(batch_size=out.batch_size).to_lazystack(0)
             )
-            print("log_probs", log_probs.shape)
             if self.pad_output:
-                log_probs_obj.full = log_probs_obj.prompt = log_probs
+                log_probs_obj.full = log_probs_obj.prompt = log_probs_full_padded
             else:
-                log_probs_obj.full = log_probs_obj.prompt = _unpad_tensors(
-                    log_probs, attention_mask, as_nested=False
+                log_probs_full_unpadded = _unpad_tensors(
+                    log_probs_full_padded, attention_mask_full_padded, as_nested=False
                 )
+                log_probs_obj.full = log_probs_obj.prompt = log_probs_full_unpadded
             log_probs_obj.response = None
             log_probs_obj.padded = MetaData(self.pad_output)
             out.set("log_probs", log_probs_obj)
@@ -893,13 +908,15 @@ class TransformersWrapper(CategoricalSequential):
 
         pad_val = self.tokenizer.pad_token_id
 
-        input_ids = td.get(
+        input_ids_prompt_padded = td.get(
             self.input_key,
             as_padded_tensor=True,
             padding_side="left",
             padding_value=pad_val,
         )
-        attention_mask = (input_ids != pad_val).to(torch.int64)
+        attention_mask_prompt_padded = (input_ids_prompt_padded != pad_val).to(
+            torch.int64
+        )
 
         if cfg is not None:
             kwargs = copy(self.generate_kwargs)
@@ -907,27 +924,38 @@ class TransformersWrapper(CategoricalSequential):
         else:
             kwargs = self.generate_kwargs
 
-        tokens_out = self.model.generate(
-            input_ids=input_ids, attention_mask=attention_mask, **kwargs
+        tokens_out_struct = self.model.generate(
+            input_ids=input_ids_prompt_padded,
+            attention_mask=attention_mask_prompt_padded,
+            **kwargs,
         )
-        full_sequences = tokens_out["sequences"]
-        sequences = full_sequences[:, input_ids.shape[-1] :]
-        mask_sequences = sequences != pad_val
-        sequences_unpadded = _unpad_tensors(sequences, mask_sequences, as_nested=False)
+        tokens_full_padded = tokens_out_struct["sequences"]
+        tokens_response_padded = tokens_full_padded[
+            :, input_ids_prompt_padded.shape[-1] :
+        ]
+        attention_mask_reponse_padded = tokens_response_padded != pad_val
+        attention_mask_full_padded = tokens_full_padded != pad_val
+        tokens_response_unpadded = _unpad_tensors(
+            tokens_response_padded, attention_mask_reponse_padded, as_nested=False
+        )
 
         if self.return_log_probs:
             # These are only for the new tokens, not for the prompt - to get that, we'd need to run the forward pass again
-            logits = tokens_out["logits"]
-            logits = torch.stack(list(logits), 1)
+            logits_response_padded = tokens_out_struct["logits"]
+            logits_response_padded = torch.stack(list(logits_response_padded), 1)
             # logits = _unpad_tensors(logits, mask_sequences, as_nested=False)
-            print("logits", logits.shape)
-            log_probs, logits = self._log_probs_generate(
-                sequences, logits, pad_val=pad_val, pad=False
+            (
+                log_probs_response_padded,
+                logits_response_padded,
+            ) = self._log_probs_generate(
+                tokens_response_padded,
+                logits_response_padded,
+                pad_val=pad_val,
+                pad=False,
             )
-            print("log_probs", log_probs.shape, "logits", logits.shape)
 
         response_text = self.tokenizer.batch_decode(
-            sequences_unpadded, skip_special_tokens=False
+            tokens_response_unpadded, skip_special_tokens=False
         )
 
         # Build output TensorClass objects
@@ -945,35 +973,48 @@ class TransformersWrapper(CategoricalSequential):
         if self.return_tokens:
             tokens_obj = Tokens._from_tensordict(out.empty())
             if not self.pad_output:
-                input_ids = td.get(self.input_key, as_list=True)
+                input_ids_prompt_unpadded = _unpad_tensors(
+                    input_ids_prompt_padded,
+                    attention_mask_prompt_padded,
+                    as_nested=False,
+                )
             if self.num_samples is not None:
                 # replicate tokens
                 for i in range(self.num_samples):
-                    tokens_obj[:, i].prompt = input_ids
+                    tokens_obj[:, i].prompt = (
+                        input_ids_prompt_unpadded
+                        if not self.pad_output
+                        else input_ids_prompt_padded
+                    )
             else:
-                tokens_obj.prompt = input_ids
+                tokens_obj.prompt = (
+                    input_ids_prompt_unpadded
+                    if not self.pad_output
+                    else input_ids_prompt_padded
+                )
             with tokens_obj.view(-1) as tokens_obj_flat:
                 if self.pad_output:
-                    tokens_obj_flat.response = sequences
-                    tokens_obj_flat.full = self._cat_tensors(
-                        tokens_obj_flat.prompt, tokens_obj_flat.response
-                    )
+                    tokens_obj_flat.response = tokens_response_padded
+                    tokens_obj_flat.full = tokens_full_padded
                 else:
-                    tokens_obj_flat.response = sequences_unpadded
-                    tokens_obj_flat.full = self._cat_tensors(
-                        tokens_obj_flat.prompt,
-                        tokens_obj_flat.get("response", as_list=True),
+                    tokens_obj_flat.response = tokens_response_unpadded
+                    tokens_full_unpadded = _unpad_tensors(
+                        tokens_full_padded, attention_mask_full_padded, as_nested=False
                     )
+                    tokens_obj_flat.full = tokens_full_unpadded
             tokens_obj.padded = MetaData(self.pad_output)
             out.set("tokens", tokens_obj)
 
         if self.return_masks:
             masks_obj = Masks._from_tensordict(out.empty())
+            if out.ndim == 2:
+                attention_mask_full_padded = attention_mask_full_padded.unflatten(
+                    0, (-1, self.num_samples)
+                )
             # self.return_tokens must be True
             if self.pad_output:
                 # Get "real" attention masks
-                response_attention_masks = tokens_obj.get("full") != self.padding_value
-                masks_obj.all_attention_mask = response_attention_masks
+                masks_obj.all_attention_mask = attention_mask_full_padded.bool()
             else:
                 # Get "real" attention masks
                 # We can use select to avoid batch-size problems
@@ -981,7 +1022,7 @@ class TransformersWrapper(CategoricalSequential):
                     out.select(("tokens", "full"))
                     .copy()
                     .rename_key_(("tokens", "full"), "all_attention_mask")
-                )
+                ).bool()
                 del _td["tokens"]
                 masks_obj.update(_td)
             masks_obj.all_assistant_mask = None
@@ -992,11 +1033,14 @@ class TransformersWrapper(CategoricalSequential):
             log_probs_obj = LogProbs._from_tensordict(out.empty())
             with log_probs_obj.view(-1) as log_probs_obj_flat:
                 if self.pad_output:
-                    log_probs_obj_flat.response = log_probs
+                    log_probs_obj_flat.response = log_probs_response_padded
                 else:
-                    log_probs_obj_flat.response = _unpad_tensors(
-                        log_probs, mask_sequences, as_nested=False
+                    log_probs_response_unpadded = _unpad_tensors(
+                        log_probs_response_padded,
+                        attention_mask_reponse_padded,
+                        as_nested=False,
                     )
+                    log_probs_obj_flat.response = log_probs_response_unpadded
             log_probs_obj.padded = MetaData(self.pad_output)
             out.set("log_probs", log_probs_obj)
 
@@ -1008,18 +1052,18 @@ class TransformersWrapper(CategoricalSequential):
         if self.input_key not in td:
             raise ValueError(
                 f"Expected '{self.input_key}' key for tokens input mode, "
-                f"but found keys: {list(td.keys())}"
+                f"but found keys: {list(td.keys(isinstance(self.input_key, tuple)))}"
             )
 
         pad_val = self.tokenizer.pad_token_id
 
-        input_ids = td.get(
+        input_ids_full_padded = td.get(
             self.input_key,
             as_padded_tensor=True,
             padding_side="left",
             padding_value=pad_val,
         )
-        attention_mask = (input_ids != pad_val).to(torch.int64)
+        attention_mask_full_padded = (input_ids_full_padded != pad_val).to(torch.int64)
 
         if cfg is not None:
             kwargs = copy(self.generate_kwargs)
@@ -1027,13 +1071,19 @@ class TransformersWrapper(CategoricalSequential):
         else:
             kwargs = self.generate_kwargs
 
-        total_tokens_out = self.model(
-            input_ids, attention_mask=attention_mask, **kwargs
+        tokens_out_struct = self.model(
+            input_ids_full_padded, attention_mask=attention_mask_full_padded, **kwargs
         )
 
         # Compute log-probs for the input tokens
-        log_probs, logits = self._compute_log_probs_from_model_output(
-            total_tokens_out, input_ids, attention_mask, self.tokenizer.pad_token_id
+        (
+            log_probs_full_padded,
+            logits_full_padded,
+        ) = self._compute_log_probs_from_model_output(
+            tokens_out_struct,
+            input_ids_full_padded,
+            attention_mask_full_padded,
+            self.tokenizer.pad_token_id,
         )
 
         # Build output TensorClass objects
@@ -1052,12 +1102,13 @@ class TransformersWrapper(CategoricalSequential):
                 TensorDict(batch_size=out.batch_size).to_lazystack(0)
             )
             if not self.pad_output:
-                tokens = td.get(self.input_key, as_list=True)
+                input_ids_full_unpadded = _unpad_tensors(
+                    input_ids_full_padded, attention_mask_full_padded, as_nested=False
+                )
+                tokens_obj.prompt = tokens_obj.full = input_ids_full_unpadded
             else:
-                tokens = input_ids
-            tokens_obj.prompt = tokens
+                tokens_obj.prompt = tokens_obj.full = input_ids_full_padded
             tokens_obj.response = None
-            tokens_obj.full = tokens
             tokens_obj.padded = MetaData(self.pad_output)
             out.set("tokens", tokens_obj)
 
@@ -1065,7 +1116,14 @@ class TransformersWrapper(CategoricalSequential):
             masks_obj = Masks._from_tensordict(
                 TensorDict(batch_size=out.batch_size).to_lazystack(0)
             )
-            masks_obj.all_attention_mask = None
+            if self.pad_output:
+                masks_obj.all_attention_mask = attention_mask_full_padded.bool()
+            else:
+                masks_obj.all_attention_mask = _unpad_tensors(
+                    attention_mask_full_padded.bool(),
+                    attention_mask_full_padded,
+                    as_nested=False,
+                )
             masks_obj.all_assistant_mask = None
             masks_obj.padded = MetaData(self.pad_output)
             out.set("masks", masks_obj)
@@ -1075,11 +1133,12 @@ class TransformersWrapper(CategoricalSequential):
                 TensorDict(batch_size=out.batch_size).to_lazystack(0)
             )
             if self.pad_output:
-                log_probs_obj.full = log_probs_obj.prompt = log_probs
+                log_probs_obj.full = log_probs_obj.prompt = log_probs_full_padded
             else:
-                log_probs_obj.full = log_probs_obj.prompt = _unpad_tensors(
-                    log_probs, attention_mask, as_nested=False
+                log_probs_full_unpadded = _unpad_tensors(
+                    log_probs_full_padded, attention_mask_full_padded, as_nested=False
                 )
+                log_probs_obj.full = log_probs_obj.prompt = log_probs_full_unpadded
             log_probs_obj.response = None
             log_probs_obj.padded = MetaData(self.pad_output)
             out.set("log_probs", log_probs_obj)
@@ -1132,6 +1191,7 @@ class TransformersWrapper(CategoricalSequential):
 
         # Create shifted versions for log-prob computation without modifying originals
         shifted_logits = logits[:, :-1, :]
+        # shifted_logits = shifted_logits - shifted_logits.logsumexp(dim=-1, keepdim=True)
         shifted_logits = torch.cat(
             [torch.zeros_like(shifted_logits[:, :1]), shifted_logits], 1
         )
@@ -1158,6 +1218,21 @@ class TransformersWrapper(CategoricalSequential):
                 reduce=False,
                 ignore_index=pad_val,
             )
-        td["log_probs"][:, 0] = 0
+        # For consistency with vllm, we set the log-probs of the first token to 0
+        #  However, the first element may not be the first - we want the first of the attention mask,
+        #  i.e, the first element that is true on the left
+        attention_mask = attention_mask.bool()
+        attention_mask_first_left = ~attention_mask[:, :-1] & attention_mask[:, 1:]
+        attention_mask_first_left = torch.cat(
+            [
+                torch.zeros_like(attention_mask_first_left[..., :1]),
+                attention_mask_first_left,
+            ],
+            -1,
+        )
+        attention_mask_first_left[~(attention_mask_first_left.any(-1)), 0] = True
+        assert attention_mask_first_left.any(-1).all()
+        attention_mask_first_left = attention_mask_first_left | ~attention_mask
+        td["log_probs"][attention_mask_first_left] = 0
 
         return td["log_probs"], shifted_logits

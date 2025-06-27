@@ -426,11 +426,9 @@ class DataLoadingPrimer(TensorDictPrimer):
         if primers is None:
             # We can get the primer from the dataloader itself
             data = self._load_from_dataloader()
-            print("data from dataloader", data)
             primers = make_composite_from_td(
                 data, dynamic_shape=True, unsqueeze_null_shapes=False
             )
-            print("primers from dataloader", primers)
             if batch_size:
                 primers = primers.expand(batch_size)
             self._queue.insert(0, data)

@@ -146,7 +146,7 @@ class ChatEnv(EnvBase):
         self,
         batch_size: tuple | torch.Size | None = None,
         system_prompt: str | None = None,
-        apply_template: bool | None = None,
+        apply_template: bool | None = False,
         tokenizer: transformers.AutoTokenizer | None = None,  # noqa: F821
         template_kwargs: dict[str, Any] | None = None,
         system_role: str = "system",
@@ -163,6 +163,8 @@ class ChatEnv(EnvBase):
         if batch_size == ():
             raise ValueError(f"{type(self).__name__} must have at least one dimension")
 
+        from torchrl.modules.llm.policies.common import Text
+
         super().__init__(batch_size=batch_size)
         self.full_observation_spec = Composite(
             history=History.default_spec(shape=batch_size + (-1,)),
@@ -172,10 +174,17 @@ class ChatEnv(EnvBase):
         self.full_state_spec[self.text_key] = NonTensor(
             shape=self.batch_size, example_data="a string", device=self.device
         )
+        if isinstance(self.text_key, tuple) and self.text_key[0] == "text":
+            self.full_state_spec[self.text_key[0]].data_cls = Text
+
         self.system_prompt = system_prompt
-        self.apply_template = (
-            apply_template or (template_kwargs is not None) or (tokenizer is not None)
-        )
+        if apply_template in (True, None):
+            self.apply_template = (
+                 apply_template or (template_kwargs is not None) or (tokenizer is not None)
+            )
+        else:
+            self.apply_template = bool(apply_template)
+
         self.tokenizer = tokenizer
         if template_kwargs is None:
             template_kwargs = {}
@@ -192,6 +201,7 @@ class ChatEnv(EnvBase):
                     shape=self.batch_size, example_data="a string", device=self.device
                 )
             },
+            data_cls=Text,
             batch_size=self.batch_size,
         )
         self.system_role = system_role
@@ -201,20 +211,22 @@ class ChatEnv(EnvBase):
 
     def _step(self, tensordict):
         # Expect action to be a "text_response" string
-        action = tensordict[self.response_key]
+        text_response = tensordict[self.response_key]
         # Find the total text
-        text = tensordict[self.text_key]
-        if isinstance(text, str):
-            text = [text]
-            action = [action]
-        text = [t + a for t, a in zip(text, action)]
+        prompt_text = tensordict[self.text_key]
+        if isinstance(prompt_text, str):
+            prompt_text = [prompt_text]
+            text_response = [text_response]
+        prompt_text = [t + a for t, a in zip(prompt_text, text_response)]
         # Convert text to a history
         chat_template_name = None
         if self.tokenizer is not None:
             name_or_path = self.tokenizer.name_or_path
             if "qwen" in name_or_path.lower():
                 chat_template_name = "qwen"
-        parsed_history = History.from_text(text, chat_template_name=chat_template_name)
+        parsed_history = History.from_text(
+            prompt_text, chat_template_name=chat_template_name
+        )
         # Isolate last element, which should be our action
         local_history = parsed_history[..., -1]
         # Get previous history
@@ -231,7 +243,7 @@ class ChatEnv(EnvBase):
                     raise ValueError(
                         "The role received in the last block parsed from the policy "
                         f"output does not match the expected policy role: received {lh.role} but expected {self.policy_role}.\n"
-                        f"Parsed input: {text=}\n"
+                        f"Parsed input: {prompt_text=}\n"
                         f"Parsed history: {parsed_history=}\n"
                         f"Final element: {local_history=}"
                     )
