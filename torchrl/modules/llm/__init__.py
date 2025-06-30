@@ -11,7 +11,15 @@ from .backends import (
     vLLMWorker,
 )
 
-from .policies import CategoricalSequential, TransformersWrapper, vLLMWrapper, Text, LogProbs, Masks, Tokens
+from .policies import (
+    CategoricalSequential,
+    LogProbs,
+    Masks,
+    Text,
+    Tokens,
+    TransformersWrapper,
+    vLLMWrapper,
+)
 
 __all__ = [
     "CategoricalSequential",

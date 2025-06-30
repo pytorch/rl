@@ -535,7 +535,7 @@ class TestGSM8K:
             env = make_gsm8k_env(num_envs=n_envs, tokenizer=tokenizer)
             env.append_transform(
                 KLRewardTransform(
-                    actor=ref_model,
+                    ref_model=ref_model,
                     coef=0.1,
                     device=ref_device,
                 )

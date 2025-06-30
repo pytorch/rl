@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import abc
 import warnings
+import weakref
 from copy import deepcopy
 from functools import partial, wraps
 from typing import Any, Callable, Iterator
@@ -538,6 +539,25 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             self.is_closed = True
         self._run_type_checks = run_type_checks
         self._allow_done_after_reset = allow_done_after_reset
+
+    _collector: weakref.ReferenceType[
+        LLMCollector  # noqa: F821 # type: ignore
+    ] | None = None
+
+    def register_collector(
+        self, collector: DataCollectorBase  # noqa: F821 # type: ignore
+    ):
+        """Registers a collector with the environment.
+
+        Args:
+            collector (DataCollectorBase): The collector to register.
+        """
+        self._collector = weakref.ref(collector)
+
+    @property
+    def collector(self) -> DataCollectorBase | None:  # noqa: F821 # type: ignore
+        """Returns the collector associated with the container, if it exists."""
+        return self._collector() if self._collector is not None else None
 
     def set_spec_lock_(self, mode: bool = True) -> EnvBase:
         """Locks or unlocks the environment's specs.

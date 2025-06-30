@@ -18,7 +18,7 @@ from tensordict import (
     TensorDictBase,
 )
 from tensordict.tensorclass import from_dataclass, TensorClass
-from tensordict.utils import _zip_strict
+from tensordict.utils import _zip_strict, NestedKey
 from torch.nn.utils.rnn import pad_sequence
 
 from torchrl.envs.utils import _classproperty
@@ -59,9 +59,10 @@ class vLLMWrapper(CategoricalSequential):
             If a string, it will be passed to `transformers.AutoTokenizer.from_pretrained`. Defaults to `None`.
         input_mode (str, optional): The input modality to use. Must be one of `"history"`, `"text"`, or `"tokens"`.
             Defaults to `"history"`.
-        input_key (str | None, optional): The key for the input data. If `None`, defaults to "history" for `"history"`, 
-            `("text", "prompt")` for `"text"`, and `("tokens", "prompt")` for `"tokens"`.
-            Defaults to `None`.        
+        input_key (str | None, optional): The key for the input data. If `None`, defaults to "history" for `"history"`,
+            `("text", "prompt")` for `"text"` when `generate=True`, `("text", "full")` for `"text"` when `generate=False`,
+            `("tokens", "prompt")` for `"tokens"` when `generate=True`, and `("tokens", "full")` for `"tokens"` when `generate=False`.
+            Defaults to `None`.
         attention_mask_key (str, optional): The key for attention masks (used in `"tokens"` mode). Defaults to `"attention_mask"`.
         generate (bool, optional): Whether to enable text generation. If `True`, the model will generate text based on
             the input. If `False`, only log probabilities will be computed. Defaults to `True`.
@@ -84,11 +85,18 @@ class vLLMWrapper(CategoricalSequential):
             For `input_mode="history"` only.
         num_samples (int | None, optional): The number of samples to generate. Defaults to `None` (one sample, and no batch-dimension for it).
             Can also be set via the `generate_kwargs["n"] = value` argument.
+        log_probs_key (NestedKey | None, optional): The key for the log probabilities :class:`~torchrl.modules.llm.policies.LogProbs` object. Defaults to `"log_probs"`.
+        text_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Text` object. Defaults to `"text"`.
+        tokens_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Tokens` object. Defaults to `"tokens"`.
+        masks_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Masks` object. Defaults to `"masks"`.
 
     Input Keys:
+        The input key depends on both `input_mode` and `generate`:
         - If `input_mode="history"`: `input_key` (defaults to `"history"`)
-        - If `input_mode="text"`: `input_key` (defaults to `"text"`)
-        - If `input_mode="tokens"`: `input_key` (defaults to `"tokens"`)
+        - If `input_mode="text"` and `generate=True`: `input_key` (defaults to `("text", "prompt")`)
+        - If `input_mode="text"` and `generate=False`: `input_key` (defaults to `("text", "full")`)
+        - If `input_mode="tokens"` and `generate=True`: `input_key` (defaults to `("tokens", "prompt")`)
+        - If `input_mode="tokens"` and `generate=False`: `input_key` (defaults to `("tokens", "full")`)
 
     Output Keys:
         Always returns a TensorDict with the following structure:
@@ -126,6 +134,9 @@ class vLLMWrapper(CategoricalSequential):
         >>> print(result["text"].response)
         >>> print(result["log_probs"].response)
 
+    Attributes:
+        collector: The collector associated with the module, if it exists.
+
     .. seealso:: :class:`~torchrl.modules.llm.TransformersWrapper` for a similar interface using the Hugging Face
         Transformers library.
     """
@@ -152,6 +163,10 @@ class vLLMWrapper(CategoricalSequential):
         num_samples: int | None = None,
         chat_template_name: Literal["chatml_format", "qwen"] | None = None,
         chat_template: str | None = None,
+        text_key: NestedKey | None = "text",
+        tokens_key: NestedKey | None = "tokens",
+        masks_key: NestedKey | None = "masks",
+        log_probs_key: NestedKey | None = "log_probs",
     ):
         super().__init__()
 
@@ -185,6 +200,10 @@ class vLLMWrapper(CategoricalSequential):
         self.return_text = return_text
         self.return_tokens = return_tokens
         self.return_masks = return_masks
+        self.text_key = text_key
+        self.tokens_key = tokens_key
+        self.masks_key = masks_key
+        self.log_probs_key = log_probs_key
         if not isinstance(pad_output, bool):
             raise ValueError("pad_output must be a boolean")
         if return_masks and not return_tokens:
@@ -196,13 +215,21 @@ class vLLMWrapper(CategoricalSequential):
         self.layout = layout
         padding_value = None
 
-        # Set input keys based on mode
+        # Set input keys based on mode and generate parameter
         if input_mode == "history":
             self.in_keys = ["history" if input_key is None else input_key]
         elif input_mode == "text":
-            self.in_keys = [("text", "prompt") if input_key is None else input_key]
+            if generate:
+                self.in_keys = [("text", "prompt") if input_key is None else input_key]
+            else:
+                self.in_keys = [("text", "full") if input_key is None else input_key]
         elif input_mode == "tokens":
-            self.in_keys = [("tokens", "prompt") if input_key is None else input_key]
+            if generate:
+                self.in_keys = [
+                    ("tokens", "prompt") if input_key is None else input_key
+                ]
+            else:
+                self.in_keys = [("tokens", "full") if input_key is None else input_key]
         else:
             raise ValueError(f"Invalid input_mode: {input_mode}")
         self.input_key = self.in_keys[0]
@@ -210,13 +237,13 @@ class vLLMWrapper(CategoricalSequential):
         # Set output keys based on return flags
         self.out_keys = []
         if return_text:
-            self.out_keys.append("text")
+            self.out_keys.append(self.text_key)
         if return_masks:
-            self.out_keys.append("masks")
+            self.out_keys.append(self.masks_key)
         if return_tokens:
-            self.out_keys.append("tokens")
+            self.out_keys.append(self.tokens_key)
         if return_log_probs:
-            self.out_keys.append("log_probs")
+            self.out_keys.append(self.log_probs_key)
 
         # Tokenizer setup
         if not tokenizer_kwargs:
@@ -307,6 +334,148 @@ class vLLMWrapper(CategoricalSequential):
         self.chat_template_name = chat_template_name
         self.chat_template = chat_template
 
+    def get_new_version(self, **kwargs):
+        """Returns a new version of the module with altered parameters.
+
+        For instance, the generate parameter can be altered to enable text generation or log-probabilities computation.
+        This is especially useful when one wants to avoid re-initializing the module with a new set of parameters, when the
+        same parameters could be used to gather log-probs.
+
+        Positional arguments are not supported.
+
+        See the class constructor for more details about the parameters.
+        """
+        # Build the constructor arguments by using current values for missing parameters
+        constructor_kwargs = {}
+
+        # Model is always required
+        constructor_kwargs["model"] = kwargs.get("model", self.model)
+
+        # Check for each parameter and use current value if not provided
+        if "tokenizer" in kwargs:
+            constructor_kwargs["tokenizer"] = kwargs["tokenizer"]
+        elif hasattr(self, "tokenizer"):
+            constructor_kwargs["tokenizer"] = self.tokenizer
+
+        if "input_mode" in kwargs:
+            constructor_kwargs["input_mode"] = kwargs["input_mode"]
+        elif hasattr(self, "input_mode"):
+            constructor_kwargs["input_mode"] = self.input_mode
+
+        if "input_key" in kwargs:
+            constructor_kwargs["input_key"] = kwargs["input_key"]
+        elif hasattr(self, "input_key"):
+            constructor_kwargs["input_key"] = self.input_key
+
+        if "attention_mask_key" in kwargs:
+            constructor_kwargs["attention_mask_key"] = kwargs["attention_mask_key"]
+        elif hasattr(self, "attention_mask_key"):
+            constructor_kwargs["attention_mask_key"] = self.attention_mask_key
+
+        if "generate" in kwargs:
+            constructor_kwargs["generate"] = kwargs["generate"]
+        elif hasattr(self, "generate"):
+            constructor_kwargs["generate"] = self.generate
+
+        if "return_log_probs" in kwargs:
+            constructor_kwargs["return_log_probs"] = kwargs["return_log_probs"]
+        elif not constructor_kwargs.get("generate", True):
+            # if we are not generating, we want to return log-probs
+            constructor_kwargs["return_log_probs"] = True
+        elif hasattr(self, "return_log_probs"):
+            constructor_kwargs["return_log_probs"] = self.return_log_probs
+
+        if "return_text" in kwargs:
+            constructor_kwargs["return_text"] = kwargs["return_text"]
+        elif hasattr(self, "return_text"):
+            constructor_kwargs["return_text"] = self.return_text
+
+        if "return_tokens" in kwargs:
+            constructor_kwargs["return_tokens"] = kwargs["return_tokens"]
+        elif hasattr(self, "return_tokens"):
+            constructor_kwargs["return_tokens"] = self.return_tokens
+
+        if "return_masks" in kwargs:
+            constructor_kwargs["return_masks"] = kwargs["return_masks"]
+        elif hasattr(self, "return_masks"):
+            constructor_kwargs["return_masks"] = self.return_masks
+
+        if "generate_kwargs" in kwargs:
+            constructor_kwargs["generate_kwargs"] = kwargs["generate_kwargs"]
+        elif hasattr(self, "generate_kwargs"):
+            constructor_kwargs["generate_kwargs"] = self.generate_kwargs
+
+        if "pad_output" in kwargs:
+            constructor_kwargs["pad_output"] = kwargs["pad_output"]
+        elif hasattr(self, "pad_output"):
+            constructor_kwargs["pad_output"] = self.pad_output
+
+        if "tokenizer_kwargs" in kwargs:
+            constructor_kwargs["tokenizer_kwargs"] = kwargs["tokenizer_kwargs"]
+        elif hasattr(self, "tokenizer_kwargs"):
+            constructor_kwargs["tokenizer_kwargs"] = dict(self.tokenizer_kwargs)
+            if (
+                "pad_output" in kwargs
+                and kwargs.get("pad_output")
+                != constructor_kwargs["tokenizer_kwargs"]["padding"]
+            ):
+                constructor_kwargs["tokenizer_kwargs"]["padding"] = kwargs.get(
+                    "pad_output"
+                )
+
+        if "inplace" in kwargs:
+            constructor_kwargs["inplace"] = kwargs["inplace"]
+        elif hasattr(self, "inplace"):
+            constructor_kwargs["inplace"] = self.inplace
+
+        if "device" in kwargs:
+            constructor_kwargs["device"] = kwargs["device"]
+        elif hasattr(self, "_device"):
+            constructor_kwargs["device"] = self._device
+
+        if "layout" in kwargs:
+            constructor_kwargs["layout"] = kwargs["layout"]
+        elif hasattr(self, "layout"):
+            constructor_kwargs["layout"] = self.layout
+
+        if "num_samples" in kwargs:
+            constructor_kwargs["num_samples"] = kwargs["num_samples"]
+        elif hasattr(self, "num_samples"):
+            constructor_kwargs["num_samples"] = self.num_samples
+
+        if "chat_template_name" in kwargs:
+            constructor_kwargs["chat_template_name"] = kwargs["chat_template_name"]
+        elif hasattr(self, "chat_template_name"):
+            constructor_kwargs["chat_template_name"] = self.chat_template_name
+
+        if "chat_template" in kwargs:
+            constructor_kwargs["chat_template"] = kwargs["chat_template"]
+        elif hasattr(self, "chat_template"):
+            constructor_kwargs["chat_template"] = self.chat_template
+
+        if "text_key" in kwargs:
+            constructor_kwargs["text_key"] = kwargs["text_key"]
+        elif hasattr(self, "text_key"):
+            constructor_kwargs["text_key"] = self.text_key
+
+        if "tokens_key" in kwargs:
+            constructor_kwargs["tokens_key"] = kwargs["tokens_key"]
+        elif hasattr(self, "tokens_key"):
+            constructor_kwargs["tokens_key"] = self.tokens_key
+
+        if "masks_key" in kwargs:
+            constructor_kwargs["masks_key"] = kwargs["masks_key"]
+        elif hasattr(self, "masks_key"):
+            constructor_kwargs["masks_key"] = self.masks_key
+
+        if "log_probs_key" in kwargs:
+            constructor_kwargs["log_probs_key"] = kwargs["log_probs_key"]
+        elif hasattr(self, "log_probs_key"):
+            constructor_kwargs["log_probs_key"] = self.log_probs_key
+
+        # Create and return new instance
+        return type(self)(**constructor_kwargs)
+
     @set_list_to_stack(True)
     def forward(
         self,
@@ -394,7 +563,9 @@ class vLLMWrapper(CategoricalSequential):
         elif self.inplace:
             result = out
             keys = list(set(self.out_keys + list(tensordict.keys(True, True))))
-            result = tensordict.exclude(*self.out_keys, inplace=True).update(result, keys_to_update=keys)
+            result = tensordict.exclude(*self.out_keys, inplace=True).update(
+                result, keys_to_update=keys
+            )
         else:
             result = out
         return result
@@ -438,10 +609,102 @@ class vLLMWrapper(CategoricalSequential):
         if self.chat_template is not None:
             tokenizer_kwargs.setdefault("chat_template", self.chat_template)
         tokenizer_kwargs.setdefault("add_generation_prompt", True)
-        text = history.apply_chat_template(tokenizer=self.tokenizer, **tokenizer_kwargs)
+        text_prompt = history.apply_chat_template(
+            tokenizer=self.tokenizer, **tokenizer_kwargs
+        )
+
+        tokenizer_kwargs.setdefault("return_assistant_tokens_mask", False)
+        tokenizer_kwargs.setdefault("tokenize", True)
+        tokenizer_kwargs.setdefault("padding", False)
+        tokenizer_kwargs.setdefault("return_dict", True)
+        response_struct = history.apply_chat_template(
+            tokenizer=self.tokenizer, **tokenizer_kwargs
+        )
+        tokens_prompt_padded = None
+        tokens_prompt_unpadded = None
+        if self.pad_output:
+            tokens_prompt_padded = response_struct.get(
+                "input_ids",
+                as_padded_tensor=True,
+                padding_value=self.padding_value,
+                padding_side="left",
+            )
+        else:
+            tokens_prompt_unpadded = response_struct.get("input_ids", as_list=True)
+
+        swap_return_tokens_value = False
+        if self.return_text and not self.return_tokens:
+            swap_return_tokens_value = True
+            self.return_tokens = True
+
+        result = self._generate_from_tokens(
+            tokens_prompt_padded=tokens_prompt_padded,
+            tokens_prompt_unpadded=tokens_prompt_unpadded,
+            sampling_params=sampling_params,
+            out=out,
+        )
+
+        if swap_return_tokens_value:
+            self.return_tokens = False
 
         # Generate using text path
-        return self._generate_from_text(text, sampling_params, out)
+        if self.return_tokens:
+            if self.pad_output:
+                result[(self.tokens_key, "prompt")] = (
+                    tokens_prompt_padded
+                    if not self.num_samples
+                    else tokens_prompt_padded.unsqueeze(1).repeat(
+                        1, self.num_samples, 1
+                    )
+                )
+            else:
+                tokens_prompt_nested = torch.nested.as_nested_tensor(
+                    tokens_prompt_unpadded
+                )
+                if not self.num_samples:
+                    result[(self.tokens_key, "prompt")] = tokens_prompt_nested
+                else:
+                    for r in result.unbind(1):
+                        r[(self.tokens_key, "prompt")] = tokens_prompt_nested
+
+        if self.return_text:
+            if not self.num_samples:
+                result.set((self.text_key, "prompt"), text_prompt)
+            else:
+                for r in result.unbind(1):
+                    r[(self.text_key, "prompt")] = text_prompt
+            with result.view(-1) as result_flat:
+                if self.pad_output:
+                    tokens_full_padded = result_flat.get(
+                        (self.tokens_key, "full"),
+                        as_padded_tensor=True,
+                        padding_side="right",
+                        padding_value=self.padding_value,
+                    )
+                    if tokens_full_padded is None:
+                        raise ValueError("tokens_full_padded is None")
+                    text_full = self.tokenizer.batch_decode(
+                        tokens_full_padded, skip_special_tokens=True
+                    )
+                else:
+                    tokens_full_unpadded = result_flat.get(
+                        (self.tokens_key, "full"), as_list=True
+                    )
+                    if tokens_full_unpadded is None:
+                        raise ValueError("tokens_full_unpadded is None")
+                    text_full = self.tokenizer.batch_decode(
+                        tokens_full_unpadded, skip_special_tokens=True
+                    )
+                text_prompt = result_flat[self.text_key, "prompt"]
+                text_response = [
+                    txt[len(prompt) :]
+                    for txt, prompt in _zip_strict(text_full, text_prompt)
+                ]
+                result_flat.set((self.text_key, "full"), text_full)
+                result_flat.set((self.text_key, "response"), text_response)
+        if swap_return_tokens_value:
+            result.exclude(self.tokens_key, inplace=True)
+        return result
 
     def _from_vllm_logprobs_history(
         self,
@@ -482,6 +745,10 @@ class vLLMWrapper(CategoricalSequential):
         if self.chat_template is not None:
             tokenizer_kwargs.setdefault("chat_template", self.chat_template)
         tokenizer_kwargs.setdefault("add_generation_prompt", False)
+        if self.return_text:
+            text_full = history.apply_chat_template(
+                tokenizer=self.tokenizer, **tokenizer_kwargs
+            )
         tokenizer_kwargs.setdefault("return_assistant_tokens_mask", True)
         tokenizer_kwargs.setdefault("tokenize", True)
         tokenizer_kwargs.setdefault("padding", False)
@@ -490,9 +757,12 @@ class vLLMWrapper(CategoricalSequential):
             tokenizer=self.tokenizer, **tokenizer_kwargs
         )
 
-        return self._logprobs_from_tokens(
+        result = self._logprobs_from_tokens(
             response_struct=response_struct, sampling_params=sampling_params, out=out
         )
+        if self.return_text:
+            result[self.text_key, "full"] = text_full
+        return result
 
     def _from_vllm_generate_text(
         self, td: TensorDictBase, sampling_params: SamplingParams, out: TensorDictBase
@@ -723,7 +993,7 @@ class vLLMWrapper(CategoricalSequential):
             masks_obj.all_attention_mask = None
             masks_obj.all_assistant_mask = None
             masks_obj.padded = MetaData(self.pad_output)
-            out.set("masks", masks_obj)
+            out.set(self.masks_key, masks_obj)
 
         if self.return_text:
             if self.num_samples is not None:
@@ -734,7 +1004,7 @@ class vLLMWrapper(CategoricalSequential):
                 text_obj_flat.response = response_text
                 text_obj_flat.full = self._cat_text(text, response_text)
             text_obj.padded = MetaData(self.pad_output)
-            out.set("text", text_obj)
+            out.set(self.text_key, text_obj)
 
         if self.return_tokens:
             tokens_obj = Tokens._from_tensordict(out.empty())
@@ -750,7 +1020,7 @@ class vLLMWrapper(CategoricalSequential):
                     self._check_not_padded(response_tokens_list)
                 tokens_obj_flat.full = None  # we don't have prompt tokens in this path so no all_tokens either
             tokens_obj.padded = self.pad_output
-            out.set("tokens", tokens_obj)
+            out.set(self.tokens_key, tokens_obj)
 
         if self.return_log_probs:
             log_probs_obj = LogProbs._from_tensordict(out.empty())
@@ -775,7 +1045,7 @@ class vLLMWrapper(CategoricalSequential):
                     log_probs_obj_flat.full = log_probs_list
                 log_probs_obj_flat.prompt = None
             log_probs_obj.padded = MetaData(self.pad_output)
-            out.set("log_probs", log_probs_obj)
+            out.set(self.log_probs_key, log_probs_obj)
 
         return out
 
@@ -811,14 +1081,14 @@ class vLLMWrapper(CategoricalSequential):
         # Tokenize the text
         tokenized_output = self.tokenizer(text, **self.tokenizer_kwargs)
         if self.pad_output:
-            tokens_prompt_full_padded = tokenized_output["input_ids"]
+            tokens_full_padded = tokenized_output["input_ids"]
             attention_mask_full_padded = tokenized_output["attention_mask"]
-            tokens_prompt_full_list = self._to_list(
-                tokens_prompt_full_padded, attention_mask_full_padded
+            tokens_full_list = self._to_list(
+                tokens_full_padded, attention_mask_full_padded
             )
         else:
-            tokens_prompt_full_unpadded = tokenized_output["input_ids"]
-            tokens_prompt_full_list = self._to_list(tokens_prompt_full_unpadded, None)
+            tokens_full_unpadded = tokenized_output["input_ids"]
+            tokens_full_list = self._to_list(tokens_full_unpadded, None)
             attention_mask_full_unpadded = tokenized_output["attention_mask"]
             attention_mask_full_unpadded = [
                 am.bool()
@@ -826,12 +1096,11 @@ class vLLMWrapper(CategoricalSequential):
                 else torch.tensor(am, dtype=torch.bool)
                 for am in attention_mask_full_unpadded
             ]
-            self._check_not_padded(attention_mask_full_unpadded)
 
         # Convert to list format for vLLM
         generate_kwargs = {
             "sampling_params": sampling_params,
-            "prompt_token_ids": tokens_prompt_full_list,
+            "prompt_token_ids": tokens_full_list,
         }
 
         # Generate with vLLM to get prompt_logprobs
@@ -855,16 +1124,16 @@ class vLLMWrapper(CategoricalSequential):
             )
 
             # Mask out padding
+            attention_mask_full_padded = tokens_full_padded != self.padding_value
             log_probs_full_padded = torch.where(
-                attention_mask_full_padded.bool(), log_probs_full_padded, 0.0
+                attention_mask_full_padded, log_probs_full_padded, 0.0
             )
         else:
+            # For unpadded case, extract from each sequence
             log_probs_full_unpadded = request_output_tc.get(
                 "prompt_logprobs", as_list=True
             )
             self._check_not_padded(log_probs_full_unpadded)
-
-        # Build output TensorClass objects
 
         if self.return_masks:
             masks_obj = Masks._from_tensordict(
@@ -876,33 +1145,32 @@ class vLLMWrapper(CategoricalSequential):
             else:
                 self._check_not_padded(attention_mask_full_unpadded)
                 masks_obj.all_attention_mask = attention_mask_full_unpadded
-            masks_obj.all_assistant_mask = None
             masks_obj.padded = MetaData(self.pad_output)
-            out.set("masks", masks_obj)
+            out.set(self.masks_key, masks_obj)
 
+        # Build output TensorClass objects
         if self.return_text:
             text_obj = Text._from_tensordict(
                 TensorDict(batch_size=out.batch_size).to_lazystack(0)
             )
-            text_obj.prompt = text
+            text_obj.prompt = None
             text_obj.response = None
             text_obj.full = text
             text_obj.padded = MetaData(self.pad_output)
-            out.set("text", text_obj)
+            out.set(self.text_key, text_obj)
 
         if self.return_tokens:
             tokens_obj = Tokens._from_tensordict(
                 TensorDict(batch_size=out.batch_size).to_lazystack(0)
             )
             if self.pad_output:
-                self._check_padded(tokens_prompt_full_padded)
-                tokens_obj.full = tokens_obj.prompt = tokens_prompt_full_padded
+                self._check_padded(tokens_full_padded)
+                tokens_obj.full = tokens_full_padded
             else:
-                self._check_not_padded(tokens_prompt_full_unpadded)
-                tokens_obj.full = tokens_obj.prompt = tokens_prompt_full_unpadded
+                tokens_obj.full = tokens_full_unpadded
             tokens_obj.response = None
             tokens_obj.padded = MetaData(self.pad_output)
-            out.set("tokens", tokens_obj)
+            out.set(self.tokens_key, tokens_obj)
 
         if self.return_log_probs:
             log_probs_obj = LogProbs._from_tensordict(
@@ -910,13 +1178,13 @@ class vLLMWrapper(CategoricalSequential):
             )
             if self.pad_output:
                 self._check_padded(log_probs_full_padded)
-                log_probs_obj.full = log_probs_obj.prompt = log_probs_full_padded
+                log_probs_obj.full = log_probs_full_padded
             else:
                 self._check_not_padded(log_probs_full_unpadded)
-                log_probs_obj.full = log_probs_obj.prompt = log_probs_full_unpadded
+                log_probs_obj.full = log_probs_full_unpadded
             log_probs_obj.response = None
             log_probs_obj.padded = MetaData(self.pad_output)
-            out.set("log_probs", log_probs_obj)
+            out.set(self.log_probs_key, log_probs_obj)
 
         return out
 
@@ -1015,7 +1283,7 @@ class vLLMWrapper(CategoricalSequential):
                 None  # we don't have text in tokens mode so no all_text either
             )
             text_obj.padded = MetaData(self.pad_output)
-            out.set("text", text_obj)
+            out.set(self.text_key, text_obj)
 
         if self.return_tokens:
             tokens_obj = Tokens._from_tensordict(out.empty())
@@ -1055,7 +1323,7 @@ class vLLMWrapper(CategoricalSequential):
                     )
                     tokens_obj_flat.full = tokens_full_unpadded
             tokens_obj.padded = MetaData(self.pad_output)
-            out.set("tokens", tokens_obj)
+            out.set(self.tokens_key, tokens_obj)
 
         if self.return_masks:
             masks_obj = Masks._from_tensordict(out.empty())
@@ -1078,7 +1346,7 @@ class vLLMWrapper(CategoricalSequential):
                 masks_obj.update(_td)
             masks_obj.all_assistant_mask = None
             masks_obj.padded = MetaData(self.pad_output)
-            out.set("masks", masks_obj)
+            out.set(self.masks_key, masks_obj)
 
         if self.return_log_probs:
             if self.pad_output:
@@ -1138,7 +1406,7 @@ class vLLMWrapper(CategoricalSequential):
                 else:
                     log_probs_obj_flat.full = None
             log_probs_obj.padded = MetaData(self.pad_output)
-            out.set("log_probs", log_probs_obj)
+            out.set(self.log_probs_key, log_probs_obj)
         return out
 
     def _logprobs_from_tokens(
@@ -1249,6 +1517,7 @@ class vLLMWrapper(CategoricalSequential):
             log_probs_full_unpadded = request_output_tc.get(
                 "prompt_logprobs", as_list=True
             )
+            self._check_not_padded(log_probs_full_unpadded)
 
         assistant_mask_full_padded = None
         if response_struct is not None:
@@ -1276,15 +1545,17 @@ class vLLMWrapper(CategoricalSequential):
                 TensorDict(batch_size=out.batch_size).to_lazystack(0)
             )
             if self.pad_output:
+                self._check_padded(attention_mask_full_padded)
                 masks_obj.all_attention_mask = attention_mask_full_padded.bool()
                 if assistant_mask_full_padded is not None:
                     masks_obj.all_assistant_mask = assistant_mask_full_padded
             else:
+                self._check_not_padded(attention_mask_full_unpadded)
                 masks_obj.all_attention_mask = attention_mask_full_unpadded
                 if assistant_mask_full_unpadded is not None:
                     masks_obj.all_assistant_mask = assistant_mask_full_unpadded
             masks_obj.padded = MetaData(self.pad_output)
-            out.set("masks", masks_obj)
+            out.set(self.masks_key, masks_obj)
 
         # Build output TensorClass objects
         if self.return_text:
@@ -1295,7 +1566,7 @@ class vLLMWrapper(CategoricalSequential):
             text_obj.response = None
             text_obj.full = None
             text_obj.padded = MetaData(self.pad_output)
-            out.set("text", text_obj)
+            out.set(self.text_key, text_obj)
 
         if self.return_tokens:
             tokens_obj = Tokens._from_tensordict(
@@ -1303,25 +1574,26 @@ class vLLMWrapper(CategoricalSequential):
             )
             if self.pad_output:
                 self._check_padded(tokens_full_padded)
-                tokens_obj.full = tokens_obj.prompt = tokens_full_padded
+                tokens_obj.full = tokens_full_padded
             else:
-                tokens_obj.full = tokens_obj.prompt = tokens_full_unpadded
+                tokens_obj.full = tokens_full_unpadded
             tokens_obj.response = None
             tokens_obj.padded = MetaData(self.pad_output)
-            out.set("tokens", tokens_obj)
+            out.set(self.tokens_key, tokens_obj)
 
         if self.return_log_probs:
             log_probs_obj = LogProbs._from_tensordict(
                 TensorDict(batch_size=out.batch_size).to_lazystack(0)
             )
             if self.pad_output:
-                log_probs_obj.full = log_probs_obj.prompt = log_probs_full_padded
+                self._check_padded(log_probs_full_padded)
+                log_probs_obj.full = log_probs_full_padded
             else:
                 self._check_not_padded(log_probs_full_unpadded)
-                log_probs_obj.full = log_probs_obj.prompt = log_probs_full_unpadded
+                log_probs_obj.full = log_probs_full_unpadded
             log_probs_obj.response = None
             log_probs_obj.padded = MetaData(self.pad_output)
-            out.set("log_probs", log_probs_obj)
+            out.set(self.log_probs_key, log_probs_obj)
 
         return out
 

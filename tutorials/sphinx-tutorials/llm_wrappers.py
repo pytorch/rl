@@ -173,7 +173,7 @@ try:
     )
 
     result_tf_text = transformers_text_wrapper(data_text)
-    print(f"Transformers Text Input Results:")
+    print("Transformers Text Input Results:")
     print(f"Generated text: {result_tf_text['text'].response}")
 
 except NameError:

@@ -14,13 +14,17 @@ together to create a complete reinforcement learning pipeline for language model
 
 2. **LLM Wrapper API** (`Modules`_): Unified interfaces for different LLM backends, including :class:`~torchrl.modules.llm.TransformersWrapper` for 
    Hugging Face models and :class:`~torchrl.modules.llm.vLLMWrapper` for vLLM inference. These wrappers provide consistent input/output formats across 
-   different backends.
+   different backends and an integrated interface for loss computation, data storage, grading, weight synchronization, etc.
 
 3. **Environments** (`Environments`_): The orchestration layer that manages data loading, tool execution, reward computation, and formatting. This includes 
    :class:`~torchrl.envs.llm.ChatEnv` for conversation management, dataset environments, and various transforms for tool integration.
 
 4. **Objectives** (`Objectives`_): Specialized loss functions for LLM training, including :class:`~torchrl.objectives.llm.GRPOLoss` for Group Relative
    Policy Optimization and :class:`~torchrl.objectives.llm.SFTLoss` for supervised fine-tuning.
+
+5. **Collectors** (`Collectors`_): Collectors are used to collect data from the environment and store it in a format that can be used for training. This includes 
+   :class:`~torchrl.collectors.llm.LLMCollector` for collecting data from the environment and :class:`~torchrl.collectors.llm.RayLLMCollector` for collecting 
+   data in distributed settings using Ray.
 
 These components work together to create a complete pipeline: environments load and format data, LLM wrappers handle inference, data structures maintain 
 conversation context, and objectives compute training losses. The modular design allows you to mix and match components based on your specific use case.
@@ -406,6 +410,8 @@ Utils
 
 Collectors
 ----------
+
+.. _Collectors:
 
 TorchRL offers specialized collector classes (:class:`~torchrl.collectors.llm.LLMCollector` and :class:`~torchrl.collectors.llm.RayLLMCollector`) that are tailored for LLM use cases. We also provide dedicated updaters for some inference engines.
 

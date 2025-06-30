@@ -8,13 +8,23 @@ import argparse
 import importlib.util
 
 import os
+from functools import partial
 
 import pytest
 import torch
-
 from tensordict import lazy_stack, set_list_to_stack, TensorDict
+
+from tensordict.utils import _zip_strict
 from torchrl.data.llm import History
-from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
+from torchrl.envs.llm.transforms.kl import (
+    KLComputation,
+    KLRewardTransform,
+    RetrieveKL,
+    RetrieveLogProb,
+)
+from torchrl.modules.llm import Text, TransformersWrapper, vLLMWrapper
+
+from torchrl.modules.llm.policies.common import Masks, Tokens
 from transformers import AutoTokenizer
 
 
@@ -148,12 +158,14 @@ def sample_tokens(vllm_instance):
     return tokenized["input_ids"], tokenized["attention_mask"]
 
 
-def check_output_shapes(out, pad_output):
+def check_output_shapes(out, pad_output, requested_log_probs=False):
     if pad_output:
         # We can get all tensors or they are none
         log_probs = out.get("log_probs")
         masks = out.get("masks")
         tokens = out.get("tokens")
+        text = out.get("text")
+
         # Test the all_ tensors
         if log_probs is not None:
             all_logprobs = log_probs.full
@@ -169,6 +181,11 @@ def check_output_shapes(out, pad_output):
             all_tokens = tokens.full
         else:
             all_tokens = None
+        if text is not None:
+            text.full
+        else:
+            pass
+
         shapes = set()
         if all_logprobs is not None:
             shapes.add(all_logprobs.shape)
@@ -215,10 +232,29 @@ def check_output_shapes(out, pad_output):
             )
 
         assert len(shapes) <= 1, shapes
+
+        # Check that if 'full' is defined, either both 'prompt' and 'response' must be set or neither of them
+        if requested_log_probs:
+            for obj_name, obj in [
+                ("log_probs", log_probs),
+                ("tokens", tokens),
+                ("text", text),
+            ]:
+                if obj is not None and obj.get("full", as_list=True) is not None:
+                    has_prompt = obj.get("prompt", as_list=True) is not None
+                    has_response = obj.get("response", as_list=True) is not None
+                    assert (has_prompt and has_response) or (
+                        not has_prompt and not has_response
+                    ), (
+                        f"{obj_name}: if 'full' is defined, either both 'prompt' and 'response' must be set or neither of them. "
+                        f"prompt={has_prompt}, response={has_response}, full={obj.full is not None}"
+                    )
     else:
         # we can simply iterate over out
         for _out in out.unbind(0):
-            check_output_shapes(_out, pad_output=not _out.ndim)
+            check_output_shapes(
+                _out, pad_output=not _out.ndim, requested_log_probs=requested_log_probs
+            )
 
 
 @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
@@ -296,7 +332,7 @@ class TestVLLMWrapper:
 
         # Run wrapper
         result = wrapper(data)
-        check_output_shapes(result, pad_output)
+        check_output_shapes(result, pad_output, requested_log_probs=not generate)
 
         # Check output structure
         for key in expected_out_keys:
@@ -386,7 +422,6 @@ class TestVLLMWrapper:
             model,
             tokenizer=tokenizer,
             input_mode="text",
-            input_key="prompt",
             generate=generate,
             return_log_probs=return_log_probs,
             return_text=True,
@@ -396,14 +431,20 @@ class TestVLLMWrapper:
         )
 
         # Check input keys
-        assert wrapper.in_keys == ["prompt"]
+        if generate:
+            assert wrapper.in_keys == [("text", "prompt")]
+        else:
+            assert wrapper.in_keys == [("text", "full")]
 
         # Create input data
-        data = TensorDict(prompt=sample_text, batch_size=(2,))
+        if generate:
+            data = TensorDict(text=Text(prompt=sample_text), batch_size=(2,))
+        else:
+            data = TensorDict(text=Text(full=sample_text), batch_size=(2,))
 
         # Run wrapper
         result = wrapper(data)
-        check_output_shapes(result, pad_output)
+        check_output_shapes(result, pad_output, requested_log_probs=not generate)
 
         # Check output structure
         expected_keys = ["text", "masks", "tokens"]
@@ -415,7 +456,10 @@ class TestVLLMWrapper:
 
         # Check text output
         text_obj = result["text"]
-        assert text_obj.prompt == sample_text
+        if generate:
+            assert text_obj.prompt == sample_text
+        else:
+            assert text_obj.full == sample_text
         if generate:
             assert text_obj.response is not None
 
@@ -479,7 +523,7 @@ class TestVLLMWrapper:
 
         # Run wrapper
         result = wrapper(data)
-        check_output_shapes(result, pad_output)
+        check_output_shapes(result, pad_output, requested_log_probs=not generate)
 
         # Check output structure
         expected_keys = ["text", "masks", "tokens"]
@@ -596,7 +640,9 @@ class TestVLLMWrapper:
 
         data = TensorDict(history=history, batch_size=(batch_size,))
         result = wrapper(data)
-        check_output_shapes(result, pad_output=wrapper.pad_output)
+        check_output_shapes(
+            result, pad_output=wrapper.pad_output, requested_log_probs=False
+        )
 
         # Check that all expected keys are present
         expected_keys = ["text", "masks", "tokens", "log_probs"]
@@ -641,7 +687,9 @@ class TestVLLMWrapper:
         # Create data with custom key
         data = TensorDict(custom_history_key=sample_history, batch_size=(2,))
         result = wrapper(data)
-        check_output_shapes(result, pad_output=wrapper.pad_output)
+        check_output_shapes(
+            result, pad_output=wrapper.pad_output, requested_log_probs=False
+        )
 
         # Check that wrapper works correctly
         expected_keys = ["text", "masks", "tokens", "log_probs"]
@@ -701,7 +749,9 @@ class TestVLLMWrapper:
         # Run wrapper
         data = TensorDict(history=sample_history, batch_size=(2,))
         result = wrapper(data)
-        check_output_shapes(result, pad_output=wrapper.pad_output)
+        check_output_shapes(
+            result, pad_output=wrapper.pad_output, requested_log_probs=False
+        )
 
         # Check that only expected keys are present
         for key in expected_out_keys:
@@ -734,7 +784,9 @@ class TestVLLMWrapper:
 
         data = TensorDict(history=sample_history, batch_size=(2,))
         result = wrapper(data)
-        check_output_shapes(result, pad_output=wrapper.pad_output)
+        check_output_shapes(
+            result, pad_output=wrapper.pad_output, requested_log_probs=True
+        )
 
         # Check that log_probs are present
         assert "log_probs" in result
@@ -744,7 +796,7 @@ class TestVLLMWrapper:
 
         # Check that prompt_logprobs are present
         log_probs_obj = result["log_probs"]
-        assert log_probs_obj.get("prompt", as_list=True) is not None
+        assert log_probs_obj.get("full", as_list=True) is not None
 
     # ================================================
     # TensorClass Structure Tests
@@ -832,7 +884,9 @@ class TestVLLMWrapper:
 
         data = TensorDict(history=sample_history, batch_size=(2,))
         result = wrapper(data)
-        check_output_shapes(result, pad_output=wrapper.pad_output)
+        check_output_shapes(
+            result, pad_output=wrapper.pad_output, requested_log_probs=False
+        )
 
         # Use as_list=True to get lists instead of trying to stack
         text_list = result.get("text", as_list=True)
@@ -898,19 +952,20 @@ class TestVLLMWrapper:
             return_log_probs=return_log_probs,
             pad_output=pad_output,
             num_samples=num_samples,
-            input_key="prompt" if input_mode == "text" else None,
         )
         if input_mode == "history":
             data = TensorDict(history=sample_history, batch_size=(2,))
         elif input_mode == "text":
-            data = TensorDict(prompt=sample_text, batch_size=(2,))
+            data = TensorDict({("text", "prompt"): sample_text}, batch_size=(2,))
         elif input_mode == "tokens":
-            data = TensorDict(tokens=sample_tokens[0], batch_size=(2,))
+            data = TensorDict({("tokens", "prompt"): sample_tokens[0]}, batch_size=(2,))
         else:
             raise ValueError(f"Invalid input mode: {input_mode}")
         result = wrapper(data)
         assert result.batch_size == (2, num_samples)
-        check_output_shapes(result, pad_output=wrapper.pad_output)
+        check_output_shapes(
+            result, pad_output=wrapper.pad_output, requested_log_probs=False
+        )
 
 
 @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
@@ -989,7 +1044,7 @@ class TestTransformersWrapper:
 
         # Run wrapper
         result = wrapper(data)
-        check_output_shapes(result, pad_output)
+        check_output_shapes(result, pad_output, requested_log_probs=not generate)
 
         # Check output structure
         for key in expected_out_keys:
@@ -1079,7 +1134,6 @@ class TestTransformersWrapper:
             model,
             tokenizer=tokenizer,
             input_mode="text",
-            input_key="prompt",
             generate=generate,
             return_log_probs=return_log_probs,
             return_text=True,
@@ -1090,14 +1144,20 @@ class TestTransformersWrapper:
         )
 
         # Check input keys
-        assert wrapper.in_keys == ["prompt"]
+        if generate:
+            assert wrapper.in_keys == [("text", "prompt")]
+        else:
+            assert wrapper.in_keys == [("text", "full")]
 
         # Create input data
-        data = TensorDict(prompt=sample_text, batch_size=(2,))
+        if generate:
+            data = TensorDict(text=Text(prompt=sample_text), batch_size=(2,))
+        else:
+            data = TensorDict(text=Text(full=sample_text), batch_size=(2,))
 
         # Run wrapper
         result = wrapper(data)
-        check_output_shapes(result, pad_output)
+        check_output_shapes(result, pad_output, requested_log_probs=not generate)
 
         # Check output structure
         expected_keys = ["text", "masks", "tokens"]
@@ -1109,7 +1169,10 @@ class TestTransformersWrapper:
 
         # Check text output
         text_obj = result["text"]
-        assert text_obj.prompt == sample_text
+        if generate:
+            assert text_obj.prompt == sample_text
+        else:
+            assert text_obj.full == sample_text
         if generate:
             assert text_obj.response is not None
 
@@ -1174,7 +1237,7 @@ class TestTransformersWrapper:
 
         # Run wrapper
         result = wrapper(data)
-        check_output_shapes(result, pad_output)
+        check_output_shapes(result, pad_output, requested_log_probs=not generate)
 
         # Check output structure
         expected_keys = ["text", "masks", "tokens"]
@@ -1292,7 +1355,9 @@ class TestTransformersWrapper:
 
         data = TensorDict(history=history, batch_size=(batch_size,))
         result = wrapper(data)
-        check_output_shapes(result, pad_output=wrapper.pad_output)
+        check_output_shapes(
+            result, pad_output=wrapper.pad_output, requested_log_probs=False
+        )
 
         # Check that all expected keys are present
         expected_keys = ["text", "masks", "tokens", "log_probs"]
@@ -1338,7 +1403,9 @@ class TestTransformersWrapper:
         # Create data with custom key
         data = TensorDict(custom_history_key=sample_history, batch_size=(2,))
         result = wrapper(data)
-        check_output_shapes(result, pad_output=wrapper.pad_output)
+        check_output_shapes(
+            result, pad_output=wrapper.pad_output, requested_log_probs=False
+        )
 
         # Check that wrapper works correctly
         expected_keys = ["text", "masks", "tokens", "log_probs"]
@@ -1399,7 +1466,9 @@ class TestTransformersWrapper:
         # Run wrapper
         data = TensorDict(history=sample_history, batch_size=(2,))
         result = wrapper(data)
-        check_output_shapes(result, pad_output=wrapper.pad_output)
+        check_output_shapes(
+            result, pad_output=wrapper.pad_output, requested_log_probs=False
+        )
 
         # Check that only expected keys are present
         for key in expected_out_keys:
@@ -1433,7 +1502,9 @@ class TestTransformersWrapper:
 
         data = TensorDict(history=sample_history, batch_size=(2,))
         result = wrapper(data)
-        check_output_shapes(result, pad_output=wrapper.pad_output)
+        check_output_shapes(
+            result, pad_output=wrapper.pad_output, requested_log_probs=True
+        )
 
         # Check that log_probs are present
         assert "log_probs" in result
@@ -1443,7 +1514,7 @@ class TestTransformersWrapper:
 
         # Check that prompt_logprobs are present
         log_probs_obj = result["log_probs"]
-        assert log_probs_obj.prompt is not None
+        assert log_probs_obj.full is not None
 
     # ================================================
     # TensorClass Structure Tests
@@ -1533,7 +1604,9 @@ class TestTransformersWrapper:
 
         data = TensorDict(history=sample_history, batch_size=(2,))
         result = wrapper(data)
-        check_output_shapes(result, pad_output=wrapper.pad_output)
+        check_output_shapes(
+            result, pad_output=wrapper.pad_output, requested_log_probs=False
+        )
 
         # Use as_list=True to get lists instead of trying to stack
         text_list = result.get("text", as_list=True)
@@ -1599,20 +1672,21 @@ class TestTransformersWrapper:
             return_log_probs=return_log_probs,
             pad_output=pad_output,
             num_samples=num_samples,
-            input_key="prompt" if input_mode == "text" else None,
             generate_kwargs={"max_new_tokens": 10, "do_sample": True},
         )
         if input_mode == "history":
             data = TensorDict(history=sample_history, batch_size=(2,))
         elif input_mode == "text":
-            data = TensorDict(prompt=sample_text, batch_size=(2,))
+            data = TensorDict({("text", "prompt"): sample_text}, batch_size=(2,))
         elif input_mode == "tokens":
-            data = TensorDict(tokens=sample_tokens[0], batch_size=(2,))
+            data = TensorDict({("tokens", "prompt"): sample_tokens[0]}, batch_size=(2,))
         else:
             raise ValueError(f"Invalid input mode: {input_mode}")
         result = wrapper(data)
         assert result.batch_size == (2, num_samples)
-        check_output_shapes(result, pad_output=wrapper.pad_output)
+        check_output_shapes(
+            result, pad_output=wrapper.pad_output, requested_log_probs=False
+        )
 
 
 class TestChatEnvIntegration:
@@ -1638,6 +1712,454 @@ class TestChatEnvIntegration:
         r, r_ = env.step_and_maybe_reset(r)
         r = policy(r_)
         r, r_ = env.step_and_maybe_reset(r)
+
+    @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
+    @pytest.mark.parametrize("ref_input_mode", ["tokens"], ids=["tokens"])
+    def test_chat_env_kl(
+        self, transformers_instance, vllm_instance, pad_output, ref_input_mode
+    ):
+        """Test that the wrapper works correctly with the ChatEnv."""
+        import vllm.envs as envs
+        from torchrl.envs.llm import GSM8KEnv
+
+        envs.VLLM_HOST_IP = "0.0.0.0" or "127.0.0.1"
+
+        vllm_model, vllm_tokenizer = vllm_instance
+        tf_model, tf_tokenizer = transformers_instance
+
+        # a policy
+        policy = vLLMWrapper(
+            vllm_model,
+            tokenizer=vllm_tokenizer,
+            input_mode="history",
+            generate=True,
+            return_text=True,
+            return_tokens=True,
+            return_masks=True,
+            return_log_probs=True,
+            pad_output=pad_output,
+        )
+        ref_model = TransformersWrapper(
+            tf_model,
+            tokenizer=tf_tokenizer,
+            input_mode="tokens",
+            # TODO: check that generate=True causes an error
+            generate=False,
+            return_log_probs=True,
+            pad_output=pad_output,
+        )
+        env = GSM8KEnv(max_steps=10, num_envs=3)
+        env = env.append_transform(KLRewardTransform(ref_model))
+        r = env.rollout(1, policy)
+        reward = r.get(("next", "reward"), as_list=not pad_output)
+        assert reward is not None
+        if pad_output:
+            assert reward.shape[0] == 3
+            assert reward.shape[1] == 1
+            assert reward.shape[2] > 1
+            assert reward.shape[3] == 1
+        else:
+            assert len(reward) == 3
+            for r in reward:
+                assert r.shape[0] == 1
+                assert r.shape[1] > 1
+                assert r.shape[2] == 1
+
+    def test_retrievekl_transform(self, transformers_instance, vllm_instance):
+        """Test that the RetrieveKL transform works correctly."""
+        from torchrl.collectors.llm.base import LLMCollector
+        from torchrl.envs.llm import GSM8KEnv
+
+        model, tokenizer = transformers_instance
+        vllm_model, vllm_tokenizer = vllm_instance
+        ref_model = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode="history",
+            generate=False,
+            return_log_probs=True,
+        )
+        env = GSM8KEnv(max_steps=1, num_envs=3)
+        env = env.append_transform(RetrieveKL("from_collector", ref_model))
+        c = LLMCollector(
+            env,
+            policy_factory=partial(
+                vLLMWrapper,
+                vllm_model,
+                tokenizer=vllm_tokenizer,
+                input_mode="history",
+                generate=True,
+                return_text=True,
+            ),
+            dialog_turns_per_batch=6,
+        )
+        for d in c:
+            print(d)
+            break
+        return
+
+
+class TestKLTransforms:
+    """Comprehensive tests for KL-related transforms with different input modes and configurations."""
+
+    @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
+    @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
+    @pytest.mark.parametrize(
+        "assistant_only", [True, False], ids=["assistant_only", "all_tokens"]
+    )
+    @pytest.mark.parametrize(
+        "input_mode", ["history", "text", "tokens"], ids=["history", "text", "tokens"]
+    )
+    def test_retrieve_log_prob_input_modes(
+        self,
+        transformers_instance,
+        sample_history_assistant,
+        sample_text,
+        sample_tokens,
+        pad_output,
+        assistant_only,
+        input_mode,
+    ):
+        """Test RetrieveLogProb with different input modes and assistant_only settings."""
+        model, tokenizer = transformers_instance
+
+        # Skip invalid combinations
+        if assistant_only and input_mode != "history":
+            pytest.skip("assistant_only=True requires input_mode='history'")
+
+        # Create test data based on input mode
+        if input_mode == "history":
+            history = sample_history_assistant
+            data = TensorDict(history=history, batch_size=(2,))
+        elif input_mode == "text":
+            history = None  # Not used in text mode
+            prompts = sample_text
+            data = TensorDict(text=Text(full=prompts), batch_size=(2,))
+        elif input_mode == "tokens":
+            history = None  # Not used in tokens mode
+            prompts = sample_tokens
+            data = TensorDict(
+                tokens=Tokens(full=prompts[0]),
+                masks=Masks(all_attention_mask=prompts[1]),
+                batch_size=(2,),
+            )
+        else:
+            raise ValueError(f"Invalid input_mode: {input_mode}")
+
+        # Create reference model with appropriate input mode
+        ref_model = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode=input_mode,
+            generate=False,
+            return_log_probs=True,
+            return_text=True,
+            return_tokens=True,
+            return_masks=True,
+            pad_output=pad_output,
+        )
+
+        # Create RetrieveLogProb transform
+        transform = RetrieveLogProb(
+            ref_model,
+            assistant_only=assistant_only,
+            tokenizer=tokenizer,
+        )
+
+        # Apply transform
+        result = transform(data)
+
+        # The log-probs key should be based on the model's log_probs_key
+        log_probs_key = (ref_model.log_probs_key, "full")
+        assert log_probs_key in result
+
+        # Check log-probs structure
+        if pad_output:
+            log_probs = result.get(log_probs_key)
+            assert isinstance(log_probs, torch.Tensor)
+            assert log_probs.shape[0] == 2  # batch size
+        else:
+            # For unpadded output, we get a list of tensors
+            log_probs = result.get(log_probs_key, as_list=True)
+            assert isinstance(log_probs, list)
+            assert len(log_probs) == 2  # batch size
+
+    @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
+    @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
+    @pytest.mark.parametrize(
+        "assistant_only", [True, False], ids=["assistant_only", "all_tokens"]
+    )
+    @pytest.mark.parametrize(
+        "input_mode", ["history", "text", "tokens"], ids=["history", "text", "tokens"]
+    )
+    def test_retrieve_kl_input_modes(
+        self,
+        transformers_instance,
+        sample_history_assistant,
+        sample_text,
+        sample_tokens,
+        pad_output,
+        assistant_only,
+        input_mode,
+    ):
+        """Test RetrieveKL with different input modes and assistant_only settings."""
+        model, tokenizer = transformers_instance
+
+        # Skip invalid combinations
+        if assistant_only and input_mode != "history":
+            pytest.skip("assistant_only=True requires input_mode='history'")
+
+        # Create test data based on input mode
+        if input_mode == "history":
+            history = sample_history_assistant
+            data = TensorDict(history=history, batch_size=(2,))
+        elif input_mode == "text":
+            history = None  # Not used in text mode
+            prompts = sample_text
+            data = TensorDict(text=Text(full=prompts), batch_size=(2,))
+        elif input_mode == "tokens":
+            history = None  # Not used in tokens mode
+            prompts = sample_tokens
+            data = TensorDict(
+                tokens=Tokens(full=prompts[0]),
+                masks=Masks(all_attention_mask=prompts[1]),
+                batch_size=(2,),
+            )
+        else:
+            raise ValueError(f"Invalid input_mode: {input_mode}")
+
+        # Create generation and reference models with appropriate input mode
+        gen_model = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode=input_mode,
+            generate=False,
+            return_log_probs=True,
+            return_text=True,
+            return_tokens=True,
+            return_masks=True,
+            pad_output=pad_output,
+            log_probs_key="gen_log_probs",
+        )
+
+        ref_model = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode=input_mode,
+            generate=False,
+            return_log_probs=True,
+            return_text=True,
+            return_tokens=True,
+            return_masks=True,
+            pad_output=pad_output,
+            log_probs_key="ref_log_probs",
+        )
+
+        # Create RetrieveKL transform
+        transform = RetrieveKL(
+            gen_model=gen_model,
+            ref_model=ref_model,
+            assistant_only=assistant_only,
+            tokenizer=tokenizer,
+        )
+
+        # Apply transform
+        data = data.to_lazystack(0)
+        result = transform(data)
+
+        # Check that KL is present
+        # Check that both log-probs and KL are present
+        assert ("gen_log_probs", "full") in result
+        assert ("ref_log_probs", "full") in result
+        assert "kl" in result
+
+        # Check KL structure
+        if pad_output:
+            kl = result.get("kl")
+            assert isinstance(kl, torch.Tensor)
+            assert kl.shape[0] == 2  # batch size
+        else:
+            kl = result.get("kl", as_list=True)
+            # For unpadded output, we get a list of tensors
+            assert isinstance(kl, list)
+            assert len(kl) == 2  # batch size
+
+    @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
+    def test_retrieve_log_prob_assistant_only_validation(
+        self, transformers_instance, sample_text
+    ):
+        """Test that assistant_only=True with non-history input_mode raises an error."""
+        model, tokenizer = transformers_instance
+
+        # Create reference model with text input mode
+        ref_model = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode="text",
+            generate=False,
+            return_log_probs=True,
+            pad_output=True,
+        )
+
+        # This should raise an error
+        with pytest.raises(
+            ValueError, match="The model must have `input_mode='history'` when"
+        ):
+            RetrieveLogProb(
+                ref_model,
+                assistant_only=True,  # This should fail with text input_mode
+                tokenizer=tokenizer,
+            )
+
+    @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
+    def test_retrieve_kl_assistant_only_validation(
+        self, transformers_instance, sample_text
+    ):
+        """Test that assistant_only=True with non-history input_mode raises an error."""
+        model, tokenizer = transformers_instance
+
+        # Create models with text input mode
+        gen_model = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode="text",
+            generate=False,
+            return_log_probs=True,
+            pad_output=True,
+            log_probs_key="gen_log_probs",
+        )
+
+        ref_model = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode="text",
+            generate=False,
+            return_log_probs=True,
+            pad_output=True,
+            log_probs_key="ref_log_probs",
+        )
+
+        # This should raise an error
+        with pytest.raises(
+            ValueError, match="The model must have `input_mode='history'` when"
+        ):
+            RetrieveKL(
+                gen_model=gen_model,
+                ref_model=ref_model,
+                assistant_only=True,  # This should fail with text input_mode
+                tokenizer=tokenizer,
+            )
+
+    @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
+    @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
+    def test_retrieve_kl_pad_output_consistency(
+        self, transformers_instance, sample_history_assistant, pad_output
+    ):
+        """Test that RetrieveKL enforces pad_output consistency between models."""
+        model, tokenizer = transformers_instance
+
+        # Create models with different pad_output settings
+        gen_model = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode="history",
+            generate=False,
+            return_log_probs=True,
+            pad_output=pad_output,
+            log_probs_key="gen_log_probs",
+        )
+
+        ref_model = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode="history",
+            generate=False,
+            return_log_probs=True,
+            pad_output=not pad_output,  # Different pad_output setting
+            log_probs_key="ref_log_probs",
+        )
+
+        # This should raise an error
+        with pytest.raises(ValueError, match="pad_output mismatch"):
+            RetrieveKL(
+                gen_model=gen_model,
+                ref_model=ref_model,
+                assistant_only=False,
+                tokenizer=tokenizer,
+            )
+
+    @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
+    @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
+    def test_kl_computation_transform(
+        self, transformers_instance, sample_history_assistant, pad_output
+    ):
+        """Test the KLComputation transform directly."""
+        model, tokenizer = transformers_instance
+
+        # Create models
+        gen_model = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode="history",
+            generate=False,
+            return_log_probs=True,
+            pad_output=pad_output,
+            log_probs_key="gen_log_probs",
+        )
+
+        ref_model = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode="history",
+            generate=False,
+            return_log_probs=True,
+            pad_output=pad_output,
+            log_probs_key="ref_log_probs",
+        )
+
+        # Create data
+        data = TensorDict(history=sample_history_assistant, batch_size=(2,))
+
+        # Get log-probs from both models
+        data = data.to_lazystack(0)
+        gen_result = gen_model(data)
+        ref_result = ref_model(data)
+
+        # Create next tensordict with log-probs and reward
+        next_td = TensorDict(batch_size=(2,)).to_lazystack(0)
+        next_td.update(gen_result, keys_to_update=[("gen_log_probs", "full")])
+        next_td.update(ref_result, keys_to_update=[("ref_log_probs", "full")])
+        next_td.update({"reward": torch.randn(2, 1, 1)})
+
+        # Create KLComputation transform
+        kl_transform = KLComputation(
+            gen_log_probs_key=("gen_log_probs", "full"),
+            ref_log_probs_key=("ref_log_probs", "full"),
+            kl_key="kl",
+            add_to_reward=True,
+            coef=1.0,
+        )
+
+        # Apply transform
+        result = kl_transform(data.set("next", next_td))
+
+        # Check that KL is computed
+        result = result["next"]
+        assert "kl" in result
+
+        if pad_output:
+            kl = result.get("kl")
+            assert isinstance(kl, torch.Tensor)
+            assert kl.shape[0] == 2  # batch size
+        else:
+            kl = result.get("kl", as_list=True)
+            assert isinstance(kl, list)
+            assert len(kl) == 2  # batch size
+
+        # Check that reward is modified
+        assert "reward" in result
+        reward = result.get("reward")
+        assert reward is not None
 
 
 class TestLogProbsComparison:
@@ -1669,10 +2191,12 @@ class TestLogProbsComparison:
             data = TensorDict(history=history, batch_size=(2,))
             input_key = "history"
         elif input_mode == "text":
+            history = None  # Not used in text mode
             prompts = sample_text
             data = TensorDict(text=prompts, batch_size=(2,))
             input_key = "text"
         elif input_mode == "tokens":
+            history = None  # Not used in tokens mode
             prompts = sample_tokens
             data = TensorDict(
                 input_ids=prompts[0],
@@ -1680,6 +2204,8 @@ class TestLogProbsComparison:
                 batch_size=(2,),
             )
             input_key = "input_ids"
+        else:
+            raise ValueError(f"Invalid input_mode: {input_mode}")
 
         # Create vLLM wrapper for generation
         vllm_gen_wrapper = vLLMWrapper(
@@ -1724,9 +2250,8 @@ class TestLogProbsComparison:
             # For history mode, we need to create new history with generated responses
             generated_texts = vllm_gen_result["text"].response
             new_chats = []
-            for i, (chat, gen_text) in enumerate(
-                zip(history.unbind(0), generated_texts)
-            ):
+            assert history is not None  # Type assertion for linter
+            for chat, gen_text in _zip_strict(history.unbind(0), generated_texts):
                 new_chat = chat.copy().append(
                     History(role="assistant", content=gen_text)
                 )
@@ -1760,6 +2285,8 @@ class TestLogProbsComparison:
                     combined = torch.cat([original_tokens[i], generated_tokens[i]])
                     new_tokens.append(combined)
             new_data = TensorDict(input_ids=new_tokens, batch_size=(2,))
+        else:
+            raise ValueError(f"Invalid input_mode: {input_mode}")
 
         # Step 3: Create log-probs only wrappers
         vllm_lp_wrapper = vLLMWrapper(

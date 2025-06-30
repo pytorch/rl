@@ -308,6 +308,19 @@ class Transform(nn.Module):
             value = [unravel_key(val) for val in value]
         self._out_keys_inv = value
 
+    @property
+    def collector(self) -> DataCollectorBase | None:  # noqa: F821 # type: ignore
+        """Returns the collector associated with the container, if it exists.
+
+        This can be used whenever the transform needs to be made aware of the collector or the policy associated with it.
+
+        Make sure to call this property only on transforms that are not nested in sub-processes.
+        The collector reference will not be passed to the workers of a :class:`~torchrl.envs.ParallelEnv` or
+        similar batched environments.
+
+        """
+        return self.container.collector
+
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
@@ -687,7 +700,7 @@ class Transform(nn.Module):
         return self_copy
 
     @property
-    def container(self):
+    def container(self) -> EnvBase | None:
         """Returns the env containing the transform.
 
         Examples:

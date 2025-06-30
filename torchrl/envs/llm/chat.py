@@ -22,7 +22,6 @@ from torchrl.envs.llm.transforms.dataloading import DataLoadingPrimer
 def _default_collate_fn(batch):
     # We want to rename the "text" key to "query"
     #  otherwise it will conflict with the "text" key in the tensordict returned by TorchRL components
-    print("batch", batch)
     if isinstance(batch, dict) and "text" in batch:
         batch["query"] = batch.pop("text")
     elif isinstance(batch, list):
@@ -180,7 +179,9 @@ class ChatEnv(EnvBase):
         self.system_prompt = system_prompt
         if apply_template in (True, None):
             self.apply_template = (
-                 apply_template or (template_kwargs is not None) or (tokenizer is not None)
+                apply_template
+                or (template_kwargs is not None)
+                or (tokenizer is not None)
             )
         else:
             self.apply_template = bool(apply_template)
