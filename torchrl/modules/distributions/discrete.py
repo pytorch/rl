@@ -11,9 +11,9 @@ from typing import Any, Sequence
 import torch
 import torch.distributions as D
 import torch.nn.functional as F
+from tensordict.utils import expand_as_right
 
 from torch.distributions.utils import lazy_property, logits_to_probs, probs_to_logits
-from tensordict.utils import expand_as_right
 
 __all__ = ["OneHotCategorical", "MaskedCategorical", "Ordinal", "OneHotOrdinal"]
 
@@ -281,7 +281,8 @@ class MaskedCategorical(D.Categorical):
         # Clamp logits to avoid numerical issues
         logits = self.logits
         if self._mask.dtype is torch.bool:
-            mask = (~self._mask) | (~logits.isfinite())
+            mask = expand_as_right(self._mask, logits)
+            mask = (~mask) | (~logits.isfinite())
             logits = torch.masked_fill(logits, mask, min_real)
         else:
             # logits are already masked

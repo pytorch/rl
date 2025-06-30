@@ -22,9 +22,9 @@ from torchrl.envs.llm.transforms.kl import (
     RetrieveKL,
     RetrieveLogProb,
 )
-from torchrl.modules.llm.policies.vllm_wrapper import vLLMWrapper
+from torchrl.modules.llm.policies.common import LogProbs, Masks, Text, Tokens
 from torchrl.modules.llm.policies.transformers_wrapper import TransformersWrapper
-from torchrl.modules.llm.policies.common import Text, Tokens, Masks, LogProbs
+from torchrl.modules.llm.policies.vllm_wrapper import vLLMWrapper
 from transformers import AutoTokenizer
 
 
@@ -2331,10 +2331,12 @@ class TestDistributionMethods:
 
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     @pytest.mark.parametrize("masking_strategy", ["sft", "rlhf", "generic"])
-    def test_vllm_distribution_methods(self, vllm_instance, sample_history_assistant, sample_tokens, masking_strategy):
+    def test_vllm_distribution_methods(
+        self, vllm_instance, sample_history_assistant, sample_tokens, masking_strategy
+    ):
         """Test that vLLM wrapper distribution methods work correctly."""
         model, tokenizer = vllm_instance
-        
+
         # vLLM doesn't support get_dist methods
         wrapper = vLLMWrapper(
             model,
@@ -2344,38 +2346,47 @@ class TestDistributionMethods:
             return_log_probs=True,
             return_masks=True,
         )
-        
+
         # Create test data
         td = TensorDict({"history": sample_history_assistant}, batch_size=(2,))
-        
+
         # Test that all distribution methods raise NotImplementedError
         with pytest.raises(NotImplementedError, match="vLLM does not return logits"):
             wrapper.get_dist(td)
-        
+
         with pytest.raises(NotImplementedError, match="vLLM does not return logits"):
             wrapper.get_sft_dist(td)
-        
+
         with pytest.raises(NotImplementedError, match="vLLM does not return logits"):
             wrapper.get_rlhf_dist(td)
-        
+
         with pytest.raises(NotImplementedError, match="vLLM does not return logits"):
             wrapper.get_generic_dist(td)
 
     @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
     @pytest.mark.parametrize("masking_strategy", ["sft", "rlhf", "generic"])
-    def test_transformers_distribution_methods(self, transformers_instance, sample_history_assistant, sample_tokens, masking_strategy):
+    def test_transformers_distribution_methods(
+        self,
+        transformers_instance,
+        sample_history_assistant,
+        sample_tokens,
+        masking_strategy,
+    ):
         """Test that Transformers wrapper distribution methods work correctly."""
         model, tokenizer = transformers_instance
-        
+
         # Use tokens input mode for SFT, history for RLHF/generic
         if masking_strategy == "sft":
             input_mode = "tokens"
             input_ids, attention_mask = sample_tokens
-            input_data = {"tokens": Tokens(full=input_ids), "masks": Masks(all_attention_mask=attention_mask)}
+            input_data = {
+                "tokens": Tokens(full=input_ids),
+                "masks": Masks(all_attention_mask=attention_mask),
+            }
         else:
             input_mode = "history"
             input_data = {"history": sample_history_assistant}
-        
+
         wrapper = TransformersWrapper(
             model,
             tokenizer=tokenizer,
@@ -2384,10 +2395,10 @@ class TestDistributionMethods:
             return_log_probs=True,
             return_masks=True,
         )
-        
+
         # Create test data with correct batch size
         td = TensorDict(input_data, batch_size=(2,))
-        
+
         # Test the appropriate distribution method
         if masking_strategy == "sft":
             dist = wrapper.get_sft_dist(td)
@@ -2395,12 +2406,12 @@ class TestDistributionMethods:
             dist = wrapper.get_rlhf_dist(td)
         elif masking_strategy == "generic":
             dist = wrapper.get_generic_dist(td)
-        
+
         # Verify that we get a distribution
         assert dist is not None
-        assert hasattr(dist, 'log_prob')
-        assert hasattr(dist, 'sample')
-        
+        assert hasattr(dist, "log_prob")
+        assert hasattr(dist, "sample")
+
         # Test that logits are available in the output
         td_out = wrapper(td.copy())
 
@@ -2420,10 +2431,12 @@ class TestDistributionMethods:
                 assert log_probs.shape == dummy_tokens.shape
 
     @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
-    def test_transformers_custom_masking(self, transformers_instance, sample_history_assistant):
+    def test_transformers_custom_masking(
+        self, transformers_instance, sample_history_assistant
+    ):
         """Test custom masking functionality."""
         model, tokenizer = transformers_instance
-        
+
         wrapper = TransformersWrapper(
             model,
             tokenizer=tokenizer,
@@ -2433,19 +2446,19 @@ class TestDistributionMethods:
             return_tokens=True,
             pad_output=True,
         )
-        
+
         td = TensorDict({"history": sample_history_assistant}, batch_size=(2,))
-        
+
         # Get the actual logits shape from the wrapper
         result = wrapper(td)
         lp = result["log_probs"].get("full")
-        
+
         # Create a custom mask matching the logits shape
         custom_mask = torch.zeros_like(lp, dtype=torch.bool)
         custom_mask[:, :5] = True  # Only first 5 tokens
-        
+
         dist = wrapper.get_dist_with_custom_mask(td, custom_mask)
-        
+
         assert dist is not None
         assert hasattr(dist, "log_prob")
 
@@ -2455,10 +2468,17 @@ class TestGRPOLossIntegration:
 
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     @pytest.mark.parametrize("masking_strategy", ["sft", "rlhf"])
-    def test_grpo_loss_with_transformers(self, vllm_instance, transformers_instance, sample_history, sample_tokens, masking_strategy):
+    def test_grpo_loss_with_transformers(
+        self,
+        vllm_instance,
+        transformers_instance,
+        sample_history,
+        sample_tokens,
+        masking_strategy,
+    ):
         """Test GRPOLoss with vLLM wrapper and different masking strategies."""
         from torchrl.objectives.llm.grpo import GRPOLoss
-        
+
         model, tokenizer = transformers_instance
         vllm_model, vllm_tokenizer = vllm_instance
 
@@ -2466,11 +2486,14 @@ class TestGRPOLossIntegration:
         if masking_strategy == "sft":
             input_mode = "tokens"
             input_ids, attention_mask = sample_tokens
-            input_data = {"tokens": Tokens(prompt=input_ids), "masks": Masks(all_attention_mask=attention_mask)}
+            input_data = {
+                "tokens": Tokens(prompt=input_ids),
+                "masks": Masks(all_attention_mask=attention_mask),
+            }
         else:
             input_mode = "history"
             input_data = {"history": sample_history}
-        
+
         wrapper_gen = vLLMWrapper(
             vllm_model,
             tokenizer=vllm_tokenizer,
@@ -2482,18 +2505,21 @@ class TestGRPOLossIntegration:
             pad_output=True,
             generate_kwargs={"max_tokens": 10},
         )
-     
+
         # Create test data with advantage and correct batch size
         td = TensorDict(input_data, batch_size=(2,)).to_lazystack(0)
         td = wrapper_gen(td)
         if masking_strategy == "rlhf":
-            # we need to invert the text to a history element
-            text = [t0 + t1 for t0, t1 in zip(td["text", "prompt"], td["text", "response"])]
+            # we need to invert the text to a history element
+            text = [
+                t0 + t1 for t0, t1 in zip(td["text", "prompt"], td["text", "response"])
+            ]
             h = History.from_text(text)
             td["history"] = td["history"].append(h[..., -1])
             assert td["history"].shape[-1] == 3
             assert td["history"][..., -1].role == ["assistant", "assistant"]
-        td["advantage"] = torch.randn(2, 10, 1)
+        # use a shape that can be broadcast
+        td["advantage"] = torch.randn(2, 1, 1)
 
         wrapper = TransformersWrapper(
             model,
@@ -2505,13 +2531,12 @@ class TestGRPOLossIntegration:
             return_masks=True,
             pad_output=True,
         )
-        
+
         # Create GRPOLoss with specified masking strategy
         loss_fn = GRPOLoss(
             actor_network=wrapper,
             masking_strategy=masking_strategy,
         )
-        
 
         # This should work without shape mismatch errors
         try:

@@ -97,7 +97,7 @@ def train(
         kl_to_ref_coeff=cfg.train.kl_to_ref_coeff if cfg.train.kl_coef_in_loss else 0.0,
         kl_to_inference_coeff=cfg.train.kl_to_inference_coeff,
         entropy_coeff=cfg.train.entropy_coeff,
-        # use prompt/response masking for regular training, and assistant masking for reasoning
+        # use prompt/response masking for regular training, and assistant masking for reasoning
         masking_strategy="rlhf" if cfg.env.reasoning else "sft",
         device=train_device,
     )

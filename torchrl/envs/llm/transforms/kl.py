@@ -211,7 +211,7 @@ class KLRewardTransform(Transform):
 
     @property
     def pad_output(self):
-        # We need pad_output to match the pad_output of the inference model
+        # We need pad_output to match the pad_output of the inference model
         return self.ref_model.pad_output
 
     @property
@@ -637,9 +637,7 @@ class RetrieveLogProb(Transform):
         Returns:
             Masked log-probs tensor
         """
-        with torch.device(
-            self.device
-        ) if self.device is not None else nullcontext():
+        with torch.device(self.device) if self.device is not None else nullcontext():
             # Get assistant mask
             assistant_masks = td.get(("masks", "all_assistant_mask"), as_list=True)
             log_probs = td.get(lp_key, as_list=True)

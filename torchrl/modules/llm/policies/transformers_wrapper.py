@@ -314,7 +314,7 @@ class TransformersWrapper(CategoricalSequential):
         # Additional transformers-specific settings
         self.chat_template_name = chat_template_name
         self.chat_template = chat_template
-        
+
         # Flag to track when we're in a get_dist call
         self._in_get_dist_call = False
 
@@ -1280,7 +1280,9 @@ class TransformersWrapper(CategoricalSequential):
 
         return out
 
-    def _from_transformers_logprobs_tokens(self, td: TensorDictBase, cfg: dict | None, out: TensorDictBase) -> TensorDictBase:
+    def _from_transformers_logprobs_tokens(
+        self, td: TensorDictBase, cfg: dict | None, out: TensorDictBase
+    ) -> TensorDictBase:
         """Compute log-probs from tokens input."""
         # Validate input
         if self.input_key not in td:
@@ -1494,16 +1496,23 @@ class TransformersWrapper(CategoricalSequential):
         **kwargs,
     ) -> D.Distribution:
         """Get distribution from logits/log-probs with optional masking.
-        
+
         This method enables logits computation for distribution creation.
         """
         self._in_get_dist_call = True
         self.out_keys += ["logits"]
         try:
             return super().get_dist(
-                tensordict, tensordict_out, logits_key, mask_key,
-                as_padded_tensor, as_nested_tensor, padding_value,
-                padding_side, layout, **kwargs
+                tensordict,
+                tensordict_out,
+                logits_key,
+                mask_key,
+                as_padded_tensor,
+                as_nested_tensor,
+                padding_value,
+                padding_side,
+                layout,
+                **kwargs,
             )
         finally:
             self._in_get_dist_call = False
@@ -1519,14 +1528,19 @@ class TransformersWrapper(CategoricalSequential):
         **kwargs,
     ) -> D.Distribution:
         """Get distribution masked to only include response tokens (exclude prompt).
-        
+
         This method enables logits computation for distribution creation.
         """
         self._in_get_dist_call = True
         self.out_keys += ["logits"]
         try:
             return super().get_dist_with_prompt_mask(
-                tensordict, tokens_key, logits_key, assistant_mask_key, attention_mask_key, **kwargs
+                tensordict,
+                tokens_key,
+                logits_key,
+                assistant_mask_key,
+                attention_mask_key,
+                **kwargs,
             )
         finally:
             self._in_get_dist_call = False
@@ -1540,7 +1554,7 @@ class TransformersWrapper(CategoricalSequential):
         **kwargs,
     ) -> D.Distribution:
         """Get distribution masked to only include assistant tokens.
-        
+
         This method enables logits computation for distribution creation.
         """
         self._in_get_dist_call = True
@@ -1552,6 +1566,7 @@ class TransformersWrapper(CategoricalSequential):
         finally:
             self._in_get_dist_call = False
             self.out_keys.remove("logits")
+
     def get_dist_with_attention_mask(
         self,
         tensordict: TensorDictBase,
@@ -1560,7 +1575,7 @@ class TransformersWrapper(CategoricalSequential):
         **kwargs,
     ) -> D.Distribution:
         """Get distribution masked using attention mask.
-        
+
         This method enables logits computation for distribution creation.
         """
         self._in_get_dist_call = True
@@ -1572,7 +1587,7 @@ class TransformersWrapper(CategoricalSequential):
         finally:
             self._in_get_dist_call = False
             self.out_keys.remove("logits")
-    
+
     def get_dist_with_custom_mask(
         self,
         tensordict: TensorDictBase,
@@ -1581,7 +1596,7 @@ class TransformersWrapper(CategoricalSequential):
         **kwargs,
     ) -> D.Distribution:
         """Get distribution with custom mask.
-        
+
         This method enables logits computation for distribution creation.
         """
         self._in_get_dist_call = True
@@ -1597,7 +1612,7 @@ class TransformersWrapper(CategoricalSequential):
     # Convenience methods for common LLM training scenarios
     def get_sft_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
         """Get distribution suitable for SFT loss (response tokens only).
-        
+
         This method enables logits computation for distribution creation.
         """
         self._in_get_dist_call = True
@@ -1607,10 +1622,10 @@ class TransformersWrapper(CategoricalSequential):
         finally:
             self._in_get_dist_call = False
             self.out_keys.remove("logits")
-    
+
     def get_rlhf_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
         """Get distribution suitable for RLHF loss (assistant tokens only).
-        
+
         This method enables logits computation for distribution creation.
         """
         self._in_get_dist_call = True
@@ -1620,10 +1635,10 @@ class TransformersWrapper(CategoricalSequential):
         finally:
             self._in_get_dist_call = False
             self.out_keys.remove("logits")
-    
+
     def get_generic_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
         """Get distribution suitable for generic losses (all tokens).
-        
+
         This method enables logits computation for distribution creation.
         """
         self._in_get_dist_call = True
@@ -1631,5 +1646,5 @@ class TransformersWrapper(CategoricalSequential):
         try:
             return super().get_generic_dist(tensordict, **kwargs)
         finally:
-            self._in_get_dist_call = False  
+            self._in_get_dist_call = False
             self.out_keys.remove("logits")

@@ -533,7 +533,7 @@ def make_env_sync(cfg: DictConfig, devices: list[int] | None = None):
         )
     else:
         raise NotImplementedError(f"Dataset {cfg.env.dataset} not implemented")
-    
+
     if cfg.env.reasoning:
         env = env.append_transform(
             AddThinkingPrompt(
@@ -545,9 +545,9 @@ def make_env_sync(cfg: DictConfig, devices: list[int] | None = None):
             )
         )
         env = env.append_transform(
-            # RetrieveKL will be lazily initialized in the collector.
-            # We use RetrieveKL instead of KLRewardTransform because the assistant response may change when
-            # adding the thinking prompt, requiring a second pass in vllm to compute the log-probs.
+            # RetrieveKL will be lazily initialized in the collector.
+            # We use RetrieveKL instead of KLRewardTransform because the assistant response may change when
+            # adding the thinking prompt, requiring a second pass in vllm to compute the log-probs.
             RetrieveKL(
                 ref_model=ref_model,
                 coef=cfg.train.kl_to_ref_coeff,
@@ -621,9 +621,9 @@ def make_env_async(cfg: DictConfig, devices: list[int] | None = None):
             )
         )
         env = env.append_transform(
-            # RetrieveKL will be lazily initialized in the collector.
-            # We use RetrieveKL instead of KLRewardTransform because the assistant response may change when
-            # adding the thinking prompt, requiring a second pass in vllm to compute the log-probs.
+            # RetrieveKL will be lazily initialized in the collector.
+            # We use RetrieveKL instead of KLRewardTransform because the assistant response may change when
+            # adding the thinking prompt, requiring a second pass in vllm to compute the log-probs.
             RetrieveKL(
                 ref_model=ref_model,
                 coef=cfg.train.kl_to_ref_coeff,

@@ -16,7 +16,11 @@ from tensordict import (
     TensorDictBase,
     TensorDictParams,
 )
-from tensordict.nn import TensorDictModule, ProbabilisticTensorDictSequential, ProbabilisticTensorDictModule
+from tensordict.nn import (
+    ProbabilisticTensorDictModule,
+    ProbabilisticTensorDictSequential,
+    TensorDictModule,
+)
 from tensordict.utils import _zip_strict
 from torch import distributions as d
 
@@ -67,9 +71,9 @@ class GRPOLoss(ClipPPOLoss):
         The masking_strategy parameter is crucial for LLM training scenarios. It determines which tokens are included
         in the loss computation:
         - "sft": Only response tokens (excludes prompt tokens) - suitable for single-turn conversations
-        - "rlhf": Only assistant tokens (excludes user/system tokens) - suitable for multi-turn conversations  
+        - "rlhf": Only assistant tokens (excludes user/system tokens) - suitable for multi-turn conversations
         - "generic": All valid tokens (excludes padding tokens) - suitable for generic scenarios
-        
+
         The masking strategy must match the strategy used for advantage computation to avoid shape mismatches.
 
     Keyword Args:
@@ -137,7 +141,7 @@ class GRPOLoss(ClipPPOLoss):
         **kwargs,
     ):
         """Initialize GRPOLoss with explicit masking strategy.
-        
+
         Args:
             masking_strategy: The masking strategy to use for distribution creation.
                 - "sft": Use prompt masking (response tokens only, suitable for single-turn)
@@ -166,20 +170,15 @@ class GRPOLoss(ClipPPOLoss):
         # We don't want to use the string action but the tokens
         self._set_in_keys()
         self.masking_strategy = masking_strategy
-        # self.set_keys(sample_log_prob=("log_probs", "full"), action=("tokens", "full"))
-        if self.masking_strategy == "sft":
-            self.set_keys(sample_log_prob=("log_probs", "full"), action=("tokens", "response"))
-        elif self.masking_strategy == "rlhf":
-            self.set_keys(sample_log_prob=("log_probs", "full"), action=("tokens", "full"))
-        else:
-            self.set_keys(sample_log_prob=("log_probs", "full"), action=("tokens", "full"))
+        # Always use the full tokens for the action
+        self.set_keys(sample_log_prob=("log_probs", "full"), action=("tokens", "full"))
         # TODO: make this a buffer
         self.kl_to_ref_coeff = kl_to_ref_coeff
         self.kl_to_inference_coeff = kl_to_inference_coeff
 
     def _get_cur_log_prob(self, tensordict):
         """Override to use LLM-specific distribution with explicit masking strategy.
-        
+
         This ensures that the loss is computed with the correct masking strategy,
         and provides helpful error messages when there are shape mismatches.
         """
@@ -188,18 +187,23 @@ class GRPOLoss(ClipPPOLoss):
             (ProbabilisticTensorDictSequential, ProbabilisticTensorDictModule),
         ) or hasattr(self.actor_network, "get_dist"):
             # Use the specified masking strategy
-            if self.masking_strategy == "sft" and hasattr(self.actor_network, "get_sft_dist"):
+            if self.masking_strategy == "sft" and hasattr(
+                self.actor_network, "get_sft_dist"
+            ):
                 dist = self.actor_network.get_sft_dist(tensordict)
-            elif self.masking_strategy == "rlhf" and hasattr(self.actor_network, "get_rlhf_dist"):
+            elif self.masking_strategy == "rlhf" and hasattr(
+                self.actor_network, "get_rlhf_dist"
+            ):
                 dist = self.actor_network.get_rlhf_dist(tensordict)
                 print("tensordict after get dist", tensordict)
-            elif self.masking_strategy == "generic" and hasattr(self.actor_network, "get_generic_dist"):
+            elif self.masking_strategy == "generic" and hasattr(
+                self.actor_network, "get_generic_dist"
+            ):
                 dist = self.actor_network.get_generic_dist(tensordict)
             elif hasattr(self.actor_network, "get_dist"):
                 # Fallback to generic distribution method
                 dist = self.actor_network.get_dist(
-                    tensordict, 
-                    logits_key=("log_probs", "full")
+                    tensordict, logits_key=("log_probs", "full")
                 )
             else:
                 raise NotImplementedError(
@@ -373,7 +377,7 @@ class GRPOLoss(ClipPPOLoss):
             )
 
         cur_log_prob, dist, is_composite = self._get_cur_log_prob(tensordict)
-        
+
         # Check for shape mismatches and provide helpful error messages
         if cur_log_prob.shape != prev_log_prob.shape:
             # Try to provide helpful debugging information
@@ -390,7 +394,7 @@ class GRPOLoss(ClipPPOLoss):
                 f"4. Ensure the advantage was computed with the same masking strategy as the loss"
             )
             raise ValueError(error_msg)
-        
+
         cur_log_prob = torch.where(padding_mask, cur_log_prob, 0.0)
 
         if is_composite:
