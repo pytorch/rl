@@ -239,6 +239,7 @@ def get_ref_model(
         tokenizer=tokenizer,
         generate=False,
         return_log_probs=True,
+        pad_output=False,
         device=torch.device("cuda:0"),
     )
     return ref_model

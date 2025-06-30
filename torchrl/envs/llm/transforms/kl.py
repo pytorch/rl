@@ -69,7 +69,62 @@ class KLRewardTransform(Transform):
         casting operations will work as expected.
 
     Examples:
-        TODO
+        >>> from torchrl.data.llm import History
+        >>> from torchrl.modules.llm import TransformersWrapper
+        >>> from transformers import AutoTokenizer, OPTConfig, OPTForCausalLM
+        >>> from tensordict import TensorDict, set_list_to_stack
+        >>> import torch
+        >>>
+        >>> # Set up list to stack for History
+        >>> set_list_to_stack(True).set()
+        >>>
+        >>> # Setup tokenizer and model
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
+        >>> tokenizer.pad_token = tokenizer.eos_token
+        >>> model = OPTForCausalLM(OPTConfig()).eval()
+        >>>
+        >>> # Create a reference model (for KL computation)
+        >>> ref_model = TransformersWrapper(
+        ...     model,
+        ...     tokenizer=tokenizer,
+        ...     input_mode="tokens",  # KLRewardTransform requires tokens input mode
+        ...     generate=False,
+        ...     return_log_probs=True,
+        ...     pad_output=True,
+        ... )
+        >>>
+        >>> # Create sample data with tokens and log-probs
+        >>> batch_size = 2
+        >>> seq_len = 10
+        >>> input_ids = torch.randint(0, 1000, (batch_size, seq_len))
+        >>> attention_mask = torch.ones_like(input_ids)
+        >>> log_probs = torch.randn(batch_size, seq_len)
+        >>> reward = torch.randn(batch_size, seq_len, 1)
+        >>>
+        >>> # Create tensordict with required keys
+        >>> data = TensorDict({
+        ...     ("tokens", "full"): input_ids,
+        ...     ("masks", "all_attention_mask"): attention_mask,
+        ...     ("log_probs", "full"): log_probs,
+        ...     "reward": reward,
+        ...     ("text", "response"): ["Hello", "World"],  # Action key
+        ... }, batch_size=(batch_size,))
+        >>>
+        >>> # Create KLRewardTransform
+        >>> kl_transform = KLRewardTransform(
+        ...     ref_model,
+        ...     coef=1.0,
+        ...     add_to_reward=True,
+        ... )
+        >>>
+        >>> # Apply transform
+        >>> result = kl_transform(data)
+        >>> print(f"Reward shape: {result['reward'].shape}")
+        >>> print(f"KL penalty present: {'kl_penalty' in result}")
+        >>> print(f"Reference log-prob present: {'ref_log_prob' in result}")
+        Reward shape: torch.Size([2, 10, 1])
+        KL penalty present: True
+        Reference log-prob present: True
 
     .. note:: Because the KL formula is not always available and the parameters of the
       original distribution may not have been recorded, we use a stochastic estimate
@@ -158,6 +213,7 @@ class KLRewardTransform(Transform):
 
     @property
     def pad_output(self):
+        # We need pad_output to match the pad_output of the inference model
         return self.ref_model.pad_output
 
     @property
