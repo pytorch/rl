@@ -334,7 +334,7 @@ class MCAdvantage(Transform):
 
     Args:
         grpo_size (int): Number of trajectories to keep in memory for the advantage computation.
-        prompt_key (NestedKey): Key to the prompt in the tensordict. Defaults to "text".
+        prompt_key (NestedKey): Key to the prompt in the tensordict. Defaults to ("text", "prompt").
         rewards_key (NestedKey): Key to the rewards in the tensordict. Defaults to ("next", "reward").
         advantage_key (NestedKey): Key to the advantage in the tensordict. Defaults to "advantage".
         done_key (NestedKey): Key to the done state in the tensordict. Defaults to ("next", "done").
@@ -345,7 +345,7 @@ class MCAdvantage(Transform):
     def __init__(
         self,
         grpo_size: int,
-        prompt_key: NestedKey = "text",
+        prompt_key: NestedKey = ("text", "prompt"),
         rewards_key: NestedKey = ("next", "reward"),
         advantage_key: NestedKey = "advantage",
         done_key: NestedKey = ("next", "done"),
