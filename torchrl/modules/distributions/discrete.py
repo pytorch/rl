@@ -13,7 +13,7 @@ import torch.distributions as D
 import torch.nn.functional as F
 
 from torch.distributions.utils import lazy_property, logits_to_probs, probs_to_logits
-
+from tensordict.utils import expand_as_right
 
 __all__ = ["OneHotCategorical", "MaskedCategorical", "Ordinal", "OneHotOrdinal"]
 
@@ -223,8 +223,8 @@ class MaskedCategorical(D.Categorical):
         logits: torch.Tensor | None = None,
         probs: torch.Tensor | None = None,
         *,
-        mask: torch.Tensor = None,
-        indices: torch.Tensor = None,
+        mask: torch.Tensor | None = None,
+        indices: torch.Tensor | None = None,
         neg_inf: float = float("-inf"),
         padding_value: int | None = None,
         use_cross_entropy: bool = False,
@@ -321,6 +321,8 @@ class MaskedCategorical(D.Categorical):
                 if logits.ndim > 2:
                     # Bring channels in 2nd dim
                     logits = logits.transpose(-1, 1)
+                print("logits", logits.shape)
+                print("value", value.shape)
                 result = -torch.nn.functional.cross_entropy(logits, value, reduce=False)
             else:
                 result = super().log_prob(value)
@@ -359,7 +361,7 @@ class MaskedCategorical(D.Categorical):
             return logits
 
         if not sparse_mask:
-            return logits.masked_fill(~mask, neg_inf)
+            return logits.masked_fill(~expand_as_right(mask, logits), neg_inf)
 
         if padding_value is not None:
             padding_mask = mask == padding_value

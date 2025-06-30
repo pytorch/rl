@@ -1659,6 +1659,101 @@ class vLLMWrapper(CategoricalSequential):
         cls._CompletionOutput_tc = CompletionOutput_tc
         return CompletionOutput_tc
 
+    def get_dist(
+        self,
+        tensordict: TensorDictBase,
+        tensordict_out: TensorDictBase | None = None,
+        logits_key: NestedKey = "logits",
+        mask_key: NestedKey | None = None,
+        as_padded_tensor: bool | None = None,
+        as_nested_tensor: bool | None = None,
+        padding_value: float | None = None,
+        padding_side: str = "right",
+        layout: torch.layout | None = None,
+        **kwargs,
+    ) -> D.Distribution:
+        """Get distribution from logits/log-probs with optional masking.
+        
+        vLLM does not return logits, so this method is not supported.
+        """
+        raise NotImplementedError("vLLM does not return logits, so get_dist is not supported")
+
+    def get_dist_with_prompt_mask(
+        self,
+        tensordict: TensorDictBase,
+        tokens_key: NestedKey = ("tokens", "full"),
+        logits_key: NestedKey = "logits",
+        assistant_mask_key: NestedKey = ("masks", "all_assistant_mask"),
+        attention_mask_key: NestedKey = ("masks", "all_attention_mask"),
+        **kwargs,
+    ) -> D.Distribution:
+        """Get distribution masked to only include response tokens (exclude prompt).
+        
+        vLLM does not return logits, so this method is not supported.
+        """
+        raise NotImplementedError("vLLM does not return logits, so get_dist_with_prompt_mask is not supported")
+    
+    def get_dist_with_assistant_mask(
+        self,
+        tensordict: TensorDictBase,
+        assistant_mask_key: NestedKey = ("masks", "all_assistant_mask"),
+        logits_key: NestedKey = "logits",
+        **kwargs,
+    ) -> D.Distribution:
+        """Get distribution masked to only include assistant tokens.
+        
+        vLLM does not return logits, so this method is not supported.
+        """
+        raise NotImplementedError("vLLM does not return logits, so get_dist_with_assistant_mask is not supported")
+    
+    def get_dist_with_attention_mask(
+        self,
+        tensordict: TensorDictBase,
+        attention_mask_key: NestedKey = ("masks", "all_attention_mask"),
+        logits_key: NestedKey = "logits",
+        **kwargs,
+    ) -> D.Distribution:
+        """Get distribution masked using attention mask.
+        
+        vLLM does not return logits, so this method is not supported.
+        """
+        raise NotImplementedError("vLLM does not return logits, so get_dist_with_attention_mask is not supported")
+    
+    def get_dist_with_custom_mask(
+        self,
+        tensordict: TensorDictBase,
+        mask: torch.Tensor,
+        logits_key: NestedKey = "logits",
+        **kwargs,
+    ) -> D.Distribution:
+        """Get distribution with custom mask.
+        
+        vLLM does not return logits, so this method is not supported.
+        """
+        raise NotImplementedError("vLLM does not return logits, so get_dist_with_custom_mask is not supported")
+
+    # Convenience methods for common LLM training scenarios
+    def get_sft_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
+        """Get distribution suitable for SFT loss (response tokens only).
+        
+        vLLM does not return logits, so this method is not supported.
+        """
+        raise NotImplementedError("vLLM does not return logits, so get_sft_dist is not supported")
+    
+    def get_rlhf_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
+        """Get distribution suitable for RLHF loss (assistant tokens only).
+        
+        vLLM does not return logits, so this method is not supported.
+        """
+        raise NotImplementedError("vLLM does not return logits, so get_rlhf_dist is not supported")
+    
+    def get_generic_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
+        """Get distribution suitable for generic losses (all tokens).
+        
+        vLLM does not return logits, so this method is not supported.
+        """
+        raise NotImplementedError("vLLM does not return logits, so get_generic_dist is not supported")
+
 
 class _RequestOutput_tc(TensorClass["nocast"]):
     """TensorClass wrapper for vLLM RequestOutput."""

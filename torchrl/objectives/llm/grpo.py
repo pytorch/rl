@@ -112,7 +112,7 @@ class GRPOLoss(ClipPPOLoss):
                 the storages match the ones that are passed to other components, such as data collectors.
     """
 
-    actor_network: TensorDictModule
+    actor_network: CategoricalSequential
     critic_network: TensorDictModule
     actor_network_params: TensorDictParams
     critic_network_params: TensorDictParams
@@ -165,11 +165,17 @@ class GRPOLoss(ClipPPOLoss):
         )
         # We don't want to use the string action but the tokens
         self._set_in_keys()
-        self.set_keys(sample_log_prob="log_probs", action="tokens_response")
+        self.masking_strategy = masking_strategy
+        # self.set_keys(sample_log_prob=("log_probs", "full"), action=("tokens", "full"))
+        if self.masking_strategy == "sft":
+            self.set_keys(sample_log_prob=("log_probs", "full"), action=("tokens", "response"))
+        elif self.masking_strategy == "rlhf":
+            self.set_keys(sample_log_prob=("log_probs", "full"), action=("tokens", "full"))
+        else:
+            self.set_keys(sample_log_prob=("log_probs", "full"), action=("tokens", "full"))
         # TODO: make this a buffer
         self.kl_to_ref_coeff = kl_to_ref_coeff
         self.kl_to_inference_coeff = kl_to_inference_coeff
-        self.masking_strategy = masking_strategy
 
     def _get_cur_log_prob(self, tensordict):
         """Override to use LLM-specific distribution with explicit masking strategy.
@@ -186,6 +192,7 @@ class GRPOLoss(ClipPPOLoss):
                 dist = self.actor_network.get_sft_dist(tensordict)
             elif self.masking_strategy == "rlhf" and hasattr(self.actor_network, "get_rlhf_dist"):
                 dist = self.actor_network.get_rlhf_dist(tensordict)
+                print("tensordict after get dist", tensordict)
             elif self.masking_strategy == "generic" and hasattr(self.actor_network, "get_generic_dist"):
                 dist = self.actor_network.get_generic_dist(tensordict)
             elif hasattr(self.actor_network, "get_dist"):
@@ -199,24 +206,9 @@ class GRPOLoss(ClipPPOLoss):
                     f"Actor network must have get_dist method or the appropriate method for "
                     f"masking strategy '{self.masking_strategy}'."
                 )
-            
-            is_composite = False  # We don't use composite distributions in LLM scenarios
 
-            if is_composite:
-                action = tensordict.select(
-                    *(
-                        (self.tensor_keys.action,)
-                        if isinstance(self.tensor_keys.action, NestedKey)
-                        else self.tensor_keys.action
-                    )
-                )
-            else:
-                action = _maybe_get_or_select(tensordict, self.tensor_keys.action)
+            action = _maybe_get_or_select(tensordict, self.tensor_keys.action)
 
-            if action.requires_grad:
-                raise RuntimeError(
-                    f"tensordict stored {self.tensor_keys.action} requires grad."
-                )
             log_prob = dist.log_prob(action)
         else:
             raise NotImplementedError(
@@ -225,7 +217,7 @@ class GRPOLoss(ClipPPOLoss):
                 "the PPO objective) or the distribution (for the PPO entropy), please augment "
                 f"the {type(self).__class__} by implementing your own logic in _get_cur_log_prob."
             )
-        return log_prob, dist, is_composite
+        return log_prob, dist, False
 
     def forward(self, tensordict: TensorDictBase) -> GRPOLossOutput:
         # Some sanity checks and housekeeping:

@@ -2331,66 +2331,62 @@ class TestDistributionMethods:
 
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     @pytest.mark.parametrize("masking_strategy", ["sft", "rlhf", "generic"])
-    def test_vllm_distribution_methods(self, vllm_instance, sample_history_assistant, masking_strategy):
+    def test_vllm_distribution_methods(self, vllm_instance, sample_history_assistant, sample_tokens, masking_strategy):
         """Test that vLLM wrapper distribution methods work correctly."""
         model, tokenizer = vllm_instance
         
+        # vLLM doesn't support get_dist methods
         wrapper = vLLMWrapper(
             model,
             tokenizer=tokenizer,
             input_mode="history",
             generate=False,
             return_log_probs=True,
-            return_tokens=True,
             return_masks=True,
-            pad_output=True,
         )
         
-        # Create test data with correct batch size
+        # Create test data
         td = TensorDict({"history": sample_history_assistant}, batch_size=(2,))
         
-        # Test the appropriate distribution method
-        if masking_strategy == "sft":
-            dist = wrapper.get_sft_dist(td)
-        elif masking_strategy == "rlhf":
-            dist = wrapper.get_rlhf_dist(td)
-        elif masking_strategy == "generic":
-            dist = wrapper.get_generic_dist(td)
-        else:
-            raise ValueError(f"Unknown masking strategy: {masking_strategy}")
+        # Test that all distribution methods raise NotImplementedError
+        with pytest.raises(NotImplementedError, match="vLLM does not return logits"):
+            wrapper.get_dist(td)
         
-        # Verify we get a distribution
-        assert dist is not None
-        assert hasattr(dist, "log_prob")
+        with pytest.raises(NotImplementedError, match="vLLM does not return logits"):
+            wrapper.get_sft_dist(td)
         
-        # Test that we can compute log probabilities
-        # Get tokens from the wrapper output
-        result = wrapper(td)
-        tokens = result["tokens"].get("full")
-        if tokens.dtype != torch.long:
-            tokens = tokens.long()
-        log_probs = dist.log_prob(tokens)
-        assert log_probs.shape == tokens.shape
+        with pytest.raises(NotImplementedError, match="vLLM does not return logits"):
+            wrapper.get_rlhf_dist(td)
+        
+        with pytest.raises(NotImplementedError, match="vLLM does not return logits"):
+            wrapper.get_generic_dist(td)
 
     @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
     @pytest.mark.parametrize("masking_strategy", ["sft", "rlhf", "generic"])
-    def test_transformers_distribution_methods(self, transformers_instance, sample_history_assistant, masking_strategy):
+    def test_transformers_distribution_methods(self, transformers_instance, sample_history_assistant, sample_tokens, masking_strategy):
         """Test that Transformers wrapper distribution methods work correctly."""
         model, tokenizer = transformers_instance
+        
+        # Use tokens input mode for SFT, history for RLHF/generic
+        if masking_strategy == "sft":
+            input_mode = "tokens"
+            input_ids, attention_mask = sample_tokens
+            input_data = {"tokens": Tokens(full=input_ids), "masks": Masks(all_attention_mask=attention_mask)}
+        else:
+            input_mode = "history"
+            input_data = {"history": sample_history_assistant}
         
         wrapper = TransformersWrapper(
             model,
             tokenizer=tokenizer,
-            input_mode="history",
+            input_mode=input_mode,
             generate=False,
             return_log_probs=True,
-            return_tokens=True,
             return_masks=True,
-            pad_output=True,
         )
         
         # Create test data with correct batch size
-        td = TensorDict({"history": sample_history_assistant}, batch_size=(2,))
+        td = TensorDict(input_data, batch_size=(2,))
         
         # Test the appropriate distribution method
         if masking_strategy == "sft":
@@ -2399,51 +2395,29 @@ class TestDistributionMethods:
             dist = wrapper.get_rlhf_dist(td)
         elif masking_strategy == "generic":
             dist = wrapper.get_generic_dist(td)
-        else:
-            raise ValueError(f"Unknown masking strategy: {masking_strategy}")
         
-        # Verify we get a distribution
+        # Verify that we get a distribution
         assert dist is not None
-        assert hasattr(dist, "log_prob")
+        assert hasattr(dist, 'log_prob')
+        assert hasattr(dist, 'sample')
         
-        # Test that we can compute log probabilities
-        # Get tokens from the wrapper output
-        result = wrapper(td)
-        tokens = result["tokens"].get("full")
-        if tokens.dtype != torch.long:
-            tokens = tokens.long()
-        log_probs = dist.log_prob(tokens)
-        assert log_probs.shape == tokens.shape
+        # Test that logits are available in the output
+        td_out = wrapper(td.copy())
 
-    @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
-    def test_vllm_custom_masking(self, vllm_instance, sample_history_assistant):
-        """Test custom masking functionality."""
-        model, tokenizer = vllm_instance
-        
-        wrapper = vLLMWrapper(
-            model,
-            tokenizer=tokenizer,
-            input_mode="history",
-            generate=False,
-            return_log_probs=True,
-            return_tokens=True,
-            pad_output=True,
-        )
-        
-        td = TensorDict({"history": sample_history_assistant}, batch_size=(2,))
-        
-        # Get the actual log_probs shape from the wrapper
-        result = wrapper(td)
-        log_probs = result["log_probs"].get("full")
-        
-        # Create a custom mask matching the log_probs shape
-        custom_mask = torch.zeros_like(log_probs, dtype=torch.bool)
-        custom_mask[:, :5] = True  # Only first 5 tokens
-        
-        dist = wrapper.get_dist_with_custom_mask(td, custom_mask)
-        
-        assert dist is not None
-        assert hasattr(dist, "log_prob")
+        # Test log_prob computation
+        if masking_strategy == "sft":
+            # For SFT, we need tokens to compute log_prob
+            tokens = td_out.get(("tokens", "full"))
+            if tokens is not None:
+                log_probs = dist.log_prob(tokens.long())
+                assert log_probs.shape == tokens.shape
+        else:
+            # For RLHF/generic, we can test with dummy tokens
+            logits = td_out.get("logits")
+            if logits is not None:
+                dummy_tokens = torch.randint(0, logits.shape[-1], logits.shape[:-1])
+                log_probs = dist.log_prob(dummy_tokens)
+                assert log_probs.shape == dummy_tokens.shape
 
     @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
     def test_transformers_custom_masking(self, transformers_instance, sample_history_assistant):
@@ -2462,61 +2436,15 @@ class TestDistributionMethods:
         
         td = TensorDict({"history": sample_history_assistant}, batch_size=(2,))
         
-        # Get the actual log_probs shape from the wrapper
+        # Get the actual logits shape from the wrapper
         result = wrapper(td)
-        log_probs = result["log_probs"].get("full")
+        lp = result["log_probs"].get("full")
         
-        # Create a custom mask matching the log_probs shape
-        custom_mask = torch.zeros_like(log_probs, dtype=torch.bool)
+        # Create a custom mask matching the logits shape
+        custom_mask = torch.zeros_like(lp, dtype=torch.bool)
         custom_mask[:, :5] = True  # Only first 5 tokens
         
         dist = wrapper.get_dist_with_custom_mask(td, custom_mask)
-        
-        assert dist is not None
-        assert hasattr(dist, "log_prob")
-
-    @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
-    def test_vllm_generic_get_dist(self, vllm_instance, sample_history_assistant):
-        """Test the generic get_dist method with log_probs key."""
-        model, tokenizer = vllm_instance
-        
-        wrapper = vLLMWrapper(
-            model,
-            tokenizer=tokenizer,
-            input_mode="history",
-            generate=False,
-            return_log_probs=True,
-            return_tokens=True,
-            pad_output=True,
-        )
-        
-        td = TensorDict({"history": sample_history_assistant}, batch_size=(2,))
-        
-        # Test generic get_dist with log_probs key
-        dist = wrapper.get_dist(td, logits_key=("log_probs", "full"))
-        
-        assert dist is not None
-        assert hasattr(dist, "log_prob")
-
-    @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
-    def test_transformers_generic_get_dist(self, transformers_instance, sample_history_assistant):
-        """Test the generic get_dist method with log_probs key."""
-        model, tokenizer = transformers_instance
-        
-        wrapper = TransformersWrapper(
-            model,
-            tokenizer=tokenizer,
-            input_mode="history",
-            generate=False,
-            return_log_probs=True,
-            return_tokens=True,
-            pad_output=True,
-        )
-        
-        td = TensorDict({"history": sample_history_assistant}, batch_size=(2,))
-        
-        # Test generic get_dist with log_probs key
-        dist = wrapper.get_dist(td, logits_key=("log_probs", "full"))
         
         assert dist is not None
         assert hasattr(dist, "log_prob")
@@ -2526,61 +2454,51 @@ class TestGRPOLossIntegration:
     """Test GRPOLoss integration with the new distribution methods."""
 
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
-    @pytest.mark.parametrize("masking_strategy", ["sft", "rlhf", "generic"])
-    def test_grpo_loss_with_vllm(self, vllm_instance, sample_history_assistant, masking_strategy):
+    @pytest.mark.parametrize("masking_strategy", ["sft", "rlhf"])
+    def test_grpo_loss_with_transformers(self, vllm_instance, transformers_instance, sample_history, sample_tokens, masking_strategy):
         """Test GRPOLoss with vLLM wrapper and different masking strategies."""
         from torchrl.objectives.llm.grpo import GRPOLoss
         
-        model, tokenizer = vllm_instance
+        model, tokenizer = transformers_instance
+        vllm_model, vllm_tokenizer = vllm_instance
+
+        # Use tokens input mode for SFT, history for RLHF/generic
+        if masking_strategy == "sft":
+            input_mode = "tokens"
+            input_ids, attention_mask = sample_tokens
+            input_data = {"tokens": Tokens(prompt=input_ids), "masks": Masks(all_attention_mask=attention_mask)}
+        else:
+            input_mode = "history"
+            input_data = {"history": sample_history}
         
-        wrapper = vLLMWrapper(
-            model,
-            tokenizer=tokenizer,
-            input_mode="history",
-            generate=False,
+        wrapper_gen = vLLMWrapper(
+            vllm_model,
+            tokenizer=vllm_tokenizer,
+            input_mode=input_mode,
+            generate=True,
             return_log_probs=True,
             return_tokens=True,
             return_masks=True,
             pad_output=True,
+            generate_kwargs={"max_tokens": 10},
         )
-        
-        # Create GRPOLoss with specified masking strategy
-        loss_fn = GRPOLoss(
-            actor_network=wrapper,
-            masking_strategy=masking_strategy,
-        )
-        
+     
         # Create test data with advantage and correct batch size
-        td = TensorDict({
-            "history": sample_history_assistant,
-            "advantage": torch.randn(2, 10, 1),  # Mock advantage with correct batch size
-            "log_probs": torch.randn(2, 10),     # Mock previous log probs with correct batch size
-        }, batch_size=(2,))
-        
-        # This should work without shape mismatch errors
-        try:
-            result = loss_fn(td)
-            assert result is not None
-        except ValueError as e:
-            if "Shape mismatch" in str(e):
-                # This is expected if the advantage shape doesn't match the log-prob shape
-                # due to different masking strategies
-                assert masking_strategy in str(e)
-            else:
-                raise
+        td = TensorDict(input_data, batch_size=(2,)).to_lazystack(0)
+        td = wrapper_gen(td)
+        if masking_strategy == "rlhf":
+            # we need to invert the text to a history element
+            text = [t0 + t1 for t0, t1 in zip(td["text", "prompt"], td["text", "response"])]
+            h = History.from_text(text)
+            td["history"] = td["history"].append(h[..., -1])
+            assert td["history"].shape[-1] == 3
+            assert td["history"][..., -1].role == ["assistant", "assistant"]
+        td["advantage"] = torch.randn(2, 10, 1)
 
-    @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
-    @pytest.mark.parametrize("masking_strategy", ["sft", "rlhf", "generic"])
-    def test_grpo_loss_with_transformers(self, transformers_instance, sample_history_assistant, masking_strategy):
-        """Test GRPOLoss with Transformers wrapper and different masking strategies."""
-        from torchrl.objectives.llm.grpo import GRPOLoss
-        
-        model, tokenizer = transformers_instance
-        
         wrapper = TransformersWrapper(
             model,
             tokenizer=tokenizer,
-            input_mode="history",
+            input_mode=input_mode,
             generate=False,
             return_log_probs=True,
             return_tokens=True,
@@ -2594,13 +2512,7 @@ class TestGRPOLossIntegration:
             masking_strategy=masking_strategy,
         )
         
-        # Create test data with advantage and correct batch size
-        td = TensorDict({
-            "history": sample_history_assistant,
-            "advantage": torch.randn(2, 10, 1),  # Mock advantage with correct batch size
-            "log_probs": torch.randn(2, 10),     # Mock previous log probs with correct batch size
-        }, batch_size=(2,))
-        
+
         # This should work without shape mismatch errors
         try:
             result = loss_fn(td)

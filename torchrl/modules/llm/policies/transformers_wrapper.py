@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import contextlib
+import warnings
 
 from contextlib import nullcontext
 from copy import copy
@@ -313,6 +314,9 @@ class TransformersWrapper(CategoricalSequential):
         # Additional transformers-specific settings
         self.chat_template_name = chat_template_name
         self.chat_template = chat_template
+        
+        # Flag to track when we're in a get_dist call
+        self._in_get_dist_call = False
 
     def get_new_version(self, **kwargs):
         """Returns a new version of the module with altered parameters.
@@ -804,6 +808,16 @@ class TransformersWrapper(CategoricalSequential):
             log_probs_obj.padded = MetaData(self.pad_output)
             out.set(self.log_probs_key, log_probs_obj)
 
+        # Add logits to output if we're in a get_dist call
+        if self._in_get_dist_call:
+            if self.pad_output:
+                out.set("logits", logits)
+            else:
+                logits_full_unpadded = _unpad_tensors(
+                    logits, attention_mask_full_padded, as_nested=False
+                )
+                out.set("logits", logits_full_unpadded)
+
         return out
 
     def _cat_tensors(
@@ -940,6 +954,16 @@ class TransformersWrapper(CategoricalSequential):
         log_probs_obj.response = None
         log_probs_obj.padded = MetaData(self.pad_output)
         out.set(self.log_probs_key, log_probs_obj)
+
+        # Add logits to output if we're in a get_dist call
+        if self._in_get_dist_call:
+            if self.pad_output:
+                out.set("logits", logits_full_padded)
+            else:
+                logits_full_unpadded = _unpad_tensors(
+                    logits_full_padded, attention_mask_full_padded, as_nested=False
+                )
+                out.set("logits", logits_full_unpadded)
 
         return out
 
@@ -1094,6 +1118,16 @@ class TransformersWrapper(CategoricalSequential):
             log_probs_obj.padded = MetaData(self.pad_output)
             out.set(self.log_probs_key, log_probs_obj)
 
+        # Add logits to output if we're in a get_dist call
+        if self._in_get_dist_call:
+            if self.pad_output:
+                out.set("logits", logits_full_padded)
+            else:
+                logits_full_unpadded = _unpad_tensors(
+                    logits_full_padded, attention_mask_full_padded, as_nested=False
+                )
+                out.set("logits", logits_full_unpadded)
+
         return out
 
     def _from_transformers_generate_tokens(self, td, cfg, out) -> TensorDictBase:
@@ -1229,17 +1263,18 @@ class TransformersWrapper(CategoricalSequential):
             out.set(self.masks_key, masks_obj)
 
         if self.return_log_probs:
-            log_probs_obj = LogProbs._from_tensordict(out.empty())
-            with log_probs_obj.view(-1) as log_probs_obj_flat:
-                if self.pad_output:
-                    log_probs_obj_flat.response = log_probs_response_padded
-                else:
-                    log_probs_response_unpadded = _unpad_tensors(
-                        log_probs_response_padded,
-                        attention_mask_reponse_padded,
-                        as_nested=False,
-                    )
-                    log_probs_obj_flat.response = log_probs_response_unpadded
+            log_probs_obj = LogProbs._from_tensordict(
+                TensorDict(batch_size=out.batch_size).to_lazystack(0)
+            )
+            if self.pad_output:
+                log_probs_obj.response = log_probs_response_padded
+            else:
+                log_probs_response_unpadded = _unpad_tensors(
+                    log_probs_response_padded,
+                    attention_mask_reponse_padded,
+                    as_nested=False,
+                )
+                log_probs_obj.response = log_probs_response_unpadded
             log_probs_obj.padded = MetaData(self.pad_output)
             out.set(self.log_probs_key, log_probs_obj)
 
@@ -1342,6 +1377,15 @@ class TransformersWrapper(CategoricalSequential):
             log_probs_obj.padded = MetaData(self.pad_output)
             out.set(self.log_probs_key, log_probs_obj)
 
+        # Add logits to output if we're in a get_dist call
+        if self._in_get_dist_call:
+            if self.pad_output:
+                out.set("logits", logits_full_padded)
+            else:
+                logits_full_unpadded = _unpad_tensors(
+                    logits_full_padded, attention_mask_full_padded, as_nested=False
+                )
+                out.set("logits", logits_full_unpadded)
         return out
 
     @classmethod
@@ -1435,3 +1479,157 @@ class TransformersWrapper(CategoricalSequential):
         td["log_probs"][attention_mask_first_left] = 0
 
         return td["log_probs"], shifted_logits
+
+    def get_dist(
+        self,
+        tensordict: TensorDictBase,
+        tensordict_out: TensorDictBase | None = None,
+        logits_key: NestedKey = "logits",
+        mask_key: NestedKey | None = None,
+        as_padded_tensor: bool | None = None,
+        as_nested_tensor: bool | None = None,
+        padding_value: float | None = None,
+        padding_side: str = "right",
+        layout: torch.layout | None = None,
+        **kwargs,
+    ) -> D.Distribution:
+        """Get distribution from logits/log-probs with optional masking.
+        
+        This method enables logits computation for distribution creation.
+        """
+        self._in_get_dist_call = True
+        self.out_keys += ["logits"]
+        try:
+            return super().get_dist(
+                tensordict, tensordict_out, logits_key, mask_key,
+                as_padded_tensor, as_nested_tensor, padding_value,
+                padding_side, layout, **kwargs
+            )
+        finally:
+            self._in_get_dist_call = False
+            self.out_keys.remove("logits")
+
+    def get_dist_with_prompt_mask(
+        self,
+        tensordict: TensorDictBase,
+        tokens_key: NestedKey = ("tokens", "prompt"),
+        logits_key: NestedKey = "logits",
+        assistant_mask_key: NestedKey = ("masks", "all_assistant_mask"),
+        attention_mask_key: NestedKey = ("masks", "all_attention_mask"),
+        **kwargs,
+    ) -> D.Distribution:
+        """Get distribution masked to only include response tokens (exclude prompt).
+        
+        This method enables logits computation for distribution creation.
+        """
+        self._in_get_dist_call = True
+        self.out_keys += ["logits"]
+        try:
+            return super().get_dist_with_prompt_mask(
+                tensordict, tokens_key, logits_key, assistant_mask_key, attention_mask_key, **kwargs
+            )
+        finally:
+            self._in_get_dist_call = False
+            self.out_keys.remove("logits")
+
+    def get_dist_with_assistant_mask(
+        self,
+        tensordict: TensorDictBase,
+        assistant_mask_key: NestedKey = ("masks", "all_assistant_mask"),
+        logits_key: NestedKey = "logits",
+        **kwargs,
+    ) -> D.Distribution:
+        """Get distribution masked to only include assistant tokens.
+        
+        This method enables logits computation for distribution creation.
+        """
+        self._in_get_dist_call = True
+        self.out_keys += ["logits"]
+        try:
+            return super().get_dist_with_assistant_mask(
+                tensordict, assistant_mask_key, logits_key, **kwargs
+            )
+        finally:
+            self._in_get_dist_call = False
+            self.out_keys.remove("logits")
+    def get_dist_with_attention_mask(
+        self,
+        tensordict: TensorDictBase,
+        attention_mask_key: NestedKey = ("masks", "all_attention_mask"),
+        logits_key: NestedKey = "logits",
+        **kwargs,
+    ) -> D.Distribution:
+        """Get distribution masked using attention mask.
+        
+        This method enables logits computation for distribution creation.
+        """
+        self._in_get_dist_call = True
+        self.out_keys += ["logits"]
+        try:
+            return super().get_dist_with_attention_mask(
+                tensordict, attention_mask_key, logits_key, **kwargs
+            )
+        finally:
+            self._in_get_dist_call = False
+            self.out_keys.remove("logits")
+    
+    def get_dist_with_custom_mask(
+        self,
+        tensordict: TensorDictBase,
+        mask: torch.Tensor,
+        logits_key: NestedKey = "logits",
+        **kwargs,
+    ) -> D.Distribution:
+        """Get distribution with custom mask.
+        
+        This method enables logits computation for distribution creation.
+        """
+        self._in_get_dist_call = True
+        self.out_keys += ["logits"]
+        try:
+            return super().get_dist_with_custom_mask(
+                tensordict, mask, logits_key, **kwargs
+            )
+        finally:
+            self._in_get_dist_call = False
+            self.out_keys.remove("logits")
+
+    # Convenience methods for common LLM training scenarios
+    def get_sft_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
+        """Get distribution suitable for SFT loss (response tokens only).
+        
+        This method enables logits computation for distribution creation.
+        """
+        self._in_get_dist_call = True
+        self.out_keys += ["logits"]
+        try:
+            return super().get_sft_dist(tensordict, **kwargs)
+        finally:
+            self._in_get_dist_call = False
+            self.out_keys.remove("logits")
+    
+    def get_rlhf_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
+        """Get distribution suitable for RLHF loss (assistant tokens only).
+        
+        This method enables logits computation for distribution creation.
+        """
+        self._in_get_dist_call = True
+        self.out_keys += ["logits"]
+        try:
+            return super().get_rlhf_dist(tensordict, **kwargs)
+        finally:
+            self._in_get_dist_call = False
+            self.out_keys.remove("logits")
+    
+    def get_generic_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
+        """Get distribution suitable for generic losses (all tokens).
+        
+        This method enables logits computation for distribution creation.
+        """
+        self._in_get_dist_call = True
+        self.out_keys += ["logits"]
+        try:
+            return super().get_generic_dist(tensordict, **kwargs)
+        finally:
+            self._in_get_dist_call = False  
+            self.out_keys.remove("logits")

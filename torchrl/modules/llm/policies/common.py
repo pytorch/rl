@@ -14,6 +14,7 @@ from tensordict.tensorclass import TensorClass
 from torch import distributions as D
 from torch.distributions import Categorical
 from torchrl.modules import MaskedCategorical
+from torch.nn.utils.rnn import pad_sequence
 
 # TODOs:
 # - [ ] Remove the useless view(-1) calls when num_samples is not > 1
@@ -354,63 +355,68 @@ class CategoricalSequential(TensorDictModuleBase):
     def get_dist_with_prompt_mask(
         self,
         tensordict: TensorDictBase,
-        prompt_key: NestedKey = ("tokens", "prompt"),
-        logits_key: NestedKey = ("logits", "full"),
-        log_probs_key: NestedKey = ("log_probs", "full"),
+        tokens_key: NestedKey = ("tokens", "prompt"),
+        logits_key: NestedKey = "logits",
         assistant_mask_key: NestedKey = ("masks", "all_assistant_mask"),
+        attention_mask_key: NestedKey = ("masks", "all_attention_mask"),
         **kwargs,
     ) -> D.Distribution:
         """Get distribution masked to only include response tokens (exclude prompt).
         
         This is suitable for single-turn scenarios where we want to compute loss
         only on the generated response, not the input prompt.
+        
+        Note: If prompt tokens are not available (e.g., when using history input),
+        this method falls back to using the assistant mask.
         """
         td_out = self(tensordict.copy())
-        logits = td_out.get(logits_key, None)
-        log_probs = td_out.get(log_probs_key, None)
-        
-        # Determine if we have logits or log-probs
-        if logits is not None and logits.dim() == 3:  # [batch, seq_len, vocab_size]
-            # We have actual logits, use MaskedCategorical
-            logits_to_use = logits
-            use_log_probs = False
-        elif log_probs is not None and log_probs.dim() == 2:  # [batch, seq_len]
-            # We have log-probs, use LogProbDistribution
-            logits_to_use = log_probs
-            use_log_probs = True
-        else:
-            raise ValueError("Neither valid logits nor log_probs found")
-        
+
         # Try to get prompt tokens first
-        prompt_tokens = tensordict.get(prompt_key, None)
-        
-        if prompt_tokens is not None:
-            # We have prompt tokens, use them to create mask
-            if isinstance(prompt_tokens, torch.Tensor):
-                prompt_length = prompt_tokens.shape[-1]
-            else:
-                # Handle unpadded case
-                prompt_length = max(len(tokens) for tokens in prompt_tokens)
-            
-            # Create mask that excludes prompt tokens
-            mask = torch.zeros_like(logits_to_use[..., 0], dtype=torch.bool)
-            mask[..., prompt_length:] = True
+        if self.pad_output:
+            prompt_tokens = tensordict.get(tokens_key, None)
+            logits = td_out.get(logits_key)
+            attention_mask = tensordict.get(attention_mask_key)
         else:
-            # No prompt tokens available (e.g., when generate=False)
-            # Fall back to assistant mask if available
-            assistant_mask = td_out.get(assistant_mask_key, None)
-            if assistant_mask is not None:
-                mask = assistant_mask
-            else:
-                # No mask available, use all tokens
-                mask = torch.ones_like(logits_to_use[..., 0], dtype=torch.bool)
+            prompt_tokens = tensordict.get(tokens_key, as_list=True)
+            logits = td_out.get(logits_key, as_list=True)
+            attention_mask = tensordict.get(attention_mask_key, as_list=True)
         
-        if use_log_probs:
-            return LogProbDistribution(logits_to_use, mask)
+        if prompt_tokens is None:
+            raise ValueError(f"Prompt tokens not found in tensordict at key {tokens_key} (keys: {td_out.keys()})")
+       
+        if logits is None:
+            raise ValueError(f"Logits not found in tensordict at key {logits_key} (keys: {td_out.keys()})")
+        
+        # Make the response mask using prompt tokens
+        if self.pad_output:
+            print("tokens_key", tokens_key)
+            print("tensordict", tensordict)
+            print("prompt_tokens", prompt_tokens.shape)
+            print("attention_mask", attention_mask.shape)
+            prompt_length = prompt_tokens.shape[-1]
+            mask = attention_mask.clone()
+            mask = mask[..., prompt_length:]
+            logits = logits[..., prompt_length:, :]
+            # mask[..., :prompt_length] = False
+            # logits[..., :prompt_length, :] = False
         else:
-            return MaskedCategorical(
-                logits=logits_to_use,
-                mask=mask,
+            raise NotImplementedError("Not implemented for non-padded output")
+            prompt_length = [p.size(-1) for p in prompt_tokens]
+            mask = [am.clone() for am in attention_mask]
+            for i, am in enumerate(mask):
+                mask[i] = am[..., prompt_length[i]:]
+            logits = [l.clone() for l in logits]
+            for i, l in enumerate(logits):
+                logits[i] = l[..., prompt_length[i]:]
+            logits = pad_sequence(logits, batch_first=True, padding_value=0.0, padding_side="right")
+            mask = pad_sequence(mask, batch_first=True, padding_value=False, padding_side="right")
+
+        print("prompt_length", prompt_length)
+        print("logits", logits.shape)
+        print("mask", mask.shape)
+        return MaskedCategorical(
+                logits=logits,
+                mask=mask.bool(),
                 use_cross_entropy=True,
             )
     
@@ -418,8 +424,7 @@ class CategoricalSequential(TensorDictModuleBase):
         self,
         tensordict: TensorDictBase,
         assistant_mask_key: NestedKey = ("masks", "all_assistant_mask"),
-        logits_key: NestedKey = ("logits", "full"),
-        log_probs_key: NestedKey = ("log_probs", "full"),
+        logits_key: NestedKey = "logits",
         **kwargs,
     ) -> D.Distribution:
         """Get distribution masked to only include assistant tokens.
@@ -427,37 +432,36 @@ class CategoricalSequential(TensorDictModuleBase):
         This is suitable for multi-turn scenarios where we want to compute loss
         only on assistant-generated tokens across the entire conversation.
         """
+        print("tensordict", tensordict)
         td_out = self(tensordict.copy())
-        logits = td_out.get(logits_key, None)
-        log_probs = td_out.get(log_probs_key, None)
-        assistant_mask = td_out.get(assistant_mask_key)
-        
-        # Determine if we have logits or log-probs
-        if logits is not None and logits.dim() == 3:  # [batch, seq_len, vocab_size]
-            # We have actual logits, use MaskedCategorical
-            use_log_probs = False
-        elif log_probs is not None and log_probs.dim() == 2:  # [batch, seq_len]
-            # We have log-probs, use LogProbDistribution
-            logits = log_probs
-            use_log_probs = True
+        print("td_out", td_out)
+        # Update the tokens key to reflect the tokenized history when querying the log-probs
+        tensordict.update(td_out, keys_to_update=[("tokens", "full"),])
+
+        if self.pad_output:
+            logits = td_out.get(logits_key)
+            assistant_mask = td_out.get(assistant_mask_key)
         else:
-            raise ValueError("Neither valid logits nor log_probs found")
+            logits = td_out.get(logits_key, as_padded_tensor=True, padding_value=0.0, padding_side="right")
+            assistant_mask = td_out.get(assistant_mask_key, as_padded_tensor=True, padding_value=False, padding_side="right")
+        print("assistant_mask", assistant_mask.shape)
+        print("logits", logits.shape)
+        if logits is None:
+            raise ValueError(f"Logits not found in tensordict at key {logits_key}")
+        if assistant_mask is None:
+            raise ValueError(f"Assistant mask not found in tensordict at key {assistant_mask_key}")
         
-        if use_log_probs:
-            return LogProbDistribution(logits, assistant_mask)
-        else:
-            return MaskedCategorical(
-                logits=logits,
-                mask=assistant_mask,
-                use_cross_entropy=True,
-            )
+        return MaskedCategorical(
+            logits=logits,
+            mask=assistant_mask,
+            use_cross_entropy=True,
+        )
     
     def get_dist_with_attention_mask(
         self,
         tensordict: TensorDictBase,
         attention_mask_key: NestedKey = ("masks", "all_attention_mask"),
-        logits_key: NestedKey = ("logits", "full"),
-        log_probs_key: NestedKey = ("log_probs", "full"),
+        logits_key: NestedKey = "logits",
         **kwargs,
     ) -> D.Distribution:
         """Get distribution masked using attention mask.
@@ -466,36 +470,29 @@ class CategoricalSequential(TensorDictModuleBase):
         on all valid tokens (non-padding tokens).
         """
         td_out = self(tensordict.copy())
-        logits = td_out.get(logits_key, None)
-        log_probs = td_out.get(log_probs_key, None)
-        attention_mask = td_out.get(attention_mask_key)
-        
-        # Determine if we have logits or log-probs
-        if logits is not None and logits.dim() == 3:  # [batch, seq_len, vocab_size]
-            # We have actual logits, use MaskedCategorical
-            use_log_probs = False
-        elif log_probs is not None and log_probs.dim() == 2:  # [batch, seq_len]
-            # We have log-probs, use LogProbDistribution
-            logits = log_probs
-            use_log_probs = True
+        if self.pad_output:
+            logits = td_out.get(logits_key)
+            attention_mask = td_out.get(attention_mask_key)
         else:
-            raise ValueError("Neither valid logits nor log_probs found")
+            logits = td_out.get(logits_key, as_padded_tensor=True, padding_value=0.0, padding_side="right")
+            attention_mask = td_out.get(attention_mask_key, as_padded_tensor=True, padding_value=False, padding_side="right")
         
-        if use_log_probs:
-            return LogProbDistribution(logits, attention_mask)
-        else:
-            return MaskedCategorical(
-                logits=logits,
-                mask=attention_mask,
-                use_cross_entropy=True,
-            )
+        if logits is None:
+            raise ValueError(f"Logits not found in tensordict at key {logits_key}")
+        if attention_mask is None:
+            raise ValueError(f"Attention mask not found in tensordict at key {attention_mask_key}")
+        
+        return MaskedCategorical(
+            logits=logits,
+            mask=attention_mask,
+            use_cross_entropy=True,
+        )
     
     def get_dist_with_custom_mask(
         self,
         tensordict: TensorDictBase,
         mask: torch.Tensor,
-        logits_key: NestedKey = ("logits", "full"),
-        log_probs_key: NestedKey = ("log_probs", "full"),
+        logits_key: NestedKey = "logits",
         **kwargs,
     ) -> D.Distribution:
         """Get distribution with custom mask.
@@ -503,28 +500,19 @@ class CategoricalSequential(TensorDictModuleBase):
         This allows for completely custom masking logic.
         """
         td_out = self(tensordict.copy())
-        logits = td_out.get(logits_key, None)
-        log_probs = td_out.get(log_probs_key, None)
-        
-        # Determine if we have logits or log-probs
-        if logits is not None and logits.dim() == 3:  # [batch, seq_len, vocab_size]
-            # We have actual logits, use MaskedCategorical
-            use_log_probs = False
-        elif log_probs is not None and log_probs.dim() == 2:  # [batch, seq_len]
-            # We have log-probs, use LogProbDistribution
-            logits = log_probs
-            use_log_probs = True
+        if self.pad_output:
+            logits = td_out.get(logits_key)
         else:
-            raise ValueError("Neither valid logits nor log_probs found")
+            logits = td_out.get(logits_key, as_padded_tensor=True, padding_value=0.0, padding_side="right")
         
-        if use_log_probs:
-            return LogProbDistribution(logits, mask)
-        else:
-            return MaskedCategorical(
-                logits=logits,
-                mask=mask,
-                use_cross_entropy=True,
-            )
+        if logits is None:
+            raise ValueError(f"Logits not found in tensordict at key {logits_key}")
+        
+        return MaskedCategorical(
+            logits=logits,
+            mask=mask,
+            use_cross_entropy=True,
+        )
 
     # Convenience methods for common LLM training scenarios
     def get_sft_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
