@@ -239,14 +239,14 @@ class ChatEnv(EnvBase):
             )
         if self.policy_role is not None:
             # Iterate over batch and check policy role
-            for lh in local_history.unbind(0):
+            for i, lh in enumerate(local_history.unbind(0)):
                 if lh.role != self.policy_role:
                     raise ValueError(
                         "The role received in the last block parsed from the policy "
                         f"output does not match the expected policy role: received {lh.role} but expected {self.policy_role}.\n"
-                        f"Parsed input: {prompt_text=}\n"
-                        f"Parsed history: {parsed_history=}\n"
-                        f"Final element: {local_history=}"
+                        f"Parsed input: {prompt_text[i]=}\n"
+                        f"Parsed history: {parsed_history[i]=}\n"
+                        f"Final element: {local_history[i]=}"
                     )
         # Append history item
         history = history.append(local_history, inplace=False)
