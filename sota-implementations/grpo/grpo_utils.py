@@ -235,7 +235,7 @@ def get_ref_model(
     TensorDict.from_module(ref_model).data.to_module(ref_model)
     ref_model = TransformersWrapper(
         ref_model,
-        input_mode="text",
+        input_mode="tokens",
         tokenizer=tokenizer,
         generate=False,
         return_log_probs=True,
