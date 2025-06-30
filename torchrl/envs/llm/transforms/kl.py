@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import contextlib
+from contextlib import nullcontext
 from copy import copy
 from typing import Any, Literal
 
@@ -209,7 +209,8 @@ class KLRewardTransform(Transform):
             return next_tensordict
 
         # We use the ("tokens", "full") key to get the log-probs of the reference model
-        ref_log_prob_td = self.ref_model(tensordict.copy())
+        with torch.device(self.device) if self.device is not None else nullcontext():
+            ref_log_prob_td = self.ref_model(tensordict.copy())
         if self.pad_output:
             ref_log_prob_padded = ref_log_prob_td.get(self.log_prob_full_key)
         else:
@@ -581,7 +582,7 @@ class RetrieveLogProb(Transform):
         """
         with torch.device(
             self.device
-        ) if self.device is not None else contextlib.nullcontext():
+        ) if self.device is not None else nullcontext():
             # Get assistant mask
             assistant_masks = td.get(("masks", "all_assistant_mask"), as_list=True)
             log_probs = td.get(lp_key, as_list=True)
