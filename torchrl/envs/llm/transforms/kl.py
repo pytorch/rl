@@ -148,7 +148,6 @@ class KLRewardTransform(Transform):
         out_keys=None,
         log_prob_key: NestedKey = ("log_probs", "full"),
         action_key: NestedKey | None = ("text", "response"),
-        assistant_mask_key: NestedKey = ("masks", "all_assistant_mask"),
         device: torch.device | None = None,
         add_to_reward: bool = True,
         tokenizer: transformers.AutoTokenizer | None = None,
@@ -193,7 +192,6 @@ class KLRewardTransform(Transform):
         # self._buffers["actor_params"] = params.clone().detach()
 
         self.device = device
-        self.assistant_mask_key = assistant_mask_key
         self.action_key = action_key
 
         # find the sample log-prob key

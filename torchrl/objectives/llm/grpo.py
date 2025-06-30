@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from collections import defaultdict, deque
+from typing import Literal
 
 import torch
 from tensordict import (
@@ -15,7 +16,7 @@ from tensordict import (
     TensorDictBase,
     TensorDictParams,
 )
-from tensordict.nn import TensorDictModule
+from tensordict.nn import TensorDictModule, ProbabilisticTensorDictSequential, ProbabilisticTensorDictModule
 from tensordict.utils import _zip_strict
 from torch import distributions as d
 
@@ -62,6 +63,15 @@ class GRPOLoss(ClipPPOLoss):
         A value of 1 indicates that all importance weights are equal (ideal case). If ESS drops or increases significantly,
         it usually indicates a problem with the model configuration, such as a train/eval mode mismatch or a large policy update.
 
+    .. note::
+        The masking_strategy parameter is crucial for LLM training scenarios. It determines which tokens are included
+        in the loss computation:
+        - "sft": Only response tokens (excludes prompt tokens) - suitable for single-turn conversations
+        - "rlhf": Only assistant tokens (excludes user/system tokens) - suitable for multi-turn conversations  
+        - "generic": All valid tokens (excludes padding tokens) - suitable for generic scenarios
+        
+        The masking strategy must match the strategy used for advantage computation to avoid shape mismatches.
+
     Keyword Args:
         clip_epsilon (scalar, optional): weight clipping threshold in the clipped PPO loss equation.
             default: 0.2
@@ -92,6 +102,11 @@ class GRPOLoss(ClipPPOLoss):
         kl_to_ref_coeff (float, optional): coefficient for the KL divergence to the reference policy. Defaults to ``None`` (no KL divergence).
         kl_to_inference_coeff (float, optional): coefficient for the KL divergence to the inference policy. Defaults to ``None`` (no KL divergence).
         device (torch.device, optional): device of the buffers. Defaults to ``None``.
+        masking_strategy (Literal["sft", "rlhf", "generic"], optional): The masking strategy to use for distribution creation.
+            - "sft": Use prompt masking (response tokens only, suitable for single-turn)
+            - "rlhf": Use assistant masking (assistant tokens only, suitable for multi-turn)
+            - "generic": Use attention masking (all valid tokens)
+            Defaults to "sft" since we can't guarantee assistant masks are available.
 
             .. note:: Parameters and buffers from the policy / critic will not be cast to that device to ensure that
                 the storages match the ones that are passed to other components, such as data collectors.
@@ -113,13 +128,23 @@ class GRPOLoss(ClipPPOLoss):
         samples_mc_entropy: int = 1,
         entropy_coeff: float = 0.01,
         gamma: float | None = None,
-        reduction: str = None,
+        reduction: str | None = None,
         clip_value: bool | float | None = None,
         kl_to_ref_coeff: float | None = None,
         kl_to_inference_coeff: float | None = None,
-        device: torch.device = None,
+        device: torch.device | None = None,
+        masking_strategy: Literal["sft", "rlhf", "generic"] = "sft",
         **kwargs,
     ):
+        """Initialize GRPOLoss with explicit masking strategy.
+        
+        Args:
+            masking_strategy: The masking strategy to use for distribution creation.
+                - "sft": Use prompt masking (response tokens only, suitable for single-turn)
+                - "rlhf": Use assistant masking (assistant tokens only, suitable for multi-turn)
+                - "generic": Use attention masking (all valid tokens)
+                Defaults to "sft" since we can't guarantee assistant masks are available.
+        """
         # Define clipping of the value loss
         if isinstance(clip_value, bool):
             clip_value = clip_epsilon if clip_value else None
@@ -144,6 +169,63 @@ class GRPOLoss(ClipPPOLoss):
         # TODO: make this a buffer
         self.kl_to_ref_coeff = kl_to_ref_coeff
         self.kl_to_inference_coeff = kl_to_inference_coeff
+        self.masking_strategy = masking_strategy
+
+    def _get_cur_log_prob(self, tensordict):
+        """Override to use LLM-specific distribution with explicit masking strategy.
+        
+        This ensures that the loss is computed with the correct masking strategy,
+        and provides helpful error messages when there are shape mismatches.
+        """
+        if isinstance(
+            self.actor_network,
+            (ProbabilisticTensorDictSequential, ProbabilisticTensorDictModule),
+        ) or hasattr(self.actor_network, "get_dist"):
+            # Use the specified masking strategy
+            if self.masking_strategy == "sft" and hasattr(self.actor_network, "get_sft_dist"):
+                dist = self.actor_network.get_sft_dist(tensordict)
+            elif self.masking_strategy == "rlhf" and hasattr(self.actor_network, "get_rlhf_dist"):
+                dist = self.actor_network.get_rlhf_dist(tensordict)
+            elif self.masking_strategy == "generic" and hasattr(self.actor_network, "get_generic_dist"):
+                dist = self.actor_network.get_generic_dist(tensordict)
+            elif hasattr(self.actor_network, "get_dist"):
+                # Fallback to generic distribution method
+                dist = self.actor_network.get_dist(
+                    tensordict, 
+                    logits_key=("log_probs", "full")
+                )
+            else:
+                raise NotImplementedError(
+                    f"Actor network must have get_dist method or the appropriate method for "
+                    f"masking strategy '{self.masking_strategy}'."
+                )
+            
+            is_composite = False  # We don't use composite distributions in LLM scenarios
+
+            if is_composite:
+                action = tensordict.select(
+                    *(
+                        (self.tensor_keys.action,)
+                        if isinstance(self.tensor_keys.action, NestedKey)
+                        else self.tensor_keys.action
+                    )
+                )
+            else:
+                action = _maybe_get_or_select(tensordict, self.tensor_keys.action)
+
+            if action.requires_grad:
+                raise RuntimeError(
+                    f"tensordict stored {self.tensor_keys.action} requires grad."
+                )
+            log_prob = dist.log_prob(action)
+        else:
+            raise NotImplementedError(
+                "Only probabilistic modules from tensordict.nn are currently supported. "
+                "If you need to implement a custom logic to retrieve the log-probs (to compute "
+                "the PPO objective) or the distribution (for the PPO entropy), please augment "
+                f"the {type(self).__class__} by implementing your own logic in _get_cur_log_prob."
+            )
+        return log_prob, dist, is_composite
 
     def forward(self, tensordict: TensorDictBase) -> GRPOLossOutput:
         # Some sanity checks and housekeeping:
@@ -299,6 +381,24 @@ class GRPOLoss(ClipPPOLoss):
             )
 
         cur_log_prob, dist, is_composite = self._get_cur_log_prob(tensordict)
+        
+        # Check for shape mismatches and provide helpful error messages
+        if cur_log_prob.shape != prev_log_prob.shape:
+            # Try to provide helpful debugging information
+            error_msg = (
+                f"Shape mismatch detected in GRPOLoss: current log-prob shape {cur_log_prob.shape} "
+                f"!= previous log-prob shape {prev_log_prob.shape}. "
+                f"This usually indicates a mismatch between the masking strategy used for "
+                f"advantage computation and the masking strategy used for loss computation.\n"
+                f"Current masking strategy: '{self.masking_strategy}'\n"
+                f"Possible solutions:\n"
+                f"1. If using RLHF (multi-turn conversations), set masking_strategy='rlhf'\n"
+                f"2. If using SFT (single-turn conversations), set masking_strategy='sft'\n"
+                f"3. If using generic scenarios, set masking_strategy='generic'\n"
+                f"4. Ensure the advantage was computed with the same masking strategy as the loss"
+            )
+            raise ValueError(error_msg)
+        
         cur_log_prob = torch.where(padding_mask, cur_log_prob, 0.0)
 
         if is_composite:
