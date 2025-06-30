@@ -1245,7 +1245,7 @@ class TransformersWrapper(CategoricalSequential):
 
         return out
 
-    def _from_transformers_logprobs_tokens(self, td, cfg, out):
+    def _from_transformers_logprobs_tokens(self, td: TensorDictBase, cfg: dict | None, out: TensorDictBase) -> TensorDictBase:
         """Compute log-probs from tokens input."""
         # Validate input
         if self.input_key not in td:

@@ -210,7 +210,10 @@ class KLRewardTransform(Transform):
 
         # We use the ("tokens", "full") key to get the log-probs of the reference model
         with torch.device(self.device) if self.device is not None else nullcontext():
-            ref_log_prob_td = self.ref_model(tensordict.copy())
+            td_input = tensordict.copy()
+            if self.device is not None:
+                td_input = td_input.to(self.device)
+            ref_log_prob_td = self.ref_model(td_input)
         if self.pad_output:
             ref_log_prob_padded = ref_log_prob_td.get(self.log_prob_full_key)
         else:
