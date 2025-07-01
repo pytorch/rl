@@ -1057,6 +1057,41 @@ class TestChatEnvIntegration:
     @pytest.mark.parametrize(
         "input_mode", ["history", "text", "tokens"], ids=["history", "text", "tokens"]
     )
+    def test_chat_env_integration_ifeval(self, compute_reward, pad_output, input_mode):
+        """Test that the wrapper works correctly with the ChatEnv."""
+        import vllm.envs as envs
+        from torchrl.envs.llm import IFEvalEnv
+
+        envs.VLLM_HOST_IP = "0.0.0.0" or "127.0.0.1"
+
+        policy = vLLMWrapper(
+            model="Qwen/Qwen2.5-0.5B",
+            tokenizer="Qwen/Qwen2.5-0.5B",
+            input_mode=input_mode,
+            pad_output=pad_output,
+            generate=True,
+        )
+        env = IFEvalEnv(
+            max_steps=10,
+            compute_reward=compute_reward,
+            input_mode=input_mode,
+            tokenizer=policy.tokenizer,
+        )
+        r = env.reset()
+        r = policy(r)
+        r, r_ = env.step_and_maybe_reset(r)
+        r = policy(r_)
+        r, r_ = env.step_and_maybe_reset(r)
+
+    @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
+    @pytest.mark.skipif(not _has_datasets, reason="datasets not available")
+    @pytest.mark.parametrize(
+        "compute_reward", [False, True], ids=["no_compute_reward", "compute_reward"]
+    )
+    @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
+    @pytest.mark.parametrize(
+        "input_mode", ["history", "text", "tokens"], ids=["history", "text", "tokens"]
+    )
     def test_chat_env_integration_gsm8k(self, compute_reward, pad_output, input_mode):
         """Test that the wrapper works correctly with the ChatEnv."""
         import vllm.envs as envs
@@ -1085,12 +1120,13 @@ class TestChatEnvIntegration:
 
     @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
     @pytest.mark.parametrize("ref_input_mode", ["tokens"], ids=["tokens"])
+    @pytest.mark.parametrize("env_class", ["GSM8KEnv", "IFEvalEnv"], ids=["gsm8k", "ifeval"])
     def test_chat_env_kl(
-        self, transformers_instance, vllm_instance, pad_output, ref_input_mode
+        self, transformers_instance, vllm_instance, pad_output, ref_input_mode, env_class
     ):
         """Test that the wrapper works correctly with the ChatEnv."""
         import vllm.envs as envs
-        from torchrl.envs.llm import GSM8KEnv
+        from torchrl.envs.llm import GSM8KEnv, IFEvalEnv
 
         envs.VLLM_HOST_IP = "0.0.0.0" or "127.0.0.1"
 
@@ -1114,7 +1150,13 @@ class TestChatEnvIntegration:
             return_log_probs=True,
             pad_output=pad_output,
         )
-        env = GSM8KEnv(max_steps=10, num_envs=3, input_mode="history")
+
+        if env_class == "GSM8KEnv":
+            env = GSM8KEnv(max_steps=10, num_envs=3, input_mode="history")
+        elif env_class == "IFEvalEnv":
+            env = IFEvalEnv(max_steps=10, num_envs=3, input_mode="history")
+        else:
+            raise ValueError(f"Invalid environment class: {env_class}")
         env = env.append_transform(KLRewardTransform(ref_model))
         r = env.rollout(1, policy)
         reward = r.get(("next", "reward"), as_list=not pad_output)
@@ -1131,10 +1173,11 @@ class TestChatEnvIntegration:
                 assert r.shape[1] > 1
                 assert r.shape[2] == 1
 
-    def test_retrievekl_transform(self, transformers_instance, vllm_instance):
+    @pytest.mark.parametrize("env_class", ["GSM8KEnv", "IFEvalEnv"], ids=["gsm8k", "ifeval"])
+    def test_retrievekl_transform(self, transformers_instance, vllm_instance, env_class):
         """Test that the RetrieveKL transform works correctly."""
         from torchrl.collectors.llm.base import LLMCollector
-        from torchrl.envs.llm import GSM8KEnv
+        from torchrl.envs.llm import GSM8KEnv, IFEvalEnv
 
         model, tokenizer = transformers_instance
         vllm_model, vllm_tokenizer = vllm_instance
@@ -1145,7 +1188,12 @@ class TestChatEnvIntegration:
             generate=False,
             pad_output=True,
         )
-        env = GSM8KEnv(max_steps=1, num_envs=3)
+        if env_class == "GSM8KEnv":
+            env = GSM8KEnv(max_steps=1, num_envs=3)
+        elif env_class == "IFEvalEnv":
+            env = IFEvalEnv(max_steps=1, num_envs=3)
+        else:
+            raise ValueError(f"Invalid environment class: {env_class}")
         env = env.append_transform(RetrieveKL("from_collector", ref_model))
         c = LLMCollector(
             env,

@@ -281,6 +281,9 @@ class IfEvalScorer(Transform):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
+        if not getattr(self.parent.base_env, "input_mode", "history") == "history":
+            raise ValueError("IFEvalScorer only supports history input mode")
+
         if tensordict.ndim:
             return torch.stack(
                 [
@@ -290,7 +293,7 @@ class IfEvalScorer(Transform):
                     )
                 ]
             )
-        h = next_tensordict["history"][..., -1]
+        h = tensordict["history", "full"][..., -1]
         response = h.content
         complete = h.is_complete
         # response = tensordict.get(self.response_key)

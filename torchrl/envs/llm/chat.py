@@ -53,6 +53,7 @@ class ChatEnv(EnvBase):
             Defaults to `None`.
         system_role (str, optional): the role of the system (at reset time). Defaults to `"system"`.
         user_role (str, optional): the role of the user (at reset time). Defaults to `"user"`.
+        data_key (str, optional): the key of the data input to the env at reset time (from dataloader). Defaults to `"query"`.
 
     Methods:
         reset (TensorDict): Resets the state of the environment. A tensordict or equivalent with a `"text"`
@@ -87,6 +88,7 @@ class ChatEnv(EnvBase):
         system_role: str = "system",
         user_role: str = "user",
         policy_role: str | None = "assistant",
+        data_key: str | None = None,
     ):
         self.input_mode = input_mode
         if batch_size is None:
@@ -97,7 +99,8 @@ class ChatEnv(EnvBase):
             batch_size = torch.Size(batch_size)
         if batch_size == ():
             raise ValueError(f"{type(self).__name__} must have at least one dimension")
-
+        if data_key is not None:
+            self.data_key = data_key
         super().__init__(batch_size=batch_size)
         self.batch_size = batch_size
 
@@ -359,6 +362,7 @@ class DatasetChatEnv(TransformedEnv):
         apply_template: bool | None = False,
         collate_fn: Callable[[Any], Any] | None = None,
         input_mode: Literal["history", "text", "tokens"] = "history",
+        data_key: str | None = None,
     ):
         from datasets import load_dataset
         from tensordict import list_to_stack
@@ -403,6 +407,7 @@ class DatasetChatEnv(TransformedEnv):
             tokenizer=tokenizer,
             template_kwargs=template_kwargs,
             input_mode=input_mode,
+            data_key=data_key,
         )
         return super().__init__(env_base, primer)
 

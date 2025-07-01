@@ -21,7 +21,8 @@ class IFEvalData(TensorClass["nocast"]):
     key: torch.Tensor
     instruction_id_list: str
     kwargs: list[dict]
-    text: str
+    string: str
+
     # Reponses and additional fields
     response: str | None = None
     tokens: torch.Tensor | None = None
@@ -32,7 +33,7 @@ class IFEvalData(TensorClass["nocast"]):
 
 def _collate_fn(batch):
     batch = torch.stack([TensorDict.from_any(_batch) for _batch in batch])
-    batch.rename_key_("prompt", "text")
+    batch.rename_key_("prompt", "string")    
     return IFEvalData.from_tensordict(batch)
 
 
@@ -179,6 +180,7 @@ You will be assessed by the content of the answer block only, so make sure it co
             apply_template=apply_template,
             collate_fn=collate_fn,
             input_mode=input_mode,
+            data_key="string",
         )
         if max_steps:
             self.append_transform(StepCounter(max_steps=max_steps))
