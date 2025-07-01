@@ -8407,7 +8407,7 @@ class TestDiscreteCQL(LossModuleTestBase):
                 assert loss[key].shape == torch.Size([])
 
 
-@pytest.mark.skipif(not _has_transformers, reason="requires transformers lib")
+# @pytest.mark.skipif(not _has_transformers, reason="requires transformers lib")
 class TestPPO(LossModuleTestBase):
     seed = 0
 
@@ -9864,6 +9864,39 @@ class TestPPO(LossModuleTestBase):
         entropy = TensorDict({"head_0": {"action_log_prob": torch.tensor(1.0)}}, [])
         with pytest.raises(KeyError):
             loss._weighted_loss_entropy(entropy)
+
+    def test_critic_loss_tensordict(self):
+        # Creates a dummy actor.
+        actor, _ = self._create_mock_actor_value()
+
+        # Creates a critic that produces a tensordict of values.
+        class CompositeValueNetwork(nn.Module):
+            def forward(self, _) -> tuple[torch.Tensor, torch.Tensor]:
+                return torch.tensor([-0.0]), torch.tensor([0.0])
+
+        critic = TensorDictModule(
+            CompositeValueNetwork(),
+            in_keys=["state"],
+            out_keys=[("state_value", "value_0"), ("state_value", "value_1")],
+        )
+
+        # Creates the loss and its input tensordict.
+        loss = ClipPPOLoss(actor, critic, loss_critic_type="l2")
+        loss.log_explained_variance = False
+        td = TensorDict(
+            {
+                "state": torch.tensor([0.0]),
+                "value_target": TensorDict(
+                    {"value_0": torch.tensor([-1.0]), "value_1": torch.tensor([2.0])}
+                ),
+            }
+        )
+
+        critic_loss, *_ = loss.loss_critic(td)
+
+        assert "value_0" in critic_loss.keys() and "value_1" in critic_loss.keys()
+        torch.testing.assert_close(critic_loss["value_0"], torch.tensor([1.0]))
+        torch.testing.assert_close(critic_loss["value_1"], torch.tensor([4.0]))
 
 
 class TestA2C(LossModuleTestBase):

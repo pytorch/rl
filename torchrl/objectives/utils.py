@@ -9,7 +9,7 @@ import re
 import warnings
 from copy import copy
 from enum import Enum
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, TypeVar
 
 import torch
 from tensordict import NestedKey, TensorDict, TensorDictBase, unravel_key
@@ -101,54 +101,80 @@ class _context_manager:
         return decorate_context
 
 
+TensorLike = TypeVar("TensorLike", Tensor, TensorDict)
+
+
 def distance_loss(
-    v1: torch.Tensor,
-    v2: torch.Tensor,
+    v1: TensorLike,
+    v2: TensorLike,
     loss_function: str,
     strict_shape: bool = True,
-) -> torch.Tensor:
+) -> TensorLike:
     """Computes a distance loss between two tensors.
 
     Args:
-        v1 (Tensor): a tensor with a shape compatible with v2
-        v2 (Tensor): a tensor with a shape compatible with v1
+        v1 (Tensor | TensorDict): a tensor or tensordict with a shape compatible with v2.
+        v2 (Tensor | TensorDict): a tensor or tensordict with a shape compatible with v1.
         loss_function (str): One of "l2", "l1" or "smooth_l1" representing which loss function is to be used.
         strict_shape (bool): if False, v1 and v2 are allowed to have a different shape.
             Default is ``True``.
 
     Returns:
-         A tensor of the shape v1.view_as(v2) or v2.view_as(v1) with values equal to the distance loss between the
-        two.
+         A tensor or tensordict of the shape v1.view_as(v2) or v2.view_as(v1)
+        with values equal to the distance loss between the two.
 
     """
     if v1.shape != v2.shape and strict_shape:
         raise RuntimeError(
-            f"The input tensors have shapes {v1.shape} and {v2.shape} which are incompatible."
+            f"The input tensors or tensordicts have shapes {v1.shape} and {v2.shape} which are incompatible."
         )
 
+    # Deals with the `TensorDict` case.
+    if isinstance(v1, TensorDict):
+        if not isinstance(v2, TensorDict):
+            raise TypeError(
+                "If the first input is a 'TensorDict', so must be the second."
+            )
+
+        v1_leaves = v1.keys(True, True)
+        v2_leaves = v2.keys(True, True)
+
+        if set(v1_leaves) != set(v2_leaves):
+            raise ValueError(
+                f"The tensordicts keys must match exactly, got {v1_leaves} and {v2_leaves}."
+            )
+
+        value_loss = v1.new_zeros()
+        for leaf in v1_leaves:
+            value_loss[leaf] = distance_loss(
+                v1[leaf], v2[leaf], loss_function, strict_shape
+            )
+
+        return value_loss
+
+    # Deals with the `Tensor` case.
     if loss_function == "l2":
-        value_loss = F.mse_loss(
+        return F.mse_loss(
             v1,
             v2,
             reduction="none",
         )
 
-    elif loss_function == "l1":
-        value_loss = F.l1_loss(
+    if loss_function == "l1":
+        return F.l1_loss(
             v1,
             v2,
             reduction="none",
         )
 
-    elif loss_function == "smooth_l1":
-        value_loss = F.smooth_l1_loss(
+    if loss_function == "smooth_l1":
+        return F.smooth_l1_loss(
             v1,
             v2,
             reduction="none",
         )
-    else:
-        raise NotImplementedError(f"Unknown loss {loss_function}")
-    return value_loss
+
+    raise NotImplementedError(f"Unknown loss {loss_function}")
 
 
 class TargetNetUpdater:
