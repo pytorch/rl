@@ -8407,7 +8407,7 @@ class TestDiscreteCQL(LossModuleTestBase):
                 assert loss[key].shape == torch.Size([])
 
 
-# @pytest.mark.skipif(not _has_transformers, reason="requires transformers lib")
+@pytest.mark.skipif(not _has_transformers, reason="requires transformers lib")
 class TestPPO(LossModuleTestBase):
     seed = 0
 
