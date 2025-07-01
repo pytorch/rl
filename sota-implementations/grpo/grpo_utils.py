@@ -608,7 +608,7 @@ def make_env_async(cfg: DictConfig, devices: list[int] | None = None):
             tokenizer=train_tokenizer,
             num_envs=cfg.env.num_envs,
             max_steps=cfg.env.max_steps,
-            device=torch.device("cuda:0}") if devices is not None else None,
+            device=torch.device("cuda:0") if devices is not None else None,
         )
     else:
         raise NotImplementedError(f"Dataset {cfg.env.dataset} not implemented")
