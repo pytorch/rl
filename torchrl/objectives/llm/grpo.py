@@ -187,6 +187,8 @@ class GRPOLoss(ClipPPOLoss):
             (ProbabilisticTensorDictSequential, ProbabilisticTensorDictModule),
         ) or hasattr(self.actor_network, "get_dist"):
             # Use the specified masking strategy
+            #  dists are always defined over the whole sequence, so we can re-use the mask as the dist will always
+            #  be a MaskedCategorical
             if self.masking_strategy == "sft" and hasattr(
                 self.actor_network, "get_sft_dist"
             ):
@@ -227,43 +229,7 @@ class GRPOLoss(ClipPPOLoss):
         # - We may not have the tokens yet. If not, we will use the tokenizer of the actor to tokenize the text.
         #   We default to history rather than text because the history will account for multiturn, or multimodal inputs.
         if self.tensor_keys.action not in tensordict:
-            # The structure is usually TensorDict(text="blah", text_response="blah", next=TensorDict(history=History(...)))
-            history: History = tensordict.get(("next", "history"))
-            if history is not None:
-                # Caveat: we need the chat template to support the return_assistant_tokens_mask argument, which is often not the case.
-                tokenized = history.apply_chat_template(
-                    tokenizer=self.actor_network.tokenizer,
-                    return_assistant_tokens_mask=True,
-                    return_dict=True,
-                    tokenize=True,
-                    padding=False,
-                    add_generation_prompt=False,
-                )
-                # We want the assistant mask to be melted in the attention mask
-                attention_mask = tokenized.get("attention_mask", as_list=True)
-                assistant_mask = tokenized.get("assistant_masks", as_list=True)
-                tokens = tokenized.get("input_ids", as_list=True)
-                if isinstance(attention_mask, list):
-                    attention_mask = [
-                        atten.bool() & assi.bool()
-                        for atten, assi in _zip_strict(attention_mask, assistant_mask)
-                    ]
-                    tokens = [
-                        tok[atten] for tok, atten in _zip_strict(tokens, attention_mask)
-                    ]
-                else:
-                    attention_mask = attention_mask.bool() & assistant_mask.bool()
-                    tokens = tokens[attention_mask]
-                tensordict.set("attention_mask", attention_mask)
-                tensordict.set(self.tensor_keys.action, tokens)
-            else:
-                text_response = tensordict.get("text_response")
-                if text_response is not None:
-                    tokenized = self.actor_network.tokenizer(
-                        text_response, return_tensors="pt", as_dict=True
-                    )
-                    tensordict.set(self.tensor_keys.action, tokenized.get("input_ids"))
-                    tensordict.set("attention_mask", tokenized.get("attention_mask"))
+            raise ValueError
 
         tensordict = tensordict.copy()
         advantage = tensordict.get(
@@ -365,7 +331,6 @@ class GRPOLoss(ClipPPOLoss):
             self.tensor_keys.sample_log_prob,
             adv_shape,
         )
-        padding_mask = prev_log_prob != 0
         if prev_log_prob is None:
             raise KeyError(
                 f"Couldn't find the log-prob {self.tensor_keys.sample_log_prob} in the input data."
@@ -394,7 +359,8 @@ class GRPOLoss(ClipPPOLoss):
             )
             raise ValueError(error_msg)
 
-        cur_log_prob = torch.where(padding_mask, cur_log_prob, 0.0)
+        attention_mask = dist.mask
+        cur_log_prob = torch.where(attention_mask, cur_log_prob, 0.0)
 
         if is_composite:
             raise NotImplementedError

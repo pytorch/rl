@@ -270,6 +270,12 @@ class MaskedCategorical(D.Categorical):
         super().__init__(logits=logits)
         self.num_samples = num_samples
 
+    @property
+    def mask(self):
+        if self._sparse_mask:
+            raise ValueError("MaskedCategorical.mask does not support sparse masks")
+        return self._mask
+
     def entropy(self):
         """Compute the entropy of the distribution.
 
