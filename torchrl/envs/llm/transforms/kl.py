@@ -190,6 +190,9 @@ class KLRewardTransform(Transform):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
+        if self.device is not None:
+            tensordict = tensordict.to(self.device)
+            next_tensordict = next_tensordict.to(self.device)
         # tensordict = self._get_text_response(tensordict, next_tensordict)
         response = tensordict.get(self.action_key, None)
         if response is None:
@@ -203,8 +206,6 @@ class KLRewardTransform(Transform):
             return next_tensordict
 
         # We use the ("tokens", "full") key to get the log-probs of the reference model
-        if self.device is not None:
-            tensordict = tensordict.to(self.device)
         with torch.device(self.device) if self.device is not None else nullcontext():
             td_input = tensordict.copy()
             ref_log_prob_td = self.ref_model(td_input)
