@@ -1160,7 +1160,8 @@ class TestChatEnvIntegration:
             dialog_turns_per_batch=6,
         )
         for d in c:
-            print(d)
+            assert ("history", "full") in d
+            assert ("next", "history", "prompt") in d
             break
         return
 
@@ -1830,7 +1831,7 @@ class TestGRPOLossIntegration:
             }
         else:
             input_mode = "history"
-            input_data = {"history": sample_history}
+            input_data = {"history": ChatHistory(prompt=sample_history)}
 
         wrapper_gen = vLLMWrapper(
             vllm_model,
@@ -1838,8 +1839,6 @@ class TestGRPOLossIntegration:
             input_mode=input_mode,
             generate=True,
             return_log_probs=True,
-            return_tokens=True,
-            return_masks=True,
             pad_output=True,
             generate_kwargs={"max_tokens": 10},
         )
@@ -1847,15 +1846,6 @@ class TestGRPOLossIntegration:
         # Create test data with advantage and correct batch size
         td = TensorDict(input_data, batch_size=(2,)).to_lazystack(0)
         td = wrapper_gen(td)
-        if masking_strategy == "rlhf":
-            # we need to invert the text to a history element
-            text = [
-                t0 + t1 for t0, t1 in zip(td["text", "prompt"], td["text", "response"])
-            ]
-            h = History.from_text(text)
-            td["history"] = td["history"].append(h[..., -1])
-            assert td["history"].shape[-1] == 3
-            assert td["history"][..., -1].role == ["assistant", "assistant"]
         # use a shape that can be broadcast
         td["advantage"] = torch.randn(2, 1, 1)
 
@@ -1865,8 +1855,6 @@ class TestGRPOLossIntegration:
             input_mode=input_mode,
             generate=False,
             return_log_probs=True,
-            return_tokens=True,
-            return_masks=True,
             pad_output=True,
         )
 

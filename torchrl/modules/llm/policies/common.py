@@ -289,7 +289,7 @@ class LogProbDistribution(D.Distribution):
 
         return result
 
-    def sample(self, sample_shape=torch.Size()) -> torch.Tensor:
+    def sample(self, sample_shape: tuple | torch.Size | None = None) -> torch.Tensor:
         """Sample from the distribution.
 
         Note: This is not implemented for log-prob distributions since we don't have
@@ -549,9 +549,6 @@ class CategoricalSequential(TensorDictModuleBase):
                 mask, batch_first=True, padding_value=False, padding_side="right"
             )
 
-        print("prompt_length", prompt_length)
-        print("logits", logits.shape)
-        print("mask", mask.shape)
         return MaskedCategorical(
             logits=logits,
             mask=mask.bool(),

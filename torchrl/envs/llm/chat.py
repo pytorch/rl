@@ -296,7 +296,6 @@ class ChatEnv(EnvBase):
         for to, tok in _zip_strict(tokens_obj.unbind(0), tokens["input_ids"]):
             to.prompt = tok
         result = tensordict.empty().set("tokens", tokens_obj)
-        print("result", result)
         return result
 
     def _set_seed(self, seed):

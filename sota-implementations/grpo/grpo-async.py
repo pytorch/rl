@@ -182,7 +182,7 @@ def train(
             batch = replay_buffer.sample(cfg.train.optim_batch_size).to(train_device)
             # For logging purposes, we get the last element of the history
             # and convert it to a string
-            history: History = batch.view(-1)[0]["next", "history"]
+            history: History = batch.view(-1)[0]["history", "full"]
             history_str: list[str] | str = history.apply_chat_template(
                 tokenizer=train_tokenizer
             )
