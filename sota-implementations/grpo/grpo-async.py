@@ -252,7 +252,9 @@ def train(
                         torch.tensor(
                             [
                                 t.numel()
-                                for t in rb_content.get(("tokens" ,"response"), as_list=True)
+                                for t in rb_content.get(
+                                    ("tokens", "response"), as_list=True
+                                )
                             ],
                             dtype=torch.float,
                         ).mean()

@@ -278,7 +278,9 @@ class ChatEnv(EnvBase):
 
     def _reset_history(self, tensordict: TensorDictBase, history: History):
         # Simplest case: history is the prompt
-        chat_history = ChatHistory._from_tensordict(tensordict.empty(device=self.device))
+        chat_history = ChatHistory._from_tensordict(
+            tensordict.empty(device=self.device)
+        )
         chat_history.prompt = history
         return tensordict.empty(device=self.device).set("history", chat_history)
 

@@ -1120,9 +1120,16 @@ class TestChatEnvIntegration:
 
     @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
     @pytest.mark.parametrize("ref_input_mode", ["tokens"], ids=["tokens"])
-    @pytest.mark.parametrize("env_class", ["GSM8KEnv", "IFEvalEnv"], ids=["gsm8k", "ifeval"])
+    @pytest.mark.parametrize(
+        "env_class", ["GSM8KEnv", "IFEvalEnv"], ids=["gsm8k", "ifeval"]
+    )
     def test_chat_env_kl(
-        self, transformers_instance, vllm_instance, pad_output, ref_input_mode, env_class
+        self,
+        transformers_instance,
+        vllm_instance,
+        pad_output,
+        ref_input_mode,
+        env_class,
     ):
         """Test that the wrapper works correctly with the ChatEnv."""
         import vllm.envs as envs
@@ -1173,8 +1180,12 @@ class TestChatEnvIntegration:
                 assert r.shape[1] > 1
                 assert r.shape[2] == 1
 
-    @pytest.mark.parametrize("env_class", ["GSM8KEnv", "IFEvalEnv"], ids=["gsm8k", "ifeval"])
-    def test_retrievekl_transform(self, transformers_instance, vllm_instance, env_class):
+    @pytest.mark.parametrize(
+        "env_class", ["GSM8KEnv", "IFEvalEnv"], ids=["gsm8k", "ifeval"]
+    )
+    def test_retrievekl_transform(
+        self, transformers_instance, vllm_instance, env_class
+    ):
         """Test that the RetrieveKL transform works correctly."""
         from torchrl.collectors.llm.base import LLMCollector
         from torchrl.envs.llm import GSM8KEnv, IFEvalEnv

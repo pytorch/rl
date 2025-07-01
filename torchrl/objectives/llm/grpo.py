@@ -21,11 +21,9 @@ from tensordict.nn import (
     ProbabilisticTensorDictSequential,
     TensorDictModule,
 )
-from tensordict.utils import _zip_strict
 from torch import distributions as d
 
 from torchrl._utils import logger as torchrl_logger
-from torchrl.envs.llm.chat import History
 from torchrl.envs.transforms.transforms import Transform
 from torchrl.modules.llm import CategoricalSequential
 from torchrl.objectives.ppo import ClipPPOLoss

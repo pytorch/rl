@@ -33,7 +33,7 @@ class IFEvalData(TensorClass["nocast"]):
 
 def _collate_fn(batch):
     batch = torch.stack([TensorDict.from_any(_batch) for _batch in batch])
-    batch.rename_key_("prompt", "string")    
+    batch.rename_key_("prompt", "string")
     return IFEvalData.from_tensordict(batch)
 
 

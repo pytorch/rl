@@ -469,18 +469,19 @@ class DataLoadingPrimer(TensorDictPrimer):
 
         If `reset` is passed, then one element per reset will be loaded.
         """
-        if reset is not None:
-            if not reset.any():
-                raise RuntimeError("reset must have at least one True value.")
-            if reset.ndim > 0:
-                loaded = [self._load_from_dataloader() for _ in range(reset.sum())]
-                return self.stack_method(loaded)
-
         primers = getattr(self, "primers", None)
         if primers is not None:
             device = self.primers.device
         else:
-            device = None
+            device = getattr(self.parent, "device", None)
+
+        if reset is not None:
+            if not reset.any():
+                raise RuntimeError("reset must have at least one True value.")
+            if reset.ndim > 0:
+                loaded = [self._load_from_dataloader().to(device) for _ in range(reset.sum())]
+                return self.stack_method(loaded)
+
 
         if len(self._queue) > 0:
             result = self._queue.popleft()
