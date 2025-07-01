@@ -8,12 +8,14 @@ import weakref
 from typing import Any, Literal, overload
 
 import torch
+from torchrl.data.llm import History
 from tensordict import NestedKey, TensorDictBase
 from tensordict.nn import TensorDictModuleBase, TensorDictSequential
 from tensordict.tensorclass import TensorClass
 from torch import distributions as D
 from torch.distributions import Categorical
 from torch.nn.utils.rnn import pad_sequence
+from torchrl.data.tensor_specs import NonTensorSpec, Unbounded
 from torchrl.modules import MaskedCategorical
 
 # TODOs:
@@ -46,6 +48,21 @@ class Tokens(TensorClass["nocast"]):
     full: torch.Tensor | None = None
     padded: bool | None = None
 
+    @classmethod
+    def default_spec(cls, shape=(-1,), keys: list[Literal["prompt", "response", "full"]] | None = None):
+        """A default spec to use in transforms / envs that return Tokens objects."""
+        from torchrl.data import Composite, NonTensor
+
+        if keys is None:
+            keys = ["prompt", "response", "full"]
+
+        defaults = {
+            k: Unbounded(shape=shape + (-1,))
+            for k in keys
+        }
+        defaults["padded"] = NonTensor(shape=shape, example_data=False)
+
+        return Composite(defaults, shape=shape[:-1], data_cls=cls)
 
 class Masks(TensorClass["nocast"]):
     """A Masks container.
@@ -68,6 +85,46 @@ class Masks(TensorClass["nocast"]):
     all_assistant_mask: torch.Tensor | None = None
     padded: bool | None = None
 
+    @classmethod
+    def default_spec(cls, shape=(-1,), keys: list[Literal["all_attention_mask", "all_assistant_mask"]] | None = None):
+        """A default spec to use in transforms / envs that return Masks objects."""
+        from torchrl.data import Composite, NonTensor
+
+        if keys is None:
+            keys = ["all_attention_mask", "all_assistant_mask"]
+
+        defaults = {
+            k: Unbounded(shape=shape + (-1,))
+            for k in keys
+        }
+        defaults["padded"] = NonTensor(shape=shape, example_data=False)
+
+        return Composite(defaults, shape=shape[:-1], data_cls=cls)
+
+class ChatHistory(TensorClass["nocast"]):
+    """A chat history container.
+
+    Args:
+        prompt (History | None): The prompt history stack.
+        response (History | None): The response history items.
+        full (History | None): The history across prompt and response.
+    """
+
+    prompt: History | None = None
+    response: History | None = None
+    full: History | None = None
+
+    @classmethod
+    def default_spec(cls, shape=(-1,), keys: list[Literal["prompt", "response", "full"]] | None = None):
+        """A default spec to use in transforms / envs that return ChatHistory objects."""
+        from torchrl.data import Composite, NonTensor
+        if keys is None:
+            keys = ["prompt", "response", "full"]
+        return Composite(
+            {k: History.default_spec(shape=shape + (-1,)) for k in keys},
+            shape=shape[:-1],
+            data_cls=cls,
+        )
 
 class LogProbs(TensorClass["nocast"]):
     """A log-probability container.
@@ -92,6 +149,20 @@ class LogProbs(TensorClass["nocast"]):
     full: torch.Tensor | None = None
     padded: bool | None = None
 
+    @classmethod
+    def default_spec(cls, shape=(-1,), keys: list[Literal["prompt", "response", "full"]] | None = None):
+        """A default spec to use in transforms / envs that return LogProbs objects."""
+        from torchrl.data import Composite, NonTensor
+        if keys is None:
+            keys = ["prompt", "response", "full"]
+
+        defaults = {
+            k: Unbounded(shape=shape + (-1,))
+            for k in keys
+        }
+        defaults["padded"] = NonTensor(shape=shape, example_data=False)
+
+        return Composite(defaults, shape=shape[:-1], data_cls=cls)
 
 class Text(TensorClass["nocast"]):
     """A text container.
@@ -100,14 +171,26 @@ class Text(TensorClass["nocast"]):
         prompt (str | None): The prompt text.
         response (str | None): The response text.
         full (str | None): The text across prompt and response.
-        padded (bool | None): Whether the text is padded.
     """
 
     prompt: str | None = None
     response: str | None = None
     full: str | None = None
-    padded: bool | None = None
 
+    @classmethod
+    def default_spec(cls, shape=(-1,), keys: list[Literal["prompt", "response", "full"]] | None = None):
+        """A default spec to use in transforms / envs that return Text objects."""
+        from torchrl.data import Composite, NonTensor
+        if keys is None:
+            keys = ["prompt", "response", "full"]
+
+        defaults = {
+            k: NonTensor(shape=shape, example_data="a string")
+            for k in keys
+        }
+
+        return Composite(defaults, shape=shape[:-1], data_cls=cls)
+        )
 
 class LogProbDistribution(D.Distribution):
     """A distribution that works directly with log-probabilities.
@@ -191,10 +274,6 @@ class CategoricalSequential(TensorDictModuleBase):
         input_key: The key for the input data. If None, defaults to the input_mode name.
         attention_mask_key: The key for attention masks (used in "tokens" mode).
         generate: Whether to enable text generation.
-        return_log_probs: Whether to return log probabilities.
-        return_text: Whether to return text outputs.
-        return_tokens: Whether to return token outputs.
-        return_masks: Whether to return mask outputs.
         generate_kwargs: Additional arguments to pass to the model's generate method.
         tokenizer_kwargs: Additional arguments to pass to the tokenizer.
         pad_output: Whether to pad the output sequences to a uniform length.
@@ -229,33 +308,32 @@ class CategoricalSequential(TensorDictModuleBase):
     @overload
     def __init__(
         self,
-        model,
+         model: Any | str,
         *,
-        tokenizer=None,
+        tokenizer: callable | str | None = None,  # type: ignore
         input_mode: str = "history",
-        input_key: str | None = None,
+        input_key: NestedKey | None = None,
         attention_mask_key: str = "attention_mask",
         generate: bool = True,
-        return_log_probs: bool = False,
-        return_text: bool = True,
-        return_tokens: bool = True,
-        return_masks: bool = True,
         generate_kwargs: dict | None = None,
         tokenizer_kwargs: dict | None = None,
         pad_output: bool = False,
-        inplace=None,
+        inplace: Literal[True, False, "empty"] | None = None,
         device: torch.device | None = None,
         layout: torch.layout | None = None,
         num_samples: int | None = None,
-        log_probs_key: NestedKey | None = ("log_probs", "response"),
+        chat_template_name: Literal["chatml_format", "qwen"] | None = None,
+        chat_template: str | None = None,
+        return_log_probs: bool | None = None,
+        history_key: NestedKey | None = "history",
         text_key: NestedKey | None = "text",
         tokens_key: NestedKey | None = "tokens",
         masks_key: NestedKey | None = "masks",
+        log_probs_key: NestedKey | None = "log_probs",
     ):
         ...
-
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__()
 
     def get_new_version(self, **kwargs):
         """Returns a new version of the module with altered parameters.

@@ -392,6 +392,11 @@ The main goal of these primitives is to:
 
     TransformersWrapper
     vLLMWrapper
+    ChatHistory
+    Text
+    LogProbs
+    Masks
+    Tokens
 
 Utils
 -----
