@@ -599,6 +599,7 @@ def make_env_async(cfg: DictConfig, devices: list[int] | None = None):
             tokenizer=train_tokenizer,
             num_envs=cfg.env.num_envs,
             max_steps=cfg.env.max_steps,
+            device=devices[0] if devices is not None else None,
         )
     elif cfg.env.dataset == "ifeval":  # ifeval
         reward_threshold = 50
@@ -607,6 +608,7 @@ def make_env_async(cfg: DictConfig, devices: list[int] | None = None):
             tokenizer=train_tokenizer,
             num_envs=cfg.env.num_envs,
             max_steps=cfg.env.max_steps,
+            device=devices[0] if devices is not None else None,
         )
     else:
         raise NotImplementedError(f"Dataset {cfg.env.dataset} not implemented")

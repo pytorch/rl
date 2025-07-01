@@ -54,6 +54,7 @@ class ChatEnv(EnvBase):
         system_role (str, optional): the role of the system (at reset time). Defaults to `"system"`.
         user_role (str, optional): the role of the user (at reset time). Defaults to `"user"`.
         data_key (str, optional): the key of the data input to the env at reset time (from dataloader). Defaults to `"query"`.
+        device (torch.device, optional): the device to use for computations. Defaults to `None`.
 
     Methods:
         reset (TensorDict): Resets the state of the environment. A tensordict or equivalent with a `"text"`
@@ -89,6 +90,7 @@ class ChatEnv(EnvBase):
         user_role: str = "user",
         policy_role: str | None = "assistant",
         data_key: str | None = None,
+        device: torch.device | None = None,
     ):
         self.input_mode = input_mode
         if batch_size is None:
@@ -101,7 +103,7 @@ class ChatEnv(EnvBase):
             raise ValueError(f"{type(self).__name__} must have at least one dimension")
         if data_key is not None:
             self.data_key = data_key
-        super().__init__(batch_size=batch_size)
+        super().__init__(batch_size=batch_size, device=device)
         self.batch_size = batch_size
 
         self.system_prompt = system_prompt
@@ -146,11 +148,13 @@ class ChatEnv(EnvBase):
         self.full_observation_spec = Composite(
             text=Text.default_spec(shape=self.batch_size, keys=["prompt"]),
             shape=self.batch_size,
+            device=self.device,
         )
         # We receive prompt, response and full
         self.full_action_spec = Composite(
             text=Text.default_spec(shape=self.batch_size, keys=["full"]),
             shape=self.batch_size,
+            device=self.device,
         )
 
     def _make_specs_tokens(self):
@@ -158,11 +162,13 @@ class ChatEnv(EnvBase):
         self.full_observation_spec = Composite(
             tokens=Tokens.default_spec(shape=self.batch_size, keys=["prompt"]),
             shape=self.batch_size,
+            device=self.device,
         )
         # We receive prompt, response and full
         self.full_action_spec = Composite(
             tokens=Tokens.default_spec(shape=self.batch_size, keys=["full"]),
             shape=self.batch_size,
+            device=self.device,
         )
 
     def _post_step_mdp_hooks(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -198,7 +204,7 @@ class ChatEnv(EnvBase):
         # prompt = chat_history.prompt
         full = chat_history.full
         # response = chat_history.response
-        empty_td = tensordict.empty()
+        empty_td = tensordict.empty(device=self.device)
         # Old full will be new prompt - can be modified at will
         new_history = ChatHistory(prompt=full)
         empty_td.set("history", new_history)
@@ -209,7 +215,7 @@ class ChatEnv(EnvBase):
         # get text from tensordict
         text: Text = tensordict["text"]
         full = text.full
-        empty_td = tensordict.empty()
+        empty_td = tensordict.empty(device=self.device)
         new_history = Text(prompt=full)
         empty_td.set("text", new_history)
         return empty_td
@@ -219,7 +225,7 @@ class ChatEnv(EnvBase):
         # get tokens from tensordict
         tokens: Tokens = tensordict["tokens"]
         full = tokens.full
-        empty_td = tensordict.empty()
+        empty_td = tensordict.empty(device=self.device)
         new_history = Tokens(prompt=full)
         empty_td.set("tokens", new_history)
         return empty_td
@@ -272,9 +278,9 @@ class ChatEnv(EnvBase):
 
     def _reset_history(self, tensordict: TensorDictBase, history: History):
         # Simplest case: history is the prompt
-        chat_history = ChatHistory._from_tensordict(tensordict.empty())
+        chat_history = ChatHistory._from_tensordict(tensordict.empty(device=self.device))
         chat_history.prompt = history
-        return tensordict.empty().set("history", chat_history)
+        return tensordict.empty(device=self.device).set("history", chat_history)
 
     def _reset_text(self, tensordict: TensorDictBase, history: History):
         # We need to parse the history to a text
@@ -283,7 +289,7 @@ class ChatEnv(EnvBase):
         )
         txt = Text._from_tensordict(tensordict.empty())
         txt.prompt = text
-        result = tensordict.empty().set("text", txt)
+        result = tensordict.empty(device=self.device).set("text", txt)
         return result
 
     def _reset_tokens(self, tensordict: TensorDictBase, history: History):
@@ -298,7 +304,7 @@ class ChatEnv(EnvBase):
         tokens_obj = Tokens._from_tensordict(tensordict.empty().to_lazystack(0))
         for to, tok in _zip_strict(tokens_obj.unbind(0), tokens["input_ids"]):
             to.prompt = tok
-        result = tensordict.empty().set("tokens", tokens_obj)
+        result = tensordict.empty(device=self.device).set("tokens", tokens_obj)
         return result
 
     def _set_seed(self, seed):
@@ -408,6 +414,7 @@ class DatasetChatEnv(TransformedEnv):
             template_kwargs=template_kwargs,
             input_mode=input_mode,
             data_key=data_key,
+            device=device,
         )
         return super().__init__(env_base, primer)
 
