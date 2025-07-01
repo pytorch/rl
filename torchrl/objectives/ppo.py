@@ -763,7 +763,6 @@ class PPOLoss(LossModule):
             "target_actor_network_params",
             "target_critic_network_params",
         )
-
         if self._has_critic:
             return self.critic_coef * loss_value, clip_fraction, explained_variance
         return loss_value, clip_fraction, explained_variance
