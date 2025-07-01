@@ -467,7 +467,7 @@ class DataLoadingPrimer(TensorDictPrimer):
     _device: torch.device | None = None
 
     @property
-    def device(self):
+    def device(self) -> torch.device | None:
         if self._device is None:
             primers = getattr(self, "primers", None)
             if primers is not None:
@@ -480,6 +480,10 @@ class DataLoadingPrimer(TensorDictPrimer):
                     device = None
             self._device = device
         return self._device
+
+    @device.setter
+    def device(self, device: torch.device | None):
+        self._device = device
 
     def _load_from_dataloader(self, reset: torch.Tensor | None = None):
         """Loads a single element from the dataloader, or alternatively from the buffer.
