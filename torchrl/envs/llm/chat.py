@@ -4,15 +4,13 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import warnings
-
 from typing import Any, Callable, Literal
 
 import torch
-from tensordict import lazy_stack, TensorDict, TensorDictBase
+from tensordict import lazy_stack, TensorDictBase
+from tensordict.utils import _zip_strict
 from torch.utils.data import DataLoader
-from torchrl.data import Composite, NonTensor
-
+from torchrl.data import Composite
 from torchrl.data.llm.chat import History
 from torchrl.envs import EnvBase, TransformedEnv
 
@@ -39,7 +37,7 @@ class ChatEnv(EnvBase):
     various entities (typically with roles such as `"system"`, `"user"`, `"assistant"` etc.)
 
     The step function will execute the following operations:
-       
+
     <TODO: add description>
     <TODO: mention it is designed to work with vLLM and TransformersWrapper>
 
@@ -100,8 +98,6 @@ class ChatEnv(EnvBase):
         if batch_size == ():
             raise ValueError(f"{type(self).__name__} must have at least one dimension")
 
-        from torchrl.modules.llm.policies.common import Text
-
         super().__init__(batch_size=batch_size)
         self.batch_size = batch_size
 
@@ -116,9 +112,10 @@ class ChatEnv(EnvBase):
         self.system_role = system_role
         self.user_role = user_role
         self.policy_role = policy_role
+        self.tokenizer = tokenizer
 
         self._make_specs()
-    
+
     def _make_specs(self):
         if self.input_mode == "history":
             self._make_specs_history()
@@ -128,31 +125,65 @@ class ChatEnv(EnvBase):
             self._make_specs_tokens()
         else:
             raise ValueError(f"Invalid input mode: {self.input_mode}")
-    
+
     def _make_specs_history(self):
-        # we output prompt
-        self.full_observation_spec = Composite(history=ChatHistory.default_spec(shape=self.batch_size, keys=["prompt"]))
-        # We receive prompt, response and full
-        self.full_action_spec = Composite(history=ChatHistory.default_spec(shape=self.batch_size, keys=["prompt", "response", "full"]))
+        # we output prompt
+        self.full_observation_spec = Composite(
+            history=ChatHistory.default_spec(shape=self.batch_size, keys=["prompt"]),
+            shape=self.batch_size,
+        )
+        # We receive prompt, response and full
+        self.full_action_spec = Composite(
+            history=ChatHistory.default_spec(shape=self.batch_size, keys=["full"]),
+            shape=self.batch_size,
+        )
 
     def _make_specs_text(self):
-        # we output prompt
-        self.full_observation_spec = Composite(text=Text.default_spec(shape=self.batch_size, keys=["prompt"]))
-        # We receive prompt, response and full
-        self.full_action_spec = Composite(text=Text.default_spec(shape=self.batch_size, keys=["prompt", "response", "full"]))
+        # we output prompt
+        self.full_observation_spec = Composite(
+            text=Text.default_spec(shape=self.batch_size, keys=["prompt"]),
+            shape=self.batch_size,
+        )
+        # We receive prompt, response and full
+        self.full_action_spec = Composite(
+            text=Text.default_spec(shape=self.batch_size, keys=["full"]),
+            shape=self.batch_size,
+        )
 
     def _make_specs_tokens(self):
-        # we output prompt
-        self.full_observation_spec = Composite(tokens=Tokens.default_spec(shape=self.batch_size, keys=["prompt"]))
-        # We receive prompt, response and full
-        self.full_action_spec = Composite(tokens=Tokens.default_spec(shape=self.batch_size, keys=["prompt", "response", "full"]))
+        # we output prompt
+        self.full_observation_spec = Composite(
+            tokens=Tokens.default_spec(shape=self.batch_size, keys=["prompt"]),
+            shape=self.batch_size,
+        )
+        # We receive prompt, response and full
+        self.full_action_spec = Composite(
+            tokens=Tokens.default_spec(shape=self.batch_size, keys=["full"]),
+            shape=self.batch_size,
+        )
+
+    def _post_step_mdp_hooks(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Allows modification of the tensordict after the step_mdp."""
+        if self.input_mode == "history":
+            tensordict.exclude(
+                ("history", "response"), ("history", "full"), inplace=True
+            )
+        if self.input_mode in ("text", "history"):
+            tensordict.exclude(("text", "response"), ("text", "full"), inplace=True)
+        if self.input_mode in ("tokens", "history", "text"):
+            tensordict.exclude(("tokens", "response"), ("tokens", "full"), inplace=True)
+        if "log_probs" in tensordict.keys():
+            tensordict.exclude(
+                ("log_probs", "response"), ("log_probs", "full"), inplace=True
+            )
+        return tensordict
 
     def _step(self, tensordict):
         if self.input_mode == "history":
             return self._step_history(tensordict)
-        elif self.input_mode == "text":
+        if self.input_mode in ("text", "history"):
             return self._step_text(tensordict)
-        elif self.input_mode == "tokens":
+        if self.input_mode in ("tokens", "history", "text"):
             return self._step_tokens(tensordict)
         else:
             raise ValueError(f"Invalid input mode: {self.input_mode}")
@@ -165,11 +196,11 @@ class ChatEnv(EnvBase):
         full = chat_history.full
         # response = chat_history.response
         empty_td = tensordict.empty()
-        # Old full will be new prompt - can be modified at will
+        # Old full will be new prompt - can be modified at will
         new_history = ChatHistory(prompt=full)
         empty_td.set("history", new_history)
         return empty_td
-    
+
     def _step_text(self, tensordict):
         """Step the environment in text mode."""
         # get text from tensordict
@@ -190,8 +221,7 @@ class ChatEnv(EnvBase):
         empty_td.set("tokens", new_history)
         return empty_td
 
-
-    def _reset(self, tensordict: TensorDictBase | None):
+    def _reset(self, tensordict: TensorDictBase | None, **kwargs):
         if tensordict is None:
             raise RuntimeError(f"{type(self).__name__} expects a tensordict as input")
         # Find the total text
@@ -216,38 +246,58 @@ class ChatEnv(EnvBase):
             history = lazy_stack([history_system, history], -1)
         else:
             history = history.unsqueeze(-1)
-        
-        # Now that we have the history, call the specific reset method
+
+        # Now that we have the history, call the specific reset method
         if self.input_mode == "history":
-            return self._reset_history(tensordict, history)
+            return (
+                self._reset_history(tensordict, history)
+                .update(tensordict)
+                .to_lazystack(0)
+            )
         elif self.input_mode == "text":
-            return self._reset_text(tensordict, history)
+            return (
+                self._reset_text(tensordict, history).update(tensordict).to_lazystack(0)
+            )
         elif self.input_mode == "tokens":
-            return self._reset_tokens(tensordict, history)
+            return (
+                self._reset_tokens(tensordict, history)
+                .update(tensordict)
+                .to_lazystack(0)
+            )
         else:
             raise ValueError(f"Invalid input mode: {self.input_mode}")
 
     def _reset_history(self, tensordict: TensorDictBase, history: History):
-        # Simplest case: history is the prompt
+        # Simplest case: history is the prompt
         chat_history = ChatHistory._from_tensordict(tensordict.empty())
         chat_history.prompt = history
         return tensordict.empty().set("history", chat_history)
-    
+
     def _reset_text(self, tensordict: TensorDictBase, history: History):
         # We need to parse the history to a text
-        text = history.apply_chat_template(tokenizer=self.tokenizer, add_generation_prompt=True, **self.template_kwargs)
+        text = history.apply_chat_template(
+            tokenizer=self.tokenizer, add_generation_prompt=True, **self.template_kwargs
+        )
         txt = Text._from_tensordict(tensordict.empty())
         txt.prompt = text
         result = tensordict.empty().set("text", txt)
         return result
-    
+
     def _reset_tokens(self, tensordict: TensorDictBase, history: History):
         # We need to parse the history to a tokens
-        tokens = history.apply_chat_template(tokenizer=self.tokenizer, add_generation_prompt=True, return_tensors="pt", return_dict=True, **self.template_kwargs)
-        tokens_obj = Tokens._from_tensordict(tensordict.empty())
-        for to, tok in _zip_strict(tokens_obj.unbind(0), tokens):
+        tokens = history.apply_chat_template(
+            tokenizer=self.tokenizer,
+            add_generation_prompt=True,
+            return_tensors="pt",
+            return_dict=True,
+            **self.template_kwargs,
+        )
+        tokens_obj = Tokens._from_tensordict(tensordict.empty().to_lazystack(0))
+        for to, tok in _zip_strict(tokens_obj.unbind(0), tokens["input_ids"]):
             to.prompt = tok
-        return tensordict.empty().set("tokens", tokens_obj)
+        result = tensordict.empty().set("tokens", tokens_obj)
+        print("result", result)
+        return result
 
     def _set_seed(self, seed):
         return
@@ -280,6 +330,7 @@ class DatasetChatEnv(TransformedEnv):
         collate_fn (Callable | None, optional): A custom collate function for data loading. If `None`, a default
             collate function is used that renames the `"text"` key to `"query"` to avoid conflicts with the `"text"` key
             in the tensordict returned by TorchRL components. Defaults to `None`.
+        input_mode (Literal["history", "text", "tokens"], optional): The mode of input to the environment. Defaults to `"history"`.
 
     .. seealso:: `DatasetChatEnv` is a thin wrapper around :class:`~torchrl.envs.llm.ChatEnv` bucketed with a
         :class:`~torchrl.envs.llm.DataLoadingPrimer` transform. See these two classes for more insight on data format
@@ -308,6 +359,7 @@ class DatasetChatEnv(TransformedEnv):
         template_kwargs: dict[str, Any] | None = None,
         apply_template: bool | None = False,
         collate_fn: Callable[[Any], Any] | None = None,
+        input_mode: Literal["history", "text", "tokens"] = "history",
     ):
         from datasets import load_dataset
         from tensordict import list_to_stack
@@ -320,11 +372,11 @@ class DatasetChatEnv(TransformedEnv):
 
         batch_size = (num_envs,)
 
-        dataset = load_dataset(dataset, name)
-        if split is None and "train" in dataset:
+        dataset_obj = load_dataset(dataset, name)
+        if split is None and "train" in dataset_obj:
             split = "train"
         if split is not None:
-            dataset = dataset[split]
+            dataset_obj = dataset_obj[split]
         # Env
         if seed is None:
             seed = int(torch.empty((), dtype=torch.int64).random_().item())
@@ -332,7 +384,7 @@ class DatasetChatEnv(TransformedEnv):
         generator.manual_seed(seed)
 
         dataloader = DataLoader(  # noqa: TOR401
-            dataset,
+            dataset_obj,
             batch_size=batch_size_dl,
             shuffle=shuffle,
             collate_fn=collate_fn if collate_fn is not None else _default_collate_fn,
@@ -351,7 +403,7 @@ class DatasetChatEnv(TransformedEnv):
             system_prompt=self.SYSTEM_PROMPT,
             tokenizer=tokenizer,
             template_kwargs=template_kwargs,
-            apply_template=apply_template,
+            input_mode=input_mode,
         )
         return super().__init__(env_base, primer)
 
@@ -363,5 +415,6 @@ class DatasetChatEnv(TransformedEnv):
         Returns:
             self: The environment itself.
         """
-        self.transform[0].reset_dataloader()
+        if hasattr(self.transform, "__getitem__"):
+            self.transform[0].reset_dataloader()
         return self

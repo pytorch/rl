@@ -9,8 +9,6 @@ import importlib.util
 
 import os
 from functools import partial
-from re import A
-from textwrap import wrap
 
 import pytest
 import torch
@@ -24,7 +22,13 @@ from torchrl.envs.llm.transforms.kl import (
     RetrieveKL,
     RetrieveLogProb,
 )
-from torchrl.modules.llm.policies.common import LogProbs, Masks, Text, Tokens, ChatHistory
+from torchrl.modules.llm.policies.common import (
+    ChatHistory,
+    LogProbs,
+    Masks,
+    Text,
+    Tokens,
+)
 from torchrl.modules.llm.policies.transformers_wrapper import TransformersWrapper
 from torchrl.modules.llm.policies.vllm_wrapper import vLLMWrapper
 from transformers import AutoTokenizer
@@ -37,7 +41,10 @@ _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_vllm = importlib.util.find_spec("vllm") is not None
 _has_datasets = importlib.util.find_spec("datasets") is not None
 
-TransformersWrapperMaxTokens = partial(TransformersWrapper, generate_kwargs={"max_new_tokens": 10, "do_sample": True})
+TransformersWrapperMaxTokens = partial(
+    TransformersWrapper, generate_kwargs={"max_new_tokens": 10, "do_sample": True}
+)
+
 
 @pytest.fixture(scope="function", autouse=True)
 def set_seed():
@@ -278,7 +285,11 @@ class TestWrappers:
     # History Input Mode Tests
     # ================================================
 
-    @pytest.mark.parametrize("wrapper_class", [vLLMWrapper, TransformersWrapperMaxTokens], ids=["vllm", "transformers"])
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
     @pytest.mark.parametrize("generate", [True, False], ids=["generate", "no_generate"])
     @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
     def test_history_input_mode(
@@ -298,15 +309,19 @@ class TestWrappers:
         else:
             model, tokenizer = transformers_instance
         wrapper = wrapper_class(
-                model,
-                tokenizer=tokenizer,
-                input_mode="history",
-                generate=generate,
-                pad_output=pad_output,
-            )
+            model,
+            tokenizer=tokenizer,
+            input_mode="history",
+            generate=generate,
+            pad_output=pad_output,
+        )
 
         # Check input keys
-        assert wrapper.in_keys == [("history", "prompt")] if generate else [("history", "full")]
+        assert (
+            wrapper.in_keys == [("history", "prompt")]
+            if generate
+            else [("history", "full")]
+        )
 
         # Check output keys - always return everything
         expected_out_keys = ["text", "masks", "tokens", "log_probs", "history"]
@@ -316,14 +331,13 @@ class TestWrappers:
         if generate:
             data = TensorDict(
                 history=ChatHistory(prompt=sample_history),
-            batch_size=(2,),
-        
-        )
+                batch_size=(2,),
+            )
         else:
             data = TensorDict(
                 history=ChatHistory(full=sample_history_assistant),
-            batch_size=(2,),
-        )
+                batch_size=(2,),
+            )
 
         # Run wrapper
         result = wrapper(data)
@@ -383,7 +397,11 @@ class TestWrappers:
     # Text Input Mode Tests
     # ================================================
 
-    @pytest.mark.parametrize("wrapper_class", [vLLMWrapper, TransformersWrapperMaxTokens], ids=["vllm", "transformers"])
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
     @pytest.mark.parametrize("generate", [True, False], ids=["generate", "no_generate"])
     @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
     def test_text_input_mode(
@@ -453,7 +471,11 @@ class TestWrappers:
     # Tokens Input Mode Tests
     # ================================================
 
-    @pytest.mark.parametrize("wrapper_class", [vLLMWrapper, TransformersWrapperMaxTokens], ids=["vllm", "transformers"])
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
     @pytest.mark.parametrize("generate", [True, False], ids=["generate", "no_generate"])
     @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
     def test_tokens_input_mode(
@@ -483,12 +505,17 @@ class TestWrappers:
         )
 
         # Check input keys
-        assert wrapper.in_keys == [("tokens", "prompt")] if generate else [("tokens", "full")]
+        assert (
+            wrapper.in_keys == [("tokens", "prompt")]
+            if generate
+            else [("tokens", "full")]
+        )
 
         # Create input data
         data = TensorDict(
-            tokens=Tokens(prompt=input_ids) if generate else Tokens(full=input_ids), 
-            attention_mask=attention_mask, batch_size=(2,)
+            tokens=Tokens(prompt=input_ids) if generate else Tokens(full=input_ids),
+            attention_mask=attention_mask,
+            batch_size=(2,),
         )
 
         # Run wrapper
@@ -513,8 +540,14 @@ class TestWrappers:
     # Error Handling Tests
     # ================================================
 
-    @pytest.mark.parametrize("wrapper_class", [vLLMWrapper, TransformersWrapperMaxTokens], ids=["vllm", "transformers"])
-    def test_invalid_input_mode(self, wrapper_class, vllm_instance, transformers_instance):
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_invalid_input_mode(
+        self, wrapper_class, vllm_instance, transformers_instance
+    ):
         """Test that invalid input_mode raises an error."""
         if wrapper_class == vLLMWrapper:
             model, tokenizer = vllm_instance
@@ -528,8 +561,14 @@ class TestWrappers:
                 input_mode="invalid_mode",
             )
 
-    @pytest.mark.parametrize("wrapper_class", [vLLMWrapper, TransformersWrapperMaxTokens], ids=["vllm", "transformers"])
-    def test_missing_input_key(self, wrapper_class, vllm_instance, transformers_instance, sample_history):
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_missing_input_key(
+        self, wrapper_class, vllm_instance, transformers_instance, sample_history
+    ):
         """Test that missing input key raises an error."""
         if wrapper_class == vLLMWrapper:
             model, tokenizer = vllm_instance
@@ -549,8 +588,14 @@ class TestWrappers:
         with pytest.raises(ValueError, match="Expected 'history' key"):
             wrapper(data)
 
-    @pytest.mark.parametrize("wrapper_class", [vLLMWrapper, TransformersWrapperMaxTokens], ids=["vllm", "transformers"])
-    def test_invalid_history_type(self, wrapper_class, vllm_instance, transformers_instance):
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_invalid_history_type(
+        self, wrapper_class, vllm_instance, transformers_instance
+    ):
         """Test that invalid history type raises an error."""
         if wrapper_class == vLLMWrapper:
             model, tokenizer = vllm_instance
@@ -564,13 +609,21 @@ class TestWrappers:
         )
 
         # Create data with wrong type
-        data = TensorDict(history=ChatHistory(prompt="not a history object"), batch_size=(2,))
+        data = TensorDict(
+            history=ChatHistory(prompt="not a history object"), batch_size=(2,)
+        )
 
         with pytest.raises(TypeError, match="Expected History object"):
             wrapper(data)
 
-    @pytest.mark.parametrize("wrapper_class", [vLLMWrapper, TransformersWrapperMaxTokens], ids=["vllm", "transformers"])
-    def test_generate_false_without_log_probs(self, wrapper_class, vllm_instance, transformers_instance):
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_generate_false_without_log_probs(
+        self, wrapper_class, vllm_instance, transformers_instance
+    ):
         """Test that generate=False without return_log_probs=True raises an error."""
         if wrapper_class == vLLMWrapper:
             model, tokenizer = vllm_instance
@@ -593,8 +646,19 @@ class TestWrappers:
         "batch_size", [1, 2, 3], ids=["batch_size_1", "batch_size_2", "batch_size_3"]
     )
     @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
-    @pytest.mark.parametrize("wrapper_class", [vLLMWrapper, TransformersWrapperMaxTokens], ids=["vllm", "transformers"])
-    def test_batch_sizes(self, wrapper_class, vllm_instance, transformers_instance, batch_size, pad_output):
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_batch_sizes(
+        self,
+        wrapper_class,
+        vllm_instance,
+        transformers_instance,
+        batch_size,
+        pad_output,
+    ):
         """Test wrapper with different batch sizes."""
         if wrapper_class == vLLMWrapper:
             model, tokenizer = vllm_instance
@@ -647,8 +711,14 @@ class TestWrappers:
     # Custom Input Key Tests
     # ================================================
 
-    @pytest.mark.parametrize("wrapper_class", [vLLMWrapper, TransformersWrapperMaxTokens], ids=["vllm", "transformers"])
-    def test_custom_input_key(self, wrapper_class, vllm_instance, transformers_instance, sample_history):
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_custom_input_key(
+        self, wrapper_class, vllm_instance, transformers_instance, sample_history
+    ):
         """Test wrapper with custom input key."""
         if wrapper_class == vLLMWrapper:
             model, tokenizer = vllm_instance
@@ -668,7 +738,9 @@ class TestWrappers:
         assert wrapper.in_keys == [("custom_history_key", "prompt")]
 
         # Create data with custom key
-        data = TensorDict(custom_history_key=ChatHistory(prompt=sample_history), batch_size=(2,))
+        data = TensorDict(
+            custom_history_key=ChatHistory(prompt=sample_history), batch_size=(2,)
+        )
         result = wrapper(data)
         check_output_shapes(
             result, pad_output=wrapper.pad_output, requested_log_probs=False
@@ -686,7 +758,11 @@ class TestWrappers:
     @pytest.mark.parametrize(
         "return_log_probs", [True, False], ids=["log_probs", "no_log_probs"]
     )
-    @pytest.mark.parametrize("wrapper_class", [vLLMWrapper, TransformersWrapperMaxTokens], ids=["vllm", "transformers"])
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
     def test_selective_outputs(
         self,
         wrapper_class,
@@ -745,8 +821,18 @@ class TestWrappers:
     # Log-probs Only Mode Tests
     # ================================================
 
-    @pytest.mark.parametrize("wrapper_class", [vLLMWrapper, TransformersWrapperMaxTokens], ids=["vllm", "transformers"])
-    def test_log_probs_only_mode(self, wrapper_class, vllm_instance, transformers_instance, sample_history_assistant):
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_log_probs_only_mode(
+        self,
+        wrapper_class,
+        vllm_instance,
+        transformers_instance,
+        sample_history_assistant,
+    ):
         """Test wrapper in log-probs only mode (generate=False)."""
         if wrapper_class == vLLMWrapper:
             model, tokenizer = vllm_instance
@@ -761,7 +847,9 @@ class TestWrappers:
             return_log_probs=True,  # Must be True when generate=False
         )
 
-        data = TensorDict(history=ChatHistory(full=sample_history_assistant), batch_size=(2,))
+        data = TensorDict(
+            history=ChatHistory(full=sample_history_assistant), batch_size=(2,)
+        )
         result = wrapper(data)
         check_output_shapes(
             result, pad_output=wrapper.pad_output, requested_log_probs=True
@@ -781,8 +869,14 @@ class TestWrappers:
     # TensorClass Structure Tests
     # ================================================
 
-    @pytest.mark.parametrize("wrapper_class", [vLLMWrapper, TransformersWrapperMaxTokens], ids=["vllm", "transformers"])
-    def test_tensorclass_structure(self, wrapper_class, vllm_instance, transformers_instance, sample_history):
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_tensorclass_structure(
+        self, wrapper_class, vllm_instance, transformers_instance, sample_history
+    ):
         """Test that TensorClass objects have the correct structure."""
         if wrapper_class == vLLMWrapper:
             model, tokenizer = vllm_instance
@@ -845,8 +939,14 @@ class TestWrappers:
     # Unpadded Output Tests (with as_list=True)
     # ================================================
 
-    @pytest.mark.parametrize("wrapper_class", [vLLMWrapper, TransformersWrapperMaxTokens], ids=["vllm", "transformers"])
-    def test_unpadded_output_with_as_list(self, wrapper_class, vllm_instance, transformers_instance, sample_history):
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_unpadded_output_with_as_list(
+        self, wrapper_class, vllm_instance, transformers_instance, sample_history
+    ):
         """Test unpadded output using as_list=True to avoid stacking issues."""
         if wrapper_class == vLLMWrapper:
             model, tokenizer = vllm_instance
@@ -897,7 +997,11 @@ class TestWrappers:
     @pytest.mark.parametrize(
         "input_mode", ["history", "text", "tokens"], ids=["history", "text", "tokens"]
     )
-    @pytest.mark.parametrize("wrapper_class", [vLLMWrapper, TransformersWrapperMaxTokens], ids=["vllm", "transformers"])
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
     def test_num_samples(
         self,
         wrapper_class,
@@ -927,7 +1031,9 @@ class TestWrappers:
             num_samples=num_samples,
         )
         if input_mode == "history":
-            data = TensorDict(history=ChatHistory(prompt=sample_history), batch_size=(2,))
+            data = TensorDict(
+                history=ChatHistory(prompt=sample_history), batch_size=(2,)
+            )
         elif input_mode == "text":
             data = TensorDict(text=Text(prompt=sample_text), batch_size=(2,))
         elif input_mode == "tokens":
@@ -940,10 +1046,18 @@ class TestWrappers:
             result, pad_output=wrapper.pad_output, requested_log_probs=False
         )
 
+
 class TestChatEnvIntegration:
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     @pytest.mark.skipif(not _has_datasets, reason="datasets not available")
-    def test_chat_env_integration_gsm8k(self):
+    @pytest.mark.parametrize(
+        "compute_reward", [False, True], ids=["no_compute_reward", "compute_reward"]
+    )
+    @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
+    @pytest.mark.parametrize(
+        "input_mode", ["history", "text", "tokens"], ids=["history", "text", "tokens"]
+    )
+    def test_chat_env_integration_gsm8k(self, compute_reward, pad_output, input_mode):
         """Test that the wrapper works correctly with the ChatEnv."""
         import vllm.envs as envs
         from torchrl.envs.llm import GSM8KEnv
@@ -953,10 +1067,16 @@ class TestChatEnvIntegration:
         policy = vLLMWrapper(
             model="Qwen/Qwen2.5-0.5B",
             tokenizer="Qwen/Qwen2.5-0.5B",
-            input_mode="history",
+            input_mode=input_mode,
+            pad_output=pad_output,
             generate=True,
         )
-        env = GSM8KEnv(max_steps=10, input_mode="history")
+        env = GSM8KEnv(
+            max_steps=10,
+            compute_reward=compute_reward,
+            input_mode=input_mode,
+            tokenizer=policy.tokenizer,
+        )
         r = env.reset()
         r = policy(r)
         r, r_ = env.step_and_maybe_reset(r)
@@ -983,10 +1103,6 @@ class TestChatEnvIntegration:
             tokenizer=vllm_tokenizer,
             input_mode="history",
             generate=True,
-            return_text=True,
-            return_tokens=True,
-            return_masks=True,
-            return_log_probs=True,
             pad_output=pad_output,
         )
         ref_model = TransformersWrapper(
@@ -998,7 +1114,7 @@ class TestChatEnvIntegration:
             return_log_probs=True,
             pad_output=pad_output,
         )
-        env = GSM8KEnv(max_steps=10, num_envs=3)
+        env = GSM8KEnv(max_steps=10, num_envs=3, input_mode="history")
         env = env.append_transform(KLRewardTransform(ref_model))
         r = env.rollout(1, policy)
         reward = r.get(("next", "reward"), as_list=not pad_output)
@@ -1027,7 +1143,7 @@ class TestChatEnvIntegration:
             tokenizer=tokenizer,
             input_mode="history",
             generate=False,
-            return_log_probs=True,
+            pad_output=True,
         )
         env = GSM8KEnv(max_steps=1, num_envs=3)
         env = env.append_transform(RetrieveKL("from_collector", ref_model))
@@ -1039,7 +1155,7 @@ class TestChatEnvIntegration:
                 tokenizer=vllm_tokenizer,
                 input_mode="history",
                 generate=True,
-                return_text=True,
+                pad_output=True,
             ),
             dialog_turns_per_batch=6,
         )
@@ -1080,7 +1196,7 @@ class TestKLTransforms:
         # Create test data based on input mode
         if input_mode == "history":
             history = sample_history_assistant
-            data = TensorDict(history=history, batch_size=(2,))
+            data = TensorDict(history=ChatHistory(full=history), batch_size=(2,))
         elif input_mode == "text":
             history = None  # Not used in text mode
             prompts = sample_text
@@ -1102,10 +1218,6 @@ class TestKLTransforms:
             tokenizer=tokenizer,
             input_mode=input_mode,
             generate=False,
-            return_log_probs=True,
-            return_text=True,
-            return_tokens=True,
-            return_masks=True,
             pad_output=pad_output,
         )
 
@@ -1162,7 +1274,7 @@ class TestKLTransforms:
         # Create test data based on input mode
         if input_mode == "history":
             history = sample_history_assistant
-            data = TensorDict(history=history, batch_size=(2,))
+            data = TensorDict(history=ChatHistory(full=history), batch_size=(2,))
         elif input_mode == "text":
             history = None  # Not used in text mode
             prompts = sample_text
@@ -1184,10 +1296,6 @@ class TestKLTransforms:
             tokenizer=tokenizer,
             input_mode=input_mode,
             generate=False,
-            return_log_probs=True,
-            return_text=True,
-            return_tokens=True,
-            return_masks=True,
             pad_output=pad_output,
             log_probs_key="gen_log_probs",
         )
@@ -1197,10 +1305,6 @@ class TestKLTransforms:
             tokenizer=tokenizer,
             input_mode=input_mode,
             generate=False,
-            return_log_probs=True,
-            return_text=True,
-            return_tokens=True,
-            return_masks=True,
             pad_output=pad_output,
             log_probs_key="ref_log_probs",
         )
@@ -1368,7 +1472,9 @@ class TestKLTransforms:
         )
 
         # Create data
-        data = TensorDict(history=sample_history_assistant, batch_size=(2,))
+        data = TensorDict(
+            history=ChatHistory(full=sample_history_assistant), batch_size=(2,)
+        )
 
         # Get log-probs from both models
         data = data.to_lazystack(0)
@@ -1464,10 +1570,6 @@ class TestLogProbsComparison:
             input_mode=input_mode,
             input_key=input_key,
             generate=True,
-            return_log_probs=True,
-            return_text=True,
-            return_tokens=True,
-            return_masks=True,
             pad_output=pad_output,
             generate_kwargs={"max_tokens": 5, "temperature": 0.0},  # Deterministic
         )
@@ -1479,10 +1581,6 @@ class TestLogProbsComparison:
             input_mode=input_mode,
             input_key=input_key,
             generate=True,
-            return_log_probs=True,
-            return_text=True,
-            return_tokens=True,
-            return_masks=True,
             pad_output=pad_output,
             generate_kwargs={
                 "max_new_tokens": 5,
@@ -1545,10 +1643,6 @@ class TestLogProbsComparison:
             input_mode=input_mode,
             input_key=input_key,
             generate=False,
-            return_log_probs=True,
-            return_text=True,
-            return_tokens=True,
-            return_masks=True,
             pad_output=pad_output,
         )
 
@@ -1558,10 +1652,6 @@ class TestLogProbsComparison:
             input_mode=input_mode,
             input_key=input_key,
             generate=False,
-            return_log_probs=True,
-            return_text=True,
-            return_tokens=True,
-            return_masks=True,
             pad_output=pad_output,
         )
 
@@ -1642,8 +1732,6 @@ class TestDistributionMethods:
             tokenizer=tokenizer,
             input_mode=input_mode,
             generate=False,
-            return_log_probs=True,
-            return_masks=True,
         )
 
         # Create test data with correct batch size

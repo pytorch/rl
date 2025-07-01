@@ -19,14 +19,16 @@ from tensordict import (
 )
 from tensordict.tensorclass import from_dataclass, TensorClass
 from tensordict.utils import _zip_strict, NestedKey
+from torch import distributions as D
 from torch.nn.utils.rnn import pad_sequence
 
 from torchrl.envs.utils import _classproperty
 from torchrl.modules.llm.policies.common import (
     CategoricalSequential,
+    ChatHistory,
     LogProbs,
     Masks,
-    Text,ChatHistory,
+    Text,
     Tokens,
 )
 from torchrl.modules.utils.utils import _unpad_tensors
@@ -47,8 +49,18 @@ except ImportError:
 class vLLMWrapper(CategoricalSequential):
     """A wrapper class for vLLM models, providing a consistent interface for text generation and log probability computation.
 
-    This class provides a simplified API for handling different input modalities (history, text, tokens) with consistent
+    This class provides a unified API for handling different input modalities (history, text, tokens) with consistent
     output structure using :class:`~tensordict.TensorClass` objects.
+
+    **Recent Changes:**
+    - **ChatHistory Integration**: The wrapper now uses :class:`~torchrl.modules.llm.policies.ChatHistory` objects for history mode,
+      similar to how :class:`~torchrl.modules.llm.policies.Text` and :class:`~torchrl.modules.llm.policies.Tokens` are used.
+    - **Modular Output**: The wrapper automatically determines what to return based on input_mode:
+      - **Tokens**: Always returned for all input modes (`"history"`, `"text"`, `"tokens"`)
+      - **Text**: Returned for `"text"` and `"history"` input modes
+      - **History**: Returned only for `"history"` input mode
+      - **Masks**: Always returned for all input modes
+      - **Log Probs**: Returned when `return_log_probs=True`
 
     Args:
         model (vllm.LLM | str): The vLLM model to wrap. If a string, it will be passed to `vllm.LLM`.
@@ -86,23 +98,33 @@ class vLLMWrapper(CategoricalSequential):
         text_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Text` object. Defaults to `"text"`.
         tokens_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Tokens` object. Defaults to `"tokens"`.
         masks_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Masks` object. Defaults to `"masks"`.
+        history_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.ChatHistory` object. Defaults to `"history"`.
 
     Input Keys:
         The input key depends on both `input_mode` and `generate`:
-        - If `input_mode="history"`: `input_key` (defaults to `"history"`)
+        - If `input_mode="history"` and `generate=True`: `input_key` (defaults to `("history", "prompt")`)
+        - If `input_mode="history"` and `generate=False`: `input_key` (defaults to `("history", "full")`)
         - If `input_mode="text"` and `generate=True`: `input_key` (defaults to `("text", "prompt")`)
         - If `input_mode="text"` and `generate=False`: `input_key` (defaults to `("text", "full")`)
         - If `input_mode="tokens"` and `generate=True`: `input_key` (defaults to `("tokens", "prompt")`)
         - If `input_mode="tokens"` and `generate=False`: `input_key` (defaults to `("tokens", "full")`)
 
     Output Keys:
-        Always returns a TensorDict with the following structure:
+        The output keys are automatically determined based on the input_mode:
+        - **Tokens**: Always returned (`tokens_key`, defaults to `"tokens"`)
+        - **Text**: Returned for `"text"` and `"history"` modes (`text_key`, defaults to `"text"`)
+        - **History**: Returned only for `"history"` mode (`history_key`, defaults to `"history"`)
+        - **Masks**: Always returned (`masks_key`, defaults to `"masks"`)
+        - **Log Probs**: Returned when `return_log_probs=True` (`log_probs_key`, defaults to `"log_probs"`)
+
+        Example output structure for `input_mode="history"`:
         ```
         TensorDict(
-            text=Text(...),
-            masks=Masks(...),
-            tokens=Tokens(...),
-            log_probs=LogProbs(...)
+            text=Text(prompt=..., response=..., full=...),
+            masks=Masks(all_attention_mask=..., all_assistant_mask=...),
+            tokens=Tokens(prompt=..., response=..., full=...),
+            log_probs=LogProbs(prompt=..., response=..., full=...),
+            history=ChatHistory(prompt=..., response=..., full=...)
         )
         ```
 
@@ -110,6 +132,7 @@ class vLLMWrapper(CategoricalSequential):
         >>> from vllm import LLM
         >>> from transformers import AutoTokenizer
         >>> from torchrl.data.llm import History
+        >>> from torchrl.modules.llm.policies import ChatHistory
         >>>
         >>> model = LLM("gpt2")
         >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
@@ -127,9 +150,11 @@ class vLLMWrapper(CategoricalSequential):
         ...     {"role": "user", "content": "Hello"},
         ...     {"role": "assistant", "content": "Hi there!"}
         ... ]])
-        >>> result = wrapper(TensorDict(history=history, batch_size=(1,)))
-        >>> print(result["text"].response)
-        >>> print(result["log_probs"].response)
+        >>> chat_history = ChatHistory(prompt=history)
+        >>> result = wrapper(TensorDict(history=chat_history, batch_size=(1,)))
+        >>> print(result["text"].response)  # Generated text
+        >>> print(result["log_probs"].response)  # Log probabilities
+        >>> print(result["history"].response)  # History with response
 
     Attributes:
         collector: The collector associated with the module, if it exists.
@@ -191,7 +216,7 @@ class vLLMWrapper(CategoricalSequential):
         self.input_mode = input_mode
         self.attention_mask_key = attention_mask_key
         self.generate = generate
-        
+
         # Auto-determine what to return based on input mode
         self.return_history = input_mode in ("history",)
         self.return_text = input_mode in ("text", "history")
@@ -199,15 +224,19 @@ class vLLMWrapper(CategoricalSequential):
         self.return_masks = True
         if return_log_probs is False and not generate:
             raise ValueError("return_log_probs must be True when generate=False.")
-        return_log_probs = True if (return_log_probs is None and generate) or (not generate) else bool(return_log_probs)
+        return_log_probs = (
+            True
+            if (return_log_probs is None and generate) or (not generate)
+            else bool(return_log_probs)
+        )
         self.return_log_probs = return_log_probs
-        
+
         self.history_key = history_key
         self.log_probs_key = log_probs_key
         self.masks_key = masks_key
         self.text_key = text_key
         self.tokens_key = tokens_key
-        
+
         if not isinstance(pad_output, bool):
             raise ValueError("pad_output must be a boolean")
         self.pad_output = pad_output
@@ -220,7 +249,9 @@ class vLLMWrapper(CategoricalSequential):
         # Set input keys based on mode and generate parameter
         if input_mode == "history":
             if generate:
-                self.in_keys = [("history", "prompt") if input_key is None else input_key]
+                self.in_keys = [
+                    ("history", "prompt") if input_key is None else input_key
+                ]
             else:
                 self.in_keys = [("history", "full") if input_key is None else input_key]
         elif input_mode == "text":
@@ -371,8 +402,9 @@ class vLLMWrapper(CategoricalSequential):
 
         if "input_key" in kwargs:
             constructor_kwargs["input_key"] = kwargs["input_key"]
-        elif hasattr(self, "input_key"):
-            constructor_kwargs["input_key"] = self.input_key
+        # Since the input_key is dynamically determined, we don't want to set it here
+        # elif hasattr(self, "input_key"):
+        # constructor_kwargs["input_key"] = self.input_key
 
         if "attention_mask_key" in kwargs:
             constructor_kwargs["attention_mask_key"] = kwargs["attention_mask_key"]
@@ -391,7 +423,6 @@ class vLLMWrapper(CategoricalSequential):
             constructor_kwargs["return_log_probs"] = True
         elif hasattr(self, "return_log_probs"):
             constructor_kwargs["return_log_probs"] = self.return_log_probs
-
 
         if "generate_kwargs" in kwargs:
             constructor_kwargs["generate_kwargs"] = kwargs["generate_kwargs"]
@@ -642,14 +673,10 @@ class vLLMWrapper(CategoricalSequential):
             result[(self.tokens_key, "prompt")] = (
                 tokens_prompt_padded
                 if not self.num_samples
-                else tokens_prompt_padded.unsqueeze(1).repeat(
-                    1, self.num_samples, 1
-                )
+                else tokens_prompt_padded.unsqueeze(1).repeat(1, self.num_samples, 1)
             )
         else:
-            tokens_prompt_nested = torch.nested.as_nested_tensor(
-                tokens_prompt_unpadded
-            )
+            tokens_prompt_nested = torch.nested.as_nested_tensor(tokens_prompt_unpadded)
             if not self.num_samples:
                 result[(self.tokens_key, "prompt")] = tokens_prompt_nested
             else:
@@ -692,8 +719,8 @@ class vLLMWrapper(CategoricalSequential):
             ]
             result_flat.set((self.text_key, "full"), text_full)
             result_flat.set((self.text_key, "response"), text_response)
-        # Now parse the full text back to a history object, and use the extra history objects
-        #  as response
+        # Now parse the full text back to a history object, and use the extra history objects
+        # as response
         history_chat = ChatHistory._from_tensordict(result.empty())
         if self.num_samples is None:
             history_chat.prompt = history
@@ -703,13 +730,15 @@ class vLLMWrapper(CategoricalSequential):
         with history_chat.view(-1) as history_chat_flat:
             history_chat_flat.full = full_histories = History.from_text(text_full)
             prompt_histories = history_chat_flat.prompt
-            # iterate over batch
+            # iterate over batch
             h_responses = []
-            for h_full, h_prompt in _zip_strict(full_histories.unbind(0), prompt_histories.unbind(0)):
+            for h_full, h_prompt in _zip_strict(
+                full_histories.unbind(0), prompt_histories.unbind(0)
+            ):
                 if h_full.shape[0] <= h_prompt.shape[0]:
                     raise RuntimeError("Full history is shorter than prompt history")
-                # Note: there can be more than one response, so the response has the same number of dims as prompt
-                h_responses.append(h_full[h_prompt.shape[0]:])
+                # Note: there can be more than one response, so the response has the same number of dims as prompt
+                h_responses.append(h_full[h_prompt.shape[0] :])
             history_chat_flat.response = torch.stack(h_responses)
         result.set(self.history_key, history_chat)
         return result
@@ -754,8 +783,8 @@ class vLLMWrapper(CategoricalSequential):
             tokenizer_kwargs.setdefault("chat_template", self.chat_template)
         tokenizer_kwargs.setdefault("add_generation_prompt", False)
         text_full = history.apply_chat_template(
-                tokenizer=self.tokenizer, **tokenizer_kwargs
-            )
+            tokenizer=self.tokenizer, **tokenizer_kwargs
+        )
         tokenizer_kwargs.setdefault("return_assistant_tokens_mask", True)
         tokenizer_kwargs.setdefault("tokenize", True)
         tokenizer_kwargs.setdefault("padding", False)
@@ -1014,16 +1043,16 @@ class vLLMWrapper(CategoricalSequential):
 
         tokens_obj = Tokens._from_tensordict(out.empty())
         with tokens_obj.view(-1) as tokens_obj_flat:
-            tokens_obj_flat.prompt = (
-                None  # We don't have prompt tokens in this path
-            )
+            tokens_obj_flat.prompt = None  # We don't have prompt tokens in this path
             if self.pad_output:
                 tokens_obj_flat.response = response_tokens_padded
                 self._check_padded(response_tokens_padded)
             else:
                 tokens_obj_flat.response = response_tokens_list
                 self._check_not_padded(response_tokens_list)
-            tokens_obj_flat.full = None  # we don't have prompt tokens in this path so no all_tokens either
+            tokens_obj_flat.full = (
+                None  # we don't have prompt tokens in this path so no all_tokens either
+            )
         tokens_obj.padded = MetaData(self.pad_output)
         out.set(self.tokens_key, tokens_obj)
 
@@ -1268,7 +1297,6 @@ class vLLMWrapper(CategoricalSequential):
         )
         self._check_not_padded(tokens_response_unpadded)
 
-
         tokens_obj = Tokens._from_tensordict(out.empty())
         if self.pad_output:
             self._check_padded(tokens_response_padded)
@@ -1287,9 +1315,7 @@ class vLLMWrapper(CategoricalSequential):
                 )
         else:
             tokens_obj.prompt = (
-                tokens_prompt_unpadded
-                if not self.pad_output
-                else tokens_prompt_padded
+                tokens_prompt_unpadded if not self.pad_output else tokens_prompt_padded
             )
         with tokens_obj.view(-1) as tokens_obj_flat:
             if self.pad_output:
@@ -1312,9 +1338,7 @@ class vLLMWrapper(CategoricalSequential):
         # self.return_tokens must be True
         if self.pad_output:
             # Get "real" attention masks
-            full_attention_mask_padded = (
-                tokens_obj.get("full") != self.padding_value
-            )
+            full_attention_mask_padded = tokens_obj.get("full") != self.padding_value
             masks_obj.all_attention_mask = full_attention_mask_padded.bool()
         else:
             # Get "real" attention masks
@@ -1537,7 +1561,6 @@ class vLLMWrapper(CategoricalSequential):
                 masks_obj.all_assistant_mask = assistant_mask_full_unpadded
         masks_obj.padded = MetaData(self.pad_output)
         out.set(self.masks_key, masks_obj)
-
 
         tokens_obj = Tokens._from_tensordict(
             TensorDict(batch_size=out.batch_size).to_lazystack(0)

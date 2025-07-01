@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 import torch
 from tensordict import NestedKey, TensorDict, TensorDictBase
@@ -154,6 +154,7 @@ class GSM8KEnv(DatasetChatEnv):
         collate_fn (Callable | None, optional): A custom collate function for data loading. If `None`, a default
             collate function is used. Defaults to `None`.
         max_steps (int, optional): The maximum number of steps allowed in an episode. Defaults to `1`.
+        input_mode (Literal["history", "text", "tokens"], optional): The mode of input to use. Defaults to `"history"`.
 
     Examples:
         >>> import transformers
@@ -304,6 +305,7 @@ i.e., <think>reasoning process here</think> <answer>answer here</answer>. The an
         compute_reward: bool = True,
         collate_fn: Callable | None = None,
         max_steps: int = 1,
+        input_mode: Literal["history", "text", "tokens"] = "history",
     ):
         if collate_fn is None:
             collate_fn = _collate_fn
@@ -321,6 +323,7 @@ i.e., <think>reasoning process here</think> <answer>answer here</answer>. The an
             template_kwargs=template_kwargs,
             apply_template=apply_template,
             collate_fn=collate_fn,
+            input_mode=input_mode,
         )
         if max_steps:
             self.append_transform(StepCounter(max_steps=max_steps))

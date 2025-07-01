@@ -322,8 +322,6 @@ class MaskedCategorical(D.Categorical):
                 if logits.ndim > 2:
                     # Bring channels in 2nd dim
                     logits = logits.transpose(-1, 1)
-                print("logits", logits.shape)
-                print("value", value.shape)
                 result = -torch.nn.functional.cross_entropy(logits, value, reduce=False)
             else:
                 result = super().log_prob(value)

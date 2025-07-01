@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import contextlib
-import warnings
 
 from contextlib import nullcontext
 from copy import copy
@@ -21,13 +20,15 @@ from tensordict import (
     TensorDictBase,
 )
 from tensordict.utils import _zip_strict, NestedKey
+from torch import distributions as D
 from torch.nn.utils.rnn import pad_sequence
 
 from torchrl.modules.llm.policies.common import (
     CategoricalSequential,
+    ChatHistory,
     LogProbs,
     Masks,
-    Text,ChatHistory,
+    Text,
     Tokens,
 )
 from torchrl.modules.utils.utils import _unpad_tensors
@@ -38,6 +39,16 @@ class TransformersWrapper(CategoricalSequential):
 
     This class provides a unified API for handling different input modalities (history, text, tokens) with consistent
     output structure using :class:`~tensordict.TensorClass` objects.
+
+    **Recent Changes:**
+    - **ChatHistory Integration**: The wrapper now uses :class:`~torchrl.modules.llm.policies.ChatHistory` objects for history mode,
+      similar to how :class:`~torchrl.modules.llm.policies.Text` and :class:`~torchrl.modules.llm.policies.Tokens` are used.
+    - **Modular Output**: The wrapper automatically determines what to return based on input_mode:
+      - **Tokens**: Always returned for all input modes (`"history"`, `"text"`, `"tokens"`)
+      - **Text**: Returned for `"text"` and `"history"` input modes
+      - **History**: Returned only for `"history"` input mode
+      - **Masks**: Always returned for all input modes
+      - **Log Probs**: Returned when `return_log_probs=True`
 
     Args:
         model (transformers.AutoModelForCausalLM | str): The Hugging Face Transformers model to wrap.
@@ -77,29 +88,40 @@ class TransformersWrapper(CategoricalSequential):
         text_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Text` object. Defaults to `"text"`.
         tokens_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Tokens` object. Defaults to `"tokens"`.
         masks_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Masks` object. Defaults to `"masks"`.
+        history_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.ChatHistory` object. Defaults to `"history"`.
 
     Input Keys:
         The input key depends on both `input_mode` and `generate`:
-        - If `input_mode="history"`: `input_key` (defaults to `"history"`)
+        - If `input_mode="history"` and `generate=True`: `input_key` (defaults to `("history", "prompt")`)
+        - If `input_mode="history"` and `generate=False`: `input_key` (defaults to `("history", "full")`)
         - If `input_mode="text"` and `generate=True`: `input_key` (defaults to `("text", "prompt")`)
         - If `input_mode="text"` and `generate=False`: `input_key` (defaults to `("text", "full")`)
         - If `input_mode="tokens"` and `generate=True`: `input_key` (defaults to `("tokens", "prompt")`)
         - If `input_mode="tokens"` and `generate=False`: `input_key` (defaults to `("tokens", "full")`)
 
     Output Keys:
-        Always returns a TensorDict with the following structure:
+        The output keys are automatically determined based on the input_mode:
+        - **Tokens**: Always returned (`tokens_key`, defaults to `"tokens"`)
+        - **Text**: Returned for `"text"` and `"history"` modes (`text_key`, defaults to `"text"`)
+        - **History**: Returned only for `"history"` mode (`history_key`, defaults to `"history"`)
+        - **Masks**: Always returned (`masks_key`, defaults to `"masks"`)
+        - **Log Probs**: Returned when `return_log_probs=True` (`log_probs_key`, defaults to `"log_probs"`)
+
+        Example output structure for `input_mode="history"`:
         ```
         TensorDict(
-            text=Text(...),
-            masks=Masks(...),
-            tokens=Tokens(...),
-            log_probs=LogProbs(...)
+            text=Text(prompt=..., response=..., full=...),
+            masks=Masks(all_attention_mask=..., all_assistant_mask=...),
+            tokens=Tokens(prompt=..., response=..., full=...),
+            log_probs=LogProbs(prompt=..., response=..., full=...),
+            history=ChatHistory(prompt=..., response=..., full=...)
         )
         ```
 
     Example:
         >>> from transformers import AutoModelForCausalLM, AutoTokenizer
         >>> from torchrl.data.llm import History
+        >>> from torchrl.modules.llm.policies import ChatHistory
         >>>
         >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
         >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
@@ -117,9 +139,11 @@ class TransformersWrapper(CategoricalSequential):
         ...     {"role": "user", "content": "Hello"},
         ...     {"role": "assistant", "content": "Hi there!"}
         ... ]])
-        >>> result = wrapper(TensorDict(history=history, batch_size=(1,)))
-        >>> print(result["text"].response)
-        >>> print(result["log_probs"].response)
+        >>> chat_history = ChatHistory(prompt=history)
+        >>> result = wrapper(TensorDict(history=chat_history, batch_size=(1,)))
+        >>> print(result["text"].response)  # Generated text
+        >>> print(result["log_probs"].response)  # Log probabilities
+        >>> print(result["history"].response)  # History with response
 
     Attributes:
         collector: The collector associated with the module, if it exists.
@@ -174,7 +198,7 @@ class TransformersWrapper(CategoricalSequential):
         self.input_mode = input_mode
         self.attention_mask_key = attention_mask_key
         self.generate = generate
-        
+
         # Auto-determine what to return based on input mode
         self.return_history = input_mode in ("history",)
         self.return_text = input_mode in ("text", "history")
@@ -182,8 +206,12 @@ class TransformersWrapper(CategoricalSequential):
         self.return_masks = True
         if return_log_probs is False and not generate:
             raise ValueError("return_log_probs must be True when generate=False.")
-        return_log_probs = True if (return_log_probs is None and generate) or (not generate) else bool(return_log_probs)
-        self.return_log_probs = return_log_probs        
+        return_log_probs = (
+            True
+            if (return_log_probs is None and generate) or (not generate)
+            else bool(return_log_probs)
+        )
+        self.return_log_probs = return_log_probs
 
         self.history_key = history_key
         self.text_key = text_key
@@ -204,7 +232,9 @@ class TransformersWrapper(CategoricalSequential):
         # Set input keys based on mode and generate parameter
         if input_mode == "history":
             if generate:
-                self.in_keys = [("history", "prompt") if input_key is None else input_key]
+                self.in_keys = [
+                    ("history", "prompt") if input_key is None else input_key
+                ]
             else:
                 self.in_keys = [("history", "full") if input_key is None else input_key]
         elif input_mode == "text":
@@ -364,7 +394,6 @@ class TransformersWrapper(CategoricalSequential):
             constructor_kwargs["generate"] = kwargs["generate"]
         elif hasattr(self, "generate"):
             constructor_kwargs["generate"] = self.generate
-
 
         if "generate_kwargs" in kwargs:
             constructor_kwargs["generate_kwargs"] = kwargs["generate_kwargs"]
@@ -560,10 +589,12 @@ class TransformersWrapper(CategoricalSequential):
         if self.chat_template is not None:
             tokenizer_kwargs.setdefault("chat_template", self.chat_template)
         tokenizer_kwargs.setdefault("add_generation_prompt", True)
-        text_prompt = history.apply_chat_template(tokenizer=self.tokenizer, **tokenizer_kwargs)
+        text_prompt = history.apply_chat_template(
+            tokenizer=self.tokenizer, **tokenizer_kwargs
+        )
         if not isinstance(text_prompt, list):
             raise ValueError(
-                f"Expected list of text for history input, got {type(text)}"
+                f"Expected list of text for history input, got {type(text_prompt)}"
             )
         tokenizer_kwargs.setdefault("return_assistant_tokens_mask", False)
         tokenizer_kwargs.setdefault("tokenize", True)
@@ -573,23 +604,25 @@ class TransformersWrapper(CategoricalSequential):
             tokenizer=self.tokenizer, **tokenizer_kwargs
         )
         tokens_prompt_padded = response_struct.get(
-                "input_ids",
-                as_padded_tensor=True,
-                padding_value=self.padding_value,
-                padding_side="left",
-            )
-        attention_mask_prompt_padded = (tokens_prompt_padded != self.tokenizer.pad_token_id).to(torch.int64)
+            "input_ids",
+            as_padded_tensor=True,
+            padding_value=self.padding_value,
+            padding_side="left",
+        )
+        attention_mask_prompt_padded = (
+            tokens_prompt_padded != self.tokenizer.pad_token_id
+        ).to(torch.int64)
 
-        result = self._generate_from_tokens(tokens_prompt_padded, attention_mask_prompt_padded, cfg, out)
+        result = self._generate_from_tokens(
+            tokens_prompt_padded, attention_mask_prompt_padded, cfg, out
+        )
 
         # Generate using text path
         if self.pad_output:
             result[(self.tokens_key, "prompt")] = (
                 tokens_prompt_padded
                 if not self.num_samples
-                else tokens_prompt_padded.unsqueeze(1).repeat(
-                    1, self.num_samples, 1
-                )
+                else tokens_prompt_padded.unsqueeze(1).repeat(1, self.num_samples, 1)
             )
         else:
             tokens_prompt_unpadded = response_struct.get(
@@ -638,8 +671,8 @@ class TransformersWrapper(CategoricalSequential):
             ]
             result_flat.set((self.text_key, "full"), text_full)
             result_flat.set((self.text_key, "response"), text_response)
-        # Now parse the full text back to a history object, and use the extra history objects
-        #  as response
+        # Now parse the full text back to a history object, and use the extra history objects
+        # as response
         history_chat = ChatHistory._from_tensordict(result.empty())
         if self.num_samples is None:
             history_chat.prompt = history
@@ -649,12 +682,14 @@ class TransformersWrapper(CategoricalSequential):
         with history_chat.view(-1) as history_chat_flat:
             history_chat_flat.full = full_histories = History.from_text(text_full)
             prompt_histories = history_chat_flat.prompt
-            # iterate over batch
+            # iterate over batch
             h_responses = []
-            for h_full, h_prompt in _zip_strict(full_histories.unbind(0), prompt_histories.unbind(0)):
+            for h_full, h_prompt in _zip_strict(
+                full_histories.unbind(0), prompt_histories.unbind(0)
+            ):
                 if h_full.shape[0] <= h_prompt.shape[0]:
                     raise RuntimeError("Full history is shorter than prompt history")
-                h_responses.append(h_full[h_prompt.shape[0]:])
+                h_responses.append(h_full[h_prompt.shape[0] :])
             history_chat_flat.response = torch.stack(h_responses)
         result.set(self.history_key, history_chat)
         return result
@@ -840,8 +875,8 @@ class TransformersWrapper(CategoricalSequential):
                 with tokens_obj.view(-1) as tokens_obj_flat, masks_obj.view(
                     -1
                 ) as masks_obj_flat:
-                    attention_mask_full_unpadded = (
-                        attention_mask_full_padded.flatten(0, 1)
+                    attention_mask_full_unpadded = attention_mask_full_padded.flatten(
+                        0, 1
                     )
                     attention_mask_full_unpadded = _unpad_tensors(
                         attention_mask_full_unpadded.bool(),
@@ -1191,7 +1226,9 @@ class TransformersWrapper(CategoricalSequential):
 
         return out
 
-    def _from_transformers_generate_tokens(self, td: TensorDictBase, cfg: dict | None, out: TensorDictBase) -> TensorDictBase:
+    def _from_transformers_generate_tokens(
+        self, td: TensorDictBase, cfg: dict | None, out: TensorDictBase
+    ) -> TensorDictBase:
         """Generate text from tokens input."""
         # Validate input
         if self.input_key not in td:
@@ -1211,9 +1248,17 @@ class TransformersWrapper(CategoricalSequential):
         attention_mask_prompt_padded = (input_ids_prompt_padded != pad_val).to(
             torch.int64
         )
-        return self._generate_from_tokens(input_ids_prompt_padded, attention_mask_prompt_padded, cfg, out)
+        return self._generate_from_tokens(
+            input_ids_prompt_padded, attention_mask_prompt_padded, cfg, out
+        )
 
-    def _generate_from_tokens(self, tokens_prompt_padded: torch.Tensor, attention_mask_prompt_padded: torch.Tensor, cfg: dict | None, out: TensorDictBase) -> TensorDictBase:
+    def _generate_from_tokens(
+        self,
+        tokens_prompt_padded: torch.Tensor,
+        attention_mask_prompt_padded: torch.Tensor,
+        cfg: dict | None,
+        out: TensorDictBase,
+    ) -> TensorDictBase:
         if cfg is not None:
             kwargs = copy(self.generate_kwargs)
             kwargs["generation_config"] = cfg
@@ -1226,9 +1271,7 @@ class TransformersWrapper(CategoricalSequential):
             **kwargs,
         )
         tokens_full_padded = tokens_out_struct["sequences"]
-        tokens_response_padded = tokens_full_padded[
-            :, tokens_prompt_padded.shape[-1] :
-        ]
+        tokens_response_padded = tokens_full_padded[:, tokens_prompt_padded.shape[-1] :]
         pad_val = getattr(self.tokenizer, "pad_token_id", None)
         if pad_val is None:
             pad_val = self.padding_value
@@ -1261,9 +1304,7 @@ class TransformersWrapper(CategoricalSequential):
         text_obj.prompt = None  # We don't have text in tokens mode
         with text_obj.view(-1) as text_obj_flat:
             text_obj_flat.response = response_text
-        text_obj.full = (
-            None  # we don't have text in tokens mode so no all_text either
-        )
+        text_obj.full = None  # we don't have text in tokens mode so no all_text either
         out.set(self.text_key, text_obj)
 
         tokens_obj = Tokens._from_tensordict(out.empty())
@@ -1323,9 +1364,7 @@ class TransformersWrapper(CategoricalSequential):
         out.set(self.masks_key, masks_obj)
 
         if self.return_log_probs:
-            log_probs_obj = LogProbs._from_tensordict(
-                out.empty()
-            )
+            log_probs_obj = LogProbs._from_tensordict(out.empty())
             if self.num_samples is None:
                 if self.pad_output:
                     log_probs_obj.response = log_probs_response_padded

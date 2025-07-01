@@ -965,6 +965,13 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
         self.empty_cache()
         return self
 
+    def _post_step_mdp_hooks(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Allows modification of the tensordict after the step_mdp."""
+        if type(self.base_env)._post_step_mdp_hooks is not None:
+            # If the base env has a _post_step_mdp_hooks, we call it
+            tensordict = self.base_env._post_step_mdp_hooks(tensordict)
+        return tensordict
+
     def _set_env(self, env: EnvBase, device) -> None:
         if device != env.device:
             env = env.to(device)

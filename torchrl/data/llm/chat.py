@@ -331,6 +331,13 @@ class History(TensorClass["nocast"]):
     - Interoperability with the `transformers` API, allowing for easy tokenization and preparation of input data.
     - **Assistant token masking support** across multiple model families for reinforcement learning applications.
 
+    **Recent Changes:**
+    - **ChatHistory Integration**: History objects are now used within :class:`~torchrl.modules.llm.policies.ChatHistory`
+      containers for structured conversation management in LLM environments.
+    - **Modular Wrapper Support**: Both vLLMWrapper and TransformersWrapper now use History objects when `input_mode="history"`
+      is specified, providing consistent conversation state management.
+    - **Environment Integration**: ChatEnv and related environments use History objects for state management and conversation tracking.
+
     .. note:: The `"<none>"` role is used to indicate that the element is a placeholder,
         for example when the tool call was not executed but a stack requires a certain number of elements
         per batch to have congruent shapes. The :meth:`~torchrl.data.llm.chat.History.apply_chat_template`
@@ -354,6 +361,7 @@ class History(TensorClass["nocast"]):
     .. code-block:: python
 
         >>> from torchrl.data.llm.chat import History
+        >>> from torchrl.modules.llm.policies import ChatHistory
         >>> from transformers import AutoTokenizer
         >>>
         >>> # Create a conversation history
@@ -363,6 +371,9 @@ class History(TensorClass["nocast"]):
         ...     {"role": "user", "content": "How are you?"},
         ...     {"role": "assistant", "content": "I'm doing well, thanks!"}
         ... ]])
+        >>>
+        >>> # Create ChatHistory container for LLM wrapper
+        >>> chat_history = ChatHistory(prompt=history)
         >>>
         >>> # Load any supported tokenizer
         >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
@@ -378,6 +389,32 @@ class History(TensorClass["nocast"]):
         >>> # The result contains an assistant_masks tensor
         >>> assistant_masks = result["assistant_masks"]
         >>> print(f"Assistant tokens: {assistant_masks.sum().item()}")
+
+    **Integration with LLM Wrappers:**
+
+    History objects work seamlessly with the new modular wrapper design:
+
+    .. code-block:: python
+
+        >>> from torchrl.modules.llm import TransformersWrapper
+        >>> from torchrl.modules.llm.policies import ChatHistory
+        >>>
+        >>> # Create wrapper with history input mode
+        >>> wrapper = TransformersWrapper(
+        ...     model, tokenizer=tokenizer,
+        ...     input_mode="history",
+        ...     generate=True,
+        ...     return_log_probs=True
+        ... )
+        >>>
+        >>> # Use History with ChatHistory container
+        >>> history = History.from_chats([[
+        ...     {"role": "user", "content": "Hello"},
+        ...     {"role": "assistant", "content": "Hi there!"}
+        ... ]])
+        >>> chat_history = ChatHistory(prompt=history)
+        >>> result = wrapper(TensorDict(history=chat_history, batch_size=(1,)))
+        >>> print(result["history"].response)  # New response from LLM
 
     Attributes:
         role (str): The role of the message sender.
@@ -432,6 +469,10 @@ class History(TensorClass["nocast"]):
 
         <|im_start|>assistant
 
+    .. seealso::
+        :class:`~torchrl.modules.llm.policies.ChatHistory`: Container for managing conversation data in LLM environments.
+        :class:`~torchrl.modules.llm.policies.Text`: Container for text data.
+        :class:`~torchrl.modules.llm.policies.Tokens`: Container for token data.
     """
 
     role: str

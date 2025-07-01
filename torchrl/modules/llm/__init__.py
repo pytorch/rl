@@ -13,9 +13,9 @@ from .backends import (
 
 from .policies import (
     CategoricalSequential,
+    ChatHistory,
     LogProbs,
     Masks,
-    ChatHistory,
     Text,
     Tokens,
     TransformersWrapper,

@@ -195,7 +195,6 @@ class GRPOLoss(ClipPPOLoss):
                 self.actor_network, "get_rlhf_dist"
             ):
                 dist = self.actor_network.get_rlhf_dist(tensordict)
-                print("tensordict after get dist", tensordict)
             elif self.masking_strategy == "generic" and hasattr(
                 self.actor_network, "get_generic_dist"
             ):

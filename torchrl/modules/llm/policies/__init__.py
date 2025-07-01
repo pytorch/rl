@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from .common import CategoricalSequential, LogProbs, Masks, Text, Tokens, ChatHistory
+from .common import CategoricalSequential, ChatHistory, LogProbs, Masks, Text, Tokens
 from .transformers_wrapper import TransformersWrapper
 
 from .vllm_wrapper import vLLMWrapper

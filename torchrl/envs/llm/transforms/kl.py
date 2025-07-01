@@ -25,116 +25,47 @@ except ImportError:
 
 
 class KLRewardTransform(Transform):
-    """A legacy transform to add a KL[pi_current||pi_0] correction term to the reward.
+    """A legacy transform for computing KL divergence-based rewards.
 
-    .. warning:: This class only works with the `"tokens"` input mode of the reference model.
-        The implication of this is that the tokens of the prompt and response must be separated and found in the root
-        tensordict. In some scenarios (typically multi-turn dialogs), it is preferable to work directly with the history
-        object as the environment transforms may change the chat history (e.g., adding a new prompt, modifying the past
-        conversation history, etc.). In these cases, the tokens returned by the LLM wrappers will be obsolete.
-        In these cases, the :class:`~torchrl.envs.llm.transforms.kl.RetrieveLogProb` and :class:`~torchrl.envs.llm.transforms.kl.RetrieveKL`
-        transforms should be used instead.
+    **Deprecated**: This transform is maintained for backward compatibility but is no longer
+    the recommended approach. Use :class:`~torchrl.envs.llm.transforms.kl.RetrieveKL` instead,
+    which provides better modularity and integration with the new wrapper design.
 
-    .. deprecated:: Use :class:`~torchrl.envs.llm.transforms.kl.RetrieveKL` instead for better flexibility and compatibility.
+    **Recent Changes:**
+    - **Legacy Status**: This transform is now considered legacy and may not work optimally
+      with the new modular wrapper design.
+    - **ChatHistory Integration**: Limited support for the new :class:`~torchrl.modules.llm.policies.ChatHistory` objects.
+    - **Input Mode Support**: May not handle all input modes (`"history"`, `"text"`, `"tokens"`) consistently.
 
-    This transform is used to constrain the policy to remain close to its original
-    configuration which limits overfitting when fine-tuning using RLHF.
+    **Recommendation**:
+    Use :class:`~torchrl.envs.llm.transforms.kl.RetrieveKL` for new code, which provides:
+    - Better integration with the new wrapper design
+    - Consistent support for all input modes
+    - Proper handling of ChatHistory objects
+    - More modular and composable architecture
 
     Args:
-        ref_model (CategoricalSequential): a frozen probabilistic reference model. It must
-            have the following features: it must have a set of input (``in_keys``)
-            and output keys (``out_keys``). It must have a ``get_dist`` method
-            that outputs the distribution of the action.
+        gen_model (CategoricalSequential): the generation model.
+        ref_model (CategoricalSequential): the reference model.
 
     Keyword Args:
-        coef (:obj:`float`): the coefficient of the KL term. Defaults to ``1.0``.
-        in_keys (str or list of str/tuples of str): the input key where the
-            reward should be fetched. Defaults to ``"reward"``.
-            Keys necessary to execute the ref_model are automatically added to the in_keys.
-        out_keys (str or list of str/tuples of str): the output key where the
-            reward should be written. Defaults to ``["reward", "kl_penalty", "ref_log_prob"]``.
-        add_to_reward (bool): whether to add the reward term to the reward.
-            Defaults to ``True``.\
-        action_key (str): the key where the text response is stored. Defaults to ``"text_response"``.
-        log_prob_key (str): the key where the log-probs are stored. Defaults to ``"log_probs"``.
-        device (torch.device): the device to use for tensor creation. Defaults to `None`.
-        tokenizer (transformers.AutoTokenizer, optional): a tokenizer to parse the text response from the chat history.
-            If not provided, the tokenizer will be inferred from the `actor`.
-        assistant_only (bool): whether to only retrieve the log-probs of the assistant tokens (i.e., steps of history
-            where the role is `"assistant"`). Defaults to `True`.
-
-    .. note:: If the parameters are not differentiable (default), they will *not*
-        follow the module when dtype or device casting operations will be called
-        (such as :meth:`cuda`, :meth:`to` etc.). When ``requires_grad=True``,
-        casting operations will work as expected.
+        assistant_only (bool): whether to only compute KL on assistant tokens. Defaults to `True`.
+        tokenizer (transformers.AutoTokenizer): the tokenizer to use. Defaults to `None`.
+        detach (bool): whether to detach the KL from the computation graph. Defaults to `True`.
+        device (torch.device): the device to use. Defaults to `None`.
 
     Examples:
-        >>> from torchrl.data.llm import History
-        >>> from torchrl.modules.llm import TransformersWrapper
-        >>> from transformers import AutoTokenizer, OPTConfig, OPTForCausalLM
-        >>> from tensordict import TensorDict, set_list_to_stack
-        >>> import torch
+        >>> # Legacy usage (not recommended for new code)
+        >>> transform = KLRewardTransform(gen_model, ref_model)
         >>>
-        >>> # Set up list to stack for History
-        >>> set_list_to_stack(True).set()
-        >>>
-        >>> # Setup tokenizer and model
-        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
-        >>> tokenizer.pad_token = tokenizer.eos_token
-        >>> model = OPTForCausalLM(OPTConfig()).eval()
-        >>>
-        >>> # Create a reference model (for KL computation)
-        >>> ref_model = TransformersWrapper(
-        ...     model,
-        ...     tokenizer=tokenizer,
-        ...     input_mode="tokens",  # KLRewardTransform requires tokens input mode
-        ...     generate=False,
-        ...     return_log_probs=True,
-        ...     pad_output=True,
-        ... )
-        >>>
-        >>> # Create sample data with tokens and log-probs
-        >>> batch_size = 2
-        >>> seq_len = 10
-        >>> input_ids = torch.randint(0, 1000, (batch_size, seq_len))
-        >>> attention_mask = torch.ones_like(input_ids)
-        >>> log_probs = torch.randn(batch_size, seq_len)
-        >>> reward = torch.randn(batch_size, seq_len, 1)
-        >>>
-        >>> # Create tensordict with required keys
-        >>> data = TensorDict({
-        ...     ("tokens", "full"): input_ids,
-        ...     ("masks", "all_attention_mask"): attention_mask,
-        ...     ("log_probs", "full"): log_probs,
-        ...     "reward": reward,
-        ...     ("text", "response"): ["Hello", "World"],  # Action key
-        ... }, batch_size=(batch_size,))
-        >>>
-        >>> # Create KLRewardTransform
-        >>> kl_transform = KLRewardTransform(
-        ...     ref_model,
-        ...     coef=1.0,
-        ...     add_to_reward=True,
-        ... )
-        >>>
-        >>> # Apply transform
-        >>> result = kl_transform(data)
-        >>> print(f"Reward shape: {result['reward'].shape}")
-        >>> print(f"KL penalty present: {'kl_penalty' in result}")
-        >>> print(f"Reference log-prob present: {'ref_log_prob' in result}")
-        Reward shape: torch.Size([2, 10, 1])
-        KL penalty present: True
-        Reference log-prob present: True
-
-    .. note:: Because the KL formula is not always available and the parameters of the
-      original distribution may not have been recorded, we use a stochastic estimate
-      of the KL divergence.
+        >>> # Recommended approach using RetrieveKL
+        >>> from torchrl.envs.llm.transforms.kl import RetrieveKL
+        >>> transform = RetrieveKL(gen_model, ref_model, assistant_only=True)
 
     .. seealso::
-        :class:`~torchrl.envs.llm.transforms.kl.RetrieveKL`: The recommended replacement for this transform.
-        :class:`~torchrl.envs.llm.transforms.kl.RetrieveLogProb`: The base transform for retrieving log-probabilities from a single model.
-        :class:`~torchrl.envs.llm.transforms.kl.KLComputation`: A transform that computes KL divergence between two log-prob tensors.
-
+        :class:`~torchrl.envs.llm.transforms.kl.RetrieveKL`: The recommended transform for KL divergence computation.
+        :class:`~torchrl.envs.llm.transforms.kl.RetrieveLogProb`: Base transform for retrieving log-probabilities.
+        :class:`~torchrl.envs.llm.transforms.kl.KLComputation`: Transform for computing KL divergence between log-prob tensors.
     """
 
     DEFAULT_IN_KEYS = ["reward"]
@@ -147,7 +78,6 @@ class KLRewardTransform(Transform):
         in_keys=None,
         out_keys=None,
         log_prob_key: NestedKey = ("log_probs", "full"),
-        action_key: NestedKey | None = ("text", "response"),
         device: torch.device | None = None,
         add_to_reward: bool = True,
         tokenizer: transformers.AutoTokenizer | None = None,
@@ -192,7 +122,6 @@ class KLRewardTransform(Transform):
         # self._buffers["actor_params"] = params.clone().detach()
 
         self.device = device
-        self.action_key = action_key
 
         # find the sample log-prob key
         self.log_prob_full_key = log_prob_key
@@ -247,12 +176,23 @@ class KLRewardTransform(Transform):
             tensordict_reset = self._step(tensordict_reset, tensordict_reset)
         return tensordict_reset
 
+    @property
+    def action_key(self) -> NestedKey:
+        # Get the action from the base env (a ChatEnv).
+        if self.parent.base_env.input_mode == "history":
+            return ("history", "full")
+        if self.parent.base_env.input_mode == "text":
+            return ("text", "full")
+        if self.parent.base_env.input_mode == "tokens":
+            return ("tokens", "full")
+        raise ValueError(f"Invalid input mode: {self.parent.base_env.input_mode}")
+
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
         # tensordict = self._get_text_response(tensordict, next_tensordict)
-        response_txt = tensordict.get(self.action_key, None)
-        if response_txt is None:
+        response = tensordict.get(self.action_key, None)
+        if response is None:
             if not self.missing_tolerance:
                 raise RuntimeError(
                     f"Action with key {self.action_key} not found data {tensordict}"
@@ -299,10 +239,14 @@ class KLRewardTransform(Transform):
             ref_log_prob_list = []
             if self.pad_output:
                 for i in range(ref_log_prob_padded.size(0)):
-                    ref_log_prob_list.append(ref_log_prob_padded[i][mask[i]])
+                    ref_log_prob_list.append(
+                        ref_log_prob_padded[i].masked_fill(~mask[i], 0)
+                    )
             else:
                 for i in range(len(ref_log_prob_unpadded)):
-                    ref_log_prob_list.append(ref_log_prob_unpadded[i][mask[i]])
+                    ref_log_prob_list.append(
+                        ref_log_prob_unpadded[i].masked_fill(~mask[i], 0)
+                    )
             if self.pad_output:
                 ref_log_prob = pad_sequence(
                     ref_log_prob_list,
@@ -329,10 +273,14 @@ class KLRewardTransform(Transform):
             curr_log_prob_list = []
             if self.pad_output:
                 for i in range(curr_log_prob_padded.size(0)):
-                    curr_log_prob_list.append(curr_log_prob_padded[i][mask[i]])
+                    curr_log_prob_list.append(
+                        curr_log_prob_padded[i].masked_fill(~mask[i], 0)
+                    )
             else:
                 for i in range(len(curr_log_prob_unpadded)):
-                    curr_log_prob_list.append(curr_log_prob_unpadded[i][mask[i]])
+                    curr_log_prob_list.append(
+                        curr_log_prob_unpadded[i].masked_fill(~mask[i], 0)
+                    )
             if self.pad_output:
                 curr_log_prob = pad_sequence(
                     curr_log_prob_list,
@@ -455,6 +403,14 @@ class RetrieveLogProb(Transform):
     to compute KL divergence with another model's log-probabilities. It's designed to work
     with the :class:`~torchrl.envs.llm.transforms.kl.RetrieveKL` and :class:`~torchrl.envs.llm.transforms.kl.KLComputation` transforms.
 
+    **Recent Changes:**
+    - **Modular Input Modes**: The transform now works seamlessly with all input modes (`"history"`, `"text"`, `"tokens"`)
+      supported by the LLM wrappers.
+    - **ChatHistory Integration**: When using `input_mode="history"`, the transform properly handles
+      :class:`~torchrl.modules.llm.policies.ChatHistory` objects.
+    - **Automatic Output Selection**: The transform automatically adapts to the wrapper's output structure,
+      whether it returns tokens, text, history, or combinations thereof.
+
     Args:
         model (CategoricalSequential): the model to use to compute the log-probs.
 
@@ -472,7 +428,7 @@ class RetrieveLogProb(Transform):
 
         tokenizer_kwargs (dict): the keyword arguments to pass to the tokenizer to be used to apply the chat template to the history when `assistant_only` is `True`.
             To control the tokenization in the ref_model, pass the tokenizer kwargs to the ref_model constructor.
-            Defaults to `{"return_assistant_tokens_mask": True, "tokenize": True, "return_tensors": "pt", "padding": True, "add_generation_prompt": False}`.
+            Defaults to `{"return_assistant_tokens_mask": True, "tokenize": True, "return_dict": True, "padding": False, "add_generation_prompt": False}`.
         tokenizer (transformers.AutoTokenizer): the tokenizer to be used to tokenize the input and compute the assitant mask. If not provided, the tokenizer will be inferred from the `ref_model`.
         detach (bool): whether to exclude the log-probs from the gradient computation. Defaults to `True`.
         device (torch.device): the device to use for tensor creation. Defaults to `None`.
@@ -480,6 +436,7 @@ class RetrieveLogProb(Transform):
     Examples:
         >>> from torchrl.data.llm import History
         >>> from torchrl.modules.llm import TransformersWrapper
+        >>> from torchrl.modules.llm.policies import ChatHistory
         >>> from transformers import AutoTokenizer, OPTConfig, OPTForCausalLM
         >>> from tensordict import TensorDict, set_list_to_stack
         >>> import torch
@@ -526,8 +483,9 @@ class RetrieveLogProb(Transform):
         ...     tokenizer=tokenizer,
         ... )
         >>>
-        >>> # Prepare data
-        >>> data = TensorDict(history=history, batch_size=(2,))
+        >>> # Prepare data using ChatHistory
+        >>> chat_history = ChatHistory(full=history)
+        >>> data = TensorDict(history=chat_history, batch_size=(2,))
         >>>
         >>> # Apply the transform to get reference log probabilities
         >>> result = transform(data)
@@ -550,7 +508,6 @@ class RetrieveLogProb(Transform):
         :class:`~torchrl.envs.llm.transforms.kl.RetrieveKL`: A higher-level transform that combines two `RetrieveLogProb` instances with `KLComputation`.
         :class:`~torchrl.envs.llm.transforms.kl.KLComputation`: A transform that computes KL divergence between two log-prob tensors.
         :class:`~torchrl.envs.llm.transforms.kl.KLRewardTransform`: A legacy transform for KL reward computation (use `RetrieveKL` instead).
-
     """
 
     def __init__(
@@ -586,7 +543,7 @@ class RetrieveLogProb(Transform):
             tokenizer_kwargs = {}
         tokenizer_kwargs.setdefault("return_assistant_tokens_mask", True)
         tokenizer_kwargs.setdefault("tokenize", True)
-        tokenizer_kwargs.setdefault("return_tensors", "pt")
+        tokenizer_kwargs.setdefault("return_dict", True)
         tokenizer_kwargs.setdefault("padding", False)
         tokenizer_kwargs.setdefault("add_generation_prompt", False)
         self.tokenizer_kwargs = tokenizer_kwargs
@@ -659,7 +616,8 @@ class RetrieveLogProb(Transform):
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
         # Compute log-probs using the model
-        ref_td = self.model(next_tensordict.copy())
+        # Use tensordict since we want to process the "full" entry
+        ref_td = self.model(tensordict.copy())
         tmp_log_probs_key = (self.model.log_probs_key, "full")
 
         # Apply assistant masking if requested
@@ -688,6 +646,14 @@ class RetrieveKL(Compose):
     This transform combines two :class:`~torchrl.envs.llm.transforms.kl.RetrieveLogProb` instances
     with a :class:`~torchrl.envs.llm.transforms.kl.KLComputation` to compute KL divergence
     between a generation model and a reference model.
+
+    **Recent Changes:**
+    - **Modular Input Modes**: The transform now works seamlessly with all input modes (`"history"`, `"text"`, `"tokens"`)
+      supported by the LLM wrappers.
+    - **ChatHistory Integration**: When using `input_mode="history"`, the transform properly handles
+      :class:`~torchrl.modules.llm.policies.ChatHistory` objects.
+    - **Automatic Output Selection**: The transform automatically adapts to the wrapper's output structure,
+      whether it returns tokens, text, history, or combinations thereof.
 
     .. note::
         Both gen_model and ref_model must use the same pad_output value (True or False), otherwise KL computation will fail.
@@ -723,6 +689,7 @@ class RetrieveKL(Compose):
     Examples:
         >>> from torchrl.data.llm import History
         >>> from torchrl.modules.llm import TransformersWrapper
+        >>> from torchrl.modules.llm.policies import ChatHistory
         >>> from transformers import AutoTokenizer, OPTConfig, OPTForCausalLM
         >>> from tensordict import TensorDict, set_list_to_stack
         >>> import torch
@@ -780,9 +747,10 @@ class RetrieveKL(Compose):
         ...     tokenizer=tokenizer,
         ... )
         >>>
-        >>> # Prepare data with next tensordict
-        >>> next_td = TensorDict(history=history, batch_size=(2,))
-        >>> data = TensorDict(history=history, next=next_td, batch_size=(2,))
+        >>> # Prepare data with next tensordict using ChatHistory
+        >>> chat_history = ChatHistory(full=history)
+        >>> next_td = TensorDict(history=chat_history, batch_size=(2,))
+        >>> data = TensorDict(history=chat_history, next=next_td, batch_size=(2,))
         >>>
         >>> # Apply transform
         >>> result = transform(data)
@@ -800,7 +768,6 @@ class RetrieveKL(Compose):
         :class:`~torchrl.envs.llm.transforms.kl.RetrieveLogProb`: The base transform for retrieving log-probabilities from a single model.
         :class:`~torchrl.envs.llm.transforms.kl.KLComputation`: The transform that computes KL divergence between two log-prob tensors.
         :class:`~torchrl.envs.llm.transforms.kl.KLRewardTransform`: A legacy transform for KL reward computation (use `RetrieveKL` instead).
-
     """
 
     def __init__(
@@ -923,7 +890,8 @@ class RetrieveKL(Compose):
             generate=False,
             return_log_probs=True,
             log_probs_key="gen_log_probs",
-            input_mode="history",
+            input_mode=ref_model.input_mode,
+            input_key=(ref_model.input_mode, "full"),
             pad_output=pad_output,  # Pass pad_output from ref_model
         )
         # Create the transforms manually instead of calling __init__
@@ -1157,30 +1125,6 @@ class KLComputation(Transform):
                 raise ValueError(
                     f"Sample {i} has different shapes: gen_log_probs[{i}].shape={gen_lp.shape}, ref_log_probs[{i}].shape={ref_lp.shape}"
                 )
-                # print(f"WARNING: Sample {i} has different shapes:")
-                # print(f"  gen_log_probs[{i}].shape: {gen_lp.shape}")
-                # print(f"  ref_log_probs[{i}].shape: {ref_lp.shape}")
-
-                # # Find where the actual content starts in ref_log_probs (skip padding zeros)
-                # ref_nonzero_start = 0
-                # for j, val in enumerate(ref_lp):
-                #     if val != 0.0:  # Skip padding tokens
-                #         ref_nonzero_start = j
-                #         break
-
-                # print(f"  ref_log_probs[{i}] starts actual content at position {ref_nonzero_start}")
-
-                # # Align sequences: remove padding from ref and truncate to shorter length
-                # ref_lp_aligned = ref_lp[ref_nonzero_start:]
-                # min_len = min(gen_lp.shape[0], ref_lp_aligned.shape[0])
-
-                # gen_lp = gen_lp[:min_len]
-                # ref_lp = ref_lp_aligned[:min_len]
-
-                # gen_log_probs[i] = gen_lp
-                # ref_log_probs[i] = ref_lp
-
-                # print(f"  After alignment: gen_log_probs[{i}].shape: {gen_lp.shape}, ref_log_probs[{i}].shape: {ref_lp.shape}")
 
         # Compute KL divergence: KL(p||q) = E_p[log p - log q]
         # Here gen_log_probs = log p, ref_log_probs = log q
