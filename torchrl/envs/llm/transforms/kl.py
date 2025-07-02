@@ -298,6 +298,8 @@ class KLRewardTransform(Transform):
         # We want the log-probs to have a similar dim to the reward
         curr_log_prob = curr_log_prob.unsqueeze(-1)
         ref_log_prob = ref_log_prob.unsqueeze(-1)
+        torchrl_logger.info(f"ref_log_prob is nested: {ref_log_prob.is_nested}")
+        torchrl_logger.info(f"curr_log_prob is nested: {curr_log_prob.is_nested}")
 
         # we use the unbiased consistent estimator of the KL: log_p(x) - log_q(x) when x ~ p(x)
         if not reward.is_nested and ref_log_prob.is_nested:
@@ -305,6 +307,7 @@ class KLRewardTransform(Transform):
                 [rew.expand(lp.shape) for rew, lp in zip(reward, ref_log_prob)],
                 layout=torch.strided,
             )
+        torchrl_logger.info(f"reward is nested: {reward.is_nested}")
         for i in range(ref_log_prob.size(0)):
             if ref_log_prob[i].shape != curr_log_prob[i].shape:
                 # Don't check shapes if nested
@@ -322,9 +325,13 @@ class KLRewardTransform(Transform):
         if self.add_to_reward:
             if reward is None:
                 reward = 0
-            next_tensordict.set(self.out_keys[0], reward - self.coef * kl)
+            reward = reward - self.coef * kl
+            next_tensordict.set(self.out_keys[0], reward)
+        torchrl_logger.info(f"self.add_to_reward: {self.add_to_reward}")
+        torchrl_logger.info(f"reward: {reward}")
         next_tensordict.set(self.out_keys[1], kl)
         next_tensordict.set(self.out_keys[2], ref_log_prob)
+        torchrl_logger.info(f"next_tensordict: {next_tensordict}")
         return next_tensordict
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
