@@ -281,7 +281,7 @@ class GRPOLoss(ClipPPOLoss):
             if value_clip_fraction is not None:
                 td_out.set("value_clip_fraction", value_clip_fraction)
 
-        td_out.set("ESS", _reduce(ess / batch, self.reduction, mask=mask))
+        td_out.set("ESS", _reduce(ess / batch, self.reduction))
         td_out = td_out.named_apply(
             lambda name, value: _reduce(value, reduction=self.reduction, mask=mask).squeeze(-1)
             if name.startswith("loss_")
