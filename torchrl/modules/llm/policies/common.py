@@ -542,12 +542,15 @@ class CategoricalSequential(TensorDictModuleBase):
             logits = [_logits.clone() for _logits in logits]
             for i, _logits in enumerate(logits):
                 logits[i] = _logits[..., prompt_length[i] :]
+            # logits need to be padded along the time dimension
+            logits = [lg.transpose(0, -2) for lg in logits]
             logits = pad_sequence(
                 logits, batch_first=True, padding_value=0.0, padding_side="right"
-            )
+            ).transpose(0, -2)
+            mask = [am.transpose(0, -1) for am in mask]
             mask = pad_sequence(
                 mask, batch_first=True, padding_value=False, padding_side="right"
-            )
+            ).transpose(0, -1)
 
         return MaskedCategorical(
             logits=logits,
