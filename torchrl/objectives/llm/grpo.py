@@ -244,12 +244,13 @@ class GRPOLoss(ClipPPOLoss):
             lw = log_weight.squeeze()
             ess = (2 * lw.logsumexp(0) - (2 * lw).logsumexp(0)).exp()
             batch = log_weight.shape[0]
-
-        gain1 = log_weight.exp() * advantage
+        
         mask = dist.mask
+        advantage = torch.where(mask, advantage, 0.0)
+        gain1 = log_weight.exp() * advantage
         with torch.no_grad():
             v = gain1[~mask]
-            assert torch.testing.assert_close(v, torch.zeros_like(v))
+            torch.testing.assert_close(v, torch.zeros_like(v))
 
         log_weight_clip = log_weight.clamp(*self._clip_bounds)
         clip_fraction = (log_weight_clip != log_weight).to(log_weight.dtype).mean()
@@ -257,7 +258,7 @@ class GRPOLoss(ClipPPOLoss):
         gain2 = ratio * advantage
         with torch.no_grad():
             v = gain2[~mask]
-            assert torch.testing.assert_close(v, torch.zeros_like(v))
+            torch.testing.assert_close(v, torch.zeros_like(v))
 
         gain = torch.stack([gain1, gain2], -1).min(dim=-1).values
         td_out = TensorDict({"loss_objective": -gain})
