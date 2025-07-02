@@ -250,6 +250,7 @@ class GRPOLoss(ClipPPOLoss):
         gain1 = log_weight.exp() * advantage
         with torch.no_grad():
             v = gain1[~mask]
+            print(f"{advantage.shape=}, {log_weight.shape=}, {mask.shape=}")
             torch.testing.assert_close(v, torch.zeros_like(v))
 
         log_weight_clip = log_weight.clamp(*self._clip_bounds)
