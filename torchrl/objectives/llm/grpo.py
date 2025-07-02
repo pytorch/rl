@@ -246,11 +246,18 @@ class GRPOLoss(ClipPPOLoss):
             batch = log_weight.shape[0]
 
         gain1 = log_weight.exp() * advantage
+        mask = dist.mask
+        with torch.no_grad():
+            v = gain1[~mask]
+            assert torch.testing.assert_close(v, torch.zeros_like(v))
 
         log_weight_clip = log_weight.clamp(*self._clip_bounds)
         clip_fraction = (log_weight_clip != log_weight).to(log_weight.dtype).mean()
         ratio = log_weight_clip.exp()
         gain2 = ratio * advantage
+        with torch.no_grad():
+            v = gain2[~mask]
+            assert torch.testing.assert_close(v, torch.zeros_like(v))
 
         gain = torch.stack([gain1, gain2], -1).min(dim=-1).values
         td_out = TensorDict({"loss_objective": -gain})
@@ -278,7 +285,7 @@ class GRPOLoss(ClipPPOLoss):
             else value,
         )
         if self.kl_to_ref_coeff is not None:
-            loss_kl, kl_penalty = self._kl_to_ref(tensordict)
+            loss_kl, kl_penalty = self._kl_to_ref(tensordict, mask=mask)
             td_out["loss_kl_to_ref"] = loss_kl
             td_out["kl_to_ref"] = kl_penalty.detach()
         if self.kl_to_inference_coeff is not None:
@@ -286,6 +293,7 @@ class GRPOLoss(ClipPPOLoss):
                 tensordict,
                 key=self.tensor_keys.sample_log_prob,
                 coeff=self.kl_to_inference_coeff,
+                mask=mask,
             )
             td_out["loss_kl_to_inference"] = loss_kl
             td_out["kl_to_inference"] = kl_penalty.detach()
@@ -298,6 +306,7 @@ class GRPOLoss(ClipPPOLoss):
         key: NestedKey = ("next", "ref_log_prob"),
         ref_log_prob: torch.Tensor | None = None,
         coeff: float | None = None,
+        mask: torch.Tensor | None = None,
     ):
         if coeff is None:
             coeff = self.kl_to_ref_coeff
@@ -313,9 +322,9 @@ class GRPOLoss(ClipPPOLoss):
             cur_log_prob.shape,
             ref_log_prob.shape,
         )
-        mask = cur_log_prob != 0
-        ref_log_prob = ref_log_prob[mask]
-        cur_log_prob = cur_log_prob[mask]
+        if mask is not None:
+            ref_log_prob = torch.where(mask, ref_log_prob, 0.0)
+            cur_log_prob = torch.where(mask, cur_log_prob, 0.0)
         diff = ref_log_prob - cur_log_prob
         kl_penalty = (diff.expm1() - diff).mean()
         return coeff * kl_penalty, kl_penalty
@@ -359,6 +368,7 @@ class GRPOLoss(ClipPPOLoss):
 
         attention_mask = dist.mask
         cur_log_prob = torch.where(attention_mask, cur_log_prob, 0.0)
+        prev_log_prob = torch.where(attention_mask, prev_log_prob, 0.0)
 
         if is_composite:
             raise NotImplementedError
