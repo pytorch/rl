@@ -130,13 +130,13 @@ def distance_loss(
         )
 
     if loss_function == "l2":
-        return tree_map(lambda a, b: F.mse_loss(a, b, reduction="none"), v1, v2)
+        return F.mse_loss(v1, v2, reduction="none")
 
     if loss_function == "l1":
-        return tree_map(lambda a, b: F.l1_loss(a, b, reduction="none"), v1, v2)
+        return F.l1_loss(v1, v2, reduction="none")
 
     if loss_function == "smooth_l1":
-        return tree_map(lambda a, b: F.smooth_l1_loss(a, b, reduction="none"), v1, v2)
+        return F.smooth_l1_loss(v1, v2, reduction="none")
 
     raise NotImplementedError(f"Unknown loss {loss_function}.")
 
@@ -634,7 +634,7 @@ def _clip_value_loss(
         loss_function=loss_critic_type,
     )
     # Chose the most pessimistic value prediction between clipped and non-clipped
-    loss_value = tree_map(torch.max, loss_value, loss_value_clipped)
+    loss_value = torch.maximum(loss_value, loss_value_clipped)
     return loss_value, clip_fraction
 
 

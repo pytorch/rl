@@ -9892,7 +9892,8 @@ class TestPPO(LossModuleTestBase):
                 "state_value": TensorDict(
                     {"value_0": torch.tensor([0.0]), "value_1": torch.tensor([0.0])}
                 ),
-            }
+            },
+            batch_size=(1,),
         )
 
         critic_loss, clip_fraction, explained_variance = loss.loss_critic(td)

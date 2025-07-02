@@ -758,8 +758,8 @@ class PPOLoss(LossModule):
                 pred = state_value.detach()
                 eps = torch.finfo(tgt.dtype).eps
 
-                resid = tree_map(partial(torch.var, unbiased=False, dim=0), tgt - pred)
-                total = tree_map(partial(torch.var, unbiased=False, dim=0), tgt)
+                resid = torch.var(tgt - pred, correction=0, dim=0)
+                total = torch.var(tgt, correction=0, dim=0)
                 explained_variance = 1.0 - resid / (total + eps)
 
         self._clear_weakrefs(
