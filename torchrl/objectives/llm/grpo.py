@@ -249,7 +249,6 @@ class GRPOLoss(ClipPPOLoss):
             batch = mask.sum()
             ess = (2 * lw.logsumexp(0) - (2 * lw).logsumexp(0)).exp()
 
-        advantage = torch.where(expand_as_right(mask, advantage), advantage, 0.0)
         if advantage.shape != log_weight.shape:
             raise ValueError(
                 f"advantage and log_weight must have the same shape, got {advantage.shape=} and {log_weight.shape=}"

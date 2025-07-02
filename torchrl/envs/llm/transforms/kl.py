@@ -260,8 +260,6 @@ class KLRewardTransform(Transform):
                     ref_log_prob_list, layout=torch.strided
                 )
 
-        reward_key = self.in_keys[0]
-        reward = next_tensordict.get(reward_key)
         # we obtain the current log-probs (already computed) from the current tensordict
         if self.pad_output:
             curr_log_prob_padded = tensordict.get(self.log_prob_full_key)
@@ -298,16 +296,7 @@ class KLRewardTransform(Transform):
         # We want the log-probs to have a similar dim to the reward
         curr_log_prob = curr_log_prob.unsqueeze(-1)
         ref_log_prob = ref_log_prob.unsqueeze(-1)
-        torchrl_logger.info(f"ref_log_prob is nested: {ref_log_prob.is_nested}")
-        torchrl_logger.info(f"curr_log_prob is nested: {curr_log_prob.is_nested}")
 
-        # we use the unbiased consistent estimator of the KL: log_p(x) - log_q(x) when x ~ p(x)
-        if not reward.is_nested and ref_log_prob.is_nested:
-            reward = torch.nested.nested_tensor(
-                [rew.expand(lp.shape) for rew, lp in zip(reward, ref_log_prob)],
-                layout=torch.strided,
-            )
-        torchrl_logger.info(f"reward is nested: {reward.is_nested}")
         for i in range(ref_log_prob.size(0)):
             if ref_log_prob[i].shape != curr_log_prob[i].shape:
                 # Don't check shapes if nested
@@ -316,22 +305,27 @@ class KLRewardTransform(Transform):
                     f"One possible reason is that the padding token is identical to the eos token, which means that the eos_token log_prob is truncated from the "
                     f"reference model output."
                 )
-        if reward is not None and reward.ndim != curr_log_prob.ndim:
-            raise ValueError(
-                "The number of dimensions of reward must be the same as the number of dimensions of the KL "
-                f"term. Got ndim={reward.ndim} and {curr_log_prob.ndim} respectively."
-            )
         kl = curr_log_prob - ref_log_prob
         if self.add_to_reward:
+            reward_key = self.in_keys[0]
+            reward = next_tensordict.get(reward_key)
+            # we use the unbiased consistent estimator of the KL: log_p(x) - log_q(x) when x ~ p(x)
+            if not reward.is_nested and ref_log_prob.is_nested:
+                reward = torch.nested.nested_tensor(
+                    [rew.expand(lp.shape) for rew, lp in zip(reward, ref_log_prob)],
+                    layout=torch.strided,
+                )
+            if reward is not None and reward.ndim != curr_log_prob.ndim:
+                raise ValueError(
+                    "The number of dimensions of reward must be the same as the number of dimensions of the KL "
+                    f"term. Got ndim={reward.ndim} and {curr_log_prob.ndim} respectively."
+                )
             if reward is None:
                 reward = 0
             reward = reward - self.coef * kl
             next_tensordict.set(self.out_keys[0], reward)
-        torchrl_logger.info(f"self.add_to_reward: {self.add_to_reward}")
-        torchrl_logger.info(f"reward: {reward}")
         next_tensordict.set(self.out_keys[1], kl)
         next_tensordict.set(self.out_keys[2], ref_log_prob)
-        torchrl_logger.info(f"next_tensordict: {next_tensordict}")
         return next_tensordict
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
