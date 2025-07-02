@@ -249,9 +249,9 @@ class GRPOLoss(ClipPPOLoss):
             batch = mask.sum()
             ess = (2 * lw.logsumexp(0) - (2 * lw).logsumexp(0)).exp()
 
-        if advantage.shape != log_weight.shape:
+        if advantage.ndim != log_weight.ndim:
             raise ValueError(
-                f"advantage and log_weight must have the same shape, got {advantage.shape=} and {log_weight.shape=}"
+                f"advantage and log_weight must have the same number of dimensions, got {advantage.ndim=} and {log_weight.ndim=}"
             )
         gain1 = log_weight.exp() * advantage
 
