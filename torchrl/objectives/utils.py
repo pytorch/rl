@@ -129,50 +129,14 @@ def distance_loss(
             f"The input tensors or tensordicts have shapes {v1.shape} and {v2.shape} which are incompatible."
         )
 
-    # Deals with the `TensorDict` case.
-    if isinstance(v1, TensorDict):
-        if not isinstance(v2, TensorDict):
-            raise TypeError(
-                "If the first input is a 'TensorDict', so must be the second."
-            )
-
-        v1_leaves = v1.keys(True, True)
-        v2_leaves = v2.keys(True, True)
-
-        if set(v1_leaves) != set(v2_leaves):
-            raise ValueError(
-                f"The tensordicts keys must match exactly, got {v1_leaves} and {v2_leaves}."
-            )
-
-        value_loss = v1.new_zeros()
-        for leaf in v1_leaves:
-            value_loss[leaf] = distance_loss(
-                v1[leaf], v2[leaf], loss_function, strict_shape
-            )
-
-        return value_loss
-
-    # Deals with the `Tensor` case.
     if loss_function == "l2":
-        return F.mse_loss(
-            v1,
-            v2,
-            reduction="none",
-        )
+        return tree_map(lambda a, b: F.mse_loss(a, b, reduction="none"), v1, v2)
 
     if loss_function == "l1":
-        return F.l1_loss(
-            v1,
-            v2,
-            reduction="none",
-        )
+        return tree_map(lambda a, b: F.l1_loss(a, b, reduction="none"), v1, v2)
 
     if loss_function == "smooth_l1":
-        return F.smooth_l1_loss(
-            v1,
-            v2,
-            reduction="none",
-        )
+        return tree_map(lambda a, b: F.smooth_l1_loss(a, b, reduction="none"), v1, v2)
 
     raise NotImplementedError(f"Unknown loss {loss_function}")
 
@@ -646,13 +610,13 @@ def _reduce(tensor: torch.Tensor, reduction: str) -> float | torch.Tensor:
 
 
 def _clip_value_loss(
-    old_state_value: torch.Tensor,
-    state_value: torch.Tensor,
-    clip_value: torch.Tensor,
-    target_return: torch.Tensor,
-    loss_value: torch.Tensor,
+    old_state_value: torch.Tensor | TensorDict,
+    state_value: torch.Tensor | TensorDict,
+    clip_value: torch.Tensor | TensorDict,
+    target_return: torch.Tensor | TensorDict,
+    loss_value: torch.Tensor | TensorDict,
     loss_critic_type: str,
-):
+) -> tuple[torch.Tensor | TensorDict, torch.Tensor]:
     """Value clipping method for loss computation.
 
     This method computes a clipped state value from the old state value and the state value,
@@ -670,7 +634,7 @@ def _clip_value_loss(
         loss_function=loss_critic_type,
     )
     # Chose the most pessimistic value prediction between clipped and non-clipped
-    loss_value = torch.max(loss_value, loss_value_clipped)
+    loss_value = tree_map(torch.max, loss_value, loss_value_clipped)
     return loss_value, clip_fraction
 
 

@@ -8,6 +8,7 @@ import contextlib
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
+from functools import partial
 from typing import Mapping
 
 import torch
@@ -30,6 +31,8 @@ from tensordict.utils import NestedKey
 from torch import distributions as d
 
 from torchrl._utils import _standardize, logger as torchrl_logger, VERBOSE
+from torch.utils._pytree import tree_map
+
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
@@ -690,7 +693,7 @@ class PPOLoss(LossModule):
 
         return log_weight, dist, kl_approx
 
-    def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
+    def loss_critic(self, tensordict: TensorDictBase) -> tuple[torch.Tensor | TensorDict, ...]:
         """Returns the critic loss multiplied by ``critic_coef``, if it is not ``None``."""
         # TODO: if the advantage is gathered by forward, this introduces an
         # overhead that we could easily reduce.
@@ -752,8 +755,9 @@ class PPOLoss(LossModule):
                 tgt = target_return.detach()
                 pred = state_value.detach()
                 eps = torch.finfo(tgt.dtype).eps
-                resid = torch.var(tgt - pred, unbiased=False, dim=0)
-                total = torch.var(tgt, unbiased=False, dim=0)
+
+                resid = tree_map(partial(torch.var, unbiased=False, dim=0), tgt - pred)
+                total = tree_map(partial(torch.var, unbiased=False, dim=0), tgt)
                 explained_variance = 1.0 - resid / (total + eps)
 
         self._clear_weakrefs(

@@ -9881,22 +9881,29 @@ class TestPPO(LossModuleTestBase):
         )
 
         # Creates the loss and its input tensordict.
-        loss = ClipPPOLoss(actor, critic, loss_critic_type="l2")
-        loss.log_explained_variance = False
+        loss = ClipPPOLoss(actor, critic, loss_critic_type="l2", clip_value=0.1)
         td = TensorDict(
             {
                 "state": torch.tensor([0.0]),
                 "value_target": TensorDict(
                     {"value_0": torch.tensor([-1.0]), "value_1": torch.tensor([2.0])}
                 ),
+                # Log an existing 'state_value' for the 'clip_fraction'
+                "state_value": TensorDict(
+                    {"value_0": torch.tensor([0.0]), "value_1": torch.tensor([0.0])}
+                ),
             }
         )
 
-        critic_loss, *_ = loss.loss_critic(td)
+        critic_loss, clip_fraction, explained_variance = loss.loss_critic(td)
 
+        assert isinstance(critic_loss, TensorDict)
         assert "value_0" in critic_loss.keys() and "value_1" in critic_loss.keys()
         torch.testing.assert_close(critic_loss["value_0"], torch.tensor([1.0]))
         torch.testing.assert_close(critic_loss["value_1"], torch.tensor([4.0]))
+
+        assert isinstance(clip_fraction, TensorDict)
+        assert isinstance(explained_variance, TensorDict)
 
 
 class TestA2C(LossModuleTestBase):
