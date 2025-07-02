@@ -8,6 +8,7 @@ import weakref
 from typing import Any, Literal, overload
 
 import torch
+from torchrl._utils import logger as torchrl_logger
 from tensordict import NestedKey, TensorDictBase
 from tensordict.nn import TensorDictModuleBase, TensorDictSequential
 from tensordict.tensorclass import TensorClass
@@ -507,9 +508,15 @@ class CategoricalSequential(TensorDictModuleBase):
 
         # Try to get prompt tokens first
         if self.pad_output:
+            for i, td in enumerate(tensordict):
+                torchrl_logger.info(f"td[{i}] = {td}")
             prompt_tokens = tensordict.get(tokens_key, as_padded_tensor=True, padding_value=-100, padding_side="right")
             logits = td_out.get(logits_key, as_padded_tensor=True, padding_value=0.0, padding_side="right")
             attention_mask = tensordict.get(attention_mask_key, as_padded_tensor=True, padding_value=False, padding_side="right")
+            # print shapes
+            torchrl_logger.info(f"prompt_tokens.shape = {prompt_tokens.shape}")
+            torchrl_logger.info(f"logits.shape = {logits.shape}")
+            torchrl_logger.info(f"attention_mask.shape = {attention_mask.shape}")
         else:
             prompt_tokens = tensordict.get(tokens_key, as_list=True)
             logits = td_out.get(logits_key, as_list=True)
