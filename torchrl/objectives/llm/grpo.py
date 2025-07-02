@@ -230,12 +230,14 @@ class GRPOLoss(ClipPPOLoss):
             raise ValueError
 
         tensordict = tensordict.copy()
+        batch = tensordict.numel()
         advantage = tensordict.get(
             self.tensor_keys.advantage, None, as_padded_tensor=True
         )
         log_weight, dist, kl_approx = self._log_weight(
             tensordict, adv_shape=advantage.shape[:-1]
         )
+        mask = dist.mask
         # ESS for logging
         with torch.no_grad():
             # In theory, ESS should be computed on particles sampled from the same source. Here we sample according
@@ -243,9 +245,7 @@ class GRPOLoss(ClipPPOLoss):
             # dispersion.
             lw = log_weight.squeeze()
             ess = (2 * lw.logsumexp(0) - (2 * lw).logsumexp(0)).exp()
-            batch = log_weight.shape[0]
-        
-        mask = dist.mask
+
         advantage = torch.where(expand_as_right(mask, advantage), advantage, 0.0)
         assert advantage.shape == log_weight.shape, f"advantage and log_weight must have the same shape, got {advantage.shape=} and {log_weight.shape=}"
         gain1 = log_weight.exp() * advantage
@@ -281,9 +281,9 @@ class GRPOLoss(ClipPPOLoss):
             if value_clip_fraction is not None:
                 td_out.set("value_clip_fraction", value_clip_fraction)
 
-        td_out.set("ESS", _reduce(ess, self.reduction) / batch)
+        td_out.set("ESS", _reduce(ess / batch, self.reduction, mask=mask))
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            lambda name, value: _reduce(value, reduction=self.reduction, mask=mask).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )

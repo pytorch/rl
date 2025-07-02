@@ -596,14 +596,29 @@ def _pseudo_vmap(
     return new_func
 
 
-def _reduce(tensor: torch.Tensor, reduction: str) -> float | torch.Tensor:
-    """Reduces a tensor given the reduction method."""
+def _reduce(tensor: torch.Tensor, reduction: str, mask: torch.Tensor | None = None) -> float | torch.Tensor:
+    """Reduces a tensor given the reduction method.
+
+    Args:
+        tensor (torch.Tensor): The tensor to reduce.
+        reduction (str): The reduction method.
+        mask (torch.Tensor, optional): A mask to apply to the tensor before reducing.
+
+    Returns:
+        float | torch.Tensor: The reduced tensor.
+    """
     if reduction == "none":
         result = tensor
     elif reduction == "mean":
-        result = tensor.mean()
+        if mask is not None:
+            result = tensor[mask].mean()
+        else:
+            result = tensor.mean()
     elif reduction == "sum":
-        result = tensor.sum()
+        if mask is not None:
+            result = tensor[mask].sum()
+        else:
+            result = tensor.sum()
     else:
         raise NotImplementedError(f"Unknown reduction method {reduction}")
     return result
