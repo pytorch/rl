@@ -22,7 +22,7 @@ from tensordict.nn import (
     TensorDictModule,
 )
 from torch import distributions as d
-
+from tensordict.utils import expand_as_right
 from torchrl._utils import logger as torchrl_logger
 from torchrl.envs.transforms.transforms import Transform
 from torchrl.modules.llm import CategoricalSequential
@@ -246,7 +246,8 @@ class GRPOLoss(ClipPPOLoss):
             batch = log_weight.shape[0]
         
         mask = dist.mask
-        advantage = torch.where(mask, advantage, 0.0)
+        advantage = torch.where(expand_as_right(mask, advantage), advantage, 0.0)
+        assert advantage.shape == log_weight.shape, f"advantage and log_weight must have the same shape, got {advantage.shape=} and {log_weight.shape=}"
         gain1 = log_weight.exp() * advantage
         with torch.no_grad():
             v = gain1[~mask]
@@ -325,8 +326,8 @@ class GRPOLoss(ClipPPOLoss):
             ref_log_prob.shape,
         )
         if mask is not None:
-            ref_log_prob = torch.where(mask, ref_log_prob, 0.0)
-            cur_log_prob = torch.where(mask, cur_log_prob, 0.0)
+            ref_log_prob = torch.where(expand_as_right(mask, ref_log_prob), ref_log_prob, 0.0)
+            cur_log_prob = torch.where(expand_as_right(mask, cur_log_prob), cur_log_prob, 0.0)
         diff = ref_log_prob - cur_log_prob
         kl_penalty = (diff.expm1() - diff).mean()
         return coeff * kl_penalty, kl_penalty
@@ -369,8 +370,8 @@ class GRPOLoss(ClipPPOLoss):
             raise ValueError(error_msg)
 
         attention_mask = dist.mask
-        cur_log_prob = torch.where(attention_mask, cur_log_prob, 0.0)
-        prev_log_prob = torch.where(attention_mask, prev_log_prob, 0.0)
+        cur_log_prob = torch.where(expand_as_right(attention_mask, cur_log_prob), cur_log_prob, 0.0)
+        prev_log_prob = torch.where(expand_as_right(attention_mask, prev_log_prob), prev_log_prob, 0.0)
 
         if is_composite:
             raise NotImplementedError
