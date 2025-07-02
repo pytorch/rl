@@ -29,9 +29,9 @@ from tensordict.nn import (
 )
 from tensordict.utils import NestedKey
 from torch import distributions as d
+from torch.utils._pytree import tree_map
 
 from torchrl._utils import _standardize, logger as torchrl_logger, VERBOSE
-from torch.utils._pytree import tree_map
 
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
@@ -693,7 +693,9 @@ class PPOLoss(LossModule):
 
         return log_weight, dist, kl_approx
 
-    def loss_critic(self, tensordict: TensorDictBase) -> tuple[torch.Tensor | TensorDict, ...]:
+    def loss_critic(
+        self, tensordict: TensorDictBase
+    ) -> tuple[torch.Tensor | TensorDict, ...]:
         """Returns the critic loss multiplied by ``critic_coef``, if it is not ``None``."""
         # TODO: if the advantage is gathered by forward, this introduces an
         # overhead that we could easily reduce.
