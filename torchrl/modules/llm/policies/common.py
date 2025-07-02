@@ -549,13 +549,17 @@ class CategoricalSequential(TensorDictModuleBase):
                 logits[i] = _logits[..., prompt_length[i] :]
             # logits need to be padded along the time dimension
             logits = [lg.transpose(0, -2) for lg in logits]
+            torchrl_logger.info(f"logits shapes: {[lg.shape for lg in logits]}")
             logits = pad_sequence(
                 logits, batch_first=True, padding_value=0.0, padding_side="right"
             ).transpose(0, -2)
+            torchrl_logger.info(f"resulting logits shapes: {logits.shape}")
             mask = [am.transpose(0, -1) for am in mask]
+            torchrl_logger.info(f"masks shapes: {[ms.shape for ms in mask]}")
             mask = pad_sequence(
                 mask, batch_first=True, padding_value=False, padding_side="right"
             ).transpose(0, -1)
+            torchrl_logger.info(f"resulting masks shapes: {mask.shape}")
 
         return MaskedCategorical(
             logits=logits,
