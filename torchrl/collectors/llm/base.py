@@ -310,9 +310,6 @@ class LLMCollector(SyncDataCollector):
                 )
             env_input = self.policy(policy_input)
             env_output, env_next_output = self.env.step_and_maybe_reset(env_input)
-            if env_output["next", "history", "prompt"].shape[-1] > 3:
-                torch.save(env_output, "env_output.pt")
-                raise ValueError("env_output is too long")
 
             # carry over collector data without messing up devices
             collector_data = env_output.get("collector").copy()

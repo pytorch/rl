@@ -16,7 +16,7 @@ env:
   # Whether to use the reasoning prompt
   reasoning: false
   # Maximum number of dialog turns per episode.
-  max_steps: 10
+  max_steps: 1
 
 # Base model configuration
 model:
