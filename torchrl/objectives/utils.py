@@ -596,7 +596,9 @@ def _pseudo_vmap(
     return new_func
 
 
-def _reduce(tensor: torch.Tensor, reduction: str, mask: torch.Tensor | None = None) -> float | torch.Tensor:
+def _reduce(
+    tensor: torch.Tensor, reduction: str, mask: torch.Tensor | None = None
+) -> float | torch.Tensor:
     """Reduces a tensor given the reduction method.
 
     Args:

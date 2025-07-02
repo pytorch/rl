@@ -1052,7 +1052,14 @@ class TestChatEnvIntegration:
     @pytest.mark.skipif(not _has_datasets, reason="datasets not available")
     @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
     @pytest.mark.parametrize(
-        "input_mode,compute_reward", [["history", True], ["history", False], ["text", False], ["tokens", False]], ids=["history_compute_reward", "history_no_compute_reward", "text_no_compute_reward", "tokens_no_compute_reward"]
+        "input_mode,compute_reward",
+        [["history", True], ["history", False], ["text", False], ["tokens", False]],
+        ids=[
+            "history_compute_reward",
+            "history_no_compute_reward",
+            "text_no_compute_reward",
+            "tokens_no_compute_reward",
+        ],
     )
     def test_chat_env_integration_ifeval(self, compute_reward, pad_output, input_mode):
         """Test that the wrapper works correctly with the ChatEnv."""

@@ -600,7 +600,7 @@ def make_env_async(cfg: DictConfig, devices: list[int] | None = None):
             repeats=cfg.env.repeats,
             tokenizer=train_tokenizer,
             num_envs=cfg.env.num_envs,
-            max_steps=cfg.env.max_steps if cfg.env.reasoning else 1,            
+            max_steps=cfg.env.max_steps if cfg.env.reasoning else 1,
             device=torch.device("cuda:0") if devices is not None else None,
         )
     elif cfg.env.dataset == "ifeval":  # ifeval

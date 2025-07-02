@@ -539,7 +539,7 @@ class CategoricalSequential(TensorDictModuleBase):
             mask = [am.clone() for am in attention_mask]
             for i, am in enumerate(mask):
                 mask[i] = am[..., prompt_length[i] :]
-            logits = [l.clone() for l in logits]
+            logits = [_logits.clone() for _logits in logits]
             for i, _logits in enumerate(logits):
                 logits[i] = _logits[..., prompt_length[i] :]
             logits = pad_sequence(

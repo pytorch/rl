@@ -21,8 +21,8 @@ from tensordict.nn import (
     ProbabilisticTensorDictSequential,
     TensorDictModule,
 )
-from torch import distributions as d
 from tensordict.utils import expand_as_right
+from torch import distributions as d
 from torchrl._utils import logger as torchrl_logger
 from torchrl.envs.transforms.transforms import Transform
 from torchrl.modules.llm import CategoricalSequential
@@ -230,7 +230,6 @@ class GRPOLoss(ClipPPOLoss):
             raise ValueError
 
         tensordict = tensordict.copy()
-        batch = tensordict.numel()
         advantage = tensordict.get(
             self.tensor_keys.advantage, None, as_padded_tensor=True
         )
@@ -243,24 +242,21 @@ class GRPOLoss(ClipPPOLoss):
             # In theory, ESS should be computed on particles sampled from the same source. Here we sample according
             # to different, unrelated trajectories, which is not standard. Still, it can give an idea of the weights'
             # dispersion.
-            lw = log_weight.squeeze(-1)
+            lw = log_weight.squeeze(-1)[mask]
+            batch = mask.sum()
             ess = (2 * lw.logsumexp(0) - (2 * lw).logsumexp(0)).exp()
 
         advantage = torch.where(expand_as_right(mask, advantage), advantage, 0.0)
-        assert advantage.shape == log_weight.shape, f"advantage and log_weight must have the same shape, got {advantage.shape=} and {log_weight.shape=}"
+        if advantage.shape != log_weight.shape:
+            raise ValueError(
+                f"advantage and log_weight must have the same shape, got {advantage.shape=} and {log_weight.shape=}"
+            )
         gain1 = log_weight.exp() * advantage
-        with torch.no_grad():
-            v = gain1[~mask]
-            print(f"{advantage.shape=}, {log_weight.shape=}, {mask.shape=}")
-            torch.testing.assert_close(v, torch.zeros_like(v))
 
         log_weight_clip = log_weight.clamp(*self._clip_bounds)
         clip_fraction = (log_weight_clip != log_weight).to(log_weight.dtype).mean()
         ratio = log_weight_clip.exp()
         gain2 = ratio * advantage
-        with torch.no_grad():
-            v = gain2[~mask]
-            torch.testing.assert_close(v, torch.zeros_like(v))
 
         gain = torch.stack([gain1, gain2], -1).min(dim=-1).values
         td_out = TensorDict({"loss_objective": -gain})
@@ -283,7 +279,9 @@ class GRPOLoss(ClipPPOLoss):
 
         td_out.set("ESS", _reduce(ess / batch, self.reduction))
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction, mask=mask).squeeze(-1)
+            lambda name, value: _reduce(
+                value, reduction=self.reduction, mask=mask
+            ).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )
@@ -321,13 +319,17 @@ class GRPOLoss(ClipPPOLoss):
             ).squeeze(-1)
         cur_log_prob = tensordict.get("_cur_log_prob")
         # TODO: remove this
-        assert cur_log_prob.shape == ref_log_prob.shape, (
-            cur_log_prob.shape,
-            ref_log_prob.shape,
-        )
+        if cur_log_prob.shape != ref_log_prob.shape:
+            raise ValueError(
+                f"cur_log_prob and ref_log_prob must have the same shape, got {cur_log_prob.shape=} and {ref_log_prob.shape=}"
+            )
         if mask is not None:
-            ref_log_prob = torch.where(expand_as_right(mask, ref_log_prob), ref_log_prob, 0.0)
-            cur_log_prob = torch.where(expand_as_right(mask, cur_log_prob), cur_log_prob, 0.0)
+            ref_log_prob = torch.where(
+                expand_as_right(mask, ref_log_prob), ref_log_prob, 0.0
+            )
+            cur_log_prob = torch.where(
+                expand_as_right(mask, cur_log_prob), cur_log_prob, 0.0
+            )
         diff = ref_log_prob - cur_log_prob
         kl_penalty = (diff.expm1() - diff).mean()
         return coeff * kl_penalty, kl_penalty
@@ -370,8 +372,12 @@ class GRPOLoss(ClipPPOLoss):
             raise ValueError(error_msg)
 
         attention_mask = dist.mask
-        cur_log_prob = torch.where(expand_as_right(attention_mask, cur_log_prob), cur_log_prob, 0.0)
-        prev_log_prob = torch.where(expand_as_right(attention_mask, prev_log_prob), prev_log_prob, 0.0)
+        cur_log_prob = torch.where(
+            expand_as_right(attention_mask, cur_log_prob), cur_log_prob, 0.0
+        )
+        prev_log_prob = torch.where(
+            expand_as_right(attention_mask, prev_log_prob), prev_log_prob, 0.0
+        )
 
         if is_composite:
             raise NotImplementedError

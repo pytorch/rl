@@ -496,9 +496,10 @@ class DataLoadingPrimer(TensorDictPrimer):
             if not reset.any():
                 raise RuntimeError("reset must have at least one True value.")
             if reset.ndim > 0:
-                loaded = [self._load_from_dataloader().to(device) for _ in range(reset.sum())]
+                loaded = [
+                    self._load_from_dataloader().to(device) for _ in range(reset.sum())
+                ]
                 return self.stack_method(loaded)
-
 
         if len(self._queue) > 0:
             result = self._queue.popleft()
