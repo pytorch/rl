@@ -9872,7 +9872,7 @@ class TestPPO(LossModuleTestBase):
         # Creates a critic that produces a tensordict of values.
         class CompositeValueNetwork(nn.Module):
             def forward(self, _) -> tuple[torch.Tensor, torch.Tensor]:
-                return torch.tensor([-0.0]), torch.tensor([0.0])
+                return torch.tensor([0.0]), torch.tensor([0.0])
 
         critic = TensorDictModule(
             CompositeValueNetwork(),

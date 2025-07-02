@@ -138,7 +138,7 @@ def distance_loss(
     if loss_function == "smooth_l1":
         return tree_map(lambda a, b: F.smooth_l1_loss(a, b, reduction="none"), v1, v2)
 
-    raise NotImplementedError(f"Unknown loss {loss_function}")
+    raise NotImplementedError(f"Unknown loss {loss_function}.")
 
 
 class TargetNetUpdater:
