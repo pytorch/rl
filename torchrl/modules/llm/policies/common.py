@@ -508,15 +508,9 @@ class CategoricalSequential(TensorDictModuleBase):
 
         # Try to get prompt tokens first
         if self.pad_output:
-            for i, td in enumerate(tensordict):
-                torchrl_logger.info(f"td[{i}] = {td}")
-            prompt_tokens = tensordict.get(tokens_key, as_padded_tensor=True, padding_value=-100, padding_side="right")
-            logits = td_out.get(logits_key, as_padded_tensor=True, padding_value=0.0, padding_side="right")
-            attention_mask = tensordict.get(attention_mask_key, as_padded_tensor=True, padding_value=False, padding_side="right")
-            # print shapes
-            torchrl_logger.info(f"prompt_tokens.shape = {prompt_tokens.shape}")
-            torchrl_logger.info(f"logits.shape = {logits.shape}")
-            torchrl_logger.info(f"attention_mask.shape = {attention_mask.shape}")
+            prompt_tokens = tensordict.get(tokens_key, as_padded_tensor=True, padding_value=-100, padding_side="left")
+            logits = td_out.get(logits_key, as_padded_tensor=True, padding_value=0.0, padding_side="left")
+            attention_mask = tensordict.get(attention_mask_key, as_padded_tensor=True, padding_value=False, padding_side="left")
         else:
             prompt_tokens = tensordict.get(tokens_key, as_list=True)
             logits = td_out.get(logits_key, as_list=True)
@@ -541,7 +535,6 @@ class CategoricalSequential(TensorDictModuleBase):
             mask[..., :prompt_length] = False
             logits[..., :prompt_length, :] = False
         else:
-            raise NotImplementedError("Not implemented for non-padded output")
             prompt_length = [p.size(-1) for p in prompt_tokens]
             mask = [am.clone() for am in attention_mask]
             for i, am in enumerate(mask):

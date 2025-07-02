@@ -98,6 +98,7 @@ def get_train_model(
         input_mode="tokens",
         generate=False,
         return_log_probs=True,
+        pad_output=False,
         device=torch.device("cuda:0"),
     )
     # Ensure model stays in eval mode after wrapping
@@ -170,6 +171,7 @@ def get_inference_model(
         chat_template_name="qwen",
         return_log_probs=True,
         tokenizer=tokenizer,
+        pad_output=False,
         generate_kwargs={
             "max_tokens": cfg.inference_model.max_tokens,
             "include_stop_str_in_output": cfg.inference_model.include_stop_str_in_output,
