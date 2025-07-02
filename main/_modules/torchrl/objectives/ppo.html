@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+773c366) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+c8a3eeb) &#x25BC</span></a>
     </div>
     
 
@@ -1112,7 +1112,9 @@
 
         <span class="k">return</span> <span class="n">log_weight</span><span class="p">,</span> <span class="n">dist</span><span class="p">,</span> <span class="n">kl_approx</span>
 
-<div class="viewcode-block" id="PPOLoss.loss_critic"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.PPOLoss.html#torchrl.objectives.PPOLoss.loss_critic">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">loss_critic</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<div class="viewcode-block" id="PPOLoss.loss_critic"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.PPOLoss.html#torchrl.objectives.PPOLoss.loss_critic">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">loss_critic</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the critic loss multiplied by ``critic_coef``, if it is not ``None``.&quot;&quot;&quot;</span>
         <span class="c1"># TODO: if the advantage is gathered by forward, this introduces an</span>
         <span class="c1"># overhead that we could easily reduce.</span>
@@ -1131,14 +1133,12 @@
             <span class="p">)</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">clip_value</span><span class="p">:</span>
-            <span class="n">old_state_value</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="kc">None</span>
-            <span class="p">)</span>  <span class="c1"># TODO: None soon to be removed</span>
+            <span class="n">old_state_value</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">old_state_value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;clip_value is set to </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">clip_value</span><span class="si">}</span><span class="s2">, but &quot;</span>
                     <span class="sa">f</span><span class="s2">&quot;the key </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">value</span><span class="si">}</span><span class="s2"> was not found in the input tensordict. &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;Make sure that the value_key passed to PPO exists in the input tensordict.&quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;Make sure that the &#39;value_key&#39; passed to PPO exists in the input tensordict.&quot;</span>
                 <span class="p">)</span>
 
         <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_network_params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span>
@@ -1146,13 +1146,11 @@
         <span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">functional</span> <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">():</span>
             <span class="n">state_value_td</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_network</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
 
-        <span class="n">state_value</span> <span class="o">=</span> <span class="n">state_value_td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="kc">None</span>
-        <span class="p">)</span>  <span class="c1"># TODO: None soon to be removed</span>
+        <span class="n">state_value</span> <span class="o">=</span> <span class="n">state_value_td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">state_value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;the key </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">value</span><span class="si">}</span><span class="s2"> was not found in the critic output tensordict. &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;Make sure that the value_key passed to PPO is accurate.&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Make sure that the &#39;value_key&#39; passed to PPO is accurate.&quot;</span>
             <span class="p">)</span>
 
         <span class="n">loss_value</span> <span class="o">=</span> <span class="n">distance_loss</span><span class="p">(</span>
@@ -1178,8 +1176,9 @@
                 <span class="n">tgt</span> <span class="o">=</span> <span class="n">target_return</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
                 <span class="n">pred</span> <span class="o">=</span> <span class="n">state_value</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
                 <span class="n">eps</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">finfo</span><span class="p">(</span><span class="n">tgt</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">eps</span>
-                <span class="n">resid</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">var</span><span class="p">(</span><span class="n">tgt</span> <span class="o">-</span> <span class="n">pred</span><span class="p">,</span> <span class="n">unbiased</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-                <span class="n">total</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">var</span><span class="p">(</span><span class="n">tgt</span><span class="p">,</span> <span class="n">unbiased</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+                <span class="n">resid</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">var</span><span class="p">(</span><span class="n">tgt</span> <span class="o">-</span> <span class="n">pred</span><span class="p">,</span> <span class="n">correction</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+                <span class="n">total</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">var</span><span class="p">(</span><span class="n">tgt</span><span class="p">,</span> <span class="n">correction</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
                 <span class="n">explained_variance</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="n">resid</span> <span class="o">/</span> <span class="p">(</span><span class="n">total</span> <span class="o">+</span> <span class="n">eps</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_clear_weakrefs</span><span class="p">(</span>
@@ -1376,7 +1375,7 @@
 <span class="sd">            ``samples_mc_entropy`` will control how many</span>
 <span class="sd">            samples will be used to compute this estimate.</span>
 <span class="sd">            Defaults to ``1``.</span>
-<span class="sd">        entropy_coeff: scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.</span>
+<span class="sd">        entropy_coeff: (scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.</span>
 <span class="sd">            * **Scalar**: one value applied to the summed entropy of every action head.</span>
 <span class="sd">            * **Mapping** ``{head_name: coef}`` gives an individual coefficient for each action-head&#39;s entropy.</span>
 <span class="sd">            Defaults to ``0.01``.</span>
