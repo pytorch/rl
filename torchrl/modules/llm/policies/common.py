@@ -507,9 +507,9 @@ class CategoricalSequential(TensorDictModuleBase):
 
         # Try to get prompt tokens first
         if self.pad_output:
-            prompt_tokens = tensordict.get(tokens_key, None)
-            logits = td_out.get(logits_key)
-            attention_mask = tensordict.get(attention_mask_key)
+            prompt_tokens = tensordict.get(tokens_key, as_padded_tensor=True, padding_value=-100, padding_side="right")
+            logits = td_out.get(logits_key, as_padded_tensor=True, padding_value=0.0, padding_side="right")
+            attention_mask = tensordict.get(attention_mask_key, as_padded_tensor=True, padding_value=False, padding_side="right")
         else:
             prompt_tokens = tensordict.get(tokens_key, as_list=True)
             logits = td_out.get(logits_key, as_list=True)
