@@ -536,6 +536,10 @@ class CategoricalSequential(TensorDictModuleBase):
             logits[..., :prompt_length, :] = False
         else:
             prompt_length = [p.size(-1) for p in prompt_tokens]
+            # Check that the lengths of the mask is the same as the logits
+            for m, lg in _zip_strict(mask, logits):
+                if m.shape[-1] != lg.shape[-2]:
+                    raise ValueError(f"Mask and logits have different lengths: {m.shape[-1]} != {lg.shape[-2]}.\nAll the logits shapes: {[lg.shape for lg in logits]}, all the mask shapes: {[m.shape for m in mask]}")
             mask = [am.clone() for am in attention_mask]
             for i, am in enumerate(mask):
                 mask[i] = am[..., prompt_length[i] :]
