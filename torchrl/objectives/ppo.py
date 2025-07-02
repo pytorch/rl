@@ -8,7 +8,6 @@ import contextlib
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
-from functools import partial
 from typing import Mapping
 
 import torch
@@ -29,10 +28,8 @@ from tensordict.nn import (
 )
 from tensordict.utils import NestedKey
 from torch import distributions as d
-from torch.utils._pytree import tree_map
 
 from torchrl._utils import _standardize, logger as torchrl_logger, VERBOSE
-
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
