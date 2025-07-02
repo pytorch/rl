@@ -10,6 +10,7 @@ from typing import Any, Literal, overload
 import torch
 from torchrl._utils import logger as torchrl_logger
 from tensordict import NestedKey, TensorDictBase
+from tensordict.utils import _zip_strict
 from tensordict.nn import TensorDictModuleBase, TensorDictSequential
 from tensordict.tensorclass import TensorClass
 from torch import distributions as D
