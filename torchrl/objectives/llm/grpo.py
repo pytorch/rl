@@ -233,6 +233,9 @@ class GRPOLoss(ClipPPOLoss):
         advantage = tensordict.get(
             self.tensor_keys.advantage, None, as_padded_tensor=True
         )
+        torchrl_logger.info(f"tensordict: {tensordict}")
+        torchrl_logger.info(f"advantage : {advantage}")
+        torchrl_logger.info(f"advantage shape: {advantage.shape}")
         log_weight, dist, kl_approx = self._log_weight(
             tensordict, adv_shape=advantage.shape[:-1]
         )
