@@ -690,7 +690,9 @@ class PPOLoss(LossModule):
 
         return log_weight, dist, kl_approx
 
-    def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
+    def loss_critic(
+        self, tensordict: TensorDictBase
+    ) -> tuple[torch.Tensor | TensorDict, ...]:
         """Returns the critic loss multiplied by ``critic_coef``, if it is not ``None``."""
         # TODO: if the advantage is gathered by forward, this introduces an
         # overhead that we could easily reduce.
@@ -709,14 +711,12 @@ class PPOLoss(LossModule):
             )
 
         if self.clip_value:
-            old_state_value = tensordict.get(
-                self.tensor_keys.value, None
-            )  # TODO: None soon to be removed
+            old_state_value = tensordict.get(self.tensor_keys.value)
             if old_state_value is None:
                 raise KeyError(
                     f"clip_value is set to {self.clip_value}, but "
                     f"the key {self.tensor_keys.value} was not found in the input tensordict. "
-                    f"Make sure that the value_key passed to PPO exists in the input tensordict."
+                    f"Make sure that the 'value_key' passed to PPO exists in the input tensordict."
                 )
 
         with self.critic_network_params.to_module(
@@ -724,13 +724,11 @@ class PPOLoss(LossModule):
         ) if self.functional else contextlib.nullcontext():
             state_value_td = self.critic_network(tensordict)
 
-        state_value = state_value_td.get(
-            self.tensor_keys.value, None
-        )  # TODO: None soon to be removed
+        state_value = state_value_td.get(self.tensor_keys.value)
         if state_value is None:
             raise KeyError(
                 f"the key {self.tensor_keys.value} was not found in the critic output tensordict. "
-                f"Make sure that the value_key passed to PPO is accurate."
+                f"Make sure that the 'value_key' passed to PPO is accurate."
             )
 
         loss_value = distance_loss(
@@ -756,8 +754,9 @@ class PPOLoss(LossModule):
                 tgt = target_return.detach()
                 pred = state_value.detach()
                 eps = torch.finfo(tgt.dtype).eps
-                resid = torch.var(tgt - pred, unbiased=False, dim=0)
-                total = torch.var(tgt, unbiased=False, dim=0)
+
+                resid = torch.var(tgt - pred, correction=0, dim=0)
+                total = torch.var(tgt, correction=0, dim=0)
                 explained_variance = 1.0 - resid / (total + eps)
 
         self._clear_weakrefs(
@@ -954,7 +953,7 @@ class ClipPPOLoss(PPOLoss):
             ``samples_mc_entropy`` will control how many
             samples will be used to compute this estimate.
             Defaults to ``1``.
-        entropy_coeff: scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.
+        entropy_coeff: (scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.
             * **Scalar**: one value applied to the summed entropy of every action head.
             * **Mapping** ``{head_name: coef}`` gives an individual coefficient for each action-head's entropy.
             Defaults to ``0.01``.

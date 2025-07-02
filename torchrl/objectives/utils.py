@@ -9,7 +9,7 @@ import re
 import warnings
 from copy import copy
 from enum import Enum
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, TypeVar
 
 import torch
 from tensordict import NestedKey, TensorDict, TensorDictBase, unravel_key
@@ -101,54 +101,44 @@ class _context_manager:
         return decorate_context
 
 
+TensorLike = TypeVar("TensorLike", Tensor, TensorDict)
+
+
 def distance_loss(
-    v1: torch.Tensor,
-    v2: torch.Tensor,
+    v1: TensorLike,
+    v2: TensorLike,
     loss_function: str,
     strict_shape: bool = True,
-) -> torch.Tensor:
+) -> TensorLike:
     """Computes a distance loss between two tensors.
 
     Args:
-        v1 (Tensor): a tensor with a shape compatible with v2
-        v2 (Tensor): a tensor with a shape compatible with v1
+        v1 (Tensor | TensorDict): a tensor or tensordict with a shape compatible with v2.
+        v2 (Tensor | TensorDict): a tensor or tensordict with a shape compatible with v1.
         loss_function (str): One of "l2", "l1" or "smooth_l1" representing which loss function is to be used.
         strict_shape (bool): if False, v1 and v2 are allowed to have a different shape.
             Default is ``True``.
 
     Returns:
-         A tensor of the shape v1.view_as(v2) or v2.view_as(v1) with values equal to the distance loss between the
-        two.
+         A tensor or tensordict of the shape v1.view_as(v2) or v2.view_as(v1)
+        with values equal to the distance loss between the two.
 
     """
     if v1.shape != v2.shape and strict_shape:
         raise RuntimeError(
-            f"The input tensors have shapes {v1.shape} and {v2.shape} which are incompatible."
+            f"The input tensors or tensordicts have shapes {v1.shape} and {v2.shape} which are incompatible."
         )
 
     if loss_function == "l2":
-        value_loss = F.mse_loss(
-            v1,
-            v2,
-            reduction="none",
-        )
+        return F.mse_loss(v1, v2, reduction="none")
 
-    elif loss_function == "l1":
-        value_loss = F.l1_loss(
-            v1,
-            v2,
-            reduction="none",
-        )
+    if loss_function == "l1":
+        return F.l1_loss(v1, v2, reduction="none")
 
-    elif loss_function == "smooth_l1":
-        value_loss = F.smooth_l1_loss(
-            v1,
-            v2,
-            reduction="none",
-        )
-    else:
-        raise NotImplementedError(f"Unknown loss {loss_function}")
-    return value_loss
+    if loss_function == "smooth_l1":
+        return F.smooth_l1_loss(v1, v2, reduction="none")
+
+    raise NotImplementedError(f"Unknown loss {loss_function}.")
 
 
 class TargetNetUpdater:
@@ -620,13 +610,13 @@ def _reduce(tensor: torch.Tensor, reduction: str) -> float | torch.Tensor:
 
 
 def _clip_value_loss(
-    old_state_value: torch.Tensor,
-    state_value: torch.Tensor,
-    clip_value: torch.Tensor,
-    target_return: torch.Tensor,
-    loss_value: torch.Tensor,
+    old_state_value: torch.Tensor | TensorDict,
+    state_value: torch.Tensor | TensorDict,
+    clip_value: torch.Tensor | TensorDict,
+    target_return: torch.Tensor | TensorDict,
+    loss_value: torch.Tensor | TensorDict,
     loss_critic_type: str,
-):
+) -> tuple[torch.Tensor | TensorDict, torch.Tensor]:
     """Value clipping method for loss computation.
 
     This method computes a clipped state value from the old state value and the state value,
@@ -644,7 +634,7 @@ def _clip_value_loss(
         loss_function=loss_critic_type,
     )
     # Chose the most pessimistic value prediction between clipped and non-clipped
-    loss_value = torch.max(loss_value, loss_value_clipped)
+    loss_value = torch.maximum(loss_value, loss_value_clipped)
     return loss_value, clip_fraction
 
 
