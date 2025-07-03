@@ -95,7 +95,7 @@ def get_train_model(
     policy_training = TransformersWrapper(
         train_model,
         tokenizer=train_tokenizer,
-        input_mode="tokens",
+        input_mode="tokens" if not cfg.env.reasoning else "history",
         generate=False,
         return_log_probs=True,
         pad_output=False,
