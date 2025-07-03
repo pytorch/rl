@@ -102,7 +102,7 @@ def train(
         device=train_device,
     )
     if cfg.env.reasoning:
-        # TODO: this is clunky, we should find a way to do this more naturally
+        # TODO: this is clunky, we should find a way to do this more naturally
         loss_fn.set_keys(sample_log_prob=("next", "log_probs", "full"))
     if cfg.model.compile:
         loss_fn = torch.compile(loss_fn)
@@ -439,7 +439,7 @@ def main(cfg):
         track_policy_version=True,
         remote_config=collector_config,
         yield_only_last_steps=cfg.env.reasoning,
-        verbose=True,
+        verbose=False,
     )
     # Ensure collector is initialized by calling a method that will block until ready
     ray.get(collector._collector.is_initialized.remote())

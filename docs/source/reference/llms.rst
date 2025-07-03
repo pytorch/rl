@@ -38,6 +38,7 @@ A complete example of how to use the LLM API can be found in the `sota-implement
   - Logging etc.
 - The trainer: handles the training loop, including the optimization step, serialization, logging and weight updates initialization.
 
+.. warning:: The LLM API is still under development and may change in the future. Feedback, issues and PRs are welcome!
 
 Data Structures
 ---------------

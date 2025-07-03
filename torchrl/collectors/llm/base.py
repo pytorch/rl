@@ -371,8 +371,7 @@ class LLMCollector(SyncDataCollector):
         result = self._trajectory_queue.popleft()
         if self.verbose:
             torchrl_logger.info(
-                f"LLMCollector: Yielding completed trajectory with shape {result.shape}. "
-                f"Trajectory: {result}"
+                f"LLMCollector: Yielding completed trajectory with shape {result.shape}."
             )
         return result
 
