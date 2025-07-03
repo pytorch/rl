@@ -153,7 +153,6 @@ class AddThinkingPrompt(Transform):
         Returns:
             The modified next_tensordict
         """
-        print("Reward", next_tensordict["reward"])
         # Handle batch dimensions
         if next_tensordict.batch_dims >= 1:
             ntds = []
