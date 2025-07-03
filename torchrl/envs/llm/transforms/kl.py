@@ -695,6 +695,7 @@ class RetrieveKL(Compose):
         kl_key (NestedKey): the key where the KL divergence is stored. Defaults to `"kl"`.
         add_to_reward (bool): whether to add the KL divergence to the reward. Defaults to `True`.
         coeff (float): the coefficient for the KL term when adding to reward. Defaults to `1.0`.
+        padding_side (str): the side of the padding when using pad_sequence. Defaults to `"left"`.
         **kwargs: additional arguments to pass to the `RetrieveLogProb` transform.
 
     Examples:
@@ -798,6 +799,7 @@ class RetrieveKL(Compose):
         kl_key: NestedKey = "kl",
         add_to_reward: bool = True,
         coeff: float = 1.0,
+        padding_side: str = "left",
         **kwargs,
     ):
         if isinstance(gen_model, str) and gen_model == "from_collector":
@@ -816,6 +818,7 @@ class RetrieveKL(Compose):
                 "kl_key": kl_key,
                 "add_to_reward": add_to_reward,
                 "coeff": coeff,
+                "padding_side": padding_side,
                 **kwargs,
             }
             super().__init__()
@@ -938,20 +941,7 @@ class RetrieveKL(Compose):
             detach=self._init_params["detach"],
             device=self._init_params["device"],
             tokenizer=self._init_params["tokenizer"],
-            **{
-                k: v
-                for k, v in self._init_params.items()
-                if k
-                not in [
-                    "ref_model",
-                    "assistant_only",
-                    "history_key",
-                    "tokenizer_kwargs",
-                    "detach",
-                    "device",
-                    "tokenizer",
-                ]
-            },
+            padding_side=self._init_params["padding_side"],
         )
         ref_log_probs_full_key = self._init_params["ref_log_probs_full_key"]
         if (
@@ -971,20 +961,7 @@ class RetrieveKL(Compose):
             detach=self._init_params["detach"],
             device=self._init_params["device"],
             tokenizer=self._init_params["tokenizer"],
-            **{
-                k: v
-                for k, v in self._init_params.items()
-                if k
-                not in [
-                    "ref_model",
-                    "assistant_only",
-                    "history_key",
-                    "tokenizer_kwargs",
-                    "detach",
-                    "device",
-                    "tokenizer",
-                ]
-            },
+            padding_side=self._init_params["padding_side"],
         )
         t3 = KLComputation(
             gen_log_probs_full_key=gen_log_probs_full_key,
