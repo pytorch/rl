@@ -21,7 +21,7 @@ class IFEvalData(TensorClass["nocast"]):
     key: torch.Tensor
     instruction_id_list: str
     kwargs: list[dict]
-    string: str
+    query: str
 
     # Reponses and additional fields
     response: str | None = None
@@ -33,7 +33,7 @@ class IFEvalData(TensorClass["nocast"]):
 
 def _collate_fn(batch):
     batch = torch.stack([TensorDict.from_any(_batch) for _batch in batch])
-    batch.rename_key_("prompt", "string")
+    batch.rename_key_("prompt", "query")
     return IFEvalData.from_tensordict(batch)
 
 
