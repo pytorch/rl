@@ -214,7 +214,7 @@ class GRPOLoss(ClipPPOLoss):
                     f"masking strategy '{self.masking_strategy}'."
                 )
 
-            action = _maybe_get_or_select(tensordict, self.tensor_keys.action, padding_side=dist.padding_side, padding_value=dist.padding_value)
+            action = _maybe_get_or_select(tensordict, self.tensor_keys.action, padding_side=dist.padding_side, padding_value=-100)
             print("action", action)
             print("dist.mask", dist.mask)
             print("dist.padding_side", dist.padding_side)

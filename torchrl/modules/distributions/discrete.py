@@ -275,7 +275,11 @@ class MaskedCategorical(D.Categorical):
 
     @property
     def padding_value(self):
-        return self._padding_value
+        """Padding value of the distribution mask.
+
+        If the padding value is not set, it will be inferred from the logits.
+        """
+        return self._padding_value if self._padding_value is not None else 0
 
     @property
     def padding_side(self):
