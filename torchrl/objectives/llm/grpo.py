@@ -192,21 +192,21 @@ class GRPOLoss(ClipPPOLoss):
             #  Additionally, we should make sure that the masks are properly updated when log-probs is called (using vllm and transformers)
             #  because in some instances it looks like they can be overwritten with None values.
             if self.masking_strategy == "sft" and hasattr(
-                self.actor_network, "get_sft_dist"
+                self.actor_network, "_get_sft_dist"
             ):
-                dist = self.actor_network.get_sft_dist(tensordict)
+                dist = self.actor_network._get_sft_dist(tensordict)
             elif self.masking_strategy == "rlhf" and hasattr(
-                self.actor_network, "get_rlhf_dist"
+                self.actor_network, "_get_rlhf_dist"
             ):
-                dist = self.actor_network.get_rlhf_dist(tensordict)
+                dist = self.actor_network._get_rlhf_dist(tensordict)
             elif self.masking_strategy == "generic" and hasattr(
-                self.actor_network, "get_generic_dist"
+                self.actor_network, "_get_generic_dist"
             ):
-                dist = self.actor_network.get_generic_dist(tensordict)
+                dist = self.actor_network._get_generic_dist(tensordict)
             elif hasattr(self.actor_network, "get_dist"):
                 # Fallback to generic distribution method
                 dist = self.actor_network.get_dist(
-                    tensordict, logits_key=("log_probs", "full")
+                    tensordict, logits_key="logits",
                 )
             else:
                 raise NotImplementedError(
