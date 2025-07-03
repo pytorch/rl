@@ -685,9 +685,9 @@ def _sum_td_features(data: TensorDictBase) -> torch.Tensor:
     return data.sum(dim="feature", reduce=True)
 
 
-def _maybe_get_or_select(td, key_or_keys, target_shape=None):
+def _maybe_get_or_select(td, key_or_keys, target_shape=None, padding_side: str = "left", padding_value: int = 0):
     if isinstance(key_or_keys, (str, tuple)):
-        return td.get(key_or_keys, as_padded_tensor=True)
+        return td.get(key_or_keys, as_padded_tensor=True, padding_side=padding_side, padding_value=padding_value)
     result = td.select(*key_or_keys)
     if target_shape is not None and result.shape != target_shape:
         result.batch_size = target_shape

@@ -490,10 +490,11 @@ class CategoricalSequential(TensorDictModuleBase):
                 logits=logits,
                 mask=mask,
                 use_cross_entropy=True,
+                padding_side=padding_side,
             )
         return Categorical(logits)
 
-    def get_dist_with_prompt_mask(
+    def _get_dist_with_prompt_mask(
         self,
         tensordict: TensorDictBase,
         tokens_key: NestedKey = ("tokens", "prompt"),
@@ -513,6 +514,8 @@ class CategoricalSequential(TensorDictModuleBase):
         this method falls back to using the assistant mask.
 
         Padding side is left by convention.
+
+        This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.
         """
         if self.generate:
             raise NotImplementedError(
@@ -527,25 +530,25 @@ class CategoricalSequential(TensorDictModuleBase):
                 tokens_key,
                 as_padded_tensor=True,
                 padding_value=-100,
-                padding_side="left",
+                padding_side=padding_side,
             )
             logits = td_out.get(
                 logits_key,
                 as_padded_tensor=True,
                 padding_value=0.0,
-                padding_side="left",
+                padding_side=padding_side,
             )
             attention_mask = tensordict.get(
                 attention_mask_key,
                 as_padded_tensor=True,
                 padding_value=False,
-                padding_side="left",
+                padding_side=padding_side,
             )
             assistant_mask = tensordict.get(
                 assistant_mask_key,
                 as_padded_tensor=True,
                 padding_value=False,
-                padding_side="left",
+                padding_side=padding_side,
             )
         else:
             prompt_tokens = tensordict.get(tokens_key, as_list=True)
@@ -600,9 +603,10 @@ class CategoricalSequential(TensorDictModuleBase):
             logits=logits,
             mask=response_mask.bool(),
             use_cross_entropy=True,
+            padding_side=padding_side,
         )
 
-    def get_dist_with_assistant_mask(
+    def _get_dist_with_assistant_mask(
         self,
         tensordict: TensorDictBase,
         assistant_mask_key: NestedKey = ("masks", "all_assistant_mask"),
@@ -616,6 +620,8 @@ class CategoricalSequential(TensorDictModuleBase):
         only on assistant-generated tokens across the entire conversation.
 
         Padding side is left by convention.
+
+        This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.
         """
         if self.generate:
             raise NotImplementedError(
@@ -658,9 +664,10 @@ class CategoricalSequential(TensorDictModuleBase):
             logits=logits,
             mask=assistant_mask,
             use_cross_entropy=True,
+            padding_side=padding_side,
         )
 
-    def get_dist_with_attention_mask(
+    def _get_dist_with_attention_mask(
         self,
         tensordict: TensorDictBase,
         attention_mask_key: NestedKey = ("masks", "all_attention_mask"),
@@ -674,6 +681,8 @@ class CategoricalSequential(TensorDictModuleBase):
         on all valid tokens (non-padding tokens).
 
         Padding side is left by convention.
+
+        This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.
         """
         if self.generate:
             raise NotImplementedError(
@@ -709,9 +718,10 @@ class CategoricalSequential(TensorDictModuleBase):
             logits=logits,
             mask=attention_mask,
             use_cross_entropy=True,
+            padding_side=padding_side,
         )
 
-    def get_dist_with_custom_mask(
+    def _get_dist_with_custom_mask(
         self,
         tensordict: TensorDictBase,
         mask: torch.Tensor,
@@ -724,6 +734,8 @@ class CategoricalSequential(TensorDictModuleBase):
         This allows for completely custom masking logic.
 
         Padding side is left by convention.
+
+        This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.
         """
         if self.generate:
             raise NotImplementedError(
@@ -748,6 +760,7 @@ class CategoricalSequential(TensorDictModuleBase):
             logits=logits,
             mask=mask,
             use_cross_entropy=True,
+            padding_side=padding_side,
         )
 
     # Convenience methods for common LLM training scenarios
@@ -756,21 +769,21 @@ class CategoricalSequential(TensorDictModuleBase):
 
         This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.
         """
-        return self.get_dist_with_prompt_mask(tensordict, **kwargs)
+        return self._get_dist_with_prompt_mask(tensordict, **kwargs)
 
     def _get_rlhf_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
         """Get distribution suitable for RLHF loss (assistant tokens only).
 
         This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.
         """
-        return self.get_dist_with_assistant_mask(tensordict, **kwargs)
+        return self._get_dist_with_assistant_mask(tensordict, **kwargs)
 
     def _get_generic_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
         """Get distribution suitable for generic losses (all tokens).
 
         This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.
         """
-        return self.get_dist_with_attention_mask(tensordict, **kwargs)
+        return self._get_dist_with_attention_mask(tensordict, **kwargs)
 
     # Sampling is taken care of by the sub-modules
     forward = TensorDictSequential.forward

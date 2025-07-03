@@ -186,6 +186,7 @@ class MaskedCategorical(D.Categorical):
             sparse_mask == True, the padding_value will be ignored.
         use_cross_entropy (bool, optional): For faster computation of the log-probability,
             the cross_entropy loss functional can be used. Defaults to ``True``.
+        padding_side (str, optional): The side of the padding. Defaults to ``"left"``.
 
     Examples:
         >>> torch.manual_seed(0)
@@ -228,6 +229,7 @@ class MaskedCategorical(D.Categorical):
         neg_inf: float = float("-inf"),
         padding_value: int | None = None,
         use_cross_entropy: bool = True,
+        padding_side: str = "left",
     ) -> None:
         if not ((mask is None) ^ (indices is None)):
             raise ValueError(
@@ -267,8 +269,17 @@ class MaskedCategorical(D.Categorical):
         self._mask = mask
         self._sparse_mask = sparse_mask
         self._padding_value = padding_value
+        self._padding_side = padding_side
         super().__init__(logits=logits)
         self.num_samples = num_samples
+
+    @property
+    def padding_value(self):
+        return self._padding_value
+
+    @property
+    def padding_side(self):
+        return self._padding_side
 
     @property
     def mask(self):

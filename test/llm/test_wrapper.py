@@ -1568,16 +1568,16 @@ class TestDistributionMethods:
 
         # Test that all distribution methods raise NotImplementedError
         with pytest.raises(NotImplementedError, match="vLLM does not return logits"):
-            wrapper.get_dist(td)
+            wrapper._get_dist(td)
 
         with pytest.raises(NotImplementedError, match="vLLM does not return logits"):
-            wrapper.get_sft_dist(td)
+            wrapper._get_sft_dist(td)
 
         with pytest.raises(NotImplementedError, match="vLLM does not return logits"):
-            wrapper.get_rlhf_dist(td)
+            wrapper._get_rlhf_dist(td)
 
         with pytest.raises(NotImplementedError, match="vLLM does not return logits"):
-            wrapper.get_generic_dist(td)
+            wrapper._get_generic_dist(td)
 
     @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
     @pytest.mark.parametrize("masking_strategy", ["sft", "rlhf", "generic"])
@@ -1637,11 +1637,11 @@ class TestDistributionMethods:
 
         # Test the appropriate distribution method
         if masking_strategy == "sft":
-            dist = wrapper.get_sft_dist(td)
+            dist = wrapper._get_sft_dist(td)
         elif masking_strategy == "rlhf":
-            dist = wrapper.get_rlhf_dist(td)
+            dist = wrapper._get_rlhf_dist(td)
         elif masking_strategy == "generic":
-            dist = wrapper.get_generic_dist(td)
+            dist = wrapper._get_generic_dist(td)
 
         # Verify that we get a distribution
         assert dist is not None

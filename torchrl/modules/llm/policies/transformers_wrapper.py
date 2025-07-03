@@ -1697,7 +1697,7 @@ class TransformersWrapper(CategoricalSequential):
         self._in_get_dist_call = True
         self.out_keys += ["logits"]
         try:
-            return super().get_dist_with_prompt_mask(
+            return super()._get_dist_with_prompt_mask(
                 tensordict,
                 tokens_key,
                 logits_key,
@@ -1725,7 +1725,7 @@ class TransformersWrapper(CategoricalSequential):
         self._in_get_dist_call = True
         self.out_keys += ["logits"]
         try:
-            return super().get_dist_with_assistant_mask(
+            return super()._get_dist_with_assistant_mask(
                 tensordict, assistant_mask_key, logits_key, **kwargs
             )
         finally:
@@ -1748,7 +1748,7 @@ class TransformersWrapper(CategoricalSequential):
         self._in_get_dist_call = True
         self.out_keys += ["logits"]
         try:
-            return super().get_dist_with_attention_mask(
+            return super()._get_dist_with_attention_mask(
                 tensordict, attention_mask_key, logits_key, **kwargs
             )
         finally:
@@ -1769,7 +1769,7 @@ class TransformersWrapper(CategoricalSequential):
         self._in_get_dist_call = True
         self.out_keys += ["logits"]
         try:
-            return super().get_dist_with_custom_mask(
+            return super()._get_dist_with_custom_mask(
                 tensordict, mask, logits_key, **kwargs
             )
         finally:
