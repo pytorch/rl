@@ -564,12 +564,10 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
             # RetrieveKL will be lazily initialized in the collector.
             # We use RetrieveKL instead of KLRewardTransform because the assistant response may change when
             # adding the thinking prompt, requiring a second pass in vllm to compute the log-probs.
-            RetrieveKL(ref_model=ref_model)
-        )
-        env.append_transform(
-            KLComputation(
-                coeff=cfg.train.kl_to_ref_coeff,
+            RetrieveKL(
+                ref_model=ref_model,
                 add_to_reward=not cfg.train.kl_coef_in_loss,
+                coeff=cfg.train.kl_to_ref_coeff,
             )
         )
     else:
