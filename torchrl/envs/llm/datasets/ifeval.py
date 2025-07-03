@@ -180,7 +180,7 @@ You will be assessed by the content of the answer block only, so make sure it co
             apply_template=apply_template,
             collate_fn=collate_fn,
             input_mode=input_mode,
-            data_key="string",
+            data_key="query",
         )
         if max_steps:
             self.append_transform(StepCounter(max_steps=max_steps))
