@@ -524,6 +524,7 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
     )
 
     # Setup environment
+    max_steps = cfg.env.max_steps if cfg.env.reasoning else 1
     if cfg.env.dataset == "gsm8k":
         # Reward scale is 0.0 to 100
         reward_threshold = 20
@@ -531,7 +532,7 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
             repeats=cfg.env.repeats,
             tokenizer=train_tokenizer,
             num_envs=cfg.env.num_envs,
-            max_steps=cfg.env.max_steps if cfg.env.reasoning else 1,
+            max_steps=max_steps,
             device=torch.device("cuda:0") if devices is not None else None,
         )
     elif cfg.env.dataset == "ifeval":  # ifeval
@@ -541,7 +542,7 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
             repeats=cfg.env.repeats,
             tokenizer=train_tokenizer,
             num_envs=cfg.env.num_envs,
-            max_steps=cfg.env.max_steps if cfg.env.reasoning else 1,
+            max_steps=max_steps,
             device=torch.device("cuda:0") if devices is not None else None,
         )
     else:
