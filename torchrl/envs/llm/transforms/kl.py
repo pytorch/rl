@@ -1087,8 +1087,8 @@ class KLComputation(Transform):
 
     def __init__(
         self,
-        gen_log_probs_key: NestedKey=("gen_log_probs", "full"),
-        ref_log_probs_key: NestedKey=("ref_log_probs", "full"),
+        gen_log_probs_key: NestedKey = ("gen_log_probs", "full"),
+        ref_log_probs_key: NestedKey = ("ref_log_probs", "full"),
         *,
         kl_key: NestedKey = "kl",
         add_to_reward: bool = True,

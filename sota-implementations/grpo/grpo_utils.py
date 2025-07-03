@@ -189,7 +189,9 @@ def get_inference_model(
 
 
 def get_ref_model(
-    cfg: DictConfig, tokenizer: PreTrainedTokenizer, devices: list[int] | None = None, log_probs_key: str | None = None
+    cfg: DictConfig,
+    tokenizer: PreTrainedTokenizer,
+    devices: list[int] | None = None,
 ) -> TransformersWrapper:
     """Creates the reference model for KL penalty computation.
 
@@ -249,7 +251,6 @@ def get_ref_model(
         return_log_probs=True,
         pad_output=False,
         device=torch.device("cuda:0"),
-        log_probs_key=log_probs_key,
     )
     return ref_model
 
@@ -518,7 +519,11 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
 
     # Create a new config with adjusted device assignments
     ref_cfg = DictConfig(dict(cfg))
-    ref_model = get_ref_model(ref_cfg, train_tokenizer, devices=devices, log_probs_key=("ref_log_probs", "full") if cfg.env.reasoning else None)
+    ref_model = get_ref_model(
+        ref_cfg,
+        train_tokenizer,
+        devices=devices,
+    )
 
     # Setup environment
     if cfg.env.dataset == "gsm8k":
@@ -553,28 +558,28 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
                 undo_done=True,
             )
         )
-        env = env.append_transform(
-            # RetrieveKL will be lazily initialized in the collector.
-            # We use RetrieveKL instead of KLRewardTransform because the assistant response may change when
-            # adding the thinking prompt, requiring a second pass in vllm to compute the log-probs.
-            RetrieveKL(ref_model=ref_model)
+    #     env = env.append_transform(
+    #         # RetrieveKL will be lazily initialized in the collector.
+    #         # We use RetrieveKL instead of KLRewardTransform because the assistant response may change when
+    #         # adding the thinking prompt, requiring a second pass in vllm to compute the log-probs.
+    #         RetrieveKL(ref_model=ref_model)
+    #     )
+    #     env.append_transform(
+    #         KLComputation(
+    #             coeff=cfg.train.kl_to_ref_coeff,
+    #             add_to_reward=not cfg.train.kl_coef_in_loss,
+    #         )
+    #     )
+    # else:
+    # Pass device directly to KLRewardTransform - Since, for Ray, the local device is always 0
+    # we can just use 0 here.
+    device = torch.device("cuda:0")
+    env = env.append_transform(
+        KLRewardTransform(
+            ref_model=ref_model,
+            coef=cfg.train.kl_to_ref_coeff,
+            add_to_reward=not cfg.train.kl_coef_in_loss,
+            device=device,
         )
-        env.append_transform(
-            KLComputation(
-                coeff=cfg.train.kl_to_ref_coeff,
-                add_to_reward=not cfg.train.kl_coef_in_loss,
-            )
-        )
-    else:
-        # Pass device directly to KLRewardTransform - Since, for Ray, the local device is always 0
-        # we can just use 0 here.
-        device = torch.device("cuda:0")
-        env = env.append_transform(
-            KLRewardTransform(
-                ref_model=ref_model,
-                coef=cfg.train.kl_to_ref_coeff,
-                add_to_reward=not cfg.train.kl_coef_in_loss,
-                device=device,
-            )
-        )
+    )
     return env
