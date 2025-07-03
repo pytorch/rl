@@ -436,6 +436,7 @@ def main(cfg):
         track_policy_version=True,
         remote_config=collector_config,
         yield_only_last_steps=cfg.env.reasoning,
+        verbose=True,
     )
     # Ensure collector is initialized by calling a method that will block until ready
     ray.get(collector._collector.is_initialized.remote())
