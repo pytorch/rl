@@ -307,8 +307,8 @@ class LogProbDistribution(D.Distribution):
         raise NotImplementedError("Entropy not supported for LogProbDistribution")
 
 
-class CategoricalSequential(TensorDictModuleBase):
-    """A ProbabilisticTensorDictSequential subclass meant to work with LLMs.
+class LLMWrapperBase(TensorDictModuleBase):
+    r"""A LLM wrapper base class.
 
     This class provides a consistent interface for LLM wrappers with the following features:
     - Support for different input modalities (history, text, tokens)
@@ -339,7 +339,9 @@ class CategoricalSequential(TensorDictModuleBase):
     Attributes:
         collector: The collector associated with the module, if it exists.
 
-    .. seealso:: :class:`~tensordict.nn.ProbabilisticTensorDictSequential` class.
+    See also:
+        - :class:`~torchrl.modules.llm.policies.TransformersWrapper` (see :ref:`ref_transformers_wrapper`)
+        - :class:`~torchrl.modules.llm.policies.vLLMWrapper` (see :ref:`ref_vllm_wrapper`)
     """
 
     generate: bool

@@ -433,7 +433,7 @@ The main goal of these primitives is to:
     :toctree: generated/
     :template: rl_template.rst
 
-    CategoricalSequential
+    LLMWrapperBase
     TransformersWrapper
     vLLMWrapper
     ChatHistory

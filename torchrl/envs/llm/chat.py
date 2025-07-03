@@ -31,12 +31,12 @@ def _default_collate_fn(batch):
 
 
 class ChatEnv(EnvBase):
-    r"""A chat-based environment that serves as a blank canvas for LLM environments.
+    r"""A chat-based environment for LLMs, designed as a blank canvas for conversation and RL.
 
-    ChatEnv is designed to work seamlessly with both :class:`~torchrl.modules.llm.TransformersWrapper` and
-    :class:`~torchrl.modules.llm.vLLMWrapper`. It provides the fundamental structure for managing conversation
-    state using the :class:`~torchrl.data.llm.History` format (or, alternatively, tokens or text), but is
-    intentionally minimal to allow maximum flexibility through transforms.
+    This environment is designed to work seamlessly with both :class:`~torchrl.modules.llm.policies.TransformersWrapper` and
+    :class:`~torchrl.modules.llm.policies.vLLMWrapper`. It provides the fundamental structure for managing conversation state
+    using the :class:`~torchrl.data.llm.History` format (or, alternatively, tokens or text), but is intentionally minimal to allow
+    maximum flexibility through transforms.
 
     Core Functionality
         The environment operates in three main modes:
@@ -87,15 +87,14 @@ class ChatEnv(EnvBase):
         system_role (str, optional): The role of the system (at reset time). Defaults to `"system"`.
         user_role (str, optional): The role of the user (at reset time). Defaults to `"user"`.
         policy_role (str, optional): The role of the policy/assistant. Defaults to `"assistant"`.
-        data_key (str, optional): The key of the data input to the env at reset time (from dataloader).
-            Defaults to `"query"`.
+        data_key (str, optional): The key of the data input to the env at reset time (from dataloader). Defaults to `"query"`.
         device (torch.device, optional): The device to use for computations. Defaults to `None`.
 
     Methods:
-        reset (TensorDict): Resets the state of the environment. A tensordict or equivalent with a `"query"`
-            entry (originating from the dataloader) must be passed. This key name is defined as a class attribute `data_key`.
-        step (TensorDict): Makes a step in the environment. A tensordict or equivalent with the LLM's response
-            must be passed. The response key is defined as a class attribute `response_key`.
+        reset (TensorDict): Resets the state of the environment. A tensordict or equivalent with a `"query"` entry
+            (originating from the dataloader) must be passed. This key name is defined as a class attribute `data_key`.
+        step (TensorDict): Makes a step in the environment. A tensordict or equivalent with the LLM's response must be passed.
+            The response key is defined as a class attribute `response_key`.
 
     .. seealso:: To see examples of a `ChatEnv` in action, see :class:`~torchrl.envs.llm.chat.DatasetChatEnv`,
         :class:`~torchrl.envs.llm.GSM8KEnv` and :class:`~torchrl.envs.llm.IFEvalEnv`.

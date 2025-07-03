@@ -31,7 +31,7 @@ from grpo_utils import (
     compute_device_allocation,
     get_inference_model,
     get_train_model,
-    make_env_async as make_env,
+    make_env,
     make_weight_updater,
 )
 from omegaconf import DictConfig

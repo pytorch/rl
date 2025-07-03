@@ -24,8 +24,8 @@ from torch.nn.utils.rnn import pad_sequence
 
 from torchrl.envs.utils import _classproperty
 from torchrl.modules.llm.policies.common import (
-    CategoricalSequential,
     ChatHistory,
+    LLMWrapperBase,
     LogProbs,
     Masks,
     Text,
@@ -46,51 +46,40 @@ except ImportError:
     RequestOutput = Any  # type: ignore
 
 
-class vLLMWrapper(CategoricalSequential):
+class vLLMWrapper(LLMWrapperBase):
     """A wrapper class for vLLM models, providing a consistent interface for text generation and log probability computation.
 
-    This class provides a unified API for handling different input modalities (history, text, tokens) with consistent
-    output structure using :class:`~tensordict.TensorClass` objects.
-
-    **Recent Changes:**
-    - **ChatHistory Integration**: The wrapper now uses :class:`~torchrl.modules.llm.policies.ChatHistory` objects for history mode,
-      similar to how :class:`~torchrl.modules.llm.policies.Text` and :class:`~torchrl.modules.llm.policies.Tokens` are used.
-    - **Modular Output**: The wrapper automatically determines what to return based on input_mode:
-      - **Tokens**: Always returned for all input modes (`"history"`, `"text"`, `"tokens"`)
-      - **Text**: Returned for `"text"` and `"history"` input modes
-      - **History**: Returned only for `"history"` input mode
-      - **Masks**: Always returned for all input modes
-      - **Log Probs**: Returned when `return_log_probs=True`
+    This class is a subclass of :class:`~torchrl.modules.llm.policies.LLMWrapperBase` and provides a unified API for handling different input
+    modalities (history, text, tokens) with consistent output structure using :class:`~tensordict.TensorClass` objects.
 
     Args:
         model (vllm.LLM | str): The vLLM model to wrap. If a string, it will be passed to `vllm.LLM`.
 
     Keyword Args:
-        tokenizer (transformers.tokenization_utils.PreTrainedTokenizer | str | None, optional): The tokenizer to use for
-            encoding and decoding text. If `None`, the tokenizer associated with the model will be used.
-            If a string, it will be passed to `transformers.AutoTokenizer.from_pretrained`. Defaults to `None`.
-        input_mode (str, optional): The input modality to use. Must be one of `"history"`, `"text"`, or `"tokens"`.
-            Defaults to `"history"`.
-        input_key (str | None, optional): The key for the input data. If `None`, defaults to `("history", "prompt")` for `"history"`,
-            `("text", "prompt")` for `"text"` when `generate=True`, `("text", "full")` for `"text"` when `generate=False`,
-            `("tokens", "prompt")` for `"tokens"` when `generate=True`, and `("tokens", "full")` for `"tokens"` when `generate=False`.
+        tokenizer (transformers.tokenization_utils.PreTrainedTokenizer | str | None, optional): The tokenizer to use for encoding and decoding text.
+            If `None`, the tokenizer associated with the model will be used. If a string, it will be passed to `transformers.AutoTokenizer.from_pretrained`.
             Defaults to `None`.
+        input_mode (str, optional): The input modality to use. Must be one of `"history"`, `"text"`, or `"tokens"`. Defaults to `"history"`.
+        input_key (str | None, optional): The key for the input data. If `None`, defaults to
+            - `("history", "prompt")` for `"history"` when `generate=True`, `("history", "full")` for `"history"` when `generate=False`
+            - `("text", "prompt")` for `"text"` when `generate=True`, `("text", "full")` for `"text"` when `generate=False`
+            - `("tokens", "prompt")` for `"tokens"` when `generate=True`, `("tokens", "full")` for `"tokens"` when `generate=False`
         attention_mask_key (str, optional): The key for attention masks (used in `"tokens"` mode). Defaults to `"attention_mask"`.
-        generate (bool, optional): Whether to enable text generation. If `True`, the model will generate text based on
-            the input. If `False`, only log probabilities will be computed. Defaults to `True`.
+
+                    .. warning:: This argument is under development and may change in the future.
+
+        generate (bool, optional): Whether to enable text generation. If `True`, the model will generate text based on the input.
+            If `False`, only log probabilities will be computed. Defaults to `True`.
         return_log_probs (bool, optional): Whether to return log probabilities. Defaults to `True`.
         generate_kwargs (dict | None, optional): Additional arguments to pass to the model's generate method. Defaults to `None`.
         tokenizer_kwargs (dict | None, optional): Additional arguments to pass to the tokenizer. Defaults to `None`.
         pad_output (bool, optional): Whether to pad the output sequences to a uniform length. Defaults to `False`.
-        inplace (Literal[True, False, "empty"] | None, optional): Determines how the module should handle in-place
-            operations. Defaults to `True` when generating a single sample, `False` otherwise.
+        inplace (Literal[True, False, "empty"] | None, optional): Determines how the module should handle in-place operations. Defaults to `True`.
         device (torch.device | None, optional): The device to use for computation. Defaults to `None`.
         layout (torch.layout | None, optional): The layout to use for the output tensors when `pad_output=False`. Defaults to `torch.strided`.
-        chat_template_name (Literal["chatml_format", "qwen"] | None, optional): The name of the chat template to use when
-            applying the chat template to the history. Defaults to `None`.
-            For `input_mode="history"` only.
-        chat_template (str | None, optional): The chat template to use when applying the chat template to the history.
-            Defaults to `None`.
+        chat_template_name (Literal["chatml_format", "qwen"] | None, optional): The name of the chat template to use when applying the chat template to the history.
+            Defaults to `None`. For `input_mode="history"` only.
+        chat_template (str | None, optional): The chat template to use when applying the chat template to the history. Defaults to `None`.
             For `input_mode="history"` only.
         num_samples (int | None, optional): The number of samples to generate. Defaults to `None` (one sample, and no batch-dimension for it).
             Can also be set via the `generate_kwargs["n"] = value` argument.
@@ -159,8 +148,9 @@ class vLLMWrapper(CategoricalSequential):
     Attributes:
         collector: The collector associated with the module, if it exists.
 
-    .. seealso:: :class:`~torchrl.modules.llm.TransformersWrapper` for a similar interface using the Hugging Face
-        Transformers library.
+    See also:
+        - :class:`~torchrl.modules.llm.policies.LLMWrapperBase` (see :ref:`ref_categorical_sequential`)
+        - :class:`~torchrl.modules.llm.policies.TransformersWrapper` (see :ref:`ref_transformers_wrapper`)
     """
 
     def __init__(

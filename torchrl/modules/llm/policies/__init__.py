@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from .common import CategoricalSequential, ChatHistory, LogProbs, Masks, Text, Tokens
+from .common import ChatHistory, LLMWrapperBase, LogProbs, Masks, Text, Tokens
 from .transformers_wrapper import TransformersWrapper
 
 from .vllm_wrapper import vLLMWrapper
@@ -13,7 +13,7 @@ from .vllm_wrapper import vLLMWrapper
 __all__ = [
     "TransformersWrapper",
     "vLLMWrapper",
-    "CategoricalSequential",
+    "LLMWrapperBase",
     "Text",
     "LogProbs",
     "Masks",

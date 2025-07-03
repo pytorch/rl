@@ -495,8 +495,7 @@ def compute_device_allocation(cfg):
         "cuda_visible_devices": cuda_visible_devices,
     }
 
-
-def make_env_sync(cfg: DictConfig, devices: list[int] | None = None):
+def make_env(cfg: DictConfig, devices: list[int] | None = None):
     """Create the environment with proper device allocation.
 
     Args:
@@ -512,7 +511,6 @@ def make_env_sync(cfg: DictConfig, devices: list[int] | None = None):
     # Get device information
     num_inf_devices = cfg.inference_model.num_devices
     num_ref_devices = cfg.ref_model.num_devices
-    num_inf_devices + num_ref_devices
 
     # Create a new config with adjusted device assignments
     ref_cfg = DictConfig(dict(cfg))
@@ -520,83 +518,7 @@ def make_env_sync(cfg: DictConfig, devices: list[int] | None = None):
 
     # Setup environment
     if cfg.env.dataset == "gsm8k":
-        reward_threshold = 20
-        env = GSM8KEnv(
-            repeats=cfg.env.repeats,
-            tokenizer=train_tokenizer,
-            num_envs=cfg.env.num_envs,
-            max_steps=cfg.env.max_steps if cfg.env.reasoning else 1,
-        )
-    elif cfg.env.dataset == "ifeval":  # ifeval
-        reward_threshold = 50
-        env = IFEvalEnv(
-            repeats=cfg.env.repeats,
-            tokenizer=train_tokenizer,
-            num_envs=cfg.env.num_envs,
-            max_steps=cfg.env.max_steps if cfg.env.reasoning else 1,
-        )
-    else:
-        raise NotImplementedError(f"Dataset {cfg.env.dataset} not implemented")
-
-    if cfg.env.reasoning:
-        env = env.append_transform(
-            AddThinkingPrompt(
-                cond=lambda td: td["reward"] <= reward_threshold,
-                role="assistant",
-                edit_last_turn=True,
-                zero_reward=True,
-                undo_done=True,
-            )
-        )
-        env = env.append_transform(
-            # RetrieveKL will be lazily initialized in the collector.
-            # We use RetrieveKL instead of KLRewardTransform because the assistant response may change when
-            # adding the thinking prompt, requiring a second pass in vllm to compute the log-probs.
-            RetrieveKL(
-                ref_model=ref_model,
-                coef=cfg.train.kl_to_ref_coeff,
-                add_to_reward=not cfg.train.kl_coef_in_loss,
-            )
-        )
-    else:
-        # Pass device directly to KLRewardTransform - Since, for Ray, the local device is always 0
-        # we can just use 0 here.
-        device = torch.device("cuda:0")
-        env = env.append_transform(
-            KLRewardTransform(
-                ref_model=ref_model,
-                coef=cfg.train.kl_to_ref_coeff,
-                add_to_reward=not cfg.train.kl_coef_in_loss,
-                device=device,
-            )
-        )
-    return env
-
-
-def make_env_async(cfg: DictConfig, devices: list[int] | None = None):
-    """Create the environment with proper device allocation.
-
-    Args:
-        cfg: The configuration object
-
-    Returns:
-        The configured environment
-    """
-    # Create reference model with proper device allocation
-    # For the collector actor, we want inference_model devices first, then ref_model devices
-    train_tokenizer = get_tokenizer(cfg)
-
-    # Get device information
-    num_inf_devices = cfg.inference_model.num_devices
-    num_ref_devices = cfg.ref_model.num_devices
-    num_inf_devices + num_ref_devices
-
-    # Create a new config with adjusted device assignments
-    ref_cfg = DictConfig(dict(cfg))
-    ref_model = get_ref_model(ref_cfg, train_tokenizer, devices=devices)
-
-    # Setup environment
-    if cfg.env.dataset == "gsm8k":
+        # Reward scale is 0.0 to 100
         reward_threshold = 20
         env = GSM8KEnv(
             repeats=cfg.env.repeats,
@@ -606,7 +528,8 @@ def make_env_async(cfg: DictConfig, devices: list[int] | None = None):
             device=torch.device("cuda:0") if devices is not None else None,
         )
     elif cfg.env.dataset == "ifeval":  # ifeval
-        reward_threshold = 50
+        # Reward scale is 0.0 to 2.2
+        reward_threshold = 1.0
         env = IFEvalEnv(
             repeats=cfg.env.repeats,
             tokenizer=train_tokenizer,

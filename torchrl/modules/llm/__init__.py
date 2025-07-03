@@ -12,8 +12,8 @@ from .backends import (
 )
 
 from .policies import (
-    CategoricalSequential,
     ChatHistory,
+    LLMWrapperBase,
     LogProbs,
     Masks,
     Text,
@@ -23,7 +23,7 @@ from .policies import (
 )
 
 __all__ = [
-    "CategoricalSequential",
+    "LLMWrapperBase",
     "LLMOnDevice",
     "TransformersWrapper",
     "make_vllm_worker",

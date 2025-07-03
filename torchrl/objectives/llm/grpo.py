@@ -25,7 +25,7 @@ from tensordict.utils import expand_as_right
 from torch import distributions as d
 from torchrl._utils import logger as torchrl_logger
 from torchrl.envs.transforms.transforms import Transform
-from torchrl.modules.llm import CategoricalSequential
+from torchrl.modules.llm import LLMWrapperBase
 from torchrl.objectives.ppo import ClipPPOLoss
 from torchrl.objectives.utils import _reduce, _sum_td_features
 
@@ -52,7 +52,7 @@ class GRPOLoss(ClipPPOLoss):
         loss = -min( weight * advantage, min(max(weight, 1-eps), 1+eps) * advantage)
 
     Args:
-        actor_network (CategoricalSequential): policy operator.
+        actor_network (LLMWrapperBase): policy operator.
 
     .. note::
         It is critical to keep your model in eval mode during GRPO training to ensure deterministic behavior and correct
@@ -114,7 +114,7 @@ class GRPOLoss(ClipPPOLoss):
                 the storages match the ones that are passed to other components, such as data collectors.
     """
 
-    actor_network: CategoricalSequential
+    actor_network: LLMWrapperBase
     critic_network: TensorDictModule
     actor_network_params: TensorDictParams
     critic_network_params: TensorDictParams
@@ -123,7 +123,7 @@ class GRPOLoss(ClipPPOLoss):
 
     def __init__(
         self,
-        actor_network: CategoricalSequential | None = None,
+        actor_network: LLMWrapperBase | None = None,
         *,
         clip_epsilon: float = 0.2,
         entropy_bonus: bool = True,

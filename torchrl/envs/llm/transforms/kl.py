@@ -18,7 +18,7 @@ from torchrl.data import Composite, Unbounded
 from torchrl.envs import EnvBase, Transform
 from torchrl.envs.transforms.transforms import Compose
 from torchrl.envs.transforms.utils import _set_missing_tolerance
-from torchrl.modules.llm.policies.common import CategoricalSequential
+from torchrl.modules.llm.policies.common import LLMWrapperBase
 
 try:
     import transformers
@@ -47,8 +47,8 @@ class KLRewardTransform(Transform):
     - More modular and composable architecture
 
     Args:
-        gen_model (CategoricalSequential): the generation model.
-        ref_model (CategoricalSequential): the reference model.
+        gen_model (LLMWrapperBase): the generation model.
+        ref_model (LLMWrapperBase): the reference model.
 
     Keyword Args:
         assistant_only (bool): whether to only compute KL on assistant tokens. Defaults to `True`.
@@ -75,7 +75,7 @@ class KLRewardTransform(Transform):
 
     def __init__(
         self,
-        ref_model: CategoricalSequential,
+        ref_model: LLMWrapperBase,
         *,
         coef=1.0,
         in_keys=None,
@@ -419,7 +419,7 @@ class RetrieveLogProb(Transform):
       whether it returns tokens, text, history, or combinations thereof.
 
     Args:
-        model (CategoricalSequential): the model to use to compute the log-probs.
+        model (LLMWrapperBase): the model to use to compute the log-probs.
 
     Keyword Args:
         log_probs_key (NestedKey): the key where the log-probs are stored.
@@ -520,7 +520,7 @@ class RetrieveLogProb(Transform):
 
     def __init__(
         self,
-        model: CategoricalSequential,
+        model: LLMWrapperBase,
         *,
         log_probs_key: NestedKey | None = None,
         assistant_only: bool = True,
@@ -567,7 +567,7 @@ class RetrieveLogProb(Transform):
         # Validate model configuration (after setting assistant_only)
         self._validate_model_config(model)
 
-    def _validate_model_config(self, model: CategoricalSequential):
+    def _validate_model_config(self, model: LLMWrapperBase):
         """Validate model configuration."""
         if not getattr(model, "return_log_probs", True):
             raise ValueError(
@@ -678,12 +678,12 @@ class RetrieveKL(Compose):
         Both gen_model and ref_model must use the same pad_output value (True or False), otherwise KL computation will fail.
 
     Args:
-        gen_model (CategoricalSequential): the generation model, wrapped in such a way that it does not generate but computes the log-probs.
+        gen_model (LLMWrapperBase): the generation model, wrapped in such a way that it does not generate but computes the log-probs.
             In cases where the transform is used within a :class:`~torchrl.collectors.llm.LLMCollector` run on a remote worker, the
             policy may not be available ahead of time. In this case, the `gen_model` can be set to `"from_collector"` (default) to retrieve the
-            policy from the collector. See :meth:`~torchrl.modules.llm.policies.CategoricalSequential.get_new_version` for more details
+            policy from the collector. See :meth:`~torchrl.modules.llm.policies.LLMWrapperBase.get_new_version` for more details
             about generating a new version of the policy to gather the log-probs.
-        ref_model (CategoricalSequential): the reference model, wrapped in such a way that it does not generate but computes the log-probs.
+        ref_model (LLMWrapperBase): the reference model, wrapped in such a way that it does not generate but computes the log-probs.
 
     Keyword Args:
         assistant_only (bool): whether to only retrieve the log-probs of the assistant tokens (i.e., steps of history
@@ -792,8 +792,8 @@ class RetrieveKL(Compose):
 
     def __init__(
         self,
-        gen_model: CategoricalSequential | Literal["from_collector"] = "from_collector",
-        ref_model: CategoricalSequential | None = None,
+        gen_model: LLMWrapperBase | Literal["from_collector"] = "from_collector",
+        ref_model: LLMWrapperBase | None = None,
         *,
         assistant_only: bool | None = None,
         history_key: str = "history",
