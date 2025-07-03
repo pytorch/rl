@@ -546,7 +546,7 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
     if cfg.env.reasoning:
         # Set the thinking transform after the reward but before step-counter
         env = env.insert_transform(
-            1,
+            -2,
             AddThinkingPrompt(
                 cond=lambda td: td["reward"] <= reward_threshold,
                 role="assistant",
