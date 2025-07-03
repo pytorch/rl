@@ -169,7 +169,7 @@ def get_inference_model(
         inference_server,
         input_mode="history",
         chat_template_name="qwen",
-        return_log_probs=True,
+        return_log_probs=not cfg.env.reasoning,
         tokenizer=tokenizer,
         pad_output=False,
         generate_kwargs={
