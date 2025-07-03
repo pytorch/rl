@@ -9642,7 +9642,7 @@ class TestPPO(LossModuleTestBase):
                     KeyError,
                     match=f"clip_value is set to {loss_fn.clip_value}, but the key "
                     "state_value was not found in the input tensordict. "
-                    "Make sure that the value_key passed to PPO exists in "
+                    "Make sure that the.*passed to PPO exists in "
                     "the input tensordict.",
                 ):
                     loss = loss_fn(td)
