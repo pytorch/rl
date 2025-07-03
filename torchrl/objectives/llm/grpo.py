@@ -321,9 +321,9 @@ class GRPOLoss(ClipPPOLoss):
                 padding_side=dist.padding_side,
                 padding_value=dist.padding_value,
             )
-            if ref_log_prob is not None:
+            if ref_log_prob is None:
                 raise KeyError(
-                    f"Couldn't find the ref log-prob {key} in the input data."
+                    f"Couldn't find the ref log-prob {key} in the input data ({tensordict.keys(True)=})."
                 )
             ref_log_prob = ref_log_prob.squeeze(-1)
         cur_log_prob = tensordict.get("_cur_log_prob")
