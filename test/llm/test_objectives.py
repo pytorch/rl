@@ -247,6 +247,7 @@ class TestSFT:
             assistant_only=True,
             tokenizer_kwargs={"chat_template_name": "qwen"},
             tokenizer=tokenizer,
+            log_probs_key=("ref_log_prob", "full"),
         )
         td = transform(data)
         assert td is data

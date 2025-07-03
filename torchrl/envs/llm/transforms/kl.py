@@ -17,6 +17,7 @@ from torchrl.envs import EnvBase, Transform
 from torchrl.envs.transforms.transforms import Compose
 from torchrl.envs.transforms.utils import _set_missing_tolerance
 from torchrl.modules.llm.policies.common import CategoricalSequential
+import warnings
 
 try:
     import transformers
@@ -531,6 +532,12 @@ class RetrieveLogProb(Transform):
         # Set up keys
         if log_probs_key is None:
             log_probs_key = (model.log_probs_key, "full")
+        elif not isinstance(log_probs_key, tuple) or log_probs_key[-1] != "full":
+            warnings.warn(
+                f"The log_probs_key {log_probs_key} is not a tuple or does not end with 'full'. "
+                "This may cause issues with the KL computation. "
+                "Please use a tuple with the log_probs_key and 'full' as the last element."
+            )
         self.log_probs_key = log_probs_key
 
         # Set up input/output keys

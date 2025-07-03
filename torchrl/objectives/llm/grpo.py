@@ -215,9 +215,9 @@ class GRPOLoss(ClipPPOLoss):
                     f"masking strategy '{self.masking_strategy}'."
                 )
 
-            action = _maybe_get_or_select(
-                tensordict,
+            action = tensordict.get(
                 self.tensor_keys.action,
+                as_padded_tensor=True,
                 padding_side=dist.padding_side,
                 padding_value=-100,
             )
@@ -346,11 +346,15 @@ class GRPOLoss(ClipPPOLoss):
         self, tensordict: TensorDictBase, adv_shape: torch.Size
     ) -> tuple[torch.Tensor, d.Distribution, torch.Tensor]:
 
-        prev_log_prob = _maybe_get_or_select(
-            tensordict,
+        cur_log_prob, dist, is_composite = self._get_cur_log_prob(tensordict)
+
+        prev_log_prob = tensordict.get(
             self.tensor_keys.sample_log_prob,
-            adv_shape,
+            as_padded_tensor=True,
+            padding_side=dist.padding_side,
+            padding_value=dist.padding_value,
         )
+
         if prev_log_prob is None:
             raise KeyError(
                 f"Couldn't find the log-prob {self.tensor_keys.sample_log_prob} in the input data."
@@ -359,8 +363,6 @@ class GRPOLoss(ClipPPOLoss):
             raise RuntimeError(
                 f"tensordict stored {self.tensor_keys.sample_log_prob} requires grad."
             )
-
-        cur_log_prob, dist, is_composite = self._get_cur_log_prob(tensordict)
 
         # Check for shape mismatches and provide helpful error messages
         if cur_log_prob.shape != prev_log_prob.shape:

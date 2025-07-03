@@ -350,9 +350,12 @@ The wrappers operate in two distinct modes:
 
 In a typical RL or tool-augmented setting, the LLM and environment interact in a loop:
 
-1. **LLM Generation**: The LLM wrapper receives a `prompt` (the current conversation history), generates a `response`, and outputs a `full` field containing the concatenation of the prompt and response.
-2. **Environment Step**: The environment takes the `full` field and makes it the next `prompt` for the LLM. This ensures that the conversation context grows with each turn.
-3. **Transforms**: Before the next LLM step, transforms can modify the conversation—for example, by inserting a new user message, a tool call, or a reward annotation.
+1. **LLM Generation**: The LLM wrapper receives a `prompt` (the current conversation history), generates a `response`, and outputs a `full` field 
+  containing the concatenation of the prompt and response.
+2. **Environment Step**: The environment takes the `full` field and makes it the next `prompt` for the LLM. This ensures that the conversation 
+  context grows with each turn. See :ref:`ref_env_llm_step` for more details.
+3. **Transforms**: Before the next LLM step, transforms can modify the conversation—for example, by inserting a new user message, a tool call, 
+  or a reward annotation.
 4. **Repeat**: This process repeats for as many turns as needed, enabling multi-turn dialogue, tool use, and RL training.
 
 This design allows for flexible augmentation of the conversation at each step, supporting advanced RL and tool-use scenarios.
@@ -361,13 +364,13 @@ A typical pseudocode loop:
 
 .. code-block:: python
 
-    obs = env.reset({"query": "Hello!"})
+    # Get the first prompt out of an initial query
+    obs = env.reset(TensorDict({"query": "Hello!"}, batch_size=env.batch_size, device=env.device))
     while not done:
         # LLM generates a response given the current prompt
         llm_output = llm(obs)
-        # Environment steps: makes llm_output["full"] the next prompt
+        # Environment steps: creates a ("next", "history") field with the new prompt (from the previous `"full"` field)
         obs = env.step(llm_output)
-        # (Transforms may insert user/tool messages here)
 
 **Integration with History**
 
@@ -552,14 +555,16 @@ Transforms are the main way to extend ChatEnv with specific capabilities:
 Integration with LLM Wrappers
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. _ref_env_llm_step:
+
 ChatEnv is designed to work seamlessly with both :class:`~torchrl.modules.llm.TransformersWrapper` and :class:`~torchrl.modules.llm.vLLMWrapper`. 
 The environment handles the conversation state management while the wrapper handles the actual LLM inference, creating a clean separation of concerns.
 
 On each call to `step`, the environment:
 
-- Takes the LLM's output, specifically the `full` field (which contains the entire conversation so far, including the new response).
-- Sets this `full` field as the new `prompt` for the next LLM step.
-- Optionally, applies transforms to insert new user messages, tool calls, or other modifications to the conversation before the next LLM step.
+- Takes the LLM's output, specifically the `full` field, which contains the entire conversation so far, including the new response (e.g., `history.full`, `text.full`, `tokens.full`).
+- Sets this `full` field as the new `prompt` for the next LLM step (e.g., `td["next", "history"].prompt`, `td["next", "text"].prompt`, `td["next", "tokens"].prompt`).
+- Optionally, applies transforms to insert new user messages, tool calls, or other modifications to the conversation before the next LLM step to refine the prompt.
 
 This mechanism enables seamless multi-turn interactions and supports complex workflows such as tool use and reward shaping.
 
