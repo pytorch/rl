@@ -174,7 +174,7 @@ class AddThinkingPrompt(Transform):
 
         # Check if we should add the thinking prompt
         if self.cond(next_tensordict):
-            torchrl_logger.info(f"Adding thinking prompt. {next_tensordict.get('reward')=}")
+            torchrl_logger.info(f"Adding thinking prompt. {next_tensordict.get('reward')=}, {next_tensordict['step_count']=}")
             history: History = next_tensordict["history"].prompt
             last_turn = history[..., -1]
 
