@@ -15,9 +15,7 @@ from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
 from torchrl.envs.llm import (
     AddThinkingPrompt,
     GSM8KEnv,
-    KLComputation,
     KLRewardTransform,
-    RetrieveKL,
 )
 from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
