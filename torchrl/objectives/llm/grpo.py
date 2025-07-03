@@ -285,7 +285,8 @@ class GRPOLoss(ClipPPOLoss):
             else value,
         )
         if self.kl_to_ref_coeff is not None:
-            loss_kl, kl_penalty = self._kl_to_ref(tensordict, mask=mask, dist=dist)
+            # FIXME: parameterize this
+            loss_kl, kl_penalty = self._kl_to_ref(tensordict, mask=mask, dist=dist, ref_log_prob=tensordict.get(("next", "ref_log_prob", "full")))
             td_out["loss_kl_to_ref"] = loss_kl
             td_out["kl_to_ref"] = kl_penalty.detach()
         if self.kl_to_inference_coeff is not None:
@@ -319,7 +320,12 @@ class GRPOLoss(ClipPPOLoss):
                 as_padded_tensor=True,
                 padding_side=dist.padding_side,
                 padding_value=dist.padding_value,
-            ).squeeze(-1)
+            )
+            if ref_log_prob is not None:
+                raise KeyError(
+                    f"Couldn't find the ref log-prob {key} in the input data."
+                )
+            ref_log_prob = ref_log_prob.squeeze(-1)
         cur_log_prob = tensordict.get("_cur_log_prob")
         # TODO: remove this
         if cur_log_prob.shape != ref_log_prob.shape:
