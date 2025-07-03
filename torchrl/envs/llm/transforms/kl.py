@@ -525,7 +525,10 @@ class RetrieveLogProb(Transform):
         # Set up keys
         if log_probs_full_key is None:
             log_probs_full_key = (model.log_probs_key, "full")
-        elif not isinstance(log_probs_full_key, tuple) or log_probs_full_key[-1] != "full":
+        elif (
+            not isinstance(log_probs_full_key, tuple)
+            or log_probs_full_key[-1] != "full"
+        ):
             warnings.warn(
                 f"The log_probs_full_key {log_probs_full_key} is not a tuple or does not end with 'full'. "
                 "This may cause issues with the KL computation. "
@@ -908,7 +911,10 @@ class RetrieveKL(Compose):
         ref_model = self._init_params["ref_model"]
         pad_output = getattr(ref_model, "pad_output", None)
         gen_log_probs_full_key = self._init_params["gen_log_probs_full_key"]
-        if not isinstance(gen_log_probs_full_key, tuple) or gen_log_probs_full_key[-1] != "full":
+        if (
+            not isinstance(gen_log_probs_full_key, tuple)
+            or gen_log_probs_full_key[-1] != "full"
+        ):
             raise ValueError(
                 f"The gen_log_probs_full_key {gen_log_probs_full_key} is not a tuple or does not end with 'full'. "
                 "This may cause issues with the KL computation. "
@@ -948,7 +954,10 @@ class RetrieveKL(Compose):
             },
         )
         ref_log_probs_full_key = self._init_params["ref_log_probs_full_key"]
-        if not isinstance(ref_log_probs_full_key, tuple) or ref_log_probs_full_key[-1] != "full":
+        if (
+            not isinstance(ref_log_probs_full_key, tuple)
+            or ref_log_probs_full_key[-1] != "full"
+        ):
             raise ValueError(
                 f"The ref_log_probs_full_key {ref_log_probs_full_key} is not a tuple or does not end with 'full'. "
                 "This may cause issues with the KL computation. "
