@@ -286,7 +286,7 @@ class GRPOLoss(ClipPPOLoss):
         )
         if self.kl_to_ref_coeff is not None:
             # FIXME: parameterize this
-            loss_kl, kl_penalty = self._kl_to_ref(tensordict, mask=mask, dist=dist, ref_log_prob=tensordict.get(("next", "ref_log_prob", "full")))
+            loss_kl, kl_penalty = self._kl_to_ref(tensordict, mask=mask, dist=dist, ref_log_prob=tensordict.get(("next", "ref_log_probs", "full")))
             td_out["loss_kl_to_ref"] = loss_kl
             td_out["kl_to_ref"] = kl_penalty.detach()
         if self.kl_to_inference_coeff is not None:
