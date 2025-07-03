@@ -206,7 +206,8 @@ class GRPOLoss(ClipPPOLoss):
             elif hasattr(self.actor_network, "get_dist"):
                 # Fallback to generic distribution method
                 dist = self.actor_network.get_dist(
-                    tensordict, logits_key="logits",
+                    tensordict,
+                    logits_key="logits",
                 )
             else:
                 raise NotImplementedError(
@@ -214,12 +215,12 @@ class GRPOLoss(ClipPPOLoss):
                     f"masking strategy '{self.masking_strategy}'."
                 )
 
-            action = _maybe_get_or_select(tensordict, self.tensor_keys.action, padding_side=dist.padding_side, padding_value=-100)
-            print("action", action)
-            print("dist.mask", dist.mask)
-            print("dist.padding_side", dist.padding_side)
-            print("dist.padding_value", dist.padding_value)
-            print("dist.logits", dist.logits.shape, dist.logits.dtype)
+            action = _maybe_get_or_select(
+                tensordict,
+                self.tensor_keys.action,
+                padding_side=dist.padding_side,
+                padding_value=-100,
+            )
             log_prob = dist.log_prob(action)
         else:
             raise NotImplementedError(

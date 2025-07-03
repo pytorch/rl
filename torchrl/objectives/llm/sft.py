@@ -420,7 +420,8 @@ class SFTLoss(LossModule):
                 )
                 if ref_log_probs is None:
                     raise ValueError(
-                        "Reference log probs not found in tensordict but kl_to_ref_coeff was set"
+                        f"Reference log probs not found in tensordict at key {self.tensor_keys.ref_log_prob} but kl_to_ref_coeff was set. "
+                        f"Existing keys in tensordict: {set(tensordict.keys(include_nested=True, leaves_only=True))}"
                     )
 
                 loss_kl, kl_penalty = self._kl_to_ref(

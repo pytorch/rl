@@ -339,6 +339,36 @@ The wrappers operate in two distinct modes:
 - **Input**: Reads from `full` fields (e.g., `history.full`, `text.full`, `tokens.full`)
 - **Output**: Writes log probabilities to the corresponding `full` fields
 
+**LLM-Environment Interaction Loop**
+
+.. figure:: /_static/img/llm-env.png
+   :alt: LLM-Environment interaction loop
+   :align: center
+   :width: 80%
+
+   LLM-Environment interaction: the LLM generates a response, the environment updates the conversation, and transforms can inject new messages or tools.
+
+In a typical RL or tool-augmented setting, the LLM and environment interact in a loop:
+
+1. **LLM Generation**: The LLM wrapper receives a `prompt` (the current conversation history), generates a `response`, and outputs a `full` field containing the concatenation of the prompt and response.
+2. **Environment Step**: The environment takes the `full` field and makes it the next `prompt` for the LLM. This ensures that the conversation context grows with each turn.
+3. **Transforms**: Before the next LLM step, transforms can modify the conversation—for example, by inserting a new user message, a tool call, or a reward annotation.
+4. **Repeat**: This process repeats for as many turns as needed, enabling multi-turn dialogue, tool use, and RL training.
+
+This design allows for flexible augmentation of the conversation at each step, supporting advanced RL and tool-use scenarios.
+
+A typical pseudocode loop:
+
+.. code-block:: python
+
+    obs = env.reset({"query": "Hello!"})
+    while not done:
+        # LLM generates a response given the current prompt
+        llm_output = llm(obs)
+        # Environment steps: makes llm_output["full"] the next prompt
+        obs = env.step(llm_output)
+        # (Transforms may insert user/tool messages here)
+
 **Integration with History**
 
 When using `input_mode="history"`, the wrapper integrates seamlessly with the :class:`~torchrl.data.llm.History` class:
@@ -524,6 +554,14 @@ Integration with LLM Wrappers
 
 ChatEnv is designed to work seamlessly with both :class:`~torchrl.modules.llm.TransformersWrapper` and :class:`~torchrl.modules.llm.vLLMWrapper`. 
 The environment handles the conversation state management while the wrapper handles the actual LLM inference, creating a clean separation of concerns.
+
+On each call to `step`, the environment:
+
+- Takes the LLM's output, specifically the `full` field (which contains the entire conversation so far, including the new response).
+- Sets this `full` field as the new `prompt` for the next LLM step.
+- Optionally, applies transforms to insert new user messages, tool calls, or other modifications to the conversation before the next LLM step.
+
+This mechanism enables seamless multi-turn interactions and supports complex workflows such as tool use and reward shaping.
 
 Task-Specific Environments
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

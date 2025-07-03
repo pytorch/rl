@@ -53,6 +53,7 @@ class KLRewardTransform(Transform):
         tokenizer (transformers.AutoTokenizer): the tokenizer to use. Defaults to `None`.
         detach (bool): whether to detach the KL from the computation graph. Defaults to `True`.
         device (torch.device): the device to use. Defaults to `None`.
+        padding_side (str): the side of the padding when using pad_sequence. Defaults to `"left"`.
 
     Examples:
         >>> # Legacy usage (not recommended for new code)
@@ -82,6 +83,7 @@ class KLRewardTransform(Transform):
         add_to_reward: bool = True,
         tokenizer: transformers.AutoTokenizer | None = None,
         assistant_only: bool = True,
+        padding_side: str = "left",
     ):
         if in_keys is None:
             in_keys = self.DEFAULT_IN_KEYS
@@ -128,6 +130,7 @@ class KLRewardTransform(Transform):
 
         self._tokenizer = tokenizer
         self.assistant_only = assistant_only
+        self.padding_side = padding_side
 
         if not isinstance(coef, torch.Tensor):
             coef = torch.as_tensor(coef)
@@ -253,7 +256,7 @@ class KLRewardTransform(Transform):
                     ref_log_prob_list,
                     batch_first=True,
                     padding_value=0,
-                    padding_side="left",
+                    padding_side=self.padding_side,
                 )
             else:
                 ref_log_prob = torch.nested.nested_tensor(
@@ -285,7 +288,7 @@ class KLRewardTransform(Transform):
                     curr_log_prob_list,
                     batch_first=True,
                     padding_value=0,
-                    padding_side="left",
+                    padding_side=self.padding_side,
                 )
             else:
                 curr_log_prob = torch.nested.nested_tensor(
@@ -434,6 +437,7 @@ class RetrieveLogProb(Transform):
         tokenizer (transformers.AutoTokenizer): the tokenizer to be used to tokenize the input and compute the assitant mask. If not provided, the tokenizer will be inferred from the `ref_model`.
         detach (bool): whether to exclude the log-probs from the gradient computation. Defaults to `True`.
         device (torch.device): the device to use for tensor creation. Defaults to `None`.
+        padding_side (str): the side of the padding when using pad_sequence. Defaults to `"left"`.
 
     Examples:
         >>> from torchrl.data.llm import History
@@ -496,7 +500,7 @@ class RetrieveLogProb(Transform):
         >>> print(f"Log-probs shape: {ref_log_probs.shape}")
         Log-probs shape: torch.Size([2, 26])
 
-    Note:
+    .. note::
         By default, the log-probabilities are stored as a list of tensors (one per sample, with variable length).
         Use `as_padded_tensor=True` in `.get()` to obtain a batchable tensor (with padding).
         The reference log probabilities are computed only for assistant tokens when `assistant_only=True`.
@@ -522,6 +526,7 @@ class RetrieveLogProb(Transform):
         detach: bool = True,
         device: torch.device | None = None,
         tokenizer: transformers.AutoTokenizer | None = None,
+        padding_side: str = "left",
     ):
         # Set up keys
         if log_probs_key is None:
@@ -539,6 +544,7 @@ class RetrieveLogProb(Transform):
         self.detach = detach
         self.device = device
         self.tokenizer = tokenizer
+        self.padding_side = padding_side
 
         # Set up tokenizer kwargs
         if tokenizer_kwargs is None:
@@ -605,7 +611,7 @@ class RetrieveLogProb(Transform):
             ]
             if self.model.pad_output:
                 log_probs = pad_sequence(
-                    log_probs, batch_first=True, padding_value=0.0, padding_side="right"
+                    log_probs, batch_first=True, padding_value=0.0, padding_side=self.padding_side
                 )
             else:
                 log_probs = torch.nested.as_nested_tensor(
@@ -686,6 +692,7 @@ class RetrieveKL(Compose):
         detach (bool): whether to exclude the log-probs from the gradient computation. Defaults to `True`.
         device (torch.device): the device to use for tensor creation. Defaults to `None`.
         tokenizer (transformers.AutoTokenizer): the tokenizer to be used to tokenize the input and compute the assitant mask. If not provided, the tokenizer will be inferred from the `actor`.
+        padding_side (str): the side of the padding when using pad_sequence. Defaults to `"left"`.
         **kwargs: additional arguments to pass to the `RetrieveLogProb` transform.
 
     Examples:
@@ -783,6 +790,7 @@ class RetrieveKL(Compose):
         detach: bool = True,
         device: torch.device | None = None,
         tokenizer: transformers.AutoTokenizer | None = None,
+        padding_side: str = "left",
         **kwargs,
     ):
         if isinstance(gen_model, str) and gen_model == "from_collector":
@@ -843,6 +851,7 @@ class RetrieveKL(Compose):
             detach=detach,
             device=device,
             tokenizer=tokenizer,
+            padding_side=padding_side,
             **kwargs,
         )
         t2 = RetrieveLogProb(
@@ -853,6 +862,7 @@ class RetrieveKL(Compose):
             detach=detach,
             device=device,
             tokenizer=tokenizer,
+            padding_side=padding_side,
             **kwargs,
         )
         t3 = KLComputation(
@@ -1027,6 +1037,7 @@ class KLComputation(Transform):
         kl_key (NestedKey): the key where the KL divergence is stored. Defaults to `"kl"`.
         add_to_reward (bool): whether to add the KL divergence to the reward. Defaults to `True`.
         coef (float): the coefficient for the KL term when adding to reward. Defaults to `1.0`.
+        padding_side (str): the side of the padding when using pad_sequence. Defaults to `"left"`.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -1077,6 +1088,7 @@ class KLComputation(Transform):
         kl_key: NestedKey = "kl",
         add_to_reward: bool = True,
         coef: float = 1.0,
+        padding_side: str = "left",
     ):
         in_keys = [gen_log_probs_key, ref_log_probs_key]
         if add_to_reward:
@@ -1091,6 +1103,7 @@ class KLComputation(Transform):
         self.kl_key = kl_key
         self.add_to_reward = add_to_reward
         self.coef = coef
+        self.padding_side = padding_side
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         next_td = tensordict.get("next")
@@ -1139,7 +1152,7 @@ class KLComputation(Transform):
         if hasattr(gen_log_probs[0], "device"):
             # If it's a tensor, use pad_sequence
             kl = pad_sequence(
-                kl, batch_first=True, padding_value=0.0, padding_side="right"
+                kl, batch_first=True, padding_value=0.0, padding_side=self.padding_side
             )
         else:
             # If it's nested, use nested tensor

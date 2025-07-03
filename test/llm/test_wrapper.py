@@ -1568,7 +1568,7 @@ class TestDistributionMethods:
 
         # Test that all distribution methods raise NotImplementedError
         with pytest.raises(NotImplementedError, match="vLLM does not return logits"):
-            wrapper._get_dist(td)
+            wrapper.get_dist(td)
 
         with pytest.raises(NotImplementedError, match="vLLM does not return logits"):
             wrapper._get_sft_dist(td)
