@@ -1,6 +1,6 @@
 # Task and env
 env:
-  name: CartPole-v1
+  name: MiniGrid-Empty-5x5-v0
   task: ""
   backend: gymnasium
   n_samples_stats: 1000
@@ -30,7 +30,7 @@ logger:
   eval_steps: 200
   mode: online
   eval_iter: 1000
-  video: False
+  video: True
 
 # Buffer
 replay_buffer:

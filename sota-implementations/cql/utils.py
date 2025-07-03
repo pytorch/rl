@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import functools
 
+import minigrid
+
 import torch.nn
 import torch.optim
 from tensordict.nn import TensorDictModule, TensorDictSequential
