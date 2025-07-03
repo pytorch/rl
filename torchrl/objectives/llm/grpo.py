@@ -215,7 +215,11 @@ class GRPOLoss(ClipPPOLoss):
                 )
 
             action = _maybe_get_or_select(tensordict, self.tensor_keys.action, padding_side=dist.padding_side, padding_value=dist.padding_value)
-
+            print("action", action)
+            print("dist.mask", dist.mask)
+            print("dist.padding_side", dist.padding_side)
+            print("dist.padding_value", dist.padding_value)
+            print("dist.logits", dist.logits.shape, dist.logits.dtype)
             log_prob = dist.log_prob(action)
         else:
             raise NotImplementedError(
