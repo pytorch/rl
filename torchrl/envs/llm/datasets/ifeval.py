@@ -182,7 +182,7 @@ You will be assessed by the content of the answer block only, so make sure it co
             input_mode=input_mode,
             data_key="string",
         )
-        if max_steps:
-            self.append_transform(StepCounter(max_steps=max_steps))
         if compute_reward:
             self.append_transform(IfEvalScorer())
+        if max_steps:
+            self.append_transform(StepCounter(max_steps=max_steps))

@@ -331,7 +331,7 @@ i.e., <think>reasoning process here</think> <answer>answer here</answer>. The an
             collate_fn=collate_fn,
             input_mode=input_mode,
         )
-        if max_steps:
-            self.append_transform(StepCounter(max_steps=max_steps))
         if compute_reward:
             self.append_transform(GSM8KRewardParser(tokenizer=tokenizer))
+        if max_steps:
+            self.append_transform(StepCounter(max_steps=max_steps))
