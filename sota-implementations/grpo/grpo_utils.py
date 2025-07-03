@@ -12,11 +12,7 @@ from torch import device as torch_device, dtype as torch_dtype
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
-from torchrl.envs.llm import (
-    AddThinkingPrompt,
-    GSM8KEnv,
-    KLRewardTransform,
-)
+from torchrl.envs.llm import AddThinkingPrompt, GSM8KEnv, KLRewardTransform
 from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
@@ -548,15 +544,16 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
     else:
         raise NotImplementedError(f"Dataset {cfg.env.dataset} not implemented")
     if cfg.env.reasoning:
-        # Set the thinking transform after the reward but before step-counter
-        env = env.insert_transform(1,
+        # Set the thinking transform after the reward but before step-counter
+        env = env.insert_transform(
+            1,
             AddThinkingPrompt(
                 cond=lambda td: td["reward"] <= reward_threshold,
                 role="assistant",
                 edit_last_turn=True,
                 zero_reward=True,
                 undo_done=True,
-            )
+            ),
         )
     #     env = env.append_transform(
     #         # RetrieveKL will be lazily initialized in the collector.
