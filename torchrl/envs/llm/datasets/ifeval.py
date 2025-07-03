@@ -4,14 +4,13 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 import torch
-from tensordict import TensorClass, TensorDict
+from tensordict import NonTensorData, NonTensorStack, TensorClass, TensorDict
+from torchrl.data import Composite, NonTensor, Unbounded
 from torchrl.envs import StepCounter
-
 from torchrl.envs.llm.chat import DatasetChatEnv
-
 from torchrl.envs.llm.reward.ifeval import IfEvalScorer
 
 
@@ -19,9 +18,10 @@ class IFEvalData(TensorClass["nocast"]):
     """A tensorclass for IFEval dta."""
 
     key: torch.Tensor
-    instruction_id_list: str
+    instruction_id_list: list[str]
     kwargs: list[dict]
-    text: str
+    query: str
+
     # Reponses and additional fields
     response: str | None = None
     tokens: torch.Tensor | None = None
@@ -29,11 +29,63 @@ class IFEvalData(TensorClass["nocast"]):
     logits: torch.Tensor | None = None
     reward: torch.Tensor | None = None
 
+    @classmethod
+    def default_spec(
+        cls, shape: torch.Size, device: torch.device | None = None
+    ) -> Composite:
+        return Composite(
+            key=Unbounded(shape=shape, dtype=torch.int64, device=device),
+            instruction_id_list=NonTensor(
+                shape=shape,
+                device=device,
+                feature_dims=0,
+                example_data=["punctuation:no_comma"],
+            ),
+            kwargs=NonTensor(
+                shape=shape,
+                device=device,
+                feature_dims=0,
+                example_data={
+                    "num_highlights": None,
+                    "relation": None,
+                    "num_placeholders": None,
+                },
+            ),
+            query=NonTensor(
+                shape=shape,
+                device=device,
+                example_data="Plan a 2 week Europe trip and visit London, Paris, and Rome. Answer in all caps. The response must contain at least 8 placeholders (i.e., [restaurant]).",
+            ),
+            shape=shape,
+            step_mdp_static=True,
+            data_cls=cls,
+        )
+
 
 def _collate_fn(batch):
     batch = torch.stack([TensorDict.from_any(_batch) for _batch in batch])
-    batch.rename_key_("prompt", "text")
-    return IFEvalData.from_tensordict(batch)
+    batch.rename_key_("prompt", "query")
+    # we want instruction_id_list and kwargs to be lists, but not NonTensorStacks
+    instruction_id_list = batch["instruction_id_list"]
+    # instruction_id_list should be a list of lists
+    instruction_id_list = NonTensorStack(
+        *[
+            NonTensorData([item] if not isinstance(item, list) else item)
+            for item in instruction_id_list
+        ]
+    )
+    kwargs = batch["kwargs"]
+    kwargs = NonTensorStack(
+        *[
+            NonTensorData([item] if not isinstance(item, list) else item)
+            for item in kwargs
+        ]
+    )
+    batch.set("instruction_id_list", instruction_id_list)
+    batch.set("kwargs", kwargs)
+    # we don't need a tensorclass here
+    return batch
+    # return IFEvalData.from_tensordict(batch)
 
 
 class IFEvalEnv(DatasetChatEnv):
@@ -60,6 +112,7 @@ class IFEvalEnv(DatasetChatEnv):
         collate_fn (Callable | None, optional): A custom collate function for data loading. If `None`, a default
             collate function is used. Defaults to `None`.
         max_steps (int, optional): The maximum number of steps allowed in an episode. Defaults to `1`.
+        input_mode (Literal["history", "text", "tokens"], optional): The mode of input to use. Defaults to `"history"`.
 
     Examples:
         >>> import transformers
@@ -160,6 +213,7 @@ You will be assessed by the content of the answer block only, so make sure it co
         compute_reward: bool = True,
         collate_fn: Callable | None = None,
         max_steps: int = 1,
+        input_mode: Literal["history", "text", "tokens"] = "history",
     ):
         if collate_fn is None:
             collate_fn = _collate_fn
@@ -176,6 +230,9 @@ You will be assessed by the content of the answer block only, so make sure it co
             template_kwargs=template_kwargs,
             apply_template=apply_template,
             collate_fn=collate_fn,
+            input_mode=input_mode,
+            data_key="query",
+            primers=IFEvalData.default_spec((num_envs,), device),
         )
         if max_steps:
             self.append_transform(StepCounter(max_steps=max_steps))

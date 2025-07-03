@@ -13,6 +13,10 @@ env:
   num_envs: 8  # Reduced from 8 to save memory
   # Number of times to repeat the same prompt for GRPO. This does not affect the GPU memory usage.
   repeats: 16
+  # Whether to use the reasoning prompt
+  reasoning: false
+  # Maximum number of dialog turns per episode.
+  max_steps: 2
 
 # Base model configuration
 model:

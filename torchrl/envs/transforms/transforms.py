@@ -308,6 +308,19 @@ class Transform(nn.Module):
             value = [unravel_key(val) for val in value]
         self._out_keys_inv = value
 
+    @property
+    def collector(self) -> DataCollectorBase | None:  # noqa: F821 # type: ignore
+        """Returns the collector associated with the container, if it exists.
+
+        This can be used whenever the transform needs to be made aware of the collector or the policy associated with it.
+
+        Make sure to call this property only on transforms that are not nested in sub-processes.
+        The collector reference will not be passed to the workers of a :class:`~torchrl.envs.ParallelEnv` or
+        similar batched environments.
+
+        """
+        return self.container.collector
+
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
@@ -687,7 +700,7 @@ class Transform(nn.Module):
         return self_copy
 
     @property
-    def container(self):
+    def container(self) -> EnvBase | None:
         """Returns the env containing the transform.
 
         Examples:
@@ -952,6 +965,13 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
         self.empty_cache()
         return self
 
+    # def _post_step_mdp_hooks(self, tensordict: TensorDictBase) -> TensorDictBase:
+    # """Allows modification of the tensordict after the step_mdp."""
+    # if type(self.base_env)._post_step_mdp_hooks is not None:
+    # If the base env has a _post_step_mdp_hooks, we call it
+    # tensordict = self.base_env._post_step_mdp_hooks(tensordict)
+    # return tensordict
+
     def _set_env(self, env: EnvBase, device) -> None:
         if device != env.device:
             env = env.to(device)
@@ -1178,6 +1198,7 @@ but got an object of type {type(transform)}."""
         if tensordict is not None:
             # We must avoid modifying the original tensordict so a shallow copy is necessary.
             # We just select the input data and reset signal, which is all we need.
+            self.transform.transform_input_spec(self.base_env.input_spec.unlock_())
             tensordict = tensordict.select(
                 *self.reset_keys, *self.state_spec.keys(True, True), strict=False
             )
@@ -6502,13 +6523,16 @@ class TensorDictPrimer(Transform):
             if self.single_default_value and callable(self.default_value):
                 if not _reset.all():
                     # FIXME: use masked op
-                    tensordict_reset = tensordict_reset.clone()
+                    # tensordict_reset = tensordict_reset.clone()
                     reset_val = self.default_value(reset=_reset)
-                    # This is safe because env.reset calls _update_during_reset which will discard the new data
-                    tensordict_reset = (
-                        self.container.full_observation_spec.zero().select(
-                            *reset_val.keys(True)
-                        )
+                    # This is safE because env.reset calls _update_during_reset which will discard the new data
+                    # tensordict_reset = (
+                    #     self.container.full_observation_spec.zero().select(
+                    #         *reset_val.keys(True)
+                    #     )
+                    # )
+                    tensordict_reset = reset_val.new_zeros(
+                        _reset.shape, empty_lazy=True
                     )
                     tensordict_reset[_reset] = reset_val
                 else:

@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .chat import ContentBase, History
 from .common import LLMData
 from .dataset import (
     create_infinite_iterator,
@@ -11,6 +10,7 @@ from .dataset import (
     TensorDictTokenizer,
     TokenizedDatasetLoader,
 )
+from .history import add_chat_template, ContentBase, History
 from .prompt import PromptData, PromptTensorDictTokenizer
 from .reward import PairwiseDataset, RewardData
 from .topk import TopKRewardSelector
@@ -24,6 +24,7 @@ __all__ = [
     "LLMData",
     "PairwiseDataset",
     "PromptData",
+    "add_chat_template",
     "PromptTensorDictTokenizer",
     "RewardData",
     "RolloutFromModel",

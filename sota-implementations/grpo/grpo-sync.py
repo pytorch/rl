@@ -14,7 +14,7 @@ import hydra
 
 from torchrl import torchrl_logger
 from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
-from torchrl.data.llm.chat import History
+from torchrl.data.llm.history import History
 from torchrl.record.loggers.wandb import WandbLogger
 
 try:
@@ -31,9 +31,8 @@ import tqdm
 from grpo_utils import (
     compute_device_allocation,
     get_inference_model,
-    get_ref_model,
-    get_tokenizer,
     get_train_model,
+    make_env,
     make_weight_updater,
 )
 from omegaconf import DictConfig
@@ -50,8 +49,6 @@ from torchrl._utils import timeit
 from torchrl.collectors.llm import RayLLMCollector
 from torchrl.data import LazyStackStorage, ReplayBuffer, SamplerWithoutReplacement
 from torchrl.data.replay_buffers.ray_buffer import RayReplayBuffer
-from torchrl.envs.llm import GSM8KEnv, KLRewardTransform
-from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
 from torchrl.objectives.llm.grpo import GRPOLoss, MCAdvantage
 
 
@@ -71,51 +68,6 @@ def setup_environment() -> None:
     # Ensure CUDA is using the correct dtype
     if torch.cuda.is_available():
         torch.cuda.set_device("cuda:0")
-
-
-def make_env(cfg: DictConfig, devices: list[int] | None = None):
-    """Create the environment with proper device allocation.
-
-    Args:
-        cfg: The configuration object
-
-    Returns:
-        The configured environment
-    """
-    # Create reference model with proper device allocation
-    # For the collector actor, we want inference_model devices first, then ref_model devices
-    train_tokenizer = get_tokenizer(cfg)
-
-    # Create a new config with adjusted device assignments
-    ref_cfg = DictConfig(dict(cfg))
-    ref_model = get_ref_model(ref_cfg, train_tokenizer, devices=devices)
-
-    # Setup environment
-    if cfg.env.dataset == "gsm8k":
-        env = GSM8KEnv(
-            repeats=cfg.env.repeats,
-            tokenizer=train_tokenizer,
-            num_envs=cfg.env.num_envs,
-        )
-    else:  # ifeval
-        env = IFEvalEnv(
-            repeats=cfg.env.repeats,
-            tokenizer=train_tokenizer,
-            num_envs=cfg.env.num_envs,
-        )
-
-    # Pass device directly to KLRewardTransform - Since, for Ray, the local device is always 0
-    # we can just use 0 here.
-    device = torch.device("cuda:0")
-    env = env.append_transform(
-        KLRewardTransform(
-            actor=ref_model,
-            coef=cfg.train.kl_to_ref_coeff,
-            add_to_reward=not cfg.train.kl_coef_in_loss,
-            device=device,
-        )
-    )
-    return env
 
 
 def train(
@@ -146,6 +98,8 @@ def train(
         kl_to_ref_coeff=cfg.train.kl_to_ref_coeff if cfg.train.kl_coef_in_loss else 0.0,
         kl_to_inference_coeff=cfg.train.kl_to_inference_coeff,
         entropy_coeff=cfg.train.entropy_coeff,
+        # use prompt/response masking for regular training, and assistant masking for reasoning
+        masking_strategy="rlhf" if cfg.env.reasoning else "sft",
         device=train_device,
     )
     if cfg.model.compile:
@@ -228,7 +182,7 @@ def train(
                 )
                 # For logging purposes, we get the last element of the history
                 # and convert it to a string
-                history: History = batch.view(-1)[0]["next", "history"]
+                history: History = batch.view(-1)[0]["next", "history"].prompt
                 history_str: list[str] | str = history.apply_chat_template(
                     tokenizer=train_tokenizer
                 )
@@ -291,6 +245,12 @@ def train(
                 if (global_step % cfg.train.logging_frequency) == 0:
                     with torch.no_grad():
                         rb_content = replay_buffer[:]
+                        step_count = (
+                            rb_content.get(("next", "step_count"))
+                            .view(-1)
+                            .float()
+                            .mean()
+                        )
                         batch_policy_version = (
                             batch["next", "policy_version"].view(-1).min()
                         )
@@ -298,6 +258,7 @@ def train(
                             collector.policy_version - batch_policy_version
                         )
                         metrics = {
+                            "step_count from buffer": float(step_count),
                             "reward from buffer": float(
                                 torch.cat(
                                     rb_content.get(("next", "reward"), as_list=True)
@@ -494,7 +455,8 @@ def main(cfg):
         track_policy_version=True,
         remote_config=collector_config,
         sync_iter=cfg.train.sync_iter,
-        verbose=True,
+        verbose=False,
+        yield_only_last_steps=cfg.env.reasoning,
     )
     # Ensure collector is initialized by calling a method that will block until ready
     ray.get(collector._collector.is_initialized.remote())

@@ -104,7 +104,7 @@ def get_train_model(
         param.data = param.data.to(model_dtype)
 
     if chat_template_name is not None:
-        from torchrl.data.llm.chat import _CHAT_TEMPLATES
+        from torchrl.data.llm.history import _CHAT_TEMPLATES
 
         chat_template = _CHAT_TEMPLATES[chat_template_name]
         train_tokenizer.chat_template = chat_template

@@ -13,6 +13,10 @@ env:
   num_envs: 4
   # Number of times to repeat the same prompt for GRPO. This does not affect the GPU memory usage.
   repeats: 16
+  # Whether to use the reasoning prompt
+  reasoning: false
+  # Maximum number of dialog turns per episode.
+  max_steps: 2
 
 # Base model configuration
 model:
@@ -46,12 +50,12 @@ train:
   optim_batch_size: 2
 
   # Whether to include the KL coefficient in the loss function. Alternatively, the KL ref-to-train will be added to the reward.
-  kl_coef_in_loss: false 
+  kl_coef_in_loss: false
 
   # KL coefficients for the KL divergence to the reference and inference policies
-  kl_to_ref_coeff: 1e-1
-  kl_to_inference_coeff: 1e-1
-  entropy_coeff: 0.01
+  kl_to_ref_coeff: 1.0
+  kl_to_inference_coeff: 0.0
+  entropy_coeff: 0.001
   
   # Fields used only by grpo-async.py / grpo-sync.py
   logging_frequency: 1  # Log metrics every N steps - here at each optimization step

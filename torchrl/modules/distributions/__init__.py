@@ -58,6 +58,7 @@ __all__ = [
     "distributions",
     "Delta",
     "IndependentNormal",
+    "LLMMaskedCategorical",
     "NormalParamWrapper",
     "TanhDelta",
     "TanhNormal",

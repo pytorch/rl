@@ -20,7 +20,14 @@ import re
 from typing import Callable
 
 import torch
-from tensordict import NestedKey, NonTensorData, TensorClass, TensorDict, TensorDictBase
+from tensordict import (
+    lazy_stack,
+    NestedKey,
+    NonTensorData,
+    TensorClass,
+    TensorDict,
+    TensorDictBase,
+)
 from tensordict.tensorclass import is_non_tensor
 from torchrl._utils import logger as torchrl_logger
 
@@ -39,6 +46,27 @@ class IFEvalScoreData(TensorClass):
     inst_level_strict_acc: torch.Tensor | None
     prompt_level_loose_acc: torch.Tensor | None
     inst_level_loose_acc: torch.Tensor | None
+
+    @classmethod
+    def default_spec(
+        cls, shape: torch.Size, device: torch.device | None = None
+    ) -> Composite:
+        return Composite(
+            prompt_level_strict_acc=Unbounded(
+                shape=shape, dtype=torch.bool, device=device
+            ),
+            inst_level_strict_acc=Unbounded(
+                shape=shape, dtype=torch.bool, device=device
+            ),
+            prompt_level_loose_acc=Unbounded(
+                shape=shape, dtype=torch.bool, device=device
+            ),
+            inst_level_loose_acc=Unbounded(
+                shape=shape, dtype=torch.bool, device=device
+            ),
+            data_cls=cls,
+            step_mdp_static=True,
+        )
 
     def __post_init__(self):
         prompt_level_loose_acc = self.get(
@@ -72,7 +100,10 @@ class IFEvalScoreData(TensorClass):
 
 
 def _process_results(
-    data: TensorDict, response: str | NonTensorData, verbose: bool = False
+    data: TensorDict,
+    response: str | NonTensorData,
+    verbose: bool = False,
+    prompt: str | None = None,
 ) -> IFEvalScoreData:
     if not _has_langdetect:
         raise ImportError("langdetect must be installed to user IFEvalScorer.")
@@ -85,10 +116,13 @@ def _process_results(
         _test_instruction_following_strict,
     )
 
+    if prompt is None:
+        prompt = data["text"]
+
     inp = _InputExample(
         key=data["key"],
         instruction_id_list=data["instruction_id_list"],
-        prompt=data["text"],
+        prompt=prompt,
         kwargs=data["kwargs"],
     )
 
@@ -136,6 +170,7 @@ class IfEvalScorer(Transform):
             `prompt_level_loose_acc`, `inst_level_loose_acc`, in that order). Defaults to `[0.4, 0.3, 0.2, 0.1]`.
             This is only used if `aggregate_reward` is `True` and the default aggregator is used.
         verbose (bool, optional): Whether to print verbose information. Defaults to `False`.
+        set_done_if_answer (bool): whether to set the done flag to `True` when an answer is present. Defaults to `True`.
 
     .. note:: `IFEvalScorer` requires the following libraries to be installed: `langdetect`, `nltk` and `immutabledict`.
 
@@ -156,9 +191,11 @@ class IfEvalScorer(Transform):
         ] = True,
         format_weights: list[float] | None = None,
         verbose: bool = False,
+        set_done_if_answer: bool = True,
     ):
         self.aggregate_reward = aggregate_reward
         self.score_key = score_key
+        self.set_done_if_answer = set_done_if_answer
         out_keys = [self.score_key]
         if aggregate_reward:
             out_keys.append("reward")
@@ -281,8 +318,11 @@ class IfEvalScorer(Transform):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
+        if not getattr(self.parent.base_env, "input_mode", "history") == "history":
+            raise ValueError("IFEvalScorer only supports history input mode")
+
         if tensordict.ndim:
-            return torch.stack(
+            return lazy_stack(
                 [
                     self._step(td, next_td)
                     for td, next_td in zip(
@@ -290,7 +330,8 @@ class IfEvalScorer(Transform):
                     )
                 ]
             )
-        h = next_tensordict["history"][..., -1]
+        h = tensordict["history", "full"][..., -1]
+        prompt = tensordict["history", "prompt"][..., -1].content
         response = h.content
         complete = h.is_complete
         # response = tensordict.get(self.response_key)
@@ -311,6 +352,7 @@ class IfEvalScorer(Transform):
             tensordict.copy().auto_device_(),
             answer_blocks[0] if answer_blocks else "",
             verbose=self.verbose,
+            prompt=prompt,
         )
         next_tensordict.set(
             self.score_key,
@@ -327,8 +369,31 @@ class IfEvalScorer(Transform):
                 answer_blocks=answer_blocks,
                 complete=complete,
             )
+            reward = reward.view(
+                next_tensordict.batch_size
+                + (
+                    1,
+                    1,
+                )
+            )
             next_tensordict.set("reward", reward)
-
+        if self.set_done_if_answer and bool(answer_blocks):
+            next_tensordict.set(
+                "done",
+                torch.ones(
+                    next_tensordict.batch_size + (1,),
+                    device=next_tensordict.device,
+                    dtype=torch.bool,
+                ),
+            )
+            next_tensordict.set(
+                "terminated",
+                torch.ones(
+                    next_tensordict.batch_size + (1,),
+                    device=next_tensordict.device,
+                    dtype=torch.bool,
+                ),
+            )
         return next_tensordict
 
     @property
@@ -343,23 +408,14 @@ class IfEvalScorer(Transform):
 
     def transform_reward_spec(self, reward_spec: Composite) -> Composite:
         reward_spec["reward"] = Unbounded(
-            reward_spec.shape + (1,), dtype=torch.get_default_dtype()
+            reward_spec.shape + (1, 1),
+            dtype=torch.get_default_dtype(),
+            device=reward_spec.device,
         )
         return reward_spec
 
     def transform_observation_spec(self, observation_spec: Composite) -> Composite:
-        observation_spec[self.score_key] = Composite(
-            prompt_level_strict_acc=Unbounded(
-                shape=observation_spec.shape, dtype=torch.bool
-            ),
-            inst_level_strict_acc=Unbounded(
-                shape=observation_spec.shape, dtype=torch.bool
-            ),
-            prompt_level_loose_acc=Unbounded(
-                shape=observation_spec.shape, dtype=torch.bool
-            ),
-            inst_level_loose_acc=Unbounded(
-                shape=observation_spec.shape, dtype=torch.bool
-            ),
+        observation_spec[self.score_key] = IFEvalScoreData.default_spec(
+            observation_spec.shape, device=observation_spec.device
         )
         return observation_spec

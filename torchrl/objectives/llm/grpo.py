@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 from collections import defaultdict, deque
+from dataclasses import dataclass
+from typing import Literal
 
 import torch
 from tensordict import (
@@ -16,16 +18,17 @@ from tensordict import (
     TensorDictParams,
 )
 from tensordict.nn import (
+    ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
     TensorDictModule,
-    TensorDictModuleBase,
 )
+from tensordict.utils import expand_as_right
 from torch import distributions as d
-
 from torchrl._utils import logger as torchrl_logger
 from torchrl.envs.transforms.transforms import Transform
+from torchrl.modules.llm import LLMWrapperBase
 from torchrl.objectives.ppo import ClipPPOLoss
-from torchrl.objectives.utils import _maybe_get_or_select, _reduce, _sum_td_features
+from torchrl.objectives.utils import _reduce, _sum_td_features
 
 
 class GRPOLossOutput(TensorClass["nocast"]):
@@ -50,7 +53,7 @@ class GRPOLoss(ClipPPOLoss):
         loss = -min( weight * advantage, min(max(weight, 1-eps), 1+eps) * advantage)
 
     Args:
-        actor_network (ProbabilisticTensorDictSequential): policy operator.
+        actor_network (LLMWrapperBase): policy operator.
 
     .. note::
         It is critical to keep your model in eval mode during GRPO training to ensure deterministic behavior and correct
@@ -62,6 +65,15 @@ class GRPOLoss(ClipPPOLoss):
         in the batch, computed as the inverse of the sum of the squared importance weights.
         A value of 1 indicates that all importance weights are equal (ideal case). If ESS drops or increases significantly,
         it usually indicates a problem with the model configuration, such as a train/eval mode mismatch or a large policy update.
+
+    .. note::
+        The masking_strategy parameter is crucial for LLM training scenarios. It determines which tokens are included
+        in the loss computation:
+        - "sft": Only response tokens (excludes prompt tokens) - suitable for single-turn conversations
+        - "rlhf": Only assistant tokens (excludes user/system tokens) - suitable for multi-turn conversations
+        - "generic": All valid tokens (excludes padding tokens) - suitable for generic scenarios
+
+        The masking strategy must match the strategy used for advantage computation to avoid shape mismatches.
 
     Keyword Args:
         clip_epsilon (scalar, optional): weight clipping threshold in the clipped PPO loss equation.
@@ -93,34 +105,48 @@ class GRPOLoss(ClipPPOLoss):
         kl_to_ref_coeff (float, optional): coefficient for the KL divergence to the reference policy. Defaults to ``None`` (no KL divergence).
         kl_to_inference_coeff (float, optional): coefficient for the KL divergence to the inference policy. Defaults to ``None`` (no KL divergence).
         device (torch.device, optional): device of the buffers. Defaults to ``None``.
+        masking_strategy (Literal["sft", "rlhf", "generic"], optional): The masking strategy to use for distribution creation.
+            - "sft": Use prompt masking (response tokens only, suitable for single-turn)
+            - "rlhf": Use assistant masking (assistant tokens only, suitable for multi-turn)
+            - "generic": Use attention masking (all valid tokens)
+            Defaults to "sft" since we can't guarantee assistant masks are available.
 
             .. note:: Parameters and buffers from the policy / critic will not be cast to that device to ensure that
                 the storages match the ones that are passed to other components, such as data collectors.
     """
 
-    actor_network: TensorDictModule
+    actor_network: LLMWrapperBase
     critic_network: TensorDictModule
     actor_network_params: TensorDictParams
     critic_network_params: TensorDictParams
     target_actor_network_params: TensorDictParams
     target_critic_network_params: TensorDictParams
 
+    @dataclass
+    class _AcceptedKeys(ClipPPOLoss._AcceptedKeys):
+        """Maintains default values for all configurable tensordict keys.
+
+        This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
+        default values
+        """
+
+        ref_log_probs: NestedKey = ("next", "ref_log_probs", "full")
+
     def __init__(
         self,
-        actor_network: ProbabilisticTensorDictSequential
-        | TensorDictModuleBase
-        | None = None,
+        actor_network: LLMWrapperBase | None = None,
         *,
         clip_epsilon: float = 0.2,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
         entropy_coeff: float = 0.01,
         gamma: float | None = None,
-        reduction: str = None,
+        reduction: str | None = None,
         clip_value: bool | float | None = None,
         kl_to_ref_coeff: float | None = None,
         kl_to_inference_coeff: float | None = None,
-        device: torch.device = None,
+        device: torch.device | None = None,
+        masking_strategy: Literal["sft", "rlhf", "generic"] = "sft",
         **kwargs,
     ):
         # Define clipping of the value loss
@@ -143,12 +169,77 @@ class GRPOLoss(ClipPPOLoss):
         )
         # We don't want to use the string action but the tokens
         self._set_in_keys()
-        self.set_keys(sample_log_prob="log_probs", action="tokens_response")
+        self.masking_strategy = masking_strategy
+        # Always use the full tokens for the action
+        self.set_keys(sample_log_prob=("log_probs", "full"), action=("tokens", "full"))
         # TODO: make this a buffer
         self.kl_to_ref_coeff = kl_to_ref_coeff
         self.kl_to_inference_coeff = kl_to_inference_coeff
 
+    def _get_cur_log_prob(self, tensordict):
+        """Override to use LLM-specific distribution with explicit masking strategy.
+
+        This ensures that the loss is computed with the correct masking strategy,
+        and provides helpful error messages when there are shape mismatches.
+        """
+        if isinstance(
+            self.actor_network,
+            (ProbabilisticTensorDictSequential, ProbabilisticTensorDictModule),
+        ) or hasattr(self.actor_network, "get_dist"):
+            # Use the specified masking strategy
+            #  dists are always defined over the whole sequence, so we can re-use the mask as the dist will always
+            #  be a MaskedCategorical
+            # TODO: eventually, we want to always use `get_dist` and just pass the key of the mask
+            #  Masks should contain: prompt and response masks, assistant, and attention.
+            #  Additionally, we should make sure that the masks are properly updated when log-probs is called (using vllm and transformers)
+            #  because in some instances it looks like they can be overwritten with None values.
+            if self.masking_strategy == "sft" and hasattr(
+                self.actor_network, "_get_sft_dist"
+            ):
+                dist = self.actor_network._get_sft_dist(tensordict)
+            elif self.masking_strategy == "rlhf" and hasattr(
+                self.actor_network, "_get_rlhf_dist"
+            ):
+                dist = self.actor_network._get_rlhf_dist(tensordict)
+            elif self.masking_strategy == "generic" and hasattr(
+                self.actor_network, "_get_generic_dist"
+            ):
+                dist = self.actor_network._get_generic_dist(tensordict)
+            elif hasattr(self.actor_network, "get_dist"):
+                # Fallback to generic distribution method
+                dist = self.actor_network.get_dist(
+                    tensordict,
+                    logits_key="logits",
+                )
+            else:
+                raise NotImplementedError(
+                    f"Actor network must have get_dist method or the appropriate method for "
+                    f"masking strategy '{self.masking_strategy}'."
+                )
+
+            action = tensordict.get(
+                self.tensor_keys.action,
+                as_padded_tensor=True,
+                padding_side="left",
+                padding_value=-100,
+            )
+            log_prob = dist.log_prob(action)
+        else:
+            raise NotImplementedError(
+                "Only probabilistic modules from tensordict.nn are currently supported. "
+                "If you need to implement a custom logic to retrieve the log-probs (to compute "
+                "the PPO objective) or the distribution (for the PPO entropy), please augment "
+                f"the {type(self).__class__} by implementing your own logic in _get_cur_log_prob."
+            )
+        return log_prob, dist, False
+
     def forward(self, tensordict: TensorDictBase) -> GRPOLossOutput:
+        # Some sanity checks and housekeeping:
+        # - We may not have the tokens yet. If not, we will use the tokenizer of the actor to tokenize the text.
+        #   We default to history rather than text because the history will account for multiturn, or multimodal inputs.
+        if self.tensor_keys.action not in tensordict:
+            raise ValueError
+
         tensordict = tensordict.copy()
         advantage = tensordict.get(
             self.tensor_keys.advantage, None, as_padded_tensor=True
@@ -156,15 +247,24 @@ class GRPOLoss(ClipPPOLoss):
         log_weight, dist, kl_approx = self._log_weight(
             tensordict, adv_shape=advantage.shape[:-1]
         )
+        mask = dist.mask
         # ESS for logging
         with torch.no_grad():
             # In theory, ESS should be computed on particles sampled from the same source. Here we sample according
             # to different, unrelated trajectories, which is not standard. Still, it can give an idea of the weights'
             # dispersion.
-            lw = log_weight.squeeze()
+            lw = log_weight.squeeze(-1)[mask]
+            batch = mask.sum()
             ess = (2 * lw.logsumexp(0) - (2 * lw).logsumexp(0)).exp()
-            batch = log_weight.shape[0]
 
+        if advantage.ndim != log_weight.ndim:
+            raise ValueError(
+                f"advantage and log_weight must have the same number of dimensions, got {advantage.ndim=} and {log_weight.ndim=}"
+            )
+        print(f"log_weight: {log_weight.shape}")
+        print(f"advantage: {advantage.shape}")
+        print(f"mask: {mask.shape}")
+        print(f"data: {tensordict}")
         gain1 = log_weight.exp() * advantage
 
         log_weight_clip = log_weight.clamp(*self._clip_bounds)
@@ -191,14 +291,27 @@ class GRPOLoss(ClipPPOLoss):
             if value_clip_fraction is not None:
                 td_out.set("value_clip_fraction", value_clip_fraction)
 
-        td_out.set("ESS", _reduce(ess, self.reduction) / batch)
+        td_out.set("ESS", _reduce(ess / batch, self.reduction))
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            lambda name, value: _reduce(
+                value, reduction=self.reduction, mask=mask
+            ).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )
         if self.kl_to_ref_coeff is not None:
-            loss_kl, kl_penalty = self._kl_to_ref(tensordict)
+            # FIXME: parameterize this
+            loss_kl, kl_penalty = self._kl_to_ref(
+                tensordict,
+                mask=mask,
+                dist=dist,
+                ref_log_prob=tensordict.get(
+                    self.tensor_keys.ref_log_probs,
+                    as_padded_tensor=True,
+                    padding_side="left",
+                    padding_value=0.0,
+                ),
+            )
             td_out["loss_kl_to_ref"] = loss_kl
             td_out["kl_to_ref"] = kl_penalty.detach()
         if self.kl_to_inference_coeff is not None:
@@ -206,6 +319,8 @@ class GRPOLoss(ClipPPOLoss):
                 tensordict,
                 key=self.tensor_keys.sample_log_prob,
                 coeff=self.kl_to_inference_coeff,
+                mask=mask,
+                dist=dist,
             )
             td_out["loss_kl_to_inference"] = loss_kl
             td_out["kl_to_inference"] = kl_penalty.detach()
@@ -218,6 +333,8 @@ class GRPOLoss(ClipPPOLoss):
         key: NestedKey = ("next", "ref_log_prob"),
         ref_log_prob: torch.Tensor | None = None,
         coeff: float | None = None,
+        mask: torch.Tensor | None = None,
+        dist: d.Distribution | None = None,
     ):
         if coeff is None:
             coeff = self.kl_to_ref_coeff
@@ -226,16 +343,27 @@ class GRPOLoss(ClipPPOLoss):
             ref_log_prob = tensordict.get(
                 key,
                 as_padded_tensor=True,
-            ).squeeze(-1)
+                padding_side="left",
+                padding_value=0.0,
+            )
+            if ref_log_prob is None:
+                raise KeyError(
+                    f"Couldn't find the ref log-prob {key} in the input data ({tensordict.keys(True)=})."
+                )
+            ref_log_prob = ref_log_prob.squeeze(-1)
         cur_log_prob = tensordict.get("_cur_log_prob")
         # TODO: remove this
-        assert cur_log_prob.shape == ref_log_prob.shape, (
-            cur_log_prob.shape,
-            ref_log_prob.shape,
-        )
-        mask = cur_log_prob != 0
-        ref_log_prob = ref_log_prob[mask]
-        cur_log_prob = cur_log_prob[mask]
+        if cur_log_prob.shape != ref_log_prob.shape:
+            raise ValueError(
+                f"cur_log_prob and ref_log_prob must have the same shape, got {cur_log_prob.shape=} and {ref_log_prob.shape=}"
+            )
+        if mask is not None:
+            ref_log_prob = torch.where(
+                expand_as_right(mask, ref_log_prob), ref_log_prob, 0.0
+            )
+            cur_log_prob = torch.where(
+                expand_as_right(mask, cur_log_prob), cur_log_prob, 0.0
+            )
         diff = ref_log_prob - cur_log_prob
         kl_penalty = (diff.expm1() - diff).mean()
         return coeff * kl_penalty, kl_penalty
@@ -244,12 +372,15 @@ class GRPOLoss(ClipPPOLoss):
         self, tensordict: TensorDictBase, adv_shape: torch.Size
     ) -> tuple[torch.Tensor, d.Distribution, torch.Tensor]:
 
-        prev_log_prob = _maybe_get_or_select(
-            tensordict,
+        cur_log_prob, dist, is_composite = self._get_cur_log_prob(tensordict)
+
+        prev_log_prob = tensordict.get(
             self.tensor_keys.sample_log_prob,
-            adv_shape,
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=0.0,
         )
-        padding_mask = prev_log_prob != 0
+
         if prev_log_prob is None:
             raise KeyError(
                 f"Couldn't find the log-prob {self.tensor_keys.sample_log_prob} in the input data."
@@ -259,8 +390,30 @@ class GRPOLoss(ClipPPOLoss):
                 f"tensordict stored {self.tensor_keys.sample_log_prob} requires grad."
             )
 
-        cur_log_prob, dist, is_composite = self._get_cur_log_prob(tensordict)
-        cur_log_prob = torch.where(padding_mask, cur_log_prob, 0.0)
+        # Check for shape mismatches and provide helpful error messages
+        if cur_log_prob.shape != prev_log_prob.shape:
+            # Try to provide helpful debugging information
+            error_msg = (
+                f"Shape mismatch detected in GRPOLoss: current log-prob shape {cur_log_prob.shape} "
+                f"!= previous log-prob shape {prev_log_prob.shape}. "
+                f"This usually indicates a mismatch between the masking strategy used for "
+                f"advantage computation and the masking strategy used for loss computation.\n"
+                f"Current masking strategy: '{self.masking_strategy}'\n"
+                f"Possible solutions:\n"
+                f"1. If using RLHF (multi-turn conversations), set masking_strategy='rlhf'\n"
+                f"2. If using SFT (single-turn conversations), set masking_strategy='sft'\n"
+                f"3. If using generic scenarios, set masking_strategy='generic'\n"
+                f"4. Ensure the advantage was computed with the same masking strategy as the loss"
+            )
+            raise ValueError(error_msg)
+
+        attention_mask = dist.mask
+        cur_log_prob = torch.where(
+            expand_as_right(attention_mask, cur_log_prob), cur_log_prob, 0.0
+        )
+        prev_log_prob = torch.where(
+            expand_as_right(attention_mask, prev_log_prob), prev_log_prob, 0.0
+        )
 
         if is_composite:
             raise NotImplementedError
@@ -295,7 +448,7 @@ class MCAdvantage(Transform):
 
     Args:
         grpo_size (int): Number of trajectories to keep in memory for the advantage computation.
-        prompt_key (NestedKey): Key to the prompt in the tensordict. Defaults to "text".
+        prompt_key (NestedKey): Key to the prompt in the tensordict. Defaults to ("text", "prompt").
         rewards_key (NestedKey): Key to the rewards in the tensordict. Defaults to ("next", "reward").
         advantage_key (NestedKey): Key to the advantage in the tensordict. Defaults to "advantage".
         done_key (NestedKey): Key to the done state in the tensordict. Defaults to ("next", "done").
@@ -306,7 +459,7 @@ class MCAdvantage(Transform):
     def __init__(
         self,
         grpo_size: int,
-        prompt_key: NestedKey = "text",
+        prompt_key: NestedKey = "query",
         rewards_key: NestedKey = ("next", "reward"),
         advantage_key: NestedKey = "advantage",
         done_key: NestedKey = ("next", "done"),

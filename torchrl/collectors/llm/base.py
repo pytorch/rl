@@ -189,6 +189,9 @@ class LLMCollector(SyncDataCollector):
             extend_buffer=True,
             postproc=postproc,
         )
+        if hasattr(self.policy, "register_collector"):
+            self.policy.register_collector(self)
+
         if yield_only_last_steps is None:
             yield_only_last_steps = False
 

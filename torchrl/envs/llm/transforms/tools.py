@@ -508,11 +508,15 @@ class PythonInterpreter(Transform):
 
         return results
 
-    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
         if next_tensordict.batch_dims > 1:
-            with next_tensordict.view(-1) as next_tensordict_flat:
+            with next_tensordict.view(-1) as next_tensordict_flat, tensordict.view(
+                -1
+            ) as tensordict_flat:
                 # Call the transform on the flattened tensordict
-                next_tensordict_flat = self._call(next_tensordict_flat)
+                next_tensordict_flat = self._step(tensordict_flat, next_tensordict_flat)
             return next_tensordict
 
         # Ensure we have enough processes for the batch
@@ -520,7 +524,7 @@ class PythonInterpreter(Transform):
             self._ensure_processes(len(next_tensordict))
 
         # Convert text to a history
-        history = next_tensordict["history"]
+        history = next_tensordict["history"].prompt
         # Isolate last element, which should be our action
         local_history = history[..., -1]
 
@@ -555,7 +559,7 @@ class PythonInterpreter(Transform):
         # Procs has the shape of the batch-size. We can cat along dim=-1
         procs = lazy_stack([lazy_stack(p) for p in procs])
         history.extend(procs, dim=-1)
-        next_tensordict["history"] = history
+        next_tensordict["history"].prompt = history
         return next_tensordict
 
     def __del__(self):
@@ -765,8 +769,18 @@ class MCPToolTransform(Transform):
                 next_tensordict_flat = self._call(next_tensordict_flat)
             return next_tensordict
 
+        # Check that base_env is on history mode
+        parent = self.parent
+        if parent is None:
+            raise RuntimeError("MCPToolTransform must be used with a ChatEnv")
+        base_env = parent.base_env
+        if base_env.input_mode != "history":
+            raise RuntimeError(
+                "MCPToolTransform must be used with a ChatEnv in history mode"
+            )
+
         # Convert text to a history
-        history = next_tensordict["history"]
+        history = next_tensordict["history"].prompt
         # Isolate last element, which should be our action
         local_history = history[..., -1]
 
@@ -801,7 +815,7 @@ class MCPToolTransform(Transform):
         # Procs has the shape of the batch-size. We can cat along dim=-1
         procs = lazy_stack([lazy_stack(p) for p in procs])
         history.extend(procs, dim=-1)
-        next_tensordict["history"] = history
+        next_tensordict["history"].prompt = history
         return next_tensordict
 
     def _reset(

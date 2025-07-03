@@ -21,7 +21,13 @@ from tensordict import (
 from tensordict.utils import _maybe_correct_neg_dim
 from torchrl._utils import logger as torchrl_logger
 
+try:
+    import transformers
+except ImportError:
+    transformers = None
 
+
+# Global storage for custom templates and their metadata
 _CHAT_TEMPLATES = {
     "chatml_format": """{% for message in messages %}
     {%- if message['role'] == 'assistant' %}
@@ -40,7 +46,7 @@ _CHAT_TEMPLATES = {
     {%- if messages[0]['role'] == 'system' %}
         {{- messages[0]['content'] }}
     {%- else %}
-        {{- 'You are Qwen, created by Alibaba Cloud. You are a helpful assistant.' }}
+        {{- 'You are a helpful assistant.' }}
     {%- endif %}
     {{- "\\n\\n# Tools\\n\\nYou may call one or more functions to assist with the user query.\\n\\nYou are provided with function signatures within <tools></tools> XML tags:\\n<tools>" }}
     {%- for tool in tools %}
@@ -52,7 +58,7 @@ _CHAT_TEMPLATES = {
     {%- if messages[0]['role'] == 'system' %}
         {{- '<|im_start|>system\\n' + messages[0]['content'] + '<|im_end|>\\n' }}
     {%- else %}
-        {{- '<|im_start|>system\\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\\n' }}
+        {{- '<|im_start|>system\\nYou are a helpful assistant.<|im_end|>\\n' }}
     {%- endif %}
 {%- endif %}
 {%- for message in messages %}
@@ -92,7 +98,175 @@ _CHAT_TEMPLATES = {
     {% generation %}{{- '<|im_start|>assistant\\n' }}{% endgeneration %}
 {%- endif %}
 """,
+    "dialogpt": """{% for message in messages %}{% if message['role'] == 'assistant' %}{% generation %}{{ message['content'] }}{% endgeneration %}{{ eos_token }}{% elif message['role'] == 'user' %}{{ message['content'] }}{{ eos_token }}{% endif %}{% endfor %}{% if add_generation_prompt %}{% generation %}{{ ' ' }}{% endgeneration %}{% endif %}""",
+    "falcon": """{% for message in messages %}{% if message['role'] == 'assistant' %}{% generation %}{{ 'Assistant: ' + message['content'] }}{% endgeneration %}\n\n{% elif message['role'] == 'user' %}{{ 'User: ' + message['content'] }}\n\n{% elif message['role'] == 'system' %}{{ message['content'] }}\n\n{% endif %}{% endfor %}{% if add_generation_prompt %}{% generation %}{{ 'Assistant: ' }}{% endgeneration %}{% endif %}""",
+    "deepseek": """{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{{ bos_token }}{% for message in messages %}{% if message['role'] == 'user' %}{{ 'User: ' + message['content'] + '\n\n' }}{% elif message['role'] == 'assistant' %}{% generation %}{{ 'Assistant: ' + message['content'] + eos_token }}{% endgeneration %}{% elif message['role'] == 'system' %}{{ message['content'] + '\n\n' }}{% endif %}{% endfor %}{% if add_generation_prompt %}{% generation %}{{ 'Assistant:' }}{% endgeneration %}{% endif %}""",
+    "llama": """{{- bos_token }}
+{%- if messages[0]['role'] == 'system' %}
+    {%- set system_message = messages[0]['content']|trim %}
+    {%- set messages = messages[1:] %}
+{%- else %}
+    {%- set system_message = "" %}
+{%- endif %}
+{%- if system_message %}
+    {{- "<|header_start|>system<|header_end|>\n\n" }}
+    {{- system_message }}
+    {{- "<|eot|>" }}
+{%- endif %}
+{%- for message in messages %}
+    {%- if message['role'] == 'assistant' %}
+    {% generation %}{{- '<|header_start|>' + message['role'] + '<|header_end|>\n\n' }}
+        {%- if message['content'] is string %}
+            {{- message['content'] }}
+        {%- else %}
+            {%- for content in message['content'] %}
+                {%- if content['type'] == 'text' %}
+                    {{- content['text'] | trim }}
+                {%- endif %}
+            {%- endfor %}
+        {%- endif %}
+    {{- "<|eot|>" }}{% endgeneration %}
+    {%- else %}
+    {{- '<|header_start|>' + message['role'] + '<|header_end|>\n\n' }}
+        {%- if message['content'] is string %}
+            {{- message['content'] }}
+        {%- else %}
+            {%- for content in message['content'] %}
+                {%- if content['type'] == 'text' %}
+                    {{- content['text'] | trim }}
+                {%- endif %}
+            {%- endfor %}
+        {%- endif %}
+    {{- "<|eot|>" }}
+    {%- endif %}
+{%- endfor %}
+{%- if add_generation_prompt %}
+    {% generation %}{{- '<|header_start|>assistant<|header_end|>\n\n' }}{% endgeneration %}
+{%- endif %}""",
 }
+
+# Global storage for custom template metadata
+_CUSTOM_INVERSE_PARSERS = {}
+_CUSTOM_MODEL_FAMILY_KEYWORDS = {}
+
+
+def add_chat_template(
+    template_name: str,
+    template: str,
+    inverse_parser: callable | None = None,
+    model_family_keywords: list[str] | None = None,
+) -> None:
+    r"""Add a custom chat template to the global template dictionary.
+
+    This function allows you to add custom chat templates for new model families
+    that support assistant token masking via the `{% generation %}` keyword.
+
+    Args:
+        template_name (str): The name of the template (e.g., "llama", "mistral").
+            This name will be used in the `chat_template_name` parameter of
+            `History.apply_chat_template()` and `History.from_text()`.
+        template (str): The Jinja2 template string. Must include `{% generation %}`
+            blocks around assistant message content to enable token masking.
+        inverse_parser (callable, optional): A function that parses formatted text back
+            into a History object. Should have signature `(text: str) -> History`.
+            If None, a basic parser will be used.
+        model_family_keywords (list[str], optional): Keywords to detect this model family
+            in the auto-detection logic. For example, ["llama", "meta-llama"] for Llama models.
+            If provided, the template will be automatically selected for models containing
+            these keywords in their name.
+
+    Example:
+        >>> from torchrl.data.llm.chat import add_chat_template, History
+        >>> from transformers import AutoTokenizer
+        >>>
+        >>> # Add a custom template for Llama models
+        >>> llama_template = '''
+        ... {% for message in messages %}
+        ... {%- if message['role'] == 'user' %}
+        ... {{ '<s>[INST] ' + message['content'] + ' [/INST]' }}
+        ... {%- elif message['role'] == 'assistant' %}
+        ... {% generation %}{{ message['content'] + '</s>' }}{% endgeneration %}
+        ... {%- endif %}
+        ... {% endfor %}
+        ... {%- if add_generation_prompt %}
+        ... {% generation %}{{ ' ' }}{% endgeneration %}
+        ... {%- endif %}
+        ... '''
+        >>>
+        >>> def parse_llama_text(text: str) -> History:
+        ...     # Custom parser for Llama format
+        ...     import re
+        ...     pattern = r'<s>\[INST\]\s*(.*?)\s*\[/INST\]\s*(.*?)</s>'
+        ...     matches = re.findall(pattern, text, re.DOTALL)
+        ...     messages = []
+        ...     for user_content, assistant_content in matches:
+        ...         messages.append(History(role="user", content=user_content.strip()))
+        ...         messages.append(History(role="assistant", content=assistant_content.strip()))
+        ...     return lazy_stack(messages)
+        >>>
+        >>> # Add the template with auto-detection
+        >>> add_chat_template(
+        ...     template_name="llama",
+        ...     template=llama_template,
+        ...     inverse_parser=parse_llama_text,
+        ...     model_family_keywords=["llama", "meta-llama"]
+        ... )
+        >>>
+        >>> # Now you can use it with auto-detection
+        >>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+        >>> history = History.from_chats([[
+        ...     {"role": "user", "content": "Hello"},
+        ...     {"role": "assistant", "content": "Hi there!"}
+        ... ]])
+        >>>
+        >>> # Auto-detection will use the llama template
+        >>> result = history.apply_chat_template(
+        ...     tokenizer=tokenizer,
+        ...     add_generation_prompt=False,
+        ...     return_dict=True,
+        ...     return_assistant_tokens_mask=True,
+        ... )
+        >>>
+        >>> # Or use it explicitly
+        >>> result = history.apply_chat_template(
+        ...     tokenizer=tokenizer,
+        ...     chat_template_name="llama",
+        ...     add_generation_prompt=False,
+        ...     return_dict=True,
+        ...     return_assistant_tokens_mask=True,
+        ... )
+
+    .. note:
+        - The template must include `{% generation %}` blocks around assistant message
+          content to enable assistant token masking.
+        - The inverse parser should handle the specific format of your template.
+        - Model family keywords are case-insensitive and matched against the tokenizer's
+          `name_or_path` attribute.
+        - Templates are stored globally and persist for the duration of the Python session.
+    """
+    global _CHAT_TEMPLATES, _CUSTOM_INVERSE_PARSERS, _CUSTOM_MODEL_FAMILY_KEYWORDS
+
+    # Validate template contains generation blocks
+    if "{% generation %}" not in template:
+        raise ValueError(
+            f"Template '{template_name}' must include '{{% generation %}}' blocks "
+            "around assistant message content to enable token masking."
+        )
+
+    # Add template to dictionary
+    _CHAT_TEMPLATES[template_name] = template
+
+    # Store inverse parser if provided
+    if inverse_parser is not None:
+        _CUSTOM_INVERSE_PARSERS[template_name] = inverse_parser
+
+    # Store model family keywords if provided
+    if model_family_keywords is not None:
+        _CUSTOM_MODEL_FAMILY_KEYWORDS[template_name] = model_family_keywords
+
+    torchrl_logger.info(
+        f"Added custom chat template '{template_name}' with assistant token masking support"
+    )
 
 
 # We need the 'shadow' flag to avoid having tensordict complaining about 'type'/'size' etc. fields
@@ -197,11 +371,92 @@ class History(TensorClass["nocast"]):
     - Efficient methods to append, extend, and reshape history elements, enabling dynamic construction of conversation
       trajectories, especially useful in reinforcement learning environments.
     - Interoperability with the `transformers` API, allowing for easy tokenization and preparation of input data.
+    - **Assistant token masking support** across multiple model families for reinforcement learning applications.
+
+    **Recent Changes:**
+    - **ChatHistory Integration**: History objects are now used within :class:`~torchrl.modules.llm.policies.ChatHistory`
+      containers for structured conversation management in LLM environments.
+    - **Modular Wrapper Support**: Both vLLMWrapper and TransformersWrapper now use History objects when `input_mode="history"`
+      is specified, providing consistent conversation state management.
+    - **Environment Integration**: ChatEnv and related environments use History objects for state management and conversation tracking.
 
     .. note:: The `"<none>"` role is used to indicate that the element is a placeholder,
         for example when the tool call was not executed but a stack requires a certain number of elements
         per batch to have congruent shapes. The :meth:`~torchrl.data.llm.chat.History.apply_chat_template`
         method will remove the `<none>` role from the history.
+
+    **Assistant Token Masking Support:**
+
+    The class supports assistant token masking across multiple model families, allowing you to identify which tokens
+    in a conversation were generated by the assistant. This is crucial for reinforcement learning applications.
+
+    **Supported Model Families:**
+
+    - **Qwen family** (e.g., `Qwen/Qwen2.5-0.5B`): Custom template with full tool calling support
+    - **DialoGPT family** (e.g., `microsoft/DialoGPT-medium`): Custom template for conversation format
+    - **Falcon family** (e.g., `tiiuae/falcon-7b-instruct`): Custom template for instruction format
+    - **DeepSeek family** (e.g., `deepseek-ai/deepseek-coder-6.7b-base`): Custom template with native format
+    - **Other models** (OPT, GPT, MPT, BLOOM, Pythia, Phi, etc.): Default `chatml_format` template
+
+    **Example with Assistant Token Masking:**
+
+    .. code-block:: python
+
+        >>> from torchrl.data.llm.chat import History
+        >>> from torchrl.modules.llm.policies import ChatHistory
+        >>> from transformers import AutoTokenizer
+        >>>
+        >>> # Create a conversation history
+        >>> history = History.from_chats([[
+        ...     {"role": "user", "content": "Hello"},
+        ...     {"role": "assistant", "content": "Hi there!"},
+        ...     {"role": "user", "content": "How are you?"},
+        ...     {"role": "assistant", "content": "I'm doing well, thanks!"}
+        ... ]])
+        >>>
+        >>> # Create ChatHistory container for LLM wrapper
+        >>> chat_history = ChatHistory(prompt=history)
+        >>>
+        >>> # Load any supported tokenizer
+        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+        >>>
+        >>> # Apply chat template with assistant token masking
+        >>> result = history.apply_chat_template(
+        ...     tokenizer=tokenizer,
+        ...     add_generation_prompt=False,
+        ...     return_dict=True,
+        ...     return_assistant_tokens_mask=True,
+        ... )
+        >>>
+        >>> # The result contains an assistant_masks tensor
+        >>> assistant_masks = result["assistant_masks"]
+        >>> print(f"Assistant tokens: {assistant_masks.sum().item()}")
+
+    **Integration with LLM Wrappers:**
+
+    History objects work seamlessly with the new modular wrapper design:
+
+    .. code-block:: python
+
+        >>> from torchrl.modules.llm import TransformersWrapper
+        >>> from torchrl.modules.llm.policies import ChatHistory
+        >>>
+        >>> # Create wrapper with history input mode
+        >>> wrapper = TransformersWrapper(
+        ...     model, tokenizer=tokenizer,
+        ...     input_mode="history",
+        ...     generate=True,
+        ...     return_log_probs=True
+        ... )
+        >>>
+        >>> # Use History with ChatHistory container
+        >>> history = History.from_chats([[
+        ...     {"role": "user", "content": "Hello"},
+        ...     {"role": "assistant", "content": "Hi there!"}
+        ... ]])
+        >>> chat_history = ChatHistory(prompt=history)
+        >>> result = wrapper(TensorDict(history=chat_history, batch_size=(1,)))
+        >>> print(result["history"].response)  # New response from LLM
 
     Attributes:
         role (str): The role of the message sender.
@@ -256,6 +511,10 @@ class History(TensorClass["nocast"]):
 
         <|im_start|>assistant
 
+    .. seealso::
+        :class:`~torchrl.modules.llm.policies.ChatHistory`: Container for managing conversation data in LLM environments.
+        :class:`~torchrl.modules.llm.policies.Text`: Container for text data.
+        :class:`~torchrl.modules.llm.policies.Tokens`: Container for token data.
     """
 
     role: str
@@ -277,7 +536,7 @@ class History(TensorClass["nocast"]):
         tokenizer: transformers.AutoTokenizer | transformers.AutoProcessor,  # noqa
         add_generation_prompt: bool = True,
         chat_template: str | None = None,
-        chat_template_name: Literal["chatml_format", "qwen"] | None = None,
+        chat_template_name: str | None = None,
         continue_final_message: bool = False,
         tokenize: bool | None = None,
         padding: bool | str = False,
@@ -286,15 +545,16 @@ class History(TensorClass["nocast"]):
         return_dict: bool | None = None,
         return_assistant_tokens_mask: bool = False,
         **kwargs,
-    ):
+    ) -> str | list[str] | TensorDict:
         """Applies a chat template to the history.
 
         Keyword Args:
             tokenizer (transformers.PreTrainedTokenizer | transformers.AutoProcessor): The tokenizer to use.
             add_generation_prompt (bool, optional): Whether to add a generation prompt (e.g. `"<|im_start|>assistant"`). Defaults to `True`.
             chat_template (str, optional): The chat template to use. Defaults to the tokenizer's default template.
-            chat_template_name (Literal["chatml_format", "qwen"], optional): The name of the chat template to use.
-                Prevalent over `tokenizer.chat_template`. Defaults to `None`.
+            chat_template_name (str, optional): The name of the chat template to use.
+                Prevalent over `tokenizer.chat_template`. If `None`, the method will automatically detect the model family and use the appropriate template.
+                Defaults to `None`.
             continue_final_message (bool, optional): Whether to continue the final message. Defaults to `False`.
             tokenize (bool, optional): Whether to tokenize the output. Defaults to `False`.
             padding (bool | str, optional): The padding strategy to use. Defaults to `False`.
@@ -308,9 +568,14 @@ class History(TensorClass["nocast"]):
                 This functionality is only available for chat templates that support it via the `{% generation %}` keyword.
                 Defaults to `False`.
 
-                .. note:: By default, the `"qwen"` chat template does not support this functionality. A modified version of the template
-                    can be used by setting `chat_template_name="qwen"`, which will override the default template from the tokenizer.
-                    For other tokenizers, similar edits can be made to the template and passed to the method via the `chat_template` argument.
+                .. note:: Assistant token masking is supported across multiple model families:
+                    - **Qwen family**: Uses custom template with full tool calling support
+                    - **DialoGPT family**: Uses custom template for conversation format
+                    - **Falcon family**: Uses custom template for instruction format
+                    - **DeepSeek family**: Uses custom template with native format
+                    - **Other models**: Use the default `chatml_format` template
+
+                    The method automatically detects the model family and selects the appropriate template.
 
             **kwargs: Additional keyword arguments to pass to the tokenizer `apply_chat_template` method.
 
@@ -325,13 +590,54 @@ class History(TensorClass["nocast"]):
                 raise RuntimeError(
                     "You must specify a tokenizer to use when chat_template is not specified."
                 )
-            elif "qwen" in getattr(tokenizer, "name_or_path", "").lower():
-                # We prefer our implementation of the Qwen template,
-                #  since it accounts for the assistant's masking.
-                chat_template = _CHAT_TEMPLATES["qwen"]
-                chat_template_name = None
             else:
-                chat_template = tokenizer.chat_template
+                # Auto-detect model family and use appropriate template
+                model_name = getattr(tokenizer, "name_or_path", "").lower()
+
+                # First check for custom model family keywords
+                custom_template_found = False
+                for template_name, keywords in _CUSTOM_MODEL_FAMILY_KEYWORDS.items():
+                    if any(keyword.lower() in model_name for keyword in keywords):
+                        chat_template = _CHAT_TEMPLATES[template_name]
+                        chat_template_name = None
+                        custom_template_found = True
+                        break
+
+                if not custom_template_found:
+                    # Fall back to built-in model family detection
+                    if "qwen" in model_name:
+                        # We prefer our implementation of the Qwen template,
+                        #  since it accounts for the assistant's masking.
+                        chat_template = _CHAT_TEMPLATES["qwen"]
+                        chat_template_name = None
+                    elif "dialogpt" in model_name or "microsoft/dialo" in model_name:
+                        # DialoGPT family - use our custom template
+                        chat_template = _CHAT_TEMPLATES["dialogpt"]
+                        chat_template_name = None
+                    elif "falcon" in model_name or "tiiuae/falcon" in model_name:
+                        # Falcon family - use our custom template
+                        chat_template = _CHAT_TEMPLATES["falcon"]
+                        chat_template_name = None
+                    elif "deepseek" in model_name:
+                        # DeepSeek family - use our custom template with generation keyword
+                        chat_template = _CHAT_TEMPLATES["deepseek"]
+                        chat_template_name = None
+                    elif "llama" in model_name:
+                        # Llama family - use our custom template
+                        chat_template = _CHAT_TEMPLATES["llama"]
+                        chat_template_name = None
+                    else:
+                        # For other models, check if their default template supports generation
+                        if (
+                            hasattr(tokenizer, "chat_template")
+                            and tokenizer.chat_template
+                            and "{% generation %}" in tokenizer.chat_template
+                        ):
+                            # Use the model's own template if it supports generation
+                            chat_template = tokenizer.chat_template
+                        else:
+                            # Use our default chatml_format template
+                            chat_template = _CHAT_TEMPLATES["chatml_format"]
         if chat_template is None:
             chat_template = _CHAT_TEMPLATES["chatml_format"]
         if tokenize is None:
@@ -402,26 +708,65 @@ class History(TensorClass["nocast"]):
     def from_text(
         cls,
         text: str | list[str],
-        chat_template_name: Literal["chatml_format", "qwen"] | None = None,
+        chat_template_name: str | None = None,
+        # currently without effect
         chat_template: str | None = None,
         tokenizer: transformers.AutoTokenizer  # noqa: F821
         | transformers.AutoProcessor  # noqa: F821
         | None = None,
     ) -> History:
-        if chat_template_name is None and chat_template is None:
-            if "qwen" in getattr(tokenizer, "name_or_path", "").lower():
-                # We can automatically detect the template name from the tokenizer
-                #  and use the precoded parser.
-                chat_template_name = "qwen"
-            else:
-                chat_template_name = "chatml_format"
-        elif chat_template_name in ("chatml_format",):
+        if chat_template_name is None:
+            if chat_template is not None:
+                # TODO: find best match given template
+                pass
+
+            model_name = getattr(tokenizer, "name_or_path", "").lower()
+            # First check for custom model family keywords
+            custom_template_found = False
+            for template_name, keywords in _CUSTOM_MODEL_FAMILY_KEYWORDS.items():
+                if any(keyword.lower() in model_name for keyword in keywords):
+                    chat_template_name = template_name
+                    custom_template_found = True
+                    break
+
+            if not custom_template_found:
+                # Fall back to built-in model family detection
+                if "qwen" in model_name:
+                    # We can automatically detect the template name from the tokenizer
+                    #  and use the precoded parser.
+                    chat_template_name = "qwen"
+                elif "dialogpt" in model_name or "microsoft/dialo" in model_name:
+                    chat_template_name = "dialogpt"
+                elif "falcon" in model_name or "tiiuae/falcon" in model_name:
+                    chat_template_name = "falcon"
+                elif "deepseek" in model_name:
+                    chat_template_name = "deepseek"
+                elif "llama" in model_name:
+                    chat_template_name = "llama"
+                else:
+                    chat_template_name = "chatml_format"
+
+        # Get the appropriate inverse parser function
+        if chat_template_name in ("chatml_format",):
             func = cls._inv_chatml
         elif chat_template_name in ("qwen",):
             func = cls._inv_qwen
+        elif chat_template_name in ("dialogpt",):
+            func = cls._inv_dialogpt
+        elif chat_template_name in ("falcon",):
+            func = cls._inv_falcon
+        elif chat_template_name in ("deepseek",):
+            func = cls._inv_deepseek
+        elif chat_template_name in ("llama",):
+            func = cls._inv_llama
+        elif chat_template_name in _CUSTOM_INVERSE_PARSERS:
+            # Use custom inverse parser
+            func = _CUSTOM_INVERSE_PARSERS[chat_template_name]
         else:
             raise NotImplementedError(
-                "chat_template_name must be one of ('chatml_format', 'qwen')"
+                f"chat_template_name '{chat_template_name}' is not supported. "
+                "Supported templates: 'chatml_format', 'qwen', 'dialogpt', 'falcon', 'deepseek'. "
+                "Use add_chat_template() to add custom templates."
             )
         if isinstance(text, list):
             list_of_histories = [func(t) for t in text]
@@ -597,6 +942,218 @@ class History(TensorClass["nocast"]):
             )
 
         return lazy_stack(parsed_messages)
+
+    @classmethod
+    def _inv_dialogpt(cls, text: str) -> History:
+        """Inverts a DialogPT string into a History object.
+
+        Args:
+            text (str): The DialogPT string to invert.
+
+        Returns:
+            History: The inverted History object.
+        """
+        torchrl_logger.debug(f"Inverting DialogPT:\n{text}")
+
+        # DialogPT format is simple: alternating user/assistant messages
+        # Split by lines and parse
+        lines = text.strip().split("\n")
+        parsed_messages = []
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            # Determine role based on content
+            if line.startswith("Assistant:"):
+                role = "assistant"
+                content = line[len("Assistant:") :].strip()
+            elif line.startswith("User:"):
+                role = "user"
+                content = line[len("User:") :].strip()
+            else:
+                # Default to user if no prefix
+                role = "user"
+                content = line
+
+            message_dict = {
+                "role": role,
+                "content": content,
+                "is_complete": True,  # DialogPT doesn't have explicit end tokens
+                "tool_calls": None,
+                "tool_responses": None,
+            }
+
+            parsed_messages.append(cls(**message_dict))
+
+        if not parsed_messages:
+            raise RuntimeError(f"Couldn't get a single item out of text {text}.")
+
+        return lazy_stack(parsed_messages)
+
+    @classmethod
+    def _inv_falcon(cls, text: str) -> History:
+        """Inverts a Falcon string into a History object.
+
+        Args:
+            text (str): The Falcon string to invert.
+
+        Returns:
+            History: The inverted History object.
+        """
+        torchrl_logger.debug(f"Inverting Falcon:\n{text}")
+
+        # Falcon format: "User: ... Assistant: ..."
+        # Split by "User:" and "Assistant:" prefixes
+        import re
+
+        # Pattern to match User: and Assistant: messages
+        pattern = r"(User:|Assistant:)\s*(.*?)(?=(User:|Assistant:)|$)"
+        matches = re.findall(pattern, text, re.DOTALL)
+
+        parsed_messages = []
+        for match in matches:
+            if len(match) != 2:
+                continue
+            prefix, content = match
+            content = content.strip()
+            if not content:
+                continue
+
+            if prefix == "User:":
+                role = "user"
+            elif prefix == "Assistant:":
+                role = "assistant"
+            else:
+                continue
+
+            message_dict = {
+                "role": role,
+                "content": content,
+                "is_complete": True,  # Falcon doesn't have explicit end tokens
+                "tool_calls": None,
+                "tool_responses": None,
+            }
+
+            parsed_messages.append(cls(**message_dict))
+
+        if not parsed_messages:
+            raise RuntimeError(f"Couldn't get a single item out of text {text}.")
+
+        return lazy_stack(parsed_messages)
+
+    @classmethod
+    def _inv_deepseek(cls, text: str) -> History:
+        """Inverts a DeepSeek string into a History object.
+
+        Args:
+            text (str): The DeepSeek string to invert.
+
+        Returns:
+            History: The inverted History object.
+        """
+        torchrl_logger.debug(f"Inverting DeepSeek:\n{text}")
+        import re
+
+        # Remove leading/trailing special tokens (e.g.
+        text = re.sub(r"^<[^>]+>", "", text)  # Remove leading <...>
+        text = re.sub(r"<[^>]+>$", "", text)  # Remove trailing <...>
+        # Remove any REDACTED_SPECIAL_TOKEN if present
+        text = re.sub(r"REDACTED_SPECIAL_TOKEN", "", text)
+        # Pattern to match User: and Assistant: messages
+        pattern = r"(User:|Assistant:)\s*(.*?)(?=(User:|Assistant:)|$)"
+        matches = re.findall(pattern, text, re.DOTALL)
+        parsed_messages = []
+        for match in matches:
+            if len(match) < 2:
+                continue
+            prefix, content = match[0], match[1]
+            content = content.strip()
+            if not content:
+                continue
+            if prefix == "User:":
+                role = "user"
+            elif prefix == "Assistant:":
+                role = "assistant"
+            else:
+                continue
+            message_dict = {
+                "role": role,
+                "content": content,
+                "is_complete": True,  # DeepSeek doesn't have explicit end tokens
+                "tool_calls": None,
+                "tool_responses": None,
+            }
+            parsed_messages.append(cls(**message_dict))
+        if not parsed_messages:
+            raise RuntimeError(f"Couldn't get a single item out of text {text}.")
+        return lazy_stack(parsed_messages)
+
+    @classmethod
+    def _inv_llama(cls, text: str) -> History:
+        import re
+
+        messages = []
+
+        # Remove BOS token if present
+        if text.startswith("<|begin_of_text|>"):
+            text = text[len("<|begin_of_text|>") :]
+
+        # Pattern to match complete message blocks: <|header_start|>role<|header_end|>\n\ncontent<|eot|>
+        complete_pattern = r"<\|header_start\|>(\w+)<\|header_end\|>\n\n(.*?)<\|eot\|>"
+        complete_matches = re.findall(complete_pattern, text, re.DOTALL)
+
+        # Pattern to match incomplete message blocks: <|header_start|>role<|header_end|>\n\ncontent (without <|eot|>)
+        incomplete_pattern = r"<\|header_start\|>(\w+)<\|header_end\|>\n\n(.*?)$"
+
+        # Find any incomplete message at the end
+        incomplete_matches = []
+        if complete_matches:
+            # Look for incomplete message after the last complete one
+            last_complete_end = text.rfind("<|eot|>")
+            if last_complete_end != -1:
+                remaining_text = text[last_complete_end + len("<|eot|>") :]
+                if remaining_text.strip():
+                    incomplete_match = re.search(
+                        incomplete_pattern, remaining_text, re.DOTALL
+                    )
+                    if incomplete_match:
+                        incomplete_matches = [
+                            (
+                                incomplete_match.group(1),
+                                incomplete_match.group(2),
+                                False,
+                            )
+                        ]
+        else:
+            # No complete messages, check entire text for incomplete message
+            incomplete_match = re.search(incomplete_pattern, text, re.DOTALL)
+            if incomplete_match:
+                incomplete_matches = [
+                    (incomplete_match.group(1), incomplete_match.group(2), False)
+                ]
+
+        # Process complete messages
+        for role, content in complete_matches:
+            if content.strip():
+                messages.append(
+                    cls(role=role, content=content.strip(), is_complete=True)
+                )
+
+        # Process incomplete messages
+        for role, content, is_complete in incomplete_matches:
+            if content.strip():
+                messages.append(
+                    cls(role=role, content=content.strip(), is_complete=is_complete)
+                )
+
+        if not messages:
+            raise RuntimeError(f"Couldn't parse Llama format from text: {text}")
+
+        from tensordict import lazy_stack
+
+        return lazy_stack(messages)
 
     def append(
         self, history: History, *, inplace: bool = True, dim: int = -1
