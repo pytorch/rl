@@ -435,6 +435,7 @@ def main(cfg):
         weight_updater=None,  # We'll create this after getting the remote LLM
         track_policy_version=True,
         remote_config=collector_config,
+        yield_only_last_steps=cfg.env.reasoning,
     )
     # Ensure collector is initialized by calling a method that will block until ready
     ray.get(collector._collector.is_initialized.remote())

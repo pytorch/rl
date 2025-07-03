@@ -456,6 +456,7 @@ def main(cfg):
         remote_config=collector_config,
         sync_iter=cfg.train.sync_iter,
         verbose=True,
+        yield_only_last_steps=cfg.env.reasoning,
     )
     # Ensure collector is initialized by calling a method that will block until ready
     ray.get(collector._collector.is_initialized.remote())
