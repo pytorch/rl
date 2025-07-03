@@ -428,7 +428,7 @@ class MCAdvantage(Transform):
     def __init__(
         self,
         grpo_size: int,
-        prompt_key: NestedKey = ("query"),
+        prompt_key: NestedKey = "query",
         rewards_key: NestedKey = ("next", "reward"),
         advantage_key: NestedKey = "advantage",
         done_key: NestedKey = ("next", "done"),

@@ -1272,7 +1272,8 @@ class SyncDataCollector(DataCollectorBase):
                     self.replay_buffer.extend(tensordict_out)
                     if self.verbose:
                         torchrl_logger.info(
-                            f"Collector: Added {tensordict_out.numel()} frames to replay buffer. Buffer write count: {self.replay_buffer.write_count}. Yielding."
+                            f"Collector: Added {tensordict_out.numel()} frames to replay buffer. "
+                            "Buffer write count: {self.replay_buffer.write_count}. Yielding."
                         )
                     yield
                 else:
