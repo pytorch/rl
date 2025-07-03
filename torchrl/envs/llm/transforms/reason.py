@@ -9,6 +9,7 @@ import re
 from typing import Callable, Literal
 
 from tensordict import lazy_stack, TensorDictBase
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.data.llm.history import History
 from torchrl.envs import Transform
@@ -173,6 +174,7 @@ class AddThinkingPrompt(Transform):
 
         # Check if we should add the thinking prompt
         if self.cond(next_tensordict):
+            torchrl_logger.info("Adding thinking prompt")
             history: History = next_tensordict["history"].prompt
             last_turn = history[..., -1]
 
