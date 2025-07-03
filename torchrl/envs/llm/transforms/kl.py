@@ -648,7 +648,7 @@ class RetrieveLogProb(Transform):
 
     def transform_observation_spec(self, observation_spec: Composite) -> Composite:
         # Add kl to observation spec
-        observation_spec["kl"] = Unbounded(
+        observation_spec["kl_penalty"] = Unbounded(
             device=observation_spec.device,
             shape=observation_spec.shape,
         )
@@ -692,7 +692,7 @@ class RetrieveKL(Compose):
         device (torch.device): the device to use for tensor creation. Defaults to `None`.
         tokenizer (transformers.AutoTokenizer): the tokenizer to be used to tokenize the input and compute the assitant mask. If not provided, the tokenizer will be inferred from the `actor`.
         padding_side (str): the side of the padding when using pad_sequence. Defaults to `"left"`.
-        kl_key (NestedKey): the key where the KL divergence is stored. Defaults to `"kl"`.
+        kl_key (NestedKey): the key where the KL divergence is stored. Defaults to `"kl_penalty"`.
         add_to_reward (bool): whether to add the KL divergence to the reward. Defaults to `True`.
         coeff (float): the coefficient for the KL term when adding to reward. Defaults to `1.0`.
         padding_side (str): the side of the padding when using pad_sequence. Defaults to `"left"`.
@@ -766,7 +766,7 @@ class RetrieveKL(Compose):
         >>>
         >>> # Apply transform
         >>> result = transform(data)
-        >>> kl = result["next"].get("kl")
+        >>> kl = result["next"].get("kl_penalty")
         >>> print(f"KL shape: {kl.shape}")
         KL shape: torch.Size([2, 26])
 
@@ -796,7 +796,7 @@ class RetrieveKL(Compose):
         padding_side: str = "left",
         gen_log_probs_full_key: NestedKey = ("log_probs", "full"),
         ref_log_probs_full_key: NestedKey = ("ref_log_probs", "full"),
-        kl_key: NestedKey = "kl",
+        kl_key: NestedKey = "kl_penalty",
         add_to_reward: bool = True,
         coeff: float = 1.0,
         **kwargs,
@@ -1045,7 +1045,7 @@ class KLComputation(Transform):
             Defaults to `("gen_log_probs", "full")`.
         ref_log_probs_full_key (NestedKey): the key where the reference model log-probs are stored.
             Defaults to `("ref_log_probs", "full")`.
-        kl_key (NestedKey): the key where the KL divergence is stored. Defaults to `"kl"`.
+        kl_key (NestedKey): the key where the KL divergence is stored. Defaults to `"kl_penalty"`.
         add_to_reward (bool): whether to add the KL divergence to the reward. Defaults to `True`.
         coeff (float): the coefficient for the KL term when adding to reward. Defaults to `1.0`.
         padding_side (str): the side of the padding when using pad_sequence. Defaults to `"left"`.
@@ -1073,14 +1073,14 @@ class KLComputation(Transform):
         >>> kl_transform = KLComputation(
         ...     gen_log_probs_key=("gen_log_probs", "full"),
         ...     ref_log_probs_key=("ref_log_probs", "full"),
-        ...     kl_key="kl",
+        ...     kl_key="kl_penalty",
         ...     add_to_reward=True,
         ...     coef=1.0,
         ... )
         >>>
         >>> # Apply transform
         >>> result = kl_transform(data)
-        >>> kl = result["next"].get("kl")
+        >>> kl = result["next"].get("kl_penalty")
         >>> print(f"KL shape: {kl.shape}")
         KL shape: torch.Size([2, 10])
 
@@ -1096,7 +1096,7 @@ class KLComputation(Transform):
         gen_log_probs_full_key: NestedKey = ("log_probs", "full"),
         ref_log_probs_full_key: NestedKey = ("ref_log_probs", "full"),
         *,
-        kl_key: NestedKey = "kl",
+        kl_key: NestedKey = "kl_penalty",
         add_to_reward: bool = True,
         coeff: float = 1.0,
         padding_side: str = "left",
