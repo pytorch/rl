@@ -853,6 +853,7 @@ The result is""",
             chat_template=chat_template,
             chat_template_name=chat_template_name,
         )
+
         # Normalize whitespace for comparison
         def norm(x):
             if isinstance(x, list):
@@ -933,6 +934,7 @@ The result is""",
             chat_template=chat_template,
             chat_template_name=chat_template_name,
         )
+
         # Normalize whitespace for comparison
         def norm(x):
             if isinstance(x, list):

@@ -64,7 +64,7 @@ class Tokens(TensorClass["nocast"]):
         defaults = {k: Unbounded(shape=shape + (-1,)) for k in keys}
         defaults["padded"] = NonTensor(shape=shape, example_data=False)
 
-        return Composite(defaults, shape=shape[:-1], data_cls=cls)
+        return Composite(defaults, shape=shape[:-1], data_cls=cls, step_mdp_static=True)
 
 
 class Masks(TensorClass["nocast"]):
@@ -103,7 +103,7 @@ class Masks(TensorClass["nocast"]):
         defaults = {k: Unbounded(shape=shape + (-1,)) for k in keys}
         defaults["padded"] = NonTensor(shape=shape, example_data=False)
 
-        return Composite(defaults, shape=shape[:-1], data_cls=cls)
+        return Composite(defaults, shape=shape[:-1], data_cls=cls, step_mdp_static=True)
 
 
 class ChatHistory(TensorClass["nocast"]):
@@ -168,6 +168,7 @@ class ChatHistory(TensorClass["nocast"]):
             {k: History.default_spec(shape=shape + (-1,)) for k in keys},
             shape=shape[:-1],
             data_cls=cls,
+            step_mdp_static=True,
         )
 
 
@@ -209,7 +210,7 @@ class LogProbs(TensorClass["nocast"]):
         defaults = {k: Unbounded(shape=shape + (-1,)) for k in keys}
         defaults["padded"] = NonTensor(shape=shape, example_data=False)
 
-        return Composite(defaults, shape=shape[:-1], data_cls=cls)
+        return Composite(defaults, shape=shape[:-1], data_cls=cls, step_mdp_static=True)
 
 
 class Text(TensorClass["nocast"]):
@@ -239,7 +240,7 @@ class Text(TensorClass["nocast"]):
 
         defaults = {k: NonTensor(shape=shape, example_data="a string") for k in keys}
 
-        return Composite(defaults, shape=shape[:-1], data_cls=cls)
+        return Composite(defaults, shape=shape[:-1], data_cls=cls, step_mdp_static=True)
 
 
 class LogProbDistribution(D.Distribution):
@@ -339,7 +340,7 @@ class LLMWrapperBase(TensorDictModuleBase):
     Attributes:
         collector: The collector associated with the module, if it exists.
 
-    See also:
+    .. seealso::
         - :class:`~torchrl.modules.llm.policies.TransformersWrapper` (see :ref:`ref_transformers_wrapper`)
         - :class:`~torchrl.modules.llm.policies.vLLMWrapper` (see :ref:`ref_vllm_wrapper`)
     """

@@ -709,7 +709,7 @@ class History(TensorClass["nocast"]):
         cls,
         text: str | list[str],
         chat_template_name: str | None = None,
-        # currently without effect
+        # currently without effect
         chat_template: str | None = None,
         tokenizer: transformers.AutoTokenizer  # noqa: F821
         | transformers.AutoProcessor  # noqa: F821
@@ -717,7 +717,7 @@ class History(TensorClass["nocast"]):
     ) -> History:
         if chat_template_name is None:
             if chat_template is not None:
-                # TODO: find best match given template
+                # TODO: find best match given template
                 pass
 
             model_name = getattr(tokenizer, "name_or_path", "").lower()
@@ -1091,52 +1091,68 @@ class History(TensorClass["nocast"]):
         return lazy_stack(parsed_messages)
 
     @classmethod
-    def _inv_llama(cls, text: str) -> "History":
+    def _inv_llama(cls, text: str) -> History:
         import re
+
         messages = []
-        
+
         # Remove BOS token if present
-        if text.startswith('<|begin_of_text|>'):
-            text = text[len('<|begin_of_text|>'):]
-        
+        if text.startswith("<|begin_of_text|>"):
+            text = text[len("<|begin_of_text|>") :]
+
         # Pattern to match complete message blocks: <|header_start|>role<|header_end|>\n\ncontent<|eot|>
-        complete_pattern = r'<\|header_start\|>(\w+)<\|header_end\|>\n\n(.*?)<\|eot\|>'
+        complete_pattern = r"<\|header_start\|>(\w+)<\|header_end\|>\n\n(.*?)<\|eot\|>"
         complete_matches = re.findall(complete_pattern, text, re.DOTALL)
-        
+
         # Pattern to match incomplete message blocks: <|header_start|>role<|header_end|>\n\ncontent (without <|eot|>)
-        incomplete_pattern = r'<\|header_start\|>(\w+)<\|header_end\|>\n\n(.*?)$'
-        
+        incomplete_pattern = r"<\|header_start\|>(\w+)<\|header_end\|>\n\n(.*?)$"
+
         # Find any incomplete message at the end
         incomplete_matches = []
         if complete_matches:
             # Look for incomplete message after the last complete one
-            last_complete_end = text.rfind('<|eot|>')
+            last_complete_end = text.rfind("<|eot|>")
             if last_complete_end != -1:
-                remaining_text = text[last_complete_end + len('<|eot|>'):]
+                remaining_text = text[last_complete_end + len("<|eot|>") :]
                 if remaining_text.strip():
-                    incomplete_match = re.search(incomplete_pattern, remaining_text, re.DOTALL)
+                    incomplete_match = re.search(
+                        incomplete_pattern, remaining_text, re.DOTALL
+                    )
                     if incomplete_match:
-                        incomplete_matches = [(incomplete_match.group(1), incomplete_match.group(2), False)]
+                        incomplete_matches = [
+                            (
+                                incomplete_match.group(1),
+                                incomplete_match.group(2),
+                                False,
+                            )
+                        ]
         else:
             # No complete messages, check entire text for incomplete message
             incomplete_match = re.search(incomplete_pattern, text, re.DOTALL)
             if incomplete_match:
-                incomplete_matches = [(incomplete_match.group(1), incomplete_match.group(2), False)]
-        
+                incomplete_matches = [
+                    (incomplete_match.group(1), incomplete_match.group(2), False)
+                ]
+
         # Process complete messages
         for role, content in complete_matches:
             if content.strip():
-                messages.append(cls(role=role, content=content.strip(), is_complete=True))
-        
+                messages.append(
+                    cls(role=role, content=content.strip(), is_complete=True)
+                )
+
         # Process incomplete messages
         for role, content, is_complete in incomplete_matches:
             if content.strip():
-                messages.append(cls(role=role, content=content.strip(), is_complete=is_complete))
-        
+                messages.append(
+                    cls(role=role, content=content.strip(), is_complete=is_complete)
+                )
+
         if not messages:
             raise RuntimeError(f"Couldn't parse Llama format from text: {text}")
-        
+
         from tensordict import lazy_stack
+
         return lazy_stack(messages)
 
     def append(

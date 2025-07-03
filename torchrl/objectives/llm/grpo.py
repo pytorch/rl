@@ -138,15 +138,6 @@ class GRPOLoss(ClipPPOLoss):
         masking_strategy: Literal["sft", "rlhf", "generic"] = "sft",
         **kwargs,
     ):
-        """Initialize GRPOLoss with explicit masking strategy.
-
-        Args:
-            masking_strategy: The masking strategy to use for distribution creation.
-                - "sft": Use prompt masking (response tokens only, suitable for single-turn)
-                - "rlhf": Use assistant masking (assistant tokens only, suitable for multi-turn)
-                - "generic": Use attention masking (all valid tokens)
-                Defaults to "sft" since we can't guarantee assistant masks are available.
-        """
         # Define clipping of the value loss
         if isinstance(clip_value, bool):
             clip_value = clip_epsilon if clip_value else None

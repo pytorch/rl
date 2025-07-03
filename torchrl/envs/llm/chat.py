@@ -269,21 +269,21 @@ class ChatEnv(EnvBase):
             device=self.device,
         )
 
-    def _post_step_mdp_hooks(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Allows modification of the tensordict after the step_mdp."""
-        if self.input_mode == "history":
-            tensordict.exclude(
-                ("history", "response"), ("history", "full"), inplace=True
-            )
-        if self.input_mode in ("text", "history"):
-            tensordict.exclude(("text", "response"), ("text", "full"), inplace=True)
-        if self.input_mode in ("tokens", "history", "text"):
-            tensordict.exclude(("tokens", "response"), ("tokens", "full"), inplace=True)
-        if "log_probs" in tensordict.keys():
-            tensordict.exclude(
-                ("log_probs", "response"), ("log_probs", "full"), inplace=True
-            )
-        return tensordict
+    # def _post_step_mdp_hooks(self, tensordict: TensorDictBase) -> TensorDictBase:
+    #     """Allows modification of the tensordict after the step_mdp."""
+    # if self.input_mode == "history":
+    #     tensordict.exclude(
+    #         ("history", "response"), ("history", "full"), inplace=True
+    #     )
+    # if self.input_mode in ("text", "history"):
+    #     tensordict.exclude(("text", "response"), ("text", "full"), inplace=True)
+    # if self.input_mode in ("tokens", "history", "text"):
+    #     tensordict.exclude(("tokens", "response"), ("tokens", "full"), inplace=True)
+    # if "log_probs" in tensordict.keys():
+    #     tensordict.exclude(
+    #             ("log_probs", "response"), ("log_probs", "full"), inplace=True
+    #         )
+    #     return tensordict
 
     def _step(self, tensordict):
         if self.input_mode == "history":

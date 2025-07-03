@@ -493,7 +493,6 @@ class TestChatEnv:
             ]
             td_action = td_reset
         td_next = env.step(td_action)
-        print(f"{td_next=}")
         if input_mode == "history":
             # Check history after step
             assert len(td_next["next", "history"][0].prompt.content) == 3
@@ -1403,6 +1402,9 @@ class TestChatEnvIntegration:
         r, r_ = env.step_and_maybe_reset(r)
         if input_mode == "history":
             assert r["next", "history", "prompt"].shape == (1, 3)
+            assert r_["history", "prompt"] is not None
+            assert r_.get(("history", "response"), as_list=True) is None
+            assert r_.get(("history", "full"), as_list=True) is None
         assert r["next", "done"].all()
         r = policy(r_)
         r, r_ = env.step_and_maybe_reset(r)
@@ -1431,14 +1433,30 @@ class TestChatEnvIntegration:
             generate=True,
         )
         env = GSM8KEnv(
-            max_steps=10,
+            max_steps=1,
             compute_reward=compute_reward,
             input_mode=input_mode,
             tokenizer=policy.tokenizer,
         )
         r = env.reset()
+        prompt = None
+        if input_mode == "history":
+            assert r["history", "prompt"].shape == (1, 2)
+        elif input_mode == "text":
+            prompt = r["text", "prompt"][0]
         r = policy(r)
+        if input_mode == "history":
+            assert r["history", "response"].shape == (1, 1)
+            assert r["history", "full"].shape == (1, 3)
+        elif input_mode == "text":
+            assert r["text", "full"][0].startswith(prompt)
         r, r_ = env.step_and_maybe_reset(r)
+        if input_mode == "history":
+            assert r["next", "history", "prompt"].shape == (1, 3)
+            assert r_["history", "prompt"] is not None
+            assert r_.get(("history", "response"), as_list=True) is None
+            assert r_.get(("history", "full"), as_list=True) is None
+        assert r["next", "done"].all()
         r = policy(r_)
         r, r_ = env.step_and_maybe_reset(r)
 

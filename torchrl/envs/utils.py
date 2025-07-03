@@ -93,11 +93,11 @@ class _StepMDP:
         exclude_done: bool = False,
         exclude_action: bool = True,
     ):
-        action_keys = env.action_keys
-        done_keys = env.done_keys
-        reward_keys = env.reward_keys
-        observation_keys = env.full_observation_spec.keys(True, True)
-        state_keys = env.full_state_spec.keys(True, True)
+        action_keys = env._action_keys_step_mdp
+        done_keys = env._done_keys_step_mdp
+        reward_keys = env._reward_keys_step_mdp
+        observation_keys = env._observation_keys_step_mdp
+        state_keys = env._state_keys_step_mdp
         self.action_keys = [unravel_key(key) for key in action_keys]
         self.done_keys = [unravel_key(key) for key in done_keys]
         self.observation_keys = list(observation_keys)
@@ -245,6 +245,8 @@ class _StepMDP:
             else:
                 if is_non_tensor(val):
                     val = val.clone()
+                if is_tensor_collection(val):
+                    val = val.copy()
                 data_out._set_str(
                     key, val, validated=True, inplace=False, non_blocking=False
                 )

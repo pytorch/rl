@@ -138,7 +138,7 @@ class TransformersWrapper(LLMWrapperBase):
     Attributes:
         collector: The collector associated with the module, if it exists.
 
-    See also:
+    .. seealso::
         - :class:`~torchrl.modules.llm.policies.LLMWrapperBase` (see :ref:`ref_categorical_sequential`)
         - :class:`~torchrl.modules.llm.policies.vLLMWrapper` (see :ref:`ref_vllm_wrapper`)
     """

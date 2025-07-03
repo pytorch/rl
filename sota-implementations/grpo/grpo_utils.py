@@ -495,6 +495,7 @@ def compute_device_allocation(cfg):
         "cuda_visible_devices": cuda_visible_devices,
     }
 
+
 def make_env(cfg: DictConfig, devices: list[int] | None = None):
     """Create the environment with proper device allocation.
 
@@ -508,17 +509,13 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
     # For the collector actor, we want inference_model devices first, then ref_model devices
     train_tokenizer = get_tokenizer(cfg)
 
-    # Get device information
-    num_inf_devices = cfg.inference_model.num_devices
-    num_ref_devices = cfg.ref_model.num_devices
-
     # Create a new config with adjusted device assignments
     ref_cfg = DictConfig(dict(cfg))
     ref_model = get_ref_model(ref_cfg, train_tokenizer, devices=devices)
 
     # Setup environment
     if cfg.env.dataset == "gsm8k":
-        # Reward scale is 0.0 to 100
+        # Reward scale is 0.0 to 100
         reward_threshold = 20
         env = GSM8KEnv(
             repeats=cfg.env.repeats,
@@ -528,7 +525,7 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
             device=torch.device("cuda:0") if devices is not None else None,
         )
     elif cfg.env.dataset == "ifeval":  # ifeval
-        # Reward scale is 0.0 to 2.2
+        # Reward scale is 0.0 to 2.2
         reward_threshold = 1.0
         env = IFEvalEnv(
             repeats=cfg.env.repeats,

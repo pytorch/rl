@@ -946,7 +946,6 @@ class SyncDataCollector(DataCollectorBase):
     def _make_shuttle(self):
         # Shuttle is a deviceless tensordict that just carried data from env to policy and policy to env
         with torch.no_grad():
-            self.env.transform.transform_output_spec(self.env.base_env.output_spec)
             self._shuttle = self.env.reset()
         if self.policy_device != self.env_device or self.env_device is None:
             self._shuttle_has_no_device = True

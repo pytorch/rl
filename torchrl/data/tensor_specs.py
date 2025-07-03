@@ -4977,6 +4977,9 @@ class Composite(TensorSpec):
             to the batch-size of the corresponding tensordicts.
         data_cls (type, optional): the tensordict subclass (TensorDict, TensorClass, tensorclass...) that should be
             enforced in the env. Defaults to ``None``.
+        step_mdp_static (bool, optional): whether the spec is static under step_mdp. Defaults to ``False``.
+            Defining a `Composite` as a step_mdp_static spec will make it so that the entire related TensorDict/TensorClass
+            instance is copied during calls to `step_mdp` - and not updated in-place.
 
     Examples:
         >>> pixels_spec = Bounded(
@@ -5052,6 +5055,7 @@ class Composite(TensorSpec):
         shape: tuple | torch.Size | None = None,
         device: torch.device | None = None,
         data_cls: type | None = None,
+        step_mdp_static: bool = False,
         **kwargs,
     ):
         # For compatibility with TensorDict
@@ -5065,6 +5069,7 @@ class Composite(TensorSpec):
             shape = _size(())
         self._shape = _size(shape)
         self._specs = {}
+        self.step_mdp_static = step_mdp_static
 
         _device = (
             _make_ordinal_device(torch.device(device)) if device is not None else device
@@ -5556,6 +5561,7 @@ class Composite(TensorSpec):
         leaves_only: bool = False,
         *,
         is_leaf: Callable[[type], bool] | None = None,
+        step_mdp_static_only: bool = False,
     ) -> _CompositeSpecKeysView:  # noqa: D417
         """Keys of the Composite.
 
@@ -5576,6 +5582,8 @@ class Composite(TensorSpec):
             is_leaf (callable, optional): reads a type and returns a boolean indicating if that type
                 should be seen as a leaf. By default, all non-Composite nodes are considered as
                 leaves.
+            step_mdp_static_only (bool, optional): if ``True``, only keys that are static under step_mdp will be returned.
+                Default is ``False``.
 
         """
         return _CompositeSpecItemsView(
@@ -5583,6 +5591,7 @@ class Composite(TensorSpec):
             include_nested=include_nested,
             leaves_only=leaves_only,
             is_leaf=is_leaf,
+            step_mdp_static_only=step_mdp_static_only,
         )._keys()
 
     def items(
@@ -5591,6 +5600,7 @@ class Composite(TensorSpec):
         leaves_only: bool = False,
         *,
         is_leaf: Callable[[type], bool] | None = None,
+        step_mdp_static_only: bool = False,
     ) -> _CompositeSpecItemsView:  # noqa: D417
         """Items of the Composite.
 
@@ -5609,12 +5619,15 @@ class Composite(TensorSpec):
             is_leaf (callable, optional): reads a type and returns a boolean indicating if that type
                 should be seen as a leaf. By default, all non-Composite nodes are considered as
                 leaves.
+            step_mdp_static_only (bool, optional): if ``True``, only keys that are static under step_mdp will be returned.
+                Default is ``False``.
         """
         return _CompositeSpecItemsView(
             self,
             include_nested=include_nested,
             leaves_only=leaves_only,
             is_leaf=is_leaf,
+            step_mdp_static_only=step_mdp_static_only,
         )
 
     def values(
@@ -5623,6 +5636,7 @@ class Composite(TensorSpec):
         leaves_only: bool = False,
         *,
         is_leaf: Callable[[type], bool] | None = None,
+        step_mdp_static_only: bool = False,
     ) -> _CompositeSpecValuesView:  # noqa: D417
         """Values of the Composite.
 
@@ -5641,24 +5655,31 @@ class Composite(TensorSpec):
             is_leaf (callable, optional): reads a type and returns a boolean indicating if that type
                 should be seen as a leaf. By default, all non-Composite nodes are considered as
                 leaves.
+            step_mdp_static_only (bool, optional): if ``True``, only keys that are static under step_mdp will be returned.
+                Default is ``False``.
         """
         return _CompositeSpecItemsView(
             self,
             include_nested=include_nested,
             leaves_only=leaves_only,
             is_leaf=is_leaf,
+            step_mdp_static_only=step_mdp_static_only,
         )._values()
 
-    def _reshape(self, shape):
+    def _reshape(self, shape: torch.Size) -> Composite:
         _specs = {
             key: val.reshape((*shape, *val.shape[self.ndimension() :]))
             for key, val in self._specs.items()
         }
         return self.__class__(
-            _specs, shape=shape, device=self.device, data_cls=self.data_cls
+            _specs,
+            shape=shape,
+            device=self.device,
+            data_cls=self.data_cls,
+            step_mdp_static=self.step_mdp_static,
         )
 
-    def _unflatten(self, dim, sizes):
+    def _unflatten(self, dim: int, sizes: tuple[int, ...]) -> Composite:
         shape = torch.zeros(self.shape, device="meta").unflatten(dim, sizes).shape
         return self._reshape(shape)
 
@@ -5677,7 +5698,11 @@ class Composite(TensorSpec):
                     continue
                 kwargs[key] = value.to(dest)
             return self.__class__(
-                **kwargs, device=self.device, shape=self.shape, data_cls=self.data_cls
+                **kwargs,
+                device=self.device,
+                shape=self.shape,
+                data_cls=self.data_cls,
+                step_mdp_static=self.step_mdp_static,
             )
         if not isinstance(dest, (str, int, torch.device)):
             raise ValueError(
@@ -5695,7 +5720,11 @@ class Composite(TensorSpec):
                 continue
             kwargs[key] = value.to(dest)
         return self.__class__(
-            **kwargs, device=_device, shape=self.shape, data_cls=self.data_cls
+            **kwargs,
+            device=_device,
+            shape=self.shape,
+            data_cls=self.data_cls,
+            step_mdp_static=self.step_mdp_static,
         )
 
     def clone(self) -> Composite:
@@ -5715,6 +5744,7 @@ class Composite(TensorSpec):
             device=device,
             shape=self.shape,
             data_cls=self.data_cls,
+            step_mdp_static=self.step_mdp_static,
         )
 
     def cardinality(self) -> int:
@@ -5762,7 +5792,7 @@ class Composite(TensorSpec):
             samples = cls.from_dict({}, batch_size=self.shape, device=self.device)
         return samples
 
-    def empty(self):
+    def empty(self) -> Composite:
         """Create a spec like self, but with no entries."""
         try:
             device = self.device
@@ -5773,6 +5803,7 @@ class Composite(TensorSpec):
             device=device,
             shape=self.shape,
             data_cls=self.data_cls,
+            step_mdp_static=self.step_mdp_static,
         )
 
     def to_numpy(self, val: TensorDict, safe: bool | None = None) -> dict:
@@ -5801,7 +5832,7 @@ class Composite(TensorSpec):
             device=device,
         )
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         return (
             type(self) == type(other)
             and self.shape == other.shape
@@ -5836,7 +5867,7 @@ class Composite(TensorSpec):
             self[key] = item
         return self
 
-    def expand(self, *shape):
+    def expand(self, *shape: tuple[int, ...] | torch.Size) -> Composite:
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
@@ -5859,10 +5890,11 @@ class Composite(TensorSpec):
             shape=shape,
             device=device,
             data_cls=self.data_cls,
+            step_mdp_static=self.step_mdp_static,
         )
         return out
 
-    def squeeze(self, dim: int | None = None):
+    def squeeze(self, dim: int | None = None) -> Composite:
         if dim is not None:
             if dim < 0:
                 dim += len(self.shape)
@@ -5881,6 +5913,7 @@ class Composite(TensorSpec):
                 shape=shape,
                 device=device,
                 data_cls=self.data_cls,
+                step_mdp_static=self.step_mdp_static,
             )
 
         if self.shape.count(1) == 0:
@@ -5892,7 +5925,7 @@ class Composite(TensorSpec):
         out = self.squeeze(self.shape.index(1))
         return out.squeeze()
 
-    def unsqueeze(self, dim: int):
+    def unsqueeze(self, dim: int) -> Composite:
         if dim < 0:
             dim += len(self.shape) + 1
 
@@ -5911,9 +5944,10 @@ class Composite(TensorSpec):
             shape=shape,
             device=device,
             data_cls=self.data_cls,
+            step_mdp_static=self.step_mdp_static,
         )
 
-    def unbind(self, dim: int = 0):
+    def unbind(self, dim: int = 0) -> tuple[Composite, ...]:
         orig_dim = dim
         if dim < 0:
             dim = len(self.shape) + dim
@@ -5929,6 +5963,7 @@ class Composite(TensorSpec):
                 shape=shape,
                 device=self.device,
                 data_cls=self.data_cls,
+                step_mdp_static=self.step_mdp_static,
             )
             for i in range(self.shape[dim])
         )
@@ -5945,14 +5980,14 @@ class Composite(TensorSpec):
         else:
             self.unlock_()
 
-    def __getstate__(self):
+    def __getstate__(self) -> dict:
         result = self.__dict__.copy()
         __lock_parents_weakrefs = result.pop("__lock_parents_weakrefs", None)
         if __lock_parents_weakrefs is not None:
             result["_lock_recurse"] = True
         return result
 
-    def __setstate__(self, state):
+    def __setstate__(self, state: dict) -> None:
         _lock_recurse = state.pop("_lock_recurse", False)
         for key, value in state.items():
             setattr(self, key, value)
@@ -5961,8 +5996,12 @@ class Composite(TensorSpec):
             self.lock_(recurse=_lock_recurse)
 
     def _propagate_lock(
-        self, *, recurse: bool, lock_parents_weakrefs=None, is_compiling
-    ):
+        self,
+        *,
+        recurse: bool,
+        lock_parents_weakrefs: list[weakref.ref] | None = None,
+        is_compiling: bool,
+    ) -> None:
         """Registers the parent composite that handles the lock."""
         self._is_locked = True
         if lock_parents_weakrefs is not None:
@@ -5992,7 +6031,7 @@ class Composite(TensorSpec):
                     )
 
     @property
-    def _lock_parents_weakrefs(self):
+    def _lock_parents_weakrefs(self) -> list[weakref.ref]:
         _lock_parents_weakrefs = self.__dict__.get("__lock_parents_weakrefs")
         if _lock_parents_weakrefs is None:
             self.__dict__["__lock_parents_weakrefs"] = []
@@ -6000,10 +6039,10 @@ class Composite(TensorSpec):
         return _lock_parents_weakrefs
 
     @_lock_parents_weakrefs.setter
-    def _lock_parents_weakrefs(self, value: list):
+    def _lock_parents_weakrefs(self, value: list[weakref.ref]) -> None:
         self.__dict__["__lock_parents_weakrefs"] = value
 
-    def lock_(self, recurse: bool | None = None) -> T:
+    def lock_(self, recurse: bool | None = None) -> None:
         """Locks the Composite and prevents modification of its content.
 
         The recurse argument control whether the lock will be propagated to sub-specs.
@@ -6053,7 +6092,7 @@ class Composite(TensorSpec):
         self._propagate_lock(recurse=recurse, is_compiling=is_comp)
         return self
 
-    def _propagate_unlock(self, recurse: bool):
+    def _propagate_unlock(self, recurse: bool) -> list[Composite]:
         # if we end up here, we can clear the graph associated with this td
         self._is_locked = False
 
@@ -6069,7 +6108,7 @@ class Composite(TensorSpec):
             return sub_specs
         return []
 
-    def _check_unlock(self, first_attempt=True):
+    def _check_unlock(self, first_attempt: bool = True) -> None:
         if not first_attempt:
             gc.collect()
         obj = None
@@ -6216,12 +6255,14 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
         leaves_only: bool = False,
         *,
         is_leaf: Callable[[type], bool] | None = None,
+        step_mdp_static_only: bool = False,
     ) -> _CompositeSpecKeysView:
         return _CompositeSpecItemsView(
             self,
             include_nested=include_nested,
             leaves_only=leaves_only,
             is_leaf=is_leaf,
+            step_mdp_static_only=step_mdp_static_only,
         )._keys()
 
     def items(
@@ -6230,6 +6271,7 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
         leaves_only: bool = False,
         *,
         is_leaf: Callable[[type], bool] | None = None,
+        step_mdp_static_only: bool = False,
     ) -> _CompositeSpecItemsView:
         return list(
             _CompositeSpecItemsView(
@@ -6237,6 +6279,7 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
                 include_nested=include_nested,
                 leaves_only=leaves_only,
                 is_leaf=is_leaf,
+                step_mdp_static_only=step_mdp_static_only,
             )
         )
 
@@ -6246,12 +6289,14 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
         leaves_only: bool = False,
         *,
         is_leaf: Callable[[type], bool] | None = None,
+        step_mdp_static_only: bool = False,
     ) -> _CompositeSpecValuesView:
         return _CompositeSpecItemsView(
             self,
             include_nested=include_nested,
             leaves_only=leaves_only,
             is_leaf=is_leaf,
+            step_mdp_static_only=step_mdp_static_only,
         )._values()
 
     def project(self, val: TensorDictBase) -> TensorDictBase:
@@ -6642,15 +6687,17 @@ class _CompositeSpecItemsView:
     def __init__(
         self,
         composite: Composite,
-        include_nested,
-        leaves_only,
+        include_nested: bool,
+        leaves_only: bool,
         *,
-        is_leaf,
+        is_leaf: Callable[[type], bool] | None,
+        step_mdp_static_only: bool = False,
     ):
         self.composite = composite
         self.leaves_only = leaves_only
         self.include_nested = include_nested
         self.is_leaf = is_leaf
+        self.step_mdp_static_only = step_mdp_static_only
 
     def __iter__(self):
         from tensordict.base import _NESTED_TENSORS_AS_LISTS
@@ -6670,23 +6717,29 @@ class _CompositeSpecItemsView:
                     include_nested=True,
                     leaves_only=self.leaves_only,
                     is_leaf=is_leaf,
+                    step_mdp_static_only=self.step_mdp_static_only,
                 ):
                     if not isinstance(subkey, tuple):
                         subkey = (subkey,)
                     yield (key, *subkey), subitem
-            if not self.leaves_only and not _is_leaf(type(item)):
-                yield (key, item)
-            elif not self.leaves_only or _is_leaf(type(item)):
-                yield key, item
-
-        for key, item in self._get_composite_items(is_leaf):
-            if is_leaf is _NESTED_TENSORS_AS_LISTS and isinstance(
-                item, _LazyStackedMixin
+            if (
+                (self.step_mdp_static_only and getattr(item, "step_mdp_static", False))
+                or (not self.leaves_only and not _is_leaf(type(item)))
+                or (not self.leaves_only or _is_leaf(type(item)))
             ):
-                for (i, spec) in enumerate(item._specs):
-                    yield from _iter_from_item(unravel_key((key, str(i))), spec)
-            else:
-                yield from _iter_from_item(key, item)
+                yield (key, item)
+
+        if not self.step_mdp_static_only or not getattr(
+            self.composite, "step_mdp_static", False
+        ):
+            for key, item in self._get_composite_items(is_leaf):
+                if is_leaf is _NESTED_TENSORS_AS_LISTS and isinstance(
+                    item, _LazyStackedMixin
+                ):
+                    for (i, spec) in enumerate(item._specs):
+                        yield from _iter_from_item(unravel_key((key, str(i))), spec)
+                else:
+                    yield from _iter_from_item(key, item)
 
     def _get_composite_items(self, is_leaf):
 
