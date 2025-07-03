@@ -410,19 +410,11 @@ class RetrieveLogProb(Transform):
     to compute KL divergence with another model's log-probabilities. It's designed to work
     with the :class:`~torchrl.envs.llm.transforms.kl.RetrieveKL` and :class:`~torchrl.envs.llm.transforms.kl.KLComputation` transforms.
 
-    **Recent Changes:**
-    - **Modular Input Modes**: The transform now works seamlessly with all input modes (`"history"`, `"text"`, `"tokens"`)
-      supported by the LLM wrappers.
-    - **ChatHistory Integration**: When using `input_mode="history"`, the transform properly handles
-      :class:`~torchrl.modules.llm.policies.ChatHistory` objects.
-    - **Automatic Output Selection**: The transform automatically adapts to the wrapper's output structure,
-      whether it returns tokens, text, history, or combinations thereof.
-
     Args:
         model (LLMWrapperBase): the model to use to compute the log-probs.
 
     Keyword Args:
-        log_probs_key (NestedKey): the key where the log-probs are stored.
+        log_probs_full_key (NestedKey): the key where the log-probs are stored.
             If not provided, the key will be retrieved from the model's `log_probs_key` attribute
             (i.e., `(model.log_probs_key, "full")`).
         assistant_only (bool): whether to only retrieve the log-probs of the assistant tokens (i.e., steps of history
@@ -522,7 +514,7 @@ class RetrieveLogProb(Transform):
         self,
         model: LLMWrapperBase,
         *,
-        log_probs_key: NestedKey | None = None,
+        log_probs_full_key: NestedKey | None = None,
         assistant_only: bool = True,
         tokenizer_kwargs: dict | None = None,
         detach: bool = True,
@@ -531,19 +523,19 @@ class RetrieveLogProb(Transform):
         padding_side: str = "left",
     ):
         # Set up keys
-        if log_probs_key is None:
-            log_probs_key = (model.log_probs_key, "full")
-        elif not isinstance(log_probs_key, tuple) or log_probs_key[-1] != "full":
+        if log_probs_full_key is None:
+            log_probs_full_key = (model.log_probs_key, "full")
+        elif not isinstance(log_probs_full_key, tuple) or log_probs_full_key[-1] != "full":
             warnings.warn(
-                f"The log_probs_key {log_probs_key} is not a tuple or does not end with 'full'. "
+                f"The log_probs_full_key {log_probs_full_key} is not a tuple or does not end with 'full'. "
                 "This may cause issues with the KL computation. "
                 "Please use a tuple with the log_probs_key and 'full' as the last element."
             )
-        self.log_probs_key = log_probs_key
+        self.log_probs_full_key = log_probs_full_key
 
         # Set up input/output keys
         in_keys = list(model.in_keys)
-        out_keys = [self.log_probs_key]
+        out_keys = [self.log_probs_full_key]
         super().__init__(in_keys=in_keys, out_keys=out_keys)
 
         # Store model and configuration
@@ -645,8 +637,9 @@ class RetrieveLogProb(Transform):
             ref_td.set(tmp_log_probs_key, log_probs)
 
         # Rename and store the log-probs
-        ref_td.rename_key_(tmp_log_probs_key, self.log_probs_key)
-        next_tensordict.update(ref_td, keys_to_update=(self.log_probs_key,))
+        if tmp_log_probs_key != self.log_probs_full_key:
+            ref_td.rename_key_(tmp_log_probs_key, self.log_probs_full_key)
+        next_tensordict.update(ref_td, keys_to_update=(self.log_probs_full_key,))
 
         return next_tensordict
 
@@ -686,8 +679,8 @@ class RetrieveKL(Compose):
                 For other input modes (`"text"` or `"tokens"`), set `assistant_only=False`.
                 This ensures users are conscious of the limitation that assistant token identification requires structured conversation history.
 
-        gen_log_prob_key (str): the key where the log-probs of the generation model are stored. Defaults to `("gen_log_probs", "full")`.
-        ref_log_prob_key (str): the key where the log-probs of the reference model are stored. Defaults to `("log_prob", "full")`.
+        gen_log_prob_full_key (str): the key where the log-probs of the generation model are stored. Defaults to `("log_probs", "full")`.
+        ref_log_prob_full_key (str): the key where the log-probs of the reference model are stored. Defaults to `("ref_log_probs", "full")`.
         history_key (str): the key where the history is stored. Defaults to `"history"`.
         tokenizer_kwargs (dict): the keyword arguments to pass to the tokenizer to be used to apply the chat template to the history when `assistant_only` is `True`.
             To control the tokenization in the actor, pass the tokenizer kwargs to the actor constructor.
@@ -696,6 +689,9 @@ class RetrieveKL(Compose):
         device (torch.device): the device to use for tensor creation. Defaults to `None`.
         tokenizer (transformers.AutoTokenizer): the tokenizer to be used to tokenize the input and compute the assitant mask. If not provided, the tokenizer will be inferred from the `actor`.
         padding_side (str): the side of the padding when using pad_sequence. Defaults to `"left"`.
+        kl_key (NestedKey): the key where the KL divergence is stored. Defaults to `"kl"`.
+        add_to_reward (bool): whether to add the KL divergence to the reward. Defaults to `True`.
+        coeff (float): the coefficient for the KL term when adding to reward. Defaults to `1.0`.
         **kwargs: additional arguments to pass to the `RetrieveLogProb` transform.
 
     Examples:
@@ -794,6 +790,11 @@ class RetrieveKL(Compose):
         device: torch.device | None = None,
         tokenizer: transformers.AutoTokenizer | None = None,
         padding_side: str = "left",
+        gen_log_probs_full_key: NestedKey = ("log_probs", "full"),
+        ref_log_probs_full_key: NestedKey = ("ref_log_probs", "full"),
+        kl_key: NestedKey = "kl",
+        add_to_reward: bool = True,
+        coeff: float = 1.0,
         **kwargs,
     ):
         if isinstance(gen_model, str) and gen_model == "from_collector":
@@ -807,6 +808,11 @@ class RetrieveKL(Compose):
                 "detach": detach,
                 "device": device,
                 "tokenizer": tokenizer,
+                "gen_log_probs_full_key": gen_log_probs_full_key,
+                "ref_log_probs_full_key": ref_log_probs_full_key,
+                "kl_key": kl_key,
+                "add_to_reward": add_to_reward,
+                "coeff": coeff,
                 **kwargs,
             }
             super().__init__()
@@ -848,7 +854,7 @@ class RetrieveKL(Compose):
             )
         t1 = RetrieveLogProb(
             gen_model,
-            log_probs_key=("gen_log_probs", "full"),
+            log_probs_key=gen_log_probs_full_key,
             assistant_only=assistant_only,
             tokenizer_kwargs=tokenizer_kwargs,
             detach=detach,
@@ -859,7 +865,7 @@ class RetrieveKL(Compose):
         )
         t2 = RetrieveLogProb(
             ref_model,
-            log_probs_key=("ref_log_probs", "full"),
+            log_probs_key=ref_log_probs_full_key,
             assistant_only=assistant_only,
             tokenizer_kwargs=tokenizer_kwargs,
             detach=detach,
@@ -869,11 +875,11 @@ class RetrieveKL(Compose):
             **kwargs,
         )
         t3 = KLComputation(
-            gen_log_probs_key=("gen_log_probs", "full"),
-            ref_log_probs_key=("ref_log_probs", "full"),
-            kl_key="kl",
-            add_to_reward=True,
-            coeff=1.0,
+            gen_log_probs_full_key=gen_log_probs_full_key,
+            ref_log_probs_full_key=ref_log_probs_full_key,
+            kl_key=kl_key,
+            add_to_reward=add_to_reward,
+            coeff=coeff,
         )
         super().__init__(t1, t2, t3)
 
@@ -901,10 +907,18 @@ class RetrieveKL(Compose):
             )
         ref_model = self._init_params["ref_model"]
         pad_output = getattr(ref_model, "pad_output", None)
+        gen_log_probs_full_key = self._init_params["gen_log_probs_full_key"]
+        if not isinstance(gen_log_probs_full_key, tuple) or gen_log_probs_full_key[-1] != "full":
+            raise ValueError(
+                f"The gen_log_probs_full_key {gen_log_probs_full_key} is not a tuple or does not end with 'full'. "
+                "This may cause issues with the KL computation. "
+                "Please use a tuple with the log_probs_key and 'full' as the last element."
+            )
+        log_probs_key = gen_log_probs_full_key[:-1]
         gen_model = collector.policy.get_new_version(
             generate=False,
             return_log_probs=True,
-            log_probs_key="gen_log_probs",
+            log_probs_key=log_probs_key,
             input_mode=ref_model.input_mode,
             input_key=(ref_model.input_mode, "full"),
             pad_output=pad_output,  # Pass pad_output from ref_model
@@ -912,7 +926,7 @@ class RetrieveKL(Compose):
         # Create the transforms manually instead of calling __init__
         t1 = RetrieveLogProb(
             gen_model,
-            log_probs_key=("gen_log_probs", "full"),
+            log_probs_full_key=gen_log_probs_full_key,
             assistant_only=self._init_params["assistant_only"],
             tokenizer_kwargs=self._init_params["tokenizer_kwargs"],
             detach=self._init_params["detach"],
@@ -933,9 +947,16 @@ class RetrieveKL(Compose):
                 ]
             },
         )
+        ref_log_probs_full_key = self._init_params["ref_log_probs_full_key"]
+        if not isinstance(ref_log_probs_full_key, tuple) or ref_log_probs_full_key[-1] != "full":
+            raise ValueError(
+                f"The ref_log_probs_full_key {ref_log_probs_full_key} is not a tuple or does not end with 'full'. "
+                "This may cause issues with the KL computation. "
+                "Please use a tuple with the log_probs_key and 'full' as the last element."
+            )
         t2 = RetrieveLogProb(
             ref_model,
-            log_probs_key=("ref_log_probs", "full"),
+            log_probs_full_key=ref_log_probs_full_key,
             assistant_only=self._init_params["assistant_only"],
             tokenizer_kwargs=self._init_params["tokenizer_kwargs"],
             detach=self._init_params["detach"],
@@ -957,11 +978,11 @@ class RetrieveKL(Compose):
             },
         )
         t3 = KLComputation(
-            gen_log_probs_key=("gen_log_probs", "full"),
-            ref_log_probs_key=("ref_log_probs", "full"),
-            kl_key="kl",
-            add_to_reward=True,
-            coeff=1.0,
+            gen_log_probs_full_key=gen_log_probs_full_key,
+            ref_log_probs_full_key=ref_log_probs_full_key,
+            kl_key=self._init_params["kl_key"],
+            add_to_reward=self._init_params["add_to_reward"],
+            coeff=self._init_params["coeff"],
         )
         # Replace the transforms in the Compose
         self.transforms.extend([t1, t2, t3])
@@ -1035,9 +1056,9 @@ class KLComputation(Transform):
         Both input log-prob tensors must use the same padding strategy (pad_output) for correct KL computation.
 
     Args:
-        gen_log_probs_key (NestedKey): the key where the generation model log-probs are stored.
+        gen_log_probs_full_key (NestedKey): the key where the generation model log-probs are stored.
             Defaults to `("gen_log_probs", "full")`.
-        ref_log_probs_key (NestedKey): the key where the reference model log-probs are stored.
+        ref_log_probs_full_key (NestedKey): the key where the reference model log-probs are stored.
             Defaults to `("ref_log_probs", "full")`.
         kl_key (NestedKey): the key where the KL divergence is stored. Defaults to `"kl"`.
         add_to_reward (bool): whether to add the KL divergence to the reward. Defaults to `True`.
@@ -1087,15 +1108,15 @@ class KLComputation(Transform):
 
     def __init__(
         self,
-        gen_log_probs_key: NestedKey = ("gen_log_probs", "full"),
-        ref_log_probs_key: NestedKey = ("ref_log_probs", "full"),
+        gen_log_probs_full_key: NestedKey = ("log_probs", "full"),
+        ref_log_probs_full_key: NestedKey = ("ref_log_probs", "full"),
         *,
         kl_key: NestedKey = "kl",
         add_to_reward: bool = True,
         coeff: float = 1.0,
         padding_side: str = "left",
     ):
-        in_keys = [gen_log_probs_key, ref_log_probs_key]
+        in_keys = [gen_log_probs_full_key, ref_log_probs_full_key]
         if add_to_reward:
             in_keys.append("reward")
         out_keys = [kl_key]
@@ -1103,8 +1124,8 @@ class KLComputation(Transform):
             out_keys.append("reward")
         super().__init__(in_keys=in_keys, out_keys=out_keys)
 
-        self.gen_log_probs_key = gen_log_probs_key
-        self.ref_log_probs_key = ref_log_probs_key
+        self.gen_log_probs_full_key = gen_log_probs_full_key
+        self.ref_log_probs_full_key = ref_log_probs_full_key
         self.kl_key = kl_key
         self.add_to_reward = add_to_reward
         self.coeff = coeff
@@ -1125,8 +1146,8 @@ class KLComputation(Transform):
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
         # Get log-probs
-        gen_log_probs = next_tensordict.get(self.gen_log_probs_key, as_list=True)
-        ref_log_probs = next_tensordict.get(self.ref_log_probs_key, as_list=True)
+        gen_log_probs = next_tensordict.get(self.gen_log_probs_full_key, as_list=True)
+        ref_log_probs = next_tensordict.get(self.ref_log_probs_full_key, as_list=True)
 
         if gen_log_probs is None or ref_log_probs is None:
             raise ValueError(
