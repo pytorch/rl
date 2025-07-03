@@ -590,7 +590,8 @@ class LLMWrapperBase(TensorDictModuleBase):
             for m, lg in _zip_strict(response_mask, logits):
                 if m.shape[-1] != lg.shape[-2]:
                     raise ValueError(
-                        f"Mask and logits have different lengths: {m.shape[-1]} != {lg.shape[-2]}.\nAll the logits shapes: {[lg.shape for lg in logits]}, all the mask shapes: {[m.shape for m in response_mask]}"
+                        f"Mask and logits have different lengths: {m.shape[-1]} != {lg.shape[-2]}.\n"
+                        f"All the logits shapes: {[lg.shape for lg in logits]}, all the mask shapes: {[m.shape for m in response_mask]}"
                     )
             logits = pad_sequence(
                 logits, batch_first=True, padding_value=0.0, padding_side=padding_side
@@ -659,8 +660,12 @@ class LLMWrapperBase(TensorDictModuleBase):
         if logits is None:
             raise ValueError(f"Logits not found in tensordict at key {logits_key}")
         if assistant_mask is None:
+            if self.input_mode != "history":
+                post_msg = "This is likely because the input_mode is not 'history'."
+            else:
+                post_msg = ""
             raise ValueError(
-                f"Assistant mask not found in tensordict at key {assistant_mask_key}"
+                f"Assistant mask not found in tensordict at key {assistant_mask_key}. {post_msg}"
             )
 
         return MaskedCategorical(

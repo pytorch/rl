@@ -239,7 +239,7 @@ def get_ref_model(
     TensorDict.from_module(ref_model).data.to_module(ref_model)
     ref_model = TransformersWrapper(
         ref_model,
-        input_mode="tokens",
+        input_mode="tokens" if not cfg.env.reasoning else "history",
         tokenizer=tokenizer,
         generate=False,
         return_log_probs=True,
