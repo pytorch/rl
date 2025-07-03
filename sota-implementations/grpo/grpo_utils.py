@@ -554,28 +554,28 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
                 undo_done=True,
             ),
         )
-    #     env = env.append_transform(
-    #         # RetrieveKL will be lazily initialized in the collector.
-    #         # We use RetrieveKL instead of KLRewardTransform because the assistant response may change when
-    #         # adding the thinking prompt, requiring a second pass in vllm to compute the log-probs.
-    #         RetrieveKL(ref_model=ref_model)
-    #     )
-    #     env.append_transform(
-    #         KLComputation(
-    #             coeff=cfg.train.kl_to_ref_coeff,
-    #             add_to_reward=not cfg.train.kl_coef_in_loss,
-    #         )
-    #     )
-    # else:
-    # Pass device directly to KLRewardTransform - Since, for Ray, the local device is always 0
-    # we can just use 0 here.
-    device = torch.device("cuda:0")
-    env = env.append_transform(
-        KLRewardTransform(
-            ref_model=ref_model,
-            coef=cfg.train.kl_to_ref_coeff,
-            add_to_reward=not cfg.train.kl_coef_in_loss,
-            device=device,
+        env = env.append_transform(
+            # RetrieveKL will be lazily initialized in the collector.
+            # We use RetrieveKL instead of KLRewardTransform because the assistant response may change when
+            # adding the thinking prompt, requiring a second pass in vllm to compute the log-probs.
+            RetrieveKL(ref_model=ref_model)
         )
-    )
+        env.append_transform(
+            KLComputation(
+                coeff=cfg.train.kl_to_ref_coeff,
+                add_to_reward=not cfg.train.kl_coef_in_loss,
+            )
+        )
+    else:
+        # Pass device directly to KLRewardTransform - Since, for Ray, the local device is always 0
+        # we can just use 0 here.
+        device = torch.device("cuda:0")
+        env = env.append_transform(
+            KLRewardTransform(
+                ref_model=ref_model,
+                coef=cfg.train.kl_to_ref_coeff,
+                add_to_reward=not cfg.train.kl_coef_in_loss,
+                device=device,
+            )
+        )
     return env
