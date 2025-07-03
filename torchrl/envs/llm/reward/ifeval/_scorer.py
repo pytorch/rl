@@ -20,7 +20,14 @@ import re
 from typing import Callable
 
 import torch
-from tensordict import NestedKey, NonTensorData, TensorClass, TensorDict, TensorDictBase
+from tensordict import (
+    lazy_stack,
+    NestedKey,
+    NonTensorData,
+    TensorClass,
+    TensorDict,
+    TensorDictBase,
+)
 from tensordict.tensorclass import is_non_tensor
 from torchrl._utils import logger as torchrl_logger
 
@@ -72,7 +79,10 @@ class IFEvalScoreData(TensorClass):
 
 
 def _process_results(
-    data: TensorDict, response: str | NonTensorData, verbose: bool = False
+    data: TensorDict,
+    response: str | NonTensorData,
+    verbose: bool = False,
+    prompt: str | None = None,
 ) -> IFEvalScoreData:
     if not _has_langdetect:
         raise ImportError("langdetect must be installed to user IFEvalScorer.")
@@ -85,10 +95,13 @@ def _process_results(
         _test_instruction_following_strict,
     )
 
+    if prompt is None:
+        prompt = data["text"]
+
     inp = _InputExample(
         key=data["key"],
         instruction_id_list=data["instruction_id_list"],
-        prompt=data["text"],
+        prompt=prompt,
         kwargs=data["kwargs"],
     )
 
@@ -285,7 +298,7 @@ class IfEvalScorer(Transform):
             raise ValueError("IFEvalScorer only supports history input mode")
 
         if tensordict.ndim:
-            return torch.stack(
+            return lazy_stack(
                 [
                     self._step(td, next_td)
                     for td, next_td in zip(
@@ -294,6 +307,7 @@ class IfEvalScorer(Transform):
                 ]
             )
         h = tensordict["history", "full"][..., -1]
+        prompt = tensordict["history", "prompt"][..., -1].content
         response = h.content
         complete = h.is_complete
         # response = tensordict.get(self.response_key)
@@ -314,6 +328,7 @@ class IfEvalScorer(Transform):
             tensordict.copy().auto_device_(),
             answer_blocks[0] if answer_blocks else "",
             verbose=self.verbose,
+            prompt=prompt,
         )
         next_tensordict.set(
             self.score_key,

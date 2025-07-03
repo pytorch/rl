@@ -71,7 +71,7 @@ class TransformersWrapper(CategoricalSequential):
         generate_kwargs (dict | None, optional): Additional arguments to pass to the model's generate method. Defaults to `None`.
         tokenizer_kwargs (dict | None, optional): Additional arguments to pass to the tokenizer. Defaults to `None`.
         pad_output (bool, optional): Whether to pad the output sequences to a uniform length. Transformers require
-            `pad_output=True`, and the output sequences will be padded and represented as tensors. Defaults to `True`.
+            `pad_output=True`, and the output sequences will be padded and represented as tensors. Defaults to `False`.
         inplace (Literal[True, False, "empty"] | None, optional): Determines how the module should handle in-place
             operations. Defaults to `True` when generating a single sample, `False` otherwise.
         device (torch.device | None, optional): The device to use for computation. Defaults to `None`.
@@ -162,7 +162,7 @@ class TransformersWrapper(CategoricalSequential):
         generate: bool = True,
         generate_kwargs: dict | None = None,
         tokenizer_kwargs: dict | None = None,
-        pad_output: bool = True,
+        pad_output: bool = False,
         inplace: Literal[True, False, "empty"] | None = None,
         device: torch.device | None = None,
         layout: torch.layout | None = None,
@@ -609,9 +609,17 @@ class TransformersWrapper(CategoricalSequential):
             padding_value=self.padding_value,
             padding_side="left",
         )
-        attention_mask_prompt_padded = (
-            tokens_prompt_padded != self.tokenizer.pad_token_id
-        ).to(torch.int64)
+        attention_mask_prompt_padded = response_struct.get(
+            "attention_mask",
+            as_padded_tensor=True,
+            padding_value=0,
+            padding_side="left",
+        )
+
+        if attention_mask_prompt_padded is None:
+            attention_mask_prompt_padded = (
+                tokens_prompt_padded != self.tokenizer.pad_token_id
+            )
 
         result = self._generate_from_tokens(
             tokens_prompt_padded, attention_mask_prompt_padded, cfg, out
@@ -811,8 +819,21 @@ class TransformersWrapper(CategoricalSequential):
             ..., tokens_prompt_padded.shape[-1] :
         ]
 
-        attention_mask_full_padded = tokens_full_padded != pad_val
         attention_mask_response_padded = tokens_response_padded != pad_val
+        if self.num_samples:
+            attention_mask_full_padded = torch.cat(
+                [
+                    attention_mask_prompt_padded.repeat_interleave(
+                        self.num_samples, dim=0
+                    ),
+                    attention_mask_response_padded,
+                ],
+                dim=-1,
+            )
+        else:
+            attention_mask_full_padded = torch.cat(
+                [attention_mask_prompt_padded, attention_mask_response_padded], dim=-1
+            )
         tokens_response_unpadded = _unpad_tensors(
             tokens_response_padded, attention_mask_response_padded, as_nested=False
         )
@@ -1189,6 +1210,7 @@ class TransformersWrapper(CategoricalSequential):
         )
         if self.pad_output:
             masks_obj.all_attention_mask = attention_mask_full_padded.bool()
+            masks_obj.all_assistant_mask = td.get(("masks", "all_assistant_mask"))
         else:
             attention_mask_full_unpadded = _unpad_tensors(
                 attention_mask_full_padded.bool(),
@@ -1196,7 +1218,9 @@ class TransformersWrapper(CategoricalSequential):
                 as_nested=False,
             )
             masks_obj.all_attention_mask = attention_mask_full_unpadded
-        masks_obj.all_assistant_mask = None
+            masks_obj.all_assistant_mask = td.get(
+                ("masks", "all_assistant_mask"), as_list=True
+            )
         masks_obj.padded = MetaData(self.pad_output)
         out.set(self.masks_key, masks_obj)
 
@@ -1245,9 +1269,21 @@ class TransformersWrapper(CategoricalSequential):
             padding_side="left",
             padding_value=pad_val,
         )
-        attention_mask_prompt_padded = (input_ids_prompt_padded != pad_val).to(
-            torch.int64
+        attention_mask_prompt_padded = td.get(
+            ("masks", "all_attention_mask"),
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=False,
         )
+        if attention_mask_prompt_padded is None:
+            attention_mask_prompt_padded = td.get(
+                self.attention_mask_key,
+                as_padded_tensor=True,
+                padding_side="left",
+                padding_value=False,
+            )
+            if attention_mask_prompt_padded is None:
+                attention_mask_prompt_padded = input_ids_prompt_padded != pad_val
         return self._generate_from_tokens(
             input_ids_prompt_padded, attention_mask_prompt_padded, cfg, out
         )
@@ -1410,7 +1446,22 @@ class TransformersWrapper(CategoricalSequential):
             padding_side="left",
             padding_value=pad_val,
         )
-        attention_mask_full_padded = (input_ids_full_padded != pad_val).to(torch.int64)
+        # Attention mask: try first the regular entry, then the key provided in the constructor, finally fallback on eager attention mask
+        attention_mask_full_padded = td.get(
+            ("masks", "all_attention_mask"),
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=False,
+        )
+        if attention_mask_full_padded is None:
+            attention_mask_full_padded = td.get(
+                self.attention_mask_key,
+                as_padded_tensor=True,
+                padding_side="left",
+                padding_value=False,
+            )
+            if attention_mask_full_padded is None:
+                attention_mask_full_padded = input_ids_full_padded != pad_val
 
         if cfg is not None:
             kwargs = copy(self.generate_kwargs)
@@ -1461,13 +1512,17 @@ class TransformersWrapper(CategoricalSequential):
         )
         if self.pad_output:
             masks_obj.all_attention_mask = attention_mask_full_padded.bool()
+            masks_obj.all_assistant_mask = td.get(("masks", "all_assistant_mask"))
         else:
             masks_obj.all_attention_mask = _unpad_tensors(
                 attention_mask_full_padded.bool(),
                 attention_mask_full_padded,
                 as_nested=False,
             )
-        masks_obj.all_assistant_mask = None
+            masks_obj.all_assistant_mask = td.get(
+                ("masks", "all_assistant_mask"), as_list=True
+            )
+
         masks_obj.padded = MetaData(self.pad_output)
         out.set(self.masks_key, masks_obj)
 
@@ -1624,7 +1679,7 @@ class TransformersWrapper(CategoricalSequential):
             self._in_get_dist_call = False
             self.out_keys.remove("logits")
 
-    def get_dist_with_prompt_mask(
+    def _get_dist_with_prompt_mask(
         self,
         tensordict: TensorDictBase,
         tokens_key: NestedKey = ("tokens", "prompt"),
@@ -1636,6 +1691,8 @@ class TransformersWrapper(CategoricalSequential):
         """Get distribution masked to only include response tokens (exclude prompt).
 
         This method enables logits computation for distribution creation.
+
+        This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.
         """
         self._in_get_dist_call = True
         self.out_keys += ["logits"]
@@ -1652,7 +1709,7 @@ class TransformersWrapper(CategoricalSequential):
             self._in_get_dist_call = False
             self.out_keys.remove("logits")
 
-    def get_dist_with_assistant_mask(
+    def _get_dist_with_assistant_mask(
         self,
         tensordict: TensorDictBase,
         assistant_mask_key: NestedKey = ("masks", "all_assistant_mask"),
@@ -1662,6 +1719,8 @@ class TransformersWrapper(CategoricalSequential):
         """Get distribution masked to only include assistant tokens.
 
         This method enables logits computation for distribution creation.
+
+        This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.
         """
         self._in_get_dist_call = True
         self.out_keys += ["logits"]
@@ -1673,7 +1732,7 @@ class TransformersWrapper(CategoricalSequential):
             self._in_get_dist_call = False
             self.out_keys.remove("logits")
 
-    def get_dist_with_attention_mask(
+    def _get_dist_with_attention_mask(
         self,
         tensordict: TensorDictBase,
         attention_mask_key: NestedKey = ("masks", "all_attention_mask"),
@@ -1683,6 +1742,8 @@ class TransformersWrapper(CategoricalSequential):
         """Get distribution masked using attention mask.
 
         This method enables logits computation for distribution creation.
+
+        This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.
         """
         self._in_get_dist_call = True
         self.out_keys += ["logits"]
@@ -1694,7 +1755,7 @@ class TransformersWrapper(CategoricalSequential):
             self._in_get_dist_call = False
             self.out_keys.remove("logits")
 
-    def get_dist_with_custom_mask(
+    def _get_dist_with_custom_mask(
         self,
         tensordict: TensorDictBase,
         mask: torch.Tensor,
@@ -1716,41 +1777,47 @@ class TransformersWrapper(CategoricalSequential):
             self.out_keys.remove("logits")
 
     # Convenience methods for common LLM training scenarios
-    def get_sft_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
+    def _get_sft_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
         """Get distribution suitable for SFT loss (response tokens only).
 
         This method enables logits computation for distribution creation.
+
+        This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.
         """
         self._in_get_dist_call = True
         self.out_keys += ["logits"]
         try:
-            return super().get_sft_dist(tensordict, **kwargs)
+            return super()._get_sft_dist(tensordict, **kwargs)
         finally:
             self._in_get_dist_call = False
             self.out_keys.remove("logits")
 
-    def get_rlhf_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
+    def _get_rlhf_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
         """Get distribution suitable for RLHF loss (assistant tokens only).
 
         This method enables logits computation for distribution creation.
+
+        This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.
         """
         self._in_get_dist_call = True
         self.out_keys += ["logits"]
         try:
-            return super().get_rlhf_dist(tensordict, **kwargs)
+            return super()._get_rlhf_dist(tensordict, **kwargs)
         finally:
             self._in_get_dist_call = False
             self.out_keys.remove("logits")
 
-    def get_generic_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
+    def _get_generic_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
         """Get distribution suitable for generic losses (all tokens).
 
         This method enables logits computation for distribution creation.
+
+        This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.
         """
         self._in_get_dist_call = True
         self.out_keys += ["logits"]
         try:
-            return super().get_generic_dist(tensordict, **kwargs)
+            return super()._get_generic_dist(tensordict, **kwargs)
         finally:
             self._in_get_dist_call = False
             self.out_keys.remove("logits")

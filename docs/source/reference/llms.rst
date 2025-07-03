@@ -5,7 +5,7 @@ LLM Interface
 
 .. _ref_llms:
 
-TorchRL provides a comprehensive framework for LLM post-training and fine-tuning. The LLM API is built around four core concepts that work 
+TorchRL provides a comprehensive framework for LLM post-training and fine-tuning. The LLM API is built around five core concepts that work 
 together to create a complete reinforcement learning pipeline for language models:
 
 1. **Data Representation** (`Data Structures`_): The foundation for handling conversations, text parsing, and LLM 
@@ -29,8 +29,7 @@ together to create a complete reinforcement learning pipeline for language model
 These components work together to create a complete pipeline: environments load and format data, LLM wrappers handle inference, data structures maintain 
 conversation context, and objectives compute training losses. The modular design allows you to mix and match components based on your specific use case.
 
-A complete example of how to use the LLM API can be found in the `sota-implementations/grpo/` directory. The training orchestration can be summarized as follows:
-Three main components (think of them as independent "workers" with dedicated responsibilities) are involved:
+A complete example of how to use the LLM API can be found in the `sota-implementations/grpo/` directory. The training orchestration involves three main components:
 
 - The Data Collector: holds a reference to the environment and the inference model or engine. It collects data, puts it in the buffer, and handles weight updates.
 - The Replay Buffer: stores the collected data and executes any pre or post-processing steps. These may include:
@@ -429,9 +428,30 @@ Collectors
 
 .. _Collectors:
 
-TorchRL offers specialized collector classes (:class:`~torchrl.collectors.llm.LLMCollector` and :class:`~torchrl.collectors.llm.RayLLMCollector`) that are tailored for LLM use cases. We also provide dedicated updaters for some inference engines.
+TorchRL offers specialized collector classes (:class:`~torchrl.collectors.llm.LLMCollector` and :class:`~torchrl.collectors.llm.RayLLMCollector`) 
+that are tailored for LLM use cases. We also provide dedicated updaters for some inference engines.
 
-LLM Collectors allow to track the version of the policy, which is useful for some use cases.
+See :ref:`ref_collectors` for more details on the collector API. In brief, the idea of a collector is to isolate the inference part of the pipeline
+in a dedicated class. 
+A collector usually takes as input a policy and an environment, and alternate between running one and the other.
+In "classical" settings, the policy is similar to the policy being trained (with some optional extra-exploration). In the context of LLM fine-tuning,
+the policy will usually be a specialized inference engine, such as a vLLM server.
+Collectors are defined by the following parameters and features:
+
+- **Sync/Async**: Whether the collector should run in sync or async mode.
+  In sync mode, the collector will run the inference step in alternate with the optimization/training step.
+  In async mode, the collector will run the inference step in parallel with the optimization/training step.
+  A replay buffer can be passed to the collector, in such a way that the collector can directly write to it.
+  In other cases, the collector can be iterated over to collect data.
+- **Steps**: A collector is built with a certain number of steps budget, as well as a number of steps to be
+  included in each batch yield during collection.
+- **Weight Updater**: Weight updaters are the classes that update the policy weights. Isolating the weight update
+  in a dedicated class allows to easily implement different weight update strategies depending on the policy specification.
+
+Policy Version Tracking
+~~~~~~~~~~~~~~~~~~~~~~~
+
+LLM Collectors also allow to track the version of the policy, which is useful for some use cases.
 This is done by adding a :class:`~torchrl.envs.llm.transforms.PolicyVersion` transform to the environment, which is
 then incremented by the collector after each weight update. To do this, one either provides the stateful version of the
 transform, or a boolean to the collector constructor.
@@ -464,41 +484,57 @@ transform, or a boolean to the collector constructor.
 Environments
 ------------
 
-The environment layer orchestrates data loading, tool execution, reward computation, and formatting. When fine-tuning an LLM using TorchRL, the environment is a crucial component of the inference pipeline, alongside the policy and collector.
+The environment layer orchestrates data loading, tool execution, reward computation, and formatting. When fine-tuning an LLM using TorchRL, the environment is a 
+crucial component of the inference pipeline, alongside the policy and collector.
 
-Environments manage operations that are not handled by the LLM itself, such as interacting with tools, loading prompts from datasets, computing rewards (when necessary), and formatting data.
+ChatEnv
+~~~~~~~
 
-The fundamental structure of an LLM post-training pipeline is:
+:class:`~torchrl.envs.llm.ChatEnv` serves as a blank canvas for LLM environments - it's a basic tool designed to be extended with transforms that add 
+specific functionality. The base ChatEnv provides the fundamental structure for managing conversation state using the 
+:class:`~torchrl.data.llm.History` format, but it's intentionally minimal to allow maximum flexibility.
 
-- A policy that wraps the LLM and the LLM only
-- An environment that handles the world around the LLM:
-    - Loading data (through :class:`~torchrl.envs.llm.transforms.DataLoadingPrimer`)
-    - Formatting data (through :class:`~torchrl.envs.llm.transforms.TemplateTransform`)
-    - Executing tools (through :class:`~torchrl.envs.llm.transforms.PythonInterpreter` or :class:`~torchrl.envs.llm.transforms.MCPToolTransform`)
-    - Computing rewards online, if needed (through :class:`~torchrl.envs.llm.transforms.KLRewardTransform`)
-- A data collector that takes the policy (the LLM) and the environment, and handles the inference part of the pipeline:
-    - Running reset, step and gathering actions
-    - Yielding the data in a consistent format - or populating a buffer
-    - Updating the policy weights (through :class:`~torchrl.collectors.WeightUpdaterBase` classes)
-- A replay buffer that stores the data collected using the collector
-- A loss that takes the LLM's output and returns a loss (through :class:`~torchrl.objectives.llm.GRPOLoss` for example)
+Core Functionality
+^^^^^^^^^^^^^^^^^^
 
-These elements are presented in the GRPO scripts in the `sota-implementations/llm` directory.
+ChatEnv operates in three main modes:
+- **History mode**: Uses :class:`~torchrl.data.llm.History` objects for conversation management
+- **Text mode**: Uses simple text strings for input/output
+- **Tokens mode**: Uses tokenized data for input/output
 
-The design of environments in TorchRL allows for flexibility and modularity. By framing tasks as environments, users can easily extend or modify existing environments using transforms. This approach enables the isolation of individual components within specific :class:`~torchrl.envs.EnvBase` or :class:`~torchrl.envs.Transform` subclasses, making it simpler to augment or alter the environment logic.
+The environment maintains conversation state by:
+- **Reset**: Initializes a new conversation with an optional system prompt
+- **Step**: Takes the LLM's response and updates the conversation history, preparing the next prompt
 
-Available Environment Classes and Utilities
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Transform-Based Architecture
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-TorchRL provides various environment classes and utilities for working with LLMs, including:
+Transforms are the main way to extend ChatEnv with specific capabilities:
 
-- Various environment classes (:class:`~torchrl.envs.llm.ChatEnv`, :class:`~torchrl.envs.llm.DatasetChatEnv`,
-  :class:`~torchrl.envs.llm.GSM8KEnv`, etc.)
-- Utility functions (:class:`~torchrl.envs.make_gsm8k_env`, :class:`~torchrl.envs.make_mlgym`, etc.)
-- Transforms and other supporting classes (:class:`~torchrl.envs.KLRewardTransform`,
-  :class:`~torchrl.envs.TemplateTransform`, :class:`~torchrl.envs.Tokenizer`, etc.)
+- **Reward computation**: :class:`~torchrl.envs.llm.transforms.KLRewardTransform` for KL divergence rewards
+- **Tool execution**: :class:`~torchrl.envs.llm.transforms.PythonInterpreter` for Python code 
+  execution, :class:`~torchrl.envs.llm.transforms.MCPToolTransform` for general tool calling.
+- **Data loading**: :class:`~torchrl.envs.llm.transforms.DataLoadingPrimer` for loading prompts from datasets
+- **Thinking prompts**: :class:`~torchrl.envs.llm.transforms.AddThinkingPrompt` for chain-of-thought reasoning
+- **Policy tracking**: :class:`~torchrl.envs.llm.transforms.PolicyVersion` for version control
+- **Step counting**: Built-in step tracking and reset management using :class:`~torchrl.envs.transforms.StepCounter`.
 
-These components can be used to create customized environments tailored to specific use cases and requirements.
+Integration with LLM Wrappers
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+ChatEnv is designed to work seamlessly with both :class:`~torchrl.modules.llm.TransformersWrapper` and :class:`~torchrl.modules.llm.vLLMWrapper`. 
+The environment handles the conversation state management while the wrapper handles the actual LLM inference, creating a clean separation of concerns.
+
+Task-Specific Environments
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+We provide a few task-specific environments, such as :class:`~torchrl.envs.llm.GSM8KEnv` for the GSM8K dataset,
+:class:`~torchrl.envs.llm.IFEvalEnv` for the IFEval dataset, and :class:`~torchrl.envs.llm.MLGymEnv` for MLGym integration.
+
+These environments wrap a :class:`~torchrl.envs.llm.ChatEnv` and add a :class:`~torchrl.envs.llm.transforms.DataLoadingPrimer` transform
+(plus an optional reward parsing transform) in a :class:`~torchrl.envs.TransformedEnv` class.
+
+
 
 .. currentmodule:: torchrl.envs.llm
 

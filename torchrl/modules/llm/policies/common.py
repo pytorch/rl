@@ -8,11 +8,10 @@ import weakref
 from typing import Any, Literal, overload
 
 import torch
-from torchrl._utils import logger as torchrl_logger
 from tensordict import NestedKey, TensorDictBase
-from tensordict.utils import _zip_strict
 from tensordict.nn import TensorDictModuleBase, TensorDictSequential
 from tensordict.tensorclass import TensorClass
+from tensordict.utils import _zip_strict
 from torch import distributions as D
 from torch.distributions import Categorical
 from torch.nn.utils.rnn import pad_sequence
@@ -425,7 +424,7 @@ class CategoricalSequential(TensorDictModuleBase):
         as_padded_tensor: bool | None = None,
         as_nested_tensor: bool | None = None,
         padding_value: float | None = None,
-        padding_side: str = "right",
+        padding_side: str = "left",
         layout: torch.layout | None = None,
         **kwargs,
     ) -> D.Distribution:
@@ -435,17 +434,23 @@ class CategoricalSequential(TensorDictModuleBase):
             tensordict: Input tensordict
             tensordict_out: Output tensordict (optional)
             logits_key: Key for logits/log-probs
-            mask_key: Key for mask (optional)
-            as_padded_tensor: Whether to return padded tensor
-            as_nested_tensor: Whether to return nested tensor
-            padding_value: Value for padding
-            padding_side: Side for padding
+            mask_key: Key for mask (optional).
+            as_padded_tensor: Whether to return padded tensor. Default is False.
+            as_nested_tensor: Whether to return nested tensor. Default is False.
+            padding_value: Value for padding. Default is 0.0 for logits and False for masks.
+            padding_side: Side for padding. Default is left by convention.
             layout: Tensor layout
             **kwargs: Additional arguments
 
         Returns:
             Distribution (Categorical or MaskedCategorical)
         """
+        if self.generate:
+            raise NotImplementedError(
+                "get_dist is not implemented for generate=True. "
+                "You can create a new version of this wrapper using the `get_new_version` method."
+            )
+
         td_out = self(tensordict.copy())
 
         # Get logits/log-probs
@@ -493,8 +498,10 @@ class CategoricalSequential(TensorDictModuleBase):
         tensordict: TensorDictBase,
         tokens_key: NestedKey = ("tokens", "prompt"),
         logits_key: NestedKey = "logits",
+        # TODO: add a prompt_mask and response_mask in Masks
         assistant_mask_key: NestedKey = ("masks", "all_assistant_mask"),
         attention_mask_key: NestedKey = ("masks", "all_attention_mask"),
+        padding_side: str = "left",
         **kwargs,
     ) -> D.Distribution:
         """Get distribution masked to only include response tokens (exclude prompt).
@@ -504,23 +511,67 @@ class CategoricalSequential(TensorDictModuleBase):
 
         Note: If prompt tokens are not available (e.g., when using history input),
         this method falls back to using the assistant mask.
+
+        Padding side is left by convention.
         """
+        if self.generate:
+            raise NotImplementedError(
+                "get_dist_with_prompt_mask is not implemented for generate=True. "
+                "You can create a new version of this wrapper using the `get_new_version` method."
+            )
         td_out = self(tensordict.copy())
 
         # Try to get prompt tokens first
         if self.pad_output:
-            prompt_tokens = tensordict.get(tokens_key, as_padded_tensor=True, padding_value=-100, padding_side="left")
-            logits = td_out.get(logits_key, as_padded_tensor=True, padding_value=0.0, padding_side="left")
-            attention_mask = tensordict.get(attention_mask_key, as_padded_tensor=True, padding_value=False, padding_side="left")
+            prompt_tokens = tensordict.get(
+                tokens_key,
+                as_padded_tensor=True,
+                padding_value=-100,
+                padding_side="left",
+            )
+            logits = td_out.get(
+                logits_key,
+                as_padded_tensor=True,
+                padding_value=0.0,
+                padding_side="left",
+            )
+            attention_mask = tensordict.get(
+                attention_mask_key,
+                as_padded_tensor=True,
+                padding_value=False,
+                padding_side="left",
+            )
+            assistant_mask = tensordict.get(
+                assistant_mask_key,
+                as_padded_tensor=True,
+                padding_value=False,
+                padding_side="left",
+            )
         else:
             prompt_tokens = tensordict.get(tokens_key, as_list=True)
             logits = td_out.get(logits_key, as_list=True)
-            attention_mask = tensordict.get(attention_mask_key, as_list=True)
+            attention_mask = td_out.get(attention_mask_key, as_list=True)
+            assistant_mask = td_out.get(assistant_mask_key, as_list=True)
 
         if prompt_tokens is None:
-            raise ValueError(
-                f"Prompt tokens not found in tensordict at key {tokens_key} (keys: {td_out.keys()})"
-            )
+            if assistant_mask is None:
+                raise ValueError(
+                    f"Assistant mask not found in tensordict at key {assistant_mask_key} (keys: {td_out.keys()})"
+                )
+            if self.pad_output:
+                response_mask = assistant_mask.clone()
+            else:
+                response_mask = [am.clone() for am in assistant_mask]
+        else:
+            if self.pad_output:
+                response_mask = attention_mask.clone()
+                response_mask[..., : prompt_tokens.shape[-1]] = False
+            else:
+                response_mask = []
+                for am, p in _zip_strict(attention_mask, prompt_tokens):
+                    am = am.clone()
+                    am[..., : p.size(-1)] = False
+                    response_mask.append(am)
 
         if logits is None:
             raise ValueError(
@@ -528,33 +579,26 @@ class CategoricalSequential(TensorDictModuleBase):
             )
 
         # Make the response mask using prompt tokens
-        if self.pad_output:
-            prompt_length = prompt_tokens.shape[-1]
-            mask = attention_mask.clone()
-            # mask = mask[..., prompt_length:]
-            # logits = logits[..., prompt_length:, :]
-            mask[..., :prompt_length] = False
-            logits[..., :prompt_length, :] = False
-        else:
-            prompt_length = [p.size(-1) for p in prompt_tokens]
-            # Check that the lengths of the mask is the same as the logits
-            mask = [am.clone() for am in attention_mask]
-            for m, lg in _zip_strict(mask, logits):
+        if not self.pad_output:
+            # Check that the lengths of the mask is the same as the logits
+            for m, lg in _zip_strict(response_mask, logits):
                 if m.shape[-1] != lg.shape[-2]:
-                    raise ValueError(f"Mask and logits have different lengths: {m.shape[-1]} != {lg.shape[-2]}.\nAll the logits shapes: {[lg.shape for lg in logits]}, all the mask shapes: {[m.shape for m in mask]}")
-            for i, am in enumerate(mask):
-                am[..., :prompt_length[i]] = False
-            logits = [_logits.clone() for _logits in logits]
+                    raise ValueError(
+                        f"Mask and logits have different lengths: {m.shape[-1]} != {lg.shape[-2]}.\nAll the logits shapes: {[lg.shape for lg in logits]}, all the mask shapes: {[m.shape for m in response_mask]}"
+                    )
             logits = pad_sequence(
-                logits, batch_first=True, padding_value=0.0, padding_side="right"
+                logits, batch_first=True, padding_value=0.0, padding_side=padding_side
             )
-            mask = pad_sequence(
-                mask, batch_first=True, padding_value=False, padding_side="right"
+            response_mask = pad_sequence(
+                response_mask,
+                batch_first=True,
+                padding_value=False,
+                padding_side=padding_side,
             )
 
         return MaskedCategorical(
             logits=logits,
-            mask=mask.bool(),
+            mask=response_mask.bool(),
             use_cross_entropy=True,
         )
 
@@ -563,13 +607,21 @@ class CategoricalSequential(TensorDictModuleBase):
         tensordict: TensorDictBase,
         assistant_mask_key: NestedKey = ("masks", "all_assistant_mask"),
         logits_key: NestedKey = "logits",
+        padding_side: str = "left",
         **kwargs,
     ) -> D.Distribution:
         """Get distribution masked to only include assistant tokens.
 
         This is suitable for multi-turn scenarios where we want to compute loss
         only on assistant-generated tokens across the entire conversation.
+
+        Padding side is left by convention.
         """
+        if self.generate:
+            raise NotImplementedError(
+                "get_dist_with_assistant_mask is not implemented for generate=True. "
+                "You can create a new version of this wrapper using the `get_new_version` method."
+            )
         td_out = self(tensordict.copy())
         # Update the tokens key to reflect the tokenized history when querying the log-probs
         tensordict.update(
@@ -587,13 +639,13 @@ class CategoricalSequential(TensorDictModuleBase):
                 logits_key,
                 as_padded_tensor=True,
                 padding_value=0.0,
-                padding_side="right",
+                padding_side=padding_side,
             )
             assistant_mask = td_out.get(
                 assistant_mask_key,
                 as_padded_tensor=True,
                 padding_value=False,
-                padding_side="right",
+                padding_side=padding_side,
             )
         if logits is None:
             raise ValueError(f"Logits not found in tensordict at key {logits_key}")
@@ -613,13 +665,21 @@ class CategoricalSequential(TensorDictModuleBase):
         tensordict: TensorDictBase,
         attention_mask_key: NestedKey = ("masks", "all_attention_mask"),
         logits_key: NestedKey = "logits",
+        padding_side: str = "left",
         **kwargs,
     ) -> D.Distribution:
         """Get distribution masked using attention mask.
 
         This is suitable for generic scenarios where we want to compute loss
         on all valid tokens (non-padding tokens).
+
+        Padding side is left by convention.
         """
+        if self.generate:
+            raise NotImplementedError(
+                "get_dist_with_attention_mask is not implemented for generate=True. "
+                "You can create a new version of this wrapper using the `get_new_version` method."
+            )
         td_out = self(tensordict.copy())
         if self.pad_output:
             logits = td_out.get(logits_key)
@@ -629,13 +689,13 @@ class CategoricalSequential(TensorDictModuleBase):
                 logits_key,
                 as_padded_tensor=True,
                 padding_value=0.0,
-                padding_side="right",
+                padding_side=padding_side,
             )
             attention_mask = td_out.get(
                 attention_mask_key,
                 as_padded_tensor=True,
                 padding_value=False,
-                padding_side="right",
+                padding_side=padding_side,
             )
 
         if logits is None:
@@ -656,12 +716,20 @@ class CategoricalSequential(TensorDictModuleBase):
         tensordict: TensorDictBase,
         mask: torch.Tensor,
         logits_key: NestedKey = "logits",
+        padding_side: str = "left",
         **kwargs,
     ) -> D.Distribution:
         """Get distribution with custom mask.
 
         This allows for completely custom masking logic.
+
+        Padding side is left by convention.
         """
+        if self.generate:
+            raise NotImplementedError(
+                "get_dist_with_custom_mask is not implemented for generate=True. "
+                "You can create a new version of this wrapper using the `get_new_version` method."
+            )
         td_out = self(tensordict.copy())
         if self.pad_output:
             logits = td_out.get(logits_key)
@@ -670,7 +738,7 @@ class CategoricalSequential(TensorDictModuleBase):
                 logits_key,
                 as_padded_tensor=True,
                 padding_value=0.0,
-                padding_side="right",
+                padding_side=padding_side,
             )
 
         if logits is None:
@@ -683,16 +751,25 @@ class CategoricalSequential(TensorDictModuleBase):
         )
 
     # Convenience methods for common LLM training scenarios
-    def get_sft_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
-        """Get distribution suitable for SFT loss (response tokens only)."""
+    def _get_sft_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
+        """Get distribution suitable for SFT loss (response tokens only).
+
+        This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.
+        """
         return self.get_dist_with_prompt_mask(tensordict, **kwargs)
 
-    def get_rlhf_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
-        """Get distribution suitable for RLHF loss (assistant tokens only)."""
+    def _get_rlhf_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
+        """Get distribution suitable for RLHF loss (assistant tokens only).
+
+        This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.
+        """
         return self.get_dist_with_assistant_mask(tensordict, **kwargs)
 
-    def get_generic_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
-        """Get distribution suitable for generic losses (all tokens)."""
+    def _get_generic_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
+        """Get distribution suitable for generic losses (all tokens).
+
+        This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.
+        """
         return self.get_dist_with_attention_mask(tensordict, **kwargs)
 
     # Sampling is taken care of by the sub-modules

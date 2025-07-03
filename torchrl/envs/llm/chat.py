@@ -10,7 +10,7 @@ import torch
 from tensordict import lazy_stack, TensorDictBase
 from tensordict.utils import _zip_strict
 from torch.utils.data import DataLoader
-from torchrl.data import Composite
+from torchrl.data import Composite, NonTensor
 from torchrl.data.llm.chat import History
 from torchrl.envs import EnvBase, TransformedEnv
 
@@ -31,43 +31,101 @@ def _default_collate_fn(batch):
 
 
 class ChatEnv(EnvBase):
-    r"""A chat-based environment.
+    r"""A chat-based environment that serves as a blank canvas for LLM environments.
 
-    ChatEnv relies on the :class:`~torchrl.data.llm.History` format to output observations framed as a chat between
-    various entities (typically with roles such as `"system"`, `"user"`, `"assistant"` etc.)
+    ChatEnv is designed to work seamlessly with both :class:`~torchrl.modules.llm.TransformersWrapper` and
+    :class:`~torchrl.modules.llm.vLLMWrapper`. It provides the fundamental structure for managing conversation
+    state using the :class:`~torchrl.data.llm.History` format (or, alternatively, tokens or text), but is
+    intentionally minimal to allow maximum flexibility through transforms.
 
-    The step function will execute the following operations:
+    Core Functionality
+        The environment operates in three main modes:
 
-    <TODO: add description>
-    <TODO: mention it is designed to work with vLLM and TransformersWrapper>
+            - **History mode**: Uses :class:`~torchrl.data.llm.History` objects for conversation management
+            - **Text mode**: Uses simple text strings for input/output
+            - **Tokens mode**: Uses tokenized data for input/output
+
+    Reset Operation
+        During reset, the environment:
+
+            1. Takes input text from the `data_key` (default: `"query"`) in the tensordict
+            2. Creates a :class:`~torchrl.data.llm.History` object with the user's message
+            3. Optionally prepends a system prompt if provided
+            4. Formats the conversation according to the selected input mode (history, text, or tokens)
+            5. Returns the formatted prompt ready for the LLM
+
+    Step Operation
+        During step, the environment:
+
+            1. Takes the LLM's response (containing both prompt and generated text)
+            2. Extracts the full conversation history
+            3. Prepares the next prompt by setting the full history as the new prompt
+            4. Returns the updated conversation state
+
+    This design enables natural multi-turn conversations where each step extends the conversation
+    history, making it ideal for dialogue systems and reinforcement learning applications.
+
+    Integration with Transforms
+        ChatEnv is designed to be extended with transforms that add specific capabilities:
+
+            - **Reward computation**: :class:`~torchrl.envs.llm.transforms.KLRewardTransform` for KL divergence rewards
+            - **Tool execution**: :class:`~torchrl.envs.llm.transforms.PythonInterpreter` for Python code execution
+            - **Data loading**: :class:`~torchrl.envs.llm.transforms.DataLoadingPrimer` for loading prompts from datasets
+            - **Thinking prompts**: :class:`~torchrl.envs.llm.transforms.AddThinkingPrompt` for chain-of-thought reasoning
 
     Keyword Args:
-        input_mode (Literal["history", "text"]): The mode of input to the environment. Defaults to `"history"`.
+        input_mode (Literal["history", "text", "tokens"]): The mode of input to the environment.
+            Defaults to `"history"`.
         batch_size (torch.Size): Expected batch size of the input. Defaults to `(1,)` (null batch sizes such as `()`
             are not recommended as they don't play well with generators).
-        system_prompt (str, optional): an optional `"system"` prompt string to use during reset calls.
+        system_prompt (str, optional): An optional `"system"` prompt string to use during reset calls.
             Defaults to `None`.
-        tokenizer (transformers.PreTrainedTokenizer, *optional*): A tokenizer that will be used to tokenize the text.
+        tokenizer (transformers.PreTrainedTokenizer, optional): A tokenizer that will be used to tokenize the text.
             Defaults to `None`.
-        template_kwargs (dict[str, any], optional): keyword arguments passed to :meth:`~torchrl.data.llm.History.apply_chat_template`.
+        template_kwargs (dict[str, any], optional): Keyword arguments passed to :meth:`~torchrl.data.llm.History.apply_chat_template`.
             Defaults to `None`.
-        system_role (str, optional): the role of the system (at reset time). Defaults to `"system"`.
-        user_role (str, optional): the role of the user (at reset time). Defaults to `"user"`.
-        data_key (str, optional): the key of the data input to the env at reset time (from dataloader). Defaults to `"query"`.
-        device (torch.device, optional): the device to use for computations. Defaults to `None`.
+        system_role (str, optional): The role of the system (at reset time). Defaults to `"system"`.
+        user_role (str, optional): The role of the user (at reset time). Defaults to `"user"`.
+        policy_role (str, optional): The role of the policy/assistant. Defaults to `"assistant"`.
+        data_key (str, optional): The key of the data input to the env at reset time (from dataloader).
+            Defaults to `"query"`.
+        device (torch.device, optional): The device to use for computations. Defaults to `None`.
 
     Methods:
-        reset (TensorDict): Resets the state of the environment. A tensordict or equivalent with a `"text"`
+        reset (TensorDict): Resets the state of the environment. A tensordict or equivalent with a `"query"`
             entry (originating from the dataloader) must be passed. This key name is defined as a class attribute `data_key`.
-        step (TensorDict): Makes a step in the environment (see above for a description of what `step` does).
-            A tensordict or equivalent with a `("text", "prompt")` entry must be passed.
-            This key name is defined as a class attribute `text_key`. The response key is defined as a class attribute `response_key`.
+        step (TensorDict): Makes a step in the environment. A tensordict or equivalent with the LLM's response
+            must be passed. The response key is defined as a class attribute `response_key`.
 
     .. seealso:: To see examples of a `ChatEnv` in action, see :class:`~torchrl.envs.llm.chat.DatasetChatEnv`,
         :class:`~torchrl.envs.llm.GSM8KEnv` and :class:`~torchrl.envs.llm.IFEvalEnv`.
 
     Examples:
-    <TODO: add examples>
+        >>> from torchrl.envs.llm import ChatEnv
+        >>> from torchrl.data.llm import History
+        >>> from tensordict import TensorDict
+        >>>
+        >>> # Create a basic chat environment
+        >>> env = ChatEnv(
+        ...     system_prompt="You are a helpful assistant.",
+        ...     input_mode="history"
+        ... )
+        >>>
+        >>> # Reset with a user query
+        >>> reset_data = TensorDict({"query": "Hello, how are you?"}, batch_size=(1,))
+        >>> obs = env.reset(reset_data)
+        >>> print(obs["history"].prompt)  # History with system prompt + user message
+        >>>
+        >>> # Simulate LLM response and step
+        >>> response_data = TensorDict({
+        ...     "history": History.from_chats([[
+        ...         {"role": "system", "content": "You are a helpful assistant."},
+        ...         {"role": "user", "content": "Hello, how are you?"},
+        ...         {"role": "assistant", "content": "I'm doing well, thank you!"}
+        ...     ]])
+        ... }, batch_size=(1,))
+        >>> next_obs = env.step(response_data)
+        >>> print(next_obs["history"].prompt)  # Full conversation history
 
     """
 
@@ -134,25 +192,53 @@ class ChatEnv(EnvBase):
     def _make_specs_history(self):
         # we output prompt
         self.full_observation_spec = Composite(
-            history=ChatHistory.default_spec(shape=self.batch_size, keys=["prompt"]),
-            shape=self.batch_size,
-        )
-        # We receive prompt, response and full
-        self.full_action_spec = Composite(
-            history=ChatHistory.default_spec(shape=self.batch_size, keys=["full"]),
-            shape=self.batch_size,
-        )
-
-    def _make_specs_text(self):
-        # we output prompt
-        self.full_observation_spec = Composite(
-            text=Text.default_spec(shape=self.batch_size, keys=["prompt"]),
+            history=ChatHistory.default_spec(shape=self.batch_size, keys=["prompt"]).to(
+                self.device
+            ),
             shape=self.batch_size,
             device=self.device,
         )
         # We receive prompt, response and full
         self.full_action_spec = Composite(
-            text=Text.default_spec(shape=self.batch_size, keys=["full"]),
+            history=ChatHistory.default_spec(shape=self.batch_size, keys=["full"]).to(
+                self.device
+            ),
+            shape=self.batch_size,
+            device=self.device,
+        )
+        self.full_state_spec = Composite(
+            {
+                self.data_key: NonTensor(
+                    example_data="a string", shape=self.batch_size, device=self.device
+                )
+            },
+            shape=self.batch_size,
+            device=self.device,
+        )
+
+    def _make_specs_text(self):
+        # we output prompt
+        self.full_observation_spec = Composite(
+            text=Text.default_spec(shape=self.batch_size, keys=["prompt"]).to(
+                self.device
+            ),
+            shape=self.batch_size,
+            device=self.device,
+        )
+        # We receive prompt, response and full
+        self.full_action_spec = Composite(
+            text=Text.default_spec(shape=self.batch_size, keys=["full"]).to(
+                self.device
+            ),
+            shape=self.batch_size,
+            device=self.device,
+        )
+        self.full_state_spec = Composite(
+            {
+                self.data_key: NonTensor(
+                    example_data="a string", shape=self.batch_size, device=self.device
+                )
+            },
             shape=self.batch_size,
             device=self.device,
         )
@@ -160,13 +246,26 @@ class ChatEnv(EnvBase):
     def _make_specs_tokens(self):
         # we output prompt
         self.full_observation_spec = Composite(
-            tokens=Tokens.default_spec(shape=self.batch_size, keys=["prompt"]),
+            tokens=Tokens.default_spec(shape=self.batch_size, keys=["prompt"]).to(
+                self.device
+            ),
             shape=self.batch_size,
             device=self.device,
         )
         # We receive prompt, response and full
         self.full_action_spec = Composite(
-            tokens=Tokens.default_spec(shape=self.batch_size, keys=["full"]),
+            tokens=Tokens.default_spec(shape=self.batch_size, keys=["full"]).to(
+                self.device
+            ),
+            shape=self.batch_size,
+            device=self.device,
+        )
+        self.full_state_spec = Composite(
+            {
+                self.data_key: NonTensor(
+                    example_data="a string", shape=self.batch_size, device=self.device
+                )
+            },
             shape=self.batch_size,
             device=self.device,
         )
@@ -235,6 +334,10 @@ class ChatEnv(EnvBase):
             raise RuntimeError(f"{type(self).__name__} expects a tensordict as input")
         # Find the total text
         content = tensordict.get(self.data_key)
+        if content is None:
+            raise RuntimeError(
+                f"{type(self).__name__} expects a tensordict with a {self.data_key} key, got {tensordict.keys()}"
+            )
         if content.batch_size != self.batch_size:
             for s in reversed(self.batch_size):
                 content = [content for _ in range(s)]

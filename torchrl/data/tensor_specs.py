@@ -2877,10 +2877,18 @@ class NonTensor(TensorSpec):
     def is_in(self, val: Any) -> bool:
         if not isinstance(val, torch.Tensor) and not is_tensor_collection(val):
             return True
-        shape = torch.broadcast_shapes(self._safe_shape, val.shape)
+        # Since we don't really share Nontensor across processes, it's ok to modify the shape
+        # We do this when the shape has been determined by a single sample gathered
+        # from a dataloader, but shapes of the non-tensor may actually vary.
+        if any(v < 0 for v in val.shape):
+            self.shape = torch.Size(
+                (self.shape[i] if s >= 0 else -1 for i, s in enumerate(val.shape))
+            )
+        _safe_val_shape = torch.Size(s if s >= 0 else 1 for s in val.shape)
+        shape = torch.broadcast_shapes(self._safe_shape, _safe_val_shape)
         return (
             is_non_tensor(val)
-            and val.shape == shape
+            and _safe_val_shape == shape
             # We relax constrains on device as they're hard to enforce for non-tensor
             #  tensordicts and pointless
             # and val.device == self.device

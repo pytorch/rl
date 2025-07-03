@@ -123,7 +123,13 @@ def make_gsm8k_env(
     env.append_transform(StepCounter(max_steps=1))
 
     if tokenizer is not None:
-        env.append_transform(GSM8KRewardParser(tokenizer=tokenizer))
+        env.append_transform(
+            GSM8KRewardParser(
+                tokenizer=tokenizer,
+                input_mode="text",
+                in_keys=["text_response", "answer"],
+            )
+        )
     else:
         warnings.warn("No tokenizer specified - reward will not be assigned.")
 

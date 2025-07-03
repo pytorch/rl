@@ -187,6 +187,10 @@ class GRPOLoss(ClipPPOLoss):
             # Use the specified masking strategy
             #  dists are always defined over the whole sequence, so we can re-use the mask as the dist will always
             #  be a MaskedCategorical
+            # TODO: eventually, we want to always use `get_dist` and just pass the key of the mask
+            #  Masks should contain: prompt and response masks, assistant, and attention.
+            #  Additionally, we should make sure that the masks are properly updated when log-probs is called (using vllm and transformers)
+            #  because in some instances it looks like they can be overwritten with None values.
             if self.masking_strategy == "sft" and hasattr(
                 self.actor_network, "get_sft_dist"
             ):
@@ -233,9 +237,6 @@ class GRPOLoss(ClipPPOLoss):
         advantage = tensordict.get(
             self.tensor_keys.advantage, None, as_padded_tensor=True
         )
-        torchrl_logger.info(f"tensordict: {tensordict}")
-        torchrl_logger.info(f"advantage : {advantage}")
-        torchrl_logger.info(f"advantage shape: {advantage.shape}")
         log_weight, dist, kl_approx = self._log_weight(
             tensordict, adv_shape=advantage.shape[:-1]
         )

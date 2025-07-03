@@ -4,10 +4,11 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from typing import Literal
+
 import torch
 from tensordict import lazy_stack, NestedKey, TensorDict, TensorDictBase
 from tensordict.utils import _zip_strict, is_non_tensor
-
 from torchrl.data import Composite, Unbounded
 from torchrl.envs import Transform
 from torchrl.envs.common import EnvBase
@@ -38,6 +39,7 @@ class GSM8KRewardParser(Transform):
         out_keys: list[NestedKey] | None = None,
         eos_token: str | None = None,
         set_done_if_answer: bool = True,
+        input_mode: Literal["history", "text", "tokens"] | None = None,
     ):
         super().__init__()
         self.tokenizer = tokenizer
@@ -49,6 +51,7 @@ class GSM8KRewardParser(Transform):
             else None
         )
         self.set_done_if_answer = set_done_if_answer
+        self._input_mode = input_mode
 
         if out_keys is None:
             out_keys = [
@@ -64,8 +67,7 @@ class GSM8KRewardParser(Transform):
             self.in_keys = in_keys
         self.out_keys = out_keys
 
-    def set_container(self, container: Transform | EnvBase) -> None:
-        result = super().set_container(container)
+    def _maybe_get_in_keys(self):
         if not self.in_keys:
             parent = getattr(self, "parent", None)
             if parent is not None:
@@ -78,7 +80,24 @@ class GSM8KRewardParser(Transform):
                         self.in_keys = [("tokens", "full"), "answer"]
             else:
                 raise ValueError(f"No base env found for {self}")
+
+    def set_container(self, container: Transform | EnvBase) -> None:
+        result = super().set_container(container)
+        self._maybe_get_in_keys()
         return result
+
+    _input_mode = None
+
+    @property
+    def input_mode(self):
+        if self._input_mode is None:
+            input_mode = (
+                getattr(self.parent, "input_mode", "history")
+                if hasattr(self, "parent") and self.parent is not None
+                else "history"
+            )
+            self._input_mode = input_mode
+        return self._input_mode
 
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
@@ -94,14 +113,11 @@ class GSM8KRewardParser(Transform):
             return next_tensordict
 
         # Get the completion based on input_mode
+        self._maybe_get_in_keys()
         responses = tensordict[self.in_keys[0]]  # batch_size, grpo_size, L
 
         # Handle different response types based on input_mode
-        input_mode = (
-            getattr(self.parent, "input_mode", "history")
-            if hasattr(self, "parent") and self.parent is not None
-            else "history"
-        )
+        input_mode = self.input_mode
         if input_mode == "history":
             # responses is a History object, extract the text content
             responses = lazy_stack([r[..., -1] for r in responses.unbind(0)])

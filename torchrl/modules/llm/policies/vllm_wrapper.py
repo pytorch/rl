@@ -707,6 +707,7 @@ class vLLMWrapper(CategoricalSequential):
                 tokens_full_unpadded = result_flat.get(
                     (self.tokens_key, "full"), as_list=True
                 )
+                # print("shapes of assistant masks", [t.shape for t in result_flat.get(("masks", "all_assistant_mask"), as_list=True)])
                 if tokens_full_unpadded is None:
                     raise ValueError("tokens_full_unpadded is None")
                 text_full = self.tokenizer.batch_decode(
@@ -719,6 +720,7 @@ class vLLMWrapper(CategoricalSequential):
             ]
             result_flat.set((self.text_key, "full"), text_full)
             result_flat.set((self.text_key, "response"), text_response)
+
         # Now parse the full text back to a history object, and use the extra history objects
         # as response
         history_chat = ChatHistory._from_tensordict(result.empty())
@@ -1684,12 +1686,14 @@ class vLLMWrapper(CategoricalSequential):
         """Get distribution masked to only include response tokens (exclude prompt).
 
         vLLM does not return logits, so this method is not supported.
+
+        This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.
         """
         raise NotImplementedError(
             "vLLM does not return logits, so get_dist_with_prompt_mask is not supported"
         )
 
-    def get_dist_with_assistant_mask(
+    def _get_dist_with_assistant_mask(
         self,
         tensordict: TensorDictBase,
         assistant_mask_key: NestedKey = ("masks", "all_assistant_mask"),
@@ -1699,12 +1703,14 @@ class vLLMWrapper(CategoricalSequential):
         """Get distribution masked to only include assistant tokens.
 
         vLLM does not return logits, so this method is not supported.
+
+        This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.
         """
         raise NotImplementedError(
             "vLLM does not return logits, so get_dist_with_assistant_mask is not supported"
         )
 
-    def get_dist_with_attention_mask(
+    def _get_dist_with_attention_mask(
         self,
         tensordict: TensorDictBase,
         attention_mask_key: NestedKey = ("masks", "all_attention_mask"),
@@ -1714,12 +1720,14 @@ class vLLMWrapper(CategoricalSequential):
         """Get distribution masked using attention mask.
 
         vLLM does not return logits, so this method is not supported.
+
+        This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.
         """
         raise NotImplementedError(
             "vLLM does not return logits, so get_dist_with_attention_mask is not supported"
         )
 
-    def get_dist_with_custom_mask(
+    def _get_dist_with_custom_mask(
         self,
         tensordict: TensorDictBase,
         mask: torch.Tensor,
@@ -1729,34 +1737,42 @@ class vLLMWrapper(CategoricalSequential):
         """Get distribution with custom mask.
 
         vLLM does not return logits, so this method is not supported.
+
+        This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.
         """
         raise NotImplementedError(
             "vLLM does not return logits, so get_dist_with_custom_mask is not supported"
         )
 
     # Convenience methods for common LLM training scenarios
-    def get_sft_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
+    def _get_sft_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
         """Get distribution suitable for SFT loss (response tokens only).
 
         vLLM does not return logits, so this method is not supported.
+
+        This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.
         """
         raise NotImplementedError(
             "vLLM does not return logits, so get_sft_dist is not supported"
         )
 
-    def get_rlhf_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
+    def _get_rlhf_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
         """Get distribution suitable for RLHF loss (assistant tokens only).
 
         vLLM does not return logits, so this method is not supported.
+
+        This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.
         """
         raise NotImplementedError(
             "vLLM does not return logits, so get_rlhf_dist is not supported"
         )
 
-    def get_generic_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
+    def _get_generic_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:
         """Get distribution suitable for generic losses (all tokens).
 
         vLLM does not return logits, so this method is not supported.
+
+        This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.
         """
         raise NotImplementedError(
             "vLLM does not return logits, so get_generic_dist is not supported"

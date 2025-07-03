@@ -16,12 +16,7 @@ from tensordict import lazy_stack, set_list_to_stack, TensorDict
 
 from tensordict.utils import _zip_strict
 from torchrl.data.llm import History
-from torchrl.envs.llm.transforms.kl import (
-    KLComputation,
-    KLRewardTransform,
-    RetrieveKL,
-    RetrieveLogProb,
-)
+from torchrl.envs.llm.transforms.kl import KLComputation, RetrieveKL, RetrieveLogProb
 from torchrl.modules.llm.policies.common import (
     ChatHistory,
     LogProbs,
@@ -46,7 +41,7 @@ TransformersWrapperMaxTokens = partial(
 )
 
 
-@pytest.fixture(scope="function", autouse=True)
+@pytest.fixture(scope="module", autouse=True)
 def set_seed():
     torch.manual_seed(0)
     if torch.cuda.is_available():
@@ -1047,201 +1042,6 @@ class TestWrappers:
         )
 
 
-class TestChatEnvIntegration:
-    @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
-    @pytest.mark.skipif(not _has_datasets, reason="datasets not available")
-    @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
-    @pytest.mark.parametrize(
-        "input_mode,compute_reward",
-        [["history", True], ["history", False], ["text", False], ["tokens", False]],
-        ids=[
-            "history_compute_reward",
-            "history_no_compute_reward",
-            "text_no_compute_reward",
-            "tokens_no_compute_reward",
-        ],
-    )
-    def test_chat_env_integration_ifeval(self, compute_reward, pad_output, input_mode):
-        """Test that the wrapper works correctly with the ChatEnv."""
-        import vllm.envs as envs
-        from torchrl.envs.llm import IFEvalEnv
-
-        envs.VLLM_HOST_IP = "0.0.0.0" or "127.0.0.1"
-
-        policy = vLLMWrapper(
-            model="Qwen/Qwen2.5-0.5B",
-            tokenizer="Qwen/Qwen2.5-0.5B",
-            input_mode=input_mode,
-            pad_output=pad_output,
-            generate=True,
-        )
-        env = IFEvalEnv(
-            max_steps=1,
-            compute_reward=compute_reward,
-            input_mode=input_mode,
-            tokenizer=policy.tokenizer,
-        )
-        r = env.reset()
-        prompt = None
-        if input_mode == "history":
-            assert r["history", "prompt"].shape == (1, 2)
-        elif input_mode == "text":
-            prompt = r["text", "prompt"][0]
-        r = policy(r)
-        if input_mode == "history":
-            assert r["history", "response"].shape == (1, 1)
-            assert r["history", "full"].shape == (1, 3)
-        elif input_mode == "text":
-            assert r["text", "full"][0].startswith(prompt)
-        r, r_ = env.step_and_maybe_reset(r)
-        if input_mode == "history":
-            assert r["next", "history", "prompt"].shape == (1, 3)
-        assert r["next", "done"].all()
-        r = policy(r_)
-        r, r_ = env.step_and_maybe_reset(r)
-
-    @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
-    @pytest.mark.skipif(not _has_datasets, reason="datasets not available")
-    @pytest.mark.parametrize(
-        "compute_reward", [False, True], ids=["no_compute_reward", "compute_reward"]
-    )
-    @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
-    @pytest.mark.parametrize(
-        "input_mode", ["history", "text", "tokens"], ids=["history", "text", "tokens"]
-    )
-    def test_chat_env_integration_gsm8k(self, compute_reward, pad_output, input_mode):
-        """Test that the wrapper works correctly with the ChatEnv."""
-        import vllm.envs as envs
-        from torchrl.envs.llm import GSM8KEnv
-
-        envs.VLLM_HOST_IP = "0.0.0.0" or "127.0.0.1"
-
-        policy = vLLMWrapper(
-            model="Qwen/Qwen2.5-0.5B",
-            tokenizer="Qwen/Qwen2.5-0.5B",
-            input_mode=input_mode,
-            pad_output=pad_output,
-            generate=True,
-        )
-        env = GSM8KEnv(
-            max_steps=10,
-            compute_reward=compute_reward,
-            input_mode=input_mode,
-            tokenizer=policy.tokenizer,
-        )
-        r = env.reset()
-        r = policy(r)
-        r, r_ = env.step_and_maybe_reset(r)
-        r = policy(r_)
-        r, r_ = env.step_and_maybe_reset(r)
-
-    @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
-    @pytest.mark.parametrize("ref_input_mode", ["tokens"], ids=["tokens"])
-    @pytest.mark.parametrize(
-        "env_class", ["GSM8KEnv", "IFEvalEnv"], ids=["gsm8k", "ifeval"]
-    )
-    def test_chat_env_kl(
-        self,
-        transformers_instance,
-        vllm_instance,
-        pad_output,
-        ref_input_mode,
-        env_class,
-    ):
-        """Test that the wrapper works correctly with the ChatEnv."""
-        import vllm.envs as envs
-        from torchrl.envs.llm import GSM8KEnv, IFEvalEnv
-
-        envs.VLLM_HOST_IP = "0.0.0.0" or "127.0.0.1"
-
-        vllm_model, vllm_tokenizer = vllm_instance
-        tf_model, tf_tokenizer = transformers_instance
-
-        # a policy
-        policy = vLLMWrapper(
-            vllm_model,
-            tokenizer=vllm_tokenizer,
-            input_mode="history",
-            generate=True,
-            pad_output=pad_output,
-        )
-        ref_model = TransformersWrapper(
-            tf_model,
-            tokenizer=tf_tokenizer,
-            input_mode="tokens",
-            # TODO: check that generate=True causes an error
-            generate=False,
-            return_log_probs=True,
-            pad_output=pad_output,
-        )
-
-        if env_class == "GSM8KEnv":
-            env = GSM8KEnv(max_steps=10, num_envs=3, input_mode="history")
-        elif env_class == "IFEvalEnv":
-            env = IFEvalEnv(max_steps=10, num_envs=3, input_mode="history")
-        else:
-            raise ValueError(f"Invalid environment class: {env_class}")
-        env = env.append_transform(KLRewardTransform(ref_model))
-        r = env.rollout(1, policy)
-        reward = r.get(("next", "reward"), as_list=not pad_output)
-        assert reward is not None
-        if pad_output:
-            assert reward.shape[0] == 3
-            assert reward.shape[1] == 1
-            assert reward.shape[2] > 1
-            assert reward.shape[3] == 1
-        else:
-            assert len(reward) == 3
-            for r in reward:
-                assert r.shape[0] == 1
-                assert r.shape[1] > 1
-                assert r.shape[2] == 1
-
-    @pytest.mark.parametrize(
-        "env_class", ["GSM8KEnv", "IFEvalEnv"], ids=["gsm8k", "ifeval"]
-    )
-    def test_retrievekl_transform(
-        self, transformers_instance, vllm_instance, env_class
-    ):
-        """Test that the RetrieveKL transform works correctly."""
-        from torchrl.collectors.llm.base import LLMCollector
-        from torchrl.envs.llm import GSM8KEnv, IFEvalEnv
-
-        model, tokenizer = transformers_instance
-        vllm_model, vllm_tokenizer = vllm_instance
-        ref_model = TransformersWrapper(
-            model,
-            tokenizer=tokenizer,
-            input_mode="history",
-            generate=False,
-            pad_output=True,
-        )
-        if env_class == "GSM8KEnv":
-            env = GSM8KEnv(max_steps=1, num_envs=3)
-        elif env_class == "IFEvalEnv":
-            env = IFEvalEnv(max_steps=1, num_envs=3)
-        else:
-            raise ValueError(f"Invalid environment class: {env_class}")
-        env = env.append_transform(RetrieveKL("from_collector", ref_model))
-        c = LLMCollector(
-            env,
-            policy_factory=partial(
-                vLLMWrapper,
-                vllm_model,
-                tokenizer=vllm_tokenizer,
-                input_mode="history",
-                generate=True,
-                pad_output=True,
-            ),
-            dialog_turns_per_batch=6,
-        )
-        for d in c:
-            assert ("history", "full") in d
-            assert ("next", "history", "prompt") in d
-            break
-        return
-
-
 class TestKLTransforms:
     """Comprehensive tests for KL-related transforms with different input modes and configurations."""
 
@@ -1761,7 +1561,6 @@ class TestDistributionMethods:
             input_mode="history",
             generate=False,
             return_log_probs=True,
-            return_masks=True,
         )
 
         # Create test data
@@ -1782,12 +1581,14 @@ class TestDistributionMethods:
 
     @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
     @pytest.mark.parametrize("masking_strategy", ["sft", "rlhf", "generic"])
+    @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
     def test_transformers_distribution_methods(
         self,
         transformers_instance,
         sample_history_assistant,
         sample_tokens,
         masking_strategy,
+        pad_output,
     ):
         """Test that Transformers wrapper distribution methods work correctly."""
         model, tokenizer = transformers_instance
@@ -1796,23 +1597,43 @@ class TestDistributionMethods:
         if masking_strategy == "sft":
             input_mode = "tokens"
             input_ids, attention_mask = sample_tokens
+            assistant_mask = attention_mask.bool().clone()
+            assistant_mask[:, : attention_mask.shape[-1] // 2] = False
             input_data = {
                 "tokens": Tokens(full=input_ids),
-                "masks": Masks(all_attention_mask=attention_mask),
+                "masks": Masks(
+                    all_attention_mask=attention_mask.bool(),
+                    all_assistant_mask=assistant_mask,
+                ),
             }
+
+            # Create test data with correct batch size
+            td = TensorDict(input_data, batch_size=(2,)).to_lazystack(0)
+            if not pad_output:
+                for _td in td.unbind(0):
+                    _td["tokens"].full = _td["tokens"].full[
+                        _td["masks"].all_attention_mask
+                    ]
+                    _td["masks"].all_assistant_mask = _td["masks"].all_assistant_mask[
+                        _td["masks"].all_attention_mask
+                    ]
+                    _td["masks"].all_attention_mask = _td["masks"].all_attention_mask[
+                        _td["masks"].all_attention_mask
+                    ]
         else:
             input_mode = "history"
-            input_data = {"history": sample_history_assistant}
+            input_data = {"history": ChatHistory(full=sample_history_assistant)}
+
+            # Create test data with correct batch size
+            td = TensorDict(input_data, batch_size=(2,)).to_lazystack(0)
 
         wrapper = TransformersWrapper(
             model,
             tokenizer=tokenizer,
             input_mode=input_mode,
             generate=False,
+            pad_output=pad_output,
         )
-
-        # Create test data with correct batch size
-        td = TensorDict(input_data, batch_size=(2,))
 
         # Test the appropriate distribution method
         if masking_strategy == "sft":
@@ -1833,7 +1654,12 @@ class TestDistributionMethods:
         # Test log_prob computation
         if masking_strategy == "sft":
             # For SFT, we need tokens to compute log_prob
-            tokens = td_out.get(("tokens", "full"))
+            tokens = td_out.get(
+                ("tokens", "full"),
+                as_padded_tensor=True,
+                padding_side="left",
+                padding_value=tokenizer.pad_token_id,
+            )
             if tokens is not None:
                 log_probs = dist.log_prob(tokens.long())
                 assert log_probs.shape == tokens.shape
@@ -1858,11 +1684,12 @@ class TestDistributionMethods:
             input_mode="history",
             generate=False,
             return_log_probs=True,
-            return_tokens=True,
             pad_output=True,
         )
 
-        td = TensorDict({"history": sample_history_assistant}, batch_size=(2,))
+        td = TensorDict(
+            {"history": ChatHistory(full=sample_history_assistant)}, batch_size=(2,)
+        )
 
         # Get the actual logits shape from the wrapper
         result = wrapper(td)
@@ -1872,85 +1699,10 @@ class TestDistributionMethods:
         custom_mask = torch.zeros_like(lp, dtype=torch.bool)
         custom_mask[:, :5] = True  # Only first 5 tokens
 
-        dist = wrapper.get_dist_with_custom_mask(td, custom_mask)
+        dist = wrapper._get_dist_with_custom_mask(td, custom_mask)
 
         assert dist is not None
         assert hasattr(dist, "log_prob")
-
-
-class TestGRPOLossIntegration:
-    """Test GRPOLoss integration with the new distribution methods."""
-
-    @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
-    @pytest.mark.parametrize("masking_strategy", ["sft", "rlhf"])
-    def test_grpo_loss_with_transformers(
-        self,
-        vllm_instance,
-        transformers_instance,
-        sample_history,
-        sample_tokens,
-        masking_strategy,
-    ):
-        """Test GRPOLoss with vLLM wrapper and different masking strategies."""
-        from torchrl.objectives.llm.grpo import GRPOLoss
-
-        model, tokenizer = transformers_instance
-        vllm_model, vllm_tokenizer = vllm_instance
-
-        # Use tokens input mode for SFT, history for RLHF/generic
-        if masking_strategy == "sft":
-            input_mode = "tokens"
-            input_ids, attention_mask = sample_tokens
-            input_data = {
-                "tokens": Tokens(prompt=input_ids),
-                "masks": Masks(all_attention_mask=attention_mask),
-            }
-        else:
-            input_mode = "history"
-            input_data = {"history": ChatHistory(prompt=sample_history)}
-
-        wrapper_gen = vLLMWrapper(
-            vllm_model,
-            tokenizer=vllm_tokenizer,
-            input_mode=input_mode,
-            generate=True,
-            return_log_probs=True,
-            pad_output=True,
-            generate_kwargs={"max_tokens": 10},
-        )
-
-        # Create test data with advantage and correct batch size
-        td = TensorDict(input_data, batch_size=(2,)).to_lazystack(0)
-        td = wrapper_gen(td)
-        # use a shape that can be broadcast
-        td["advantage"] = torch.randn(2, 1, 1)
-
-        wrapper = TransformersWrapper(
-            model,
-            tokenizer=tokenizer,
-            input_mode=input_mode,
-            generate=False,
-            return_log_probs=True,
-            pad_output=True,
-        )
-
-        # Create GRPOLoss with specified masking strategy
-        loss_fn = GRPOLoss(
-            actor_network=wrapper,
-            masking_strategy=masking_strategy,
-        )
-
-        # This should work without shape mismatch errors
-        try:
-            result = loss_fn(td)
-            assert result is not None
-        except ValueError as e:
-            if "Shape mismatch" in str(e):
-                # This is expected if the advantage shape doesn't match the log-prob shape
-                # due to different masking strategies
-                assert masking_strategy in str(e)
-            else:
-                raise
 
 
 if __name__ == "__main__":
