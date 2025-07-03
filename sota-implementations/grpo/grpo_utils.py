@@ -546,7 +546,8 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
     if cfg.env.reasoning:
         env = env.append_transform(
             AddThinkingPrompt(
-                cond=lambda td: td["reward"] <= reward_threshold and td["step_count"] < max_steps,
+                cond=lambda td: td["reward"] <= reward_threshold
+                and td["step_count"] < max_steps,
                 role="assistant",
                 edit_last_turn=True,
                 zero_reward=True,
