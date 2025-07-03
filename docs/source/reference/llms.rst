@@ -675,15 +675,17 @@ transforms).
     :toctree: generated/
     :template: rl_template.rst
 
-    DataLoadingPrimer
-    KLRewardTransform
-    RetrieveLogProb
-    MCPToolTransform
-    BrowserTransform
-    PythonInterpreter
-    PolicyVersion
-    TemplateTransform
     AddThinkingPrompt
+    BrowserTransform
+    DataLoadingPrimer
+    KLComputation
+    KLRewardTransform
+    MCPToolTransform
+    PolicyVersion
+    PythonInterpreter
+    RetrieveKL
+    RetrieveLogProb
+    TemplateTransform
     Tokenizer
     as_nested_tensor
     as_padded_tensor

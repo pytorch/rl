@@ -245,6 +245,12 @@ def train(
                 if (global_step % cfg.train.logging_frequency) == 0:
                     with torch.no_grad():
                         rb_content = replay_buffer[:]
+                        step_count = (
+                            rb_content.get(("next", "step_count"))
+                            .view(-1)
+                            .float()
+                            .mean()
+                        )
                         batch_policy_version = (
                             batch["next", "policy_version"].view(-1).min()
                         )
@@ -252,6 +258,7 @@ def train(
                             collector.policy_version - batch_policy_version
                         )
                         metrics = {
+                            "step_count from buffer": float(step_count),
                             "reward from buffer": float(
                                 torch.cat(
                                     rb_content.get(("next", "reward"), as_list=True)

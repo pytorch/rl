@@ -12,7 +12,13 @@ from torch import device as torch_device, dtype as torch_dtype
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
-from torchrl.envs.llm import AddThinkingPrompt, GSM8KEnv, KLRewardTransform, RetrieveKL
+from torchrl.envs.llm import (
+    AddThinkingPrompt,
+    GSM8KEnv,
+    KLComputation,
+    KLRewardTransform,
+    RetrieveKL,
+)
 from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
@@ -183,7 +189,7 @@ def get_inference_model(
 
 
 def get_ref_model(
-    cfg: DictConfig, tokenizer: PreTrainedTokenizer, devices: list[int] | None = None
+    cfg: DictConfig, tokenizer: PreTrainedTokenizer, devices: list[int] | None = None, log_probs_key: str | None = None
 ) -> TransformersWrapper:
     """Creates the reference model for KL penalty computation.
 
@@ -243,6 +249,7 @@ def get_ref_model(
         return_log_probs=True,
         pad_output=False,
         device=torch.device("cuda:0"),
+        log_probs_key=log_probs_key,
     )
     return ref_model
 
@@ -511,7 +518,7 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
 
     # Create a new config with adjusted device assignments
     ref_cfg = DictConfig(dict(cfg))
-    ref_model = get_ref_model(ref_cfg, train_tokenizer, devices=devices)
+    ref_model = get_ref_model(ref_cfg, train_tokenizer, devices=devices, log_probs_key=("ref_log_probs", "full") if cfg.env.reasoning else None)
 
     # Setup environment
     if cfg.env.dataset == "gsm8k":
@@ -550,9 +557,11 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
             # RetrieveKL will be lazily initialized in the collector.
             # We use RetrieveKL instead of KLRewardTransform because the assistant response may change when
             # adding the thinking prompt, requiring a second pass in vllm to compute the log-probs.
-            RetrieveKL(
-                ref_model=ref_model,
-                coef=cfg.train.kl_to_ref_coeff,
+            RetrieveKL(ref_model=ref_model)
+        )
+        env.append_transform(
+            KLComputation(
+                coeff=cfg.train.kl_to_ref_coeff,
                 add_to_reward=not cfg.train.kl_coef_in_loss,
             )
         )

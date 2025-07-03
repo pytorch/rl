@@ -6,7 +6,7 @@
 from .browser import BrowserTransform
 from .dataloading import as_nested_tensor, as_padded_tensor, DataLoadingPrimer
 from .format import TemplateTransform
-from .kl import KLRewardTransform, RetrieveKL, RetrieveLogProb
+from .kl import KLComputation, KLRewardTransform, RetrieveKL, RetrieveLogProb
 from .policy_version import PolicyVersion
 from .reason import AddThinkingPrompt
 from .tokenizer import Tokenizer
@@ -22,6 +22,7 @@ __all__ = [
     "PolicyVersion",
     "PythonInterpreter",
     "AddThinkingPrompt",
+    "KLComputation",
     "TemplateTransform",
     "Tokenizer",
     "as_nested_tensor",

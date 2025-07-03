@@ -666,14 +666,6 @@ class RetrieveKL(Compose):
     with a :class:`~torchrl.envs.llm.transforms.kl.KLComputation` to compute KL divergence
     between a generation model and a reference model.
 
-    **Recent Changes:**
-    - **Modular Input Modes**: The transform now works seamlessly with all input modes (`"history"`, `"text"`, `"tokens"`)
-      supported by the LLM wrappers.
-    - **ChatHistory Integration**: When using `input_mode="history"`, the transform properly handles
-      :class:`~torchrl.modules.llm.policies.ChatHistory` objects.
-    - **Automatic Output Selection**: The transform automatically adapts to the wrapper's output structure,
-      whether it returns tokens, text, history, or combinations thereof.
-
     .. note::
         Both gen_model and ref_model must use the same pad_output value (True or False), otherwise KL computation will fail.
 
@@ -881,7 +873,7 @@ class RetrieveKL(Compose):
             ref_log_probs_key=("ref_log_probs", "full"),
             kl_key="kl",
             add_to_reward=True,
-            coef=1.0,
+            coeff=1.0,
         )
         super().__init__(t1, t2, t3)
 
@@ -969,7 +961,7 @@ class RetrieveKL(Compose):
             ref_log_probs_key=("ref_log_probs", "full"),
             kl_key="kl",
             add_to_reward=True,
-            coef=1.0,
+            coeff=1.0,
         )
         # Replace the transforms in the Compose
         self.transforms.extend([t1, t2, t3])
@@ -1039,15 +1031,17 @@ class KLComputation(Transform):
     and can optionally subtract it from the reward (for KL penalty). It's designed to work
     with the :class:`~torchrl.envs.llm.transforms.kl.RetrieveLogProb` and :class:`~torchrl.envs.llm.transforms.kl.RetrieveKL` transforms.
 
-    Note:
+    .. note::
         Both input log-prob tensors must use the same padding strategy (pad_output) for correct KL computation.
 
     Args:
         gen_log_probs_key (NestedKey): the key where the generation model log-probs are stored.
+            Defaults to `("gen_log_probs", "full")`.
         ref_log_probs_key (NestedKey): the key where the reference model log-probs are stored.
+            Defaults to `("ref_log_probs", "full")`.
         kl_key (NestedKey): the key where the KL divergence is stored. Defaults to `"kl"`.
         add_to_reward (bool): whether to add the KL divergence to the reward. Defaults to `True`.
-        coef (float): the coefficient for the KL term when adding to reward. Defaults to `1.0`.
+        coeff (float): the coefficient for the KL term when adding to reward. Defaults to `1.0`.
         padding_side (str): the side of the padding when using pad_sequence. Defaults to `"left"`.
 
     Examples:
@@ -1093,12 +1087,12 @@ class KLComputation(Transform):
 
     def __init__(
         self,
-        gen_log_probs_key: NestedKey,
-        ref_log_probs_key: NestedKey,
+        gen_log_probs_key: NestedKey=("gen_log_probs", "full"),
+        ref_log_probs_key: NestedKey=("ref_log_probs", "full"),
         *,
         kl_key: NestedKey = "kl",
         add_to_reward: bool = True,
-        coef: float = 1.0,
+        coeff: float = 1.0,
         padding_side: str = "left",
     ):
         in_keys = [gen_log_probs_key, ref_log_probs_key]
@@ -1113,7 +1107,7 @@ class KLComputation(Transform):
         self.ref_log_probs_key = ref_log_probs_key
         self.kl_key = kl_key
         self.add_to_reward = add_to_reward
-        self.coef = coef
+        self.coeff = coeff
         self.padding_side = padding_side
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -1183,7 +1177,7 @@ class KLComputation(Transform):
                             f"The rewards should have one more dimension than the KL."
                         )
                     reward = [
-                        r - self.coef * k.unsqueeze(-1)
+                        r - self.coeff * k.unsqueeze(-1)
                         for r, k in _zip_strict(reward, kl)
                     ]
                 else:
@@ -1192,7 +1186,7 @@ class KLComputation(Transform):
                             f"The rewards have shape {reward.shape} but the kl has shape {kl.shape}. "
                             f"The rewards should have one more dimension than the KL."
                         )
-                    reward = reward - self.coef * kl.unsqueeze(-1)
+                    reward = reward - self.coeff * kl.unsqueeze(-1)
                 next_tensordict.set("reward", reward)
 
         return next_tensordict

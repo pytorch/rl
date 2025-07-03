@@ -1370,7 +1370,7 @@ class TestKLTransforms:
             ref_log_probs_key=("ref_log_probs", "full"),
             kl_key="kl",
             add_to_reward=True,
-            coef=1.0,
+            coeff=1.0,
         )
 
         # Apply transform
