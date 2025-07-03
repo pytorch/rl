@@ -41,7 +41,7 @@ TransformersWrapperMaxTokens = partial(
 )
 
 
-@pytest.fixture(scope="module", autouse=True)
+@pytest.fixture(scope="function", autouse=True)
 def set_seed():
     torch.manual_seed(0)
     if torch.cuda.is_available():

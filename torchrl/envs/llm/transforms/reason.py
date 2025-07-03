@@ -10,7 +10,7 @@ from typing import Callable, Literal
 
 from tensordict import lazy_stack, TensorDictBase
 
-from torchrl.data.llm.chat import History
+from torchrl.data.llm.history import History
 from torchrl.envs import Transform
 from torchrl.envs.common import EnvBase
 

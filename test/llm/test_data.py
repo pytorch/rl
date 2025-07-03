@@ -21,7 +21,7 @@ from torchrl.data import (
     ReplayBuffer,
     SamplerWithoutReplacement,
 )
-from torchrl.data.llm.chat import ContentBase
+from torchrl.data.llm.history import ContentBase
 from torchrl.data.llm.topk import TopKRewardSelector
 
 _has_transformers = importlib.util.find_spec("transformers")
@@ -324,8 +324,12 @@ Let me help you with that.
 The result is""",
     ]
 
-    @pytest.mark.parametrize("test_case", TEST_CASES)
-    def test_history_assistant_mask(self, test_case):
+    @pytest.mark.parametrize(
+        "test_case",
+        TEST_CASES,
+        ids=["case_1", "case_2", "case_3", "case_4", "case_5", "case_6"],
+    )
+    def test_history_assistant_mask_qwen(self, test_case):
         from transformers import AutoTokenizer
 
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B")
@@ -341,6 +345,101 @@ The result is""",
         last_item: str = history[role_assistant].apply_chat_template(
             tokenizer=tokenizer,
             chat_template_name="qwen",
+            add_generation_prompt=False,
+        )
+
+        if "assistant" in history.role:
+            assert proc["assistant_masks"].any()
+        else:
+            assert not proc["assistant_masks"].any()
+        if last_item:
+            decoded = tokenizer.decode(
+                proc["input_ids"][proc["assistant_masks"].bool()]
+            )
+            assert type(decoded) is str
+            assert last_item.endswith(decoded), (decoded, last_item)
+
+    LLAMA_TEST_CASES = [
+        # Case 1: All messages complete
+        """<|begin_of_text|><|header_start|>system<|header_end|>
+
+I am a helpful assistant.<|eot|><|header_start|>user<|header_end|>
+
+What is the capital of France?<|eot|><|header_start|>assistant<|header_end|>
+
+The capital of France is Paris.<|eot|>""",
+        # Case 2: Last message incomplete
+        """<|begin_of_text|><|header_start|>system<|header_end|>
+
+I am a helpful assistant.<|eot|><|header_start|>user<|header_end|>
+
+What is the capital of France?<|eot|><|header_start|>assistant<|header_end|>
+
+The capital of France is""",
+        # Case 3: Multiple messages with mix of endings
+        """<|begin_of_text|><|header_start|>system<|header_end|>
+
+I am a helpful assistant.<|eot|><|header_start|>user<|header_end|>
+
+Tell me about Python.<|eot|><|header_start|>assistant<|header_end|>
+
+Python is a programming language.<|eot|><|header_start|>user<|header_end|>
+
+Can you elaborate?<|eot|><|header_start|>assistant<|header_end|>
+
+Python is known for its simplicity""",
+        # Case 4: Single incomplete message
+        """<|header_start|>assistant<|header_end|>
+
+Let me help you with that""",
+        #         # Case 5: Empty content but complete -- not supported by LLAMA 4
+        #         """<|begin_of_text|><|header_start|>system<|header_end|>
+        # <|eot|><|header_start|>user<|header_end|>
+        # <|eot|>""",
+        # Case 6: Message with tool calls
+        """<|begin_of_text|><|header_start|>system<|header_end|>
+
+I am an assistant that can use tools.<|eot|><|header_start|>user<|header_end|>
+
+<|eot|><|header_start|>assistant<|header_end|>
+
+Let me help you with that.
+<tool_call>
+{"name": "calculator", "arguments": {"expression": "2+2"}}
+</tool_call><|eot|><|header_start|>user<|header_end|>
+
+4<|eot|><|header_start|>assistant<|header_end|>
+
+The result is""",
+    ]
+
+    @pytest.mark.parametrize(
+        "test_case",
+        LLAMA_TEST_CASES,
+        ids=["case_1", "case_2", "case_3", "case_4", "case_6"],
+    )
+    def test_history_assistant_mask_llama(self, test_case):
+        from transformers import AutoTokenizer
+
+        try:
+            tokenizer = AutoTokenizer.from_pretrained(
+                "meta-llama/Llama-4-Scout-17B-16E-Instruct"
+            )
+        except Exception:
+            pytest.skip("Could not load Llama tokenizer")
+
+        history = History.from_text(test_case, chat_template_name="llama")
+        proc = history.apply_chat_template(
+            tokenizer=tokenizer,
+            chat_template_name="llama",
+            add_generation_prompt=False,
+            return_dict=True,
+            return_assistant_tokens_mask=True,
+        )
+        role_assistant = torch.tensor([r == "assistant" for r in history.role])
+        last_item: str = history[role_assistant].apply_chat_template(
+            tokenizer=tokenizer,
+            chat_template_name="llama",
             add_generation_prompt=False,
         )
 
@@ -581,82 +680,289 @@ The result is""",
     def test_add_chat_template_parameters_used(self):
         """Test that add_chat_template actually uses inverse_parser and model_family_keywords parameters with a real tokenizer."""
         import re
+        import uuid
 
-        from torchrl.data.llm.chat import add_chat_template, History
+        from torchrl.data.llm.history import add_chat_template, History
         from transformers import AutoTokenizer
 
-        # Track if the inverse parser is called
-        inverse_parser_called = {"called": False}
+        try:
+            # Track if the inverse parser is called
+            inverse_parser_called = {"called": False}
 
-        # Create a custom template (trivially different from Qwen)
-        custom_template = """
-        {% for message in messages %}
-        {%- if message['role'] == 'user' %}
-        [USER] {{ message['content'] }}
-        {%- elif message['role'] == 'assistant' %}
-        {% generation %}[ASSISTANT] {{ message['content'] }}{% endgeneration %}
-        {%- endif %}
-        {% endfor %}
-        """
+            template_name = f"qwen_custom_{uuid.uuid4()}"
 
-        # Custom inverse parser
-        def custom_inverse_parser(text: str) -> History:
-            inverse_parser_called["called"] = True
-            user_msgs = re.findall(
-                r"\[USER\] (.*?)(?=\[ASSISTANT\]|$)", text, re.DOTALL
+            # Create a custom template (trivially different from Qwen)
+            custom_template = """
+            {% for message in messages %}
+            {%- if message['role'] == 'user' %}
+            [USER] {{ message['content'] }}
+            {%- elif message['role'] == 'assistant' %}
+            {% generation %}[ASSISTANT] {{ message['content'] }}{% endgeneration %}
+            {%- endif %}
+            {% endfor %}
+            """
+
+            # Custom inverse parser
+            def custom_inverse_parser(text: str) -> History:
+                inverse_parser_called["called"] = True
+                user_msgs = re.findall(
+                    r"\[USER\] (.*?)(?=\[ASSISTANT\]|$)", text, re.DOTALL
+                )
+                assistant_msgs = re.findall(
+                    r"\[ASSISTANT\] (.*?)(?=\[USER\]|$)", text, re.DOTALL
+                )
+                messages = []
+                for i, user_content in enumerate(user_msgs):
+                    messages.append(History(role="user", content=user_content.strip()))
+                    if i < len(assistant_msgs):
+                        messages.append(
+                            History(role="assistant", content=assistant_msgs[i].strip())
+                        )
+                return lazy_stack(messages)
+
+            # Register the custom template and parser for Qwen
+            add_chat_template(
+                template_name=template_name,
+                template=custom_template,
+                inverse_parser=custom_inverse_parser,
+                model_family_keywords=["qwen"],
             )
-            assistant_msgs = re.findall(
-                r"\[ASSISTANT\] (.*?)(?=\[USER\]|$)", text, re.DOTALL
+
+            # Use a real Qwen tokenizer
+            tokenizer = AutoTokenizer.from_pretrained(
+                "Qwen/Qwen2.5-3B", trust_remote_code=True
             )
-            messages = []
-            for i, user_content in enumerate(user_msgs):
-                messages.append(History(role="user", content=user_content.strip()))
-                if i < len(assistant_msgs):
-                    messages.append(
-                        History(role="assistant", content=assistant_msgs[i].strip())
-                    )
-            return lazy_stack(messages)
-
-        # Register the custom template and parser for Qwen
-        add_chat_template(
-            template_name="qwen_custom",
-            template=custom_template,
-            inverse_parser=custom_inverse_parser,
-            model_family_keywords=["qwen"],
-        )
-
-        # Use a real Qwen tokenizer
-        tokenizer = AutoTokenizer.from_pretrained(
-            "Qwen/Qwen2.5-3B", trust_remote_code=True
-        )
-        history = History.from_chats(
-            [
+            history = History.from_chats(
                 [
-                    {"role": "user", "content": "Hello"},
-                    {"role": "assistant", "content": "Hi there!"},
+                    [
+                        {"role": "user", "content": "Hello"},
+                        {"role": "assistant", "content": "Hi there!"},
+                    ]
                 ]
-            ]
+            )
+
+            # This should trigger auto-detection using our custom template
+            result = history.apply_chat_template(
+                tokenizer=tokenizer,
+                add_generation_prompt=False,
+                tokenize=False,
+            )
+            # The result should use our custom format
+            if isinstance(result, list):
+                result_str = result[0]
+            else:
+                result_str = result
+            assert "[USER]" in result_str
+            assert "[ASSISTANT]" in result_str
+
+            # Test that inverse parser works
+            parsed = History.from_text(result, chat_template_name=template_name)
+            assert inverse_parser_called["called"], "Inverse parser was not called"
+            assert parsed.role == history.role
+            assert parsed.content == history.content
+        finally:
+            from torchrl.data.llm.history import (
+                _CHAT_TEMPLATES,
+                _CUSTOM_INVERSE_PARSERS,
+                _CUSTOM_MODEL_FAMILY_KEYWORDS,
+            )
+
+            if template_name in _CHAT_TEMPLATES:
+                del _CHAT_TEMPLATES[template_name]
+            if template_name in _CUSTOM_INVERSE_PARSERS:
+                del _CUSTOM_INVERSE_PARSERS[template_name]
+            if template_name in _CUSTOM_MODEL_FAMILY_KEYWORDS:
+                del _CUSTOM_MODEL_FAMILY_KEYWORDS[template_name]
+
+    chats_round_trip = [
+        [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "What is the capital of France?"},
+            {"role": "assistant", "content": "The capital of France is Paris."},
+        ],
+        [
+            {"role": "user", "content": "Tell me a joke."},
+            {
+                "role": "assistant",
+                "content": "Why did the chicken cross the road? To get to the other side!",
+            },
+        ],
+        [
+            {"role": "system", "content": "You are a coding assistant."},
+            {"role": "user", "content": "Write a Python function to add two numbers."},
+            {"role": "assistant", "content": "def add(a, b):\n    return a + b"},
+            {"role": "user", "content": "What about subtraction?"},
+            {"role": "assistant", "content": "def subtract(a, b):\n    return a - b"},
+        ],
+    ]
+
+    @pytest.mark.skipif(not _has_transformers, reason="requires transformers library")
+    @pytest.mark.parametrize(
+        "tokenizer_name",
+        [
+            "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+            "Qwen/Qwen2.5-0.5B",
+            "microsoft/phi-2",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "use_tokenizer_chat_template",
+        [False, True],
+        ids=["no_use_tokenizer_chat_template", "use_tokenizer_chat_template"],
+    )
+    @pytest.mark.parametrize("chat", chats_round_trip)
+    def test_history_round_trip(
+        self, tokenizer_name, use_tokenizer_chat_template, chat
+    ):
+        """Test round-trip conversion: History -> string -> History for various templates and tokenizers."""
+        import re
+
+        from transformers import AutoTokenizer
+
+        # Example chats
+
+        tokenizer = AutoTokenizer.from_pretrained(
+            tokenizer_name, trust_remote_code=True
         )
 
-        # This should trigger auto-detection using our custom template
-        result = history.apply_chat_template(
+        history = History.from_chats(chat)
+        if use_tokenizer_chat_template:
+            if (
+                not hasattr(tokenizer, "chat_template")
+                or tokenizer.chat_template is None
+            ):
+                pytest.skip(f"Tokenizer {tokenizer_name} does not have a chat template")
+            chat_template = tokenizer.chat_template
+            chat_template_name = None
+        else:
+            chat_template = None
+            chat_template_name = None  # Let History auto-detect
+
+        # Serialize
+        chat_str = history.apply_chat_template(
             tokenizer=tokenizer,
             add_generation_prompt=False,
-            tokenize=False,
+            chat_template=chat_template,
+            chat_template_name=chat_template_name,
+            return_dict=False,
         )
-        # The result should use our custom format
-        if isinstance(result, list):
-            result_str = result[0]
-        else:
-            result_str = result
-        assert "[USER]" in result_str
-        assert "[ASSISTANT]" in result_str
+        # Parse back
+        parsed = History.from_text(
+            text=chat_str,
+            tokenizer=tokenizer,
+            chat_template=chat_template,
+            chat_template_name=chat_template_name,
+        )
+        # Normalize whitespace for comparison
+        def norm(x):
+            if isinstance(x, list):
+                return [re.sub(r"\\s+", " ", str(xx).strip()) for xx in x]
+            return re.sub(r"\\s+", " ", str(x).strip())
+            # Compare roles and content
+            assert norm(parsed.role) == norm(
+                history.role
+            ), f"Roles do not match!\nOriginal: {history.role}\nParsed: {parsed.role}"
+            assert norm(parsed.content) == norm(
+                history.content
+            ), f"Content does not match!\nOriginal: {history.content}\nParsed: {parsed.content}"
 
-        # Test that inverse parser works
-        parsed = History.from_text(result, chat_template_name="qwen_custom")
-        assert inverse_parser_called["called"], "Inverse parser was not called"
-        assert parsed.role == history.role
-        assert parsed.content == history.content
+        # All messages should be complete
+        assert all(
+            parsed.is_complete
+        ), f"All messages should be complete after round-trip. is_complete: {parsed.is_complete}"
+
+    @pytest.mark.skipif(not _has_transformers, reason="requires transformers library")
+    @pytest.mark.parametrize(
+        "tokenizer_name",
+        [
+            "Qwen/Qwen2.5-0.5B",
+            "microsoft/phi-2",
+            "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "use_tokenizer_chat_template",
+        [False, True],
+        ids=["no_use_tokenizer_chat_template", "use_tokenizer_chat_template"],
+    )
+    @pytest.mark.parametrize("chat", chats_round_trip)
+    def test_history_round_trip_incomplete(
+        self, tokenizer_name, use_tokenizer_chat_template, chat
+    ):
+        """Test that truncated strings are properly parsed with the last message marked as incomplete."""
+        if chat[0]["role"] != "system":
+            pytest.skip("Skipping test for non-system message")
+        import re
+
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained(
+            tokenizer_name, trust_remote_code=True
+        )
+
+        history = History.from_chats(chat)
+
+        if use_tokenizer_chat_template:
+            if (
+                not hasattr(tokenizer, "chat_template")
+                or tokenizer.chat_template is None
+            ):
+                pytest.skip(f"Tokenizer {tokenizer_name} does not have a chat template")
+            chat_template = tokenizer.chat_template
+            chat_template_name = None
+        else:
+            chat_template = None
+            chat_template_name = None  # Let History auto-detect
+
+        # Serialize
+        chat_str = history.apply_chat_template(
+            tokenizer=tokenizer,
+            add_generation_prompt=False,
+            chat_template=chat_template,
+            chat_template_name=chat_template_name,
+            return_dict=False,
+        )
+
+        # Truncate the last 10 characters to simulate incomplete response
+        truncated_chat_str = chat_str[:-10]
+
+        # Parse back the truncated string
+        parsed = History.from_text(
+            text=truncated_chat_str,
+            tokenizer=tokenizer,
+            chat_template=chat_template,
+            chat_template_name=chat_template_name,
+        )
+        # Normalize whitespace for comparison
+        def norm(x):
+            if isinstance(x, list):
+                return [re.sub(r"\\s+", " ", str(xx).strip()) for xx in x]
+            return re.sub(r"\\s+", " ", str(x).strip())
+
+        # Check that we have the same number of messages as the original
+        assert len(parsed.role) == len(
+            history.role
+        ), f"Number of messages should match original. Original: {len(history.role)}, Parsed: {len(parsed.role)}"
+        assert len(parsed.content) == len(
+            history.content
+        ), f"Number of content items should match original. Original: {len(history.content)}, Parsed: {len(parsed.content)}"
+        assert len(parsed.is_complete) == len(
+            history.is_complete
+        ), f"Number of completion flags should match original. Original: {len(history.is_complete)}, Parsed: {len(parsed.is_complete)}"
+
+        # Check that all messages except the last one are complete
+        if len(parsed.is_complete) > 0:
+            assert all(
+                parsed.is_complete[:-1]
+            ), f"All messages except the last should be complete. is_complete: {parsed.is_complete}"
+            assert not parsed.is_complete[
+                -1
+            ], f"Last message should be incomplete. is_complete: {parsed.is_complete}"
+
+        # Check that roles match the original (except potentially the last one if it was truncated mid-message)
+        assert norm(parsed.role[:-1]) == norm(
+            history.role[:-1]
+        ), f"All roles except the last should match original. Original: {history.role[:-1]}, Parsed: {parsed.role[:-1]}"
 
 
 class TestTopK:

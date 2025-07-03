@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import warnings
+
 from contextlib import nullcontext
 from copy import copy
 from typing import Any, Literal
@@ -17,7 +19,6 @@ from torchrl.envs import EnvBase, Transform
 from torchrl.envs.transforms.transforms import Compose
 from torchrl.envs.transforms.utils import _set_missing_tolerance
 from torchrl.modules.llm.policies.common import CategoricalSequential
-import warnings
 
 try:
     import transformers
@@ -618,7 +619,10 @@ class RetrieveLogProb(Transform):
             ]
             if self.model.pad_output:
                 log_probs = pad_sequence(
-                    log_probs, batch_first=True, padding_value=0.0, padding_side=self.padding_side
+                    log_probs,
+                    batch_first=True,
+                    padding_value=0.0,
+                    padding_side=self.padding_side,
                 )
             else:
                 log_probs = torch.nested.as_nested_tensor(

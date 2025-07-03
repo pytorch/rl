@@ -11,7 +11,7 @@ from tensordict import lazy_stack, TensorDictBase
 from tensordict.utils import _zip_strict
 from torch.utils.data import DataLoader
 from torchrl.data import Composite, NonTensor
-from torchrl.data.llm.chat import History
+from torchrl.data.llm.history import History
 from torchrl.envs import EnvBase, TransformedEnv
 
 from torchrl.envs.llm.transforms.dataloading import DataLoadingPrimer

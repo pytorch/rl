@@ -221,7 +221,7 @@ class TestSFT:
         assert loss_vals.sum(reduce=True).shape == ()
 
     def test_sft_assistant_only(self, data):
-        from torchrl.data.llm.chat import _CHAT_TEMPLATES
+        from torchrl.data.llm.history import _CHAT_TEMPLATES
         from transformers import AutoTokenizer, OPTConfig, OPTForCausalLM
 
         tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")

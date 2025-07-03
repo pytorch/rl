@@ -15,7 +15,7 @@ import hydra
 
 from torchrl import torchrl_logger
 from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
-from torchrl.data.llm.chat import History
+from torchrl.data.llm.history import History
 from torchrl.record.loggers.wandb import WandbLogger
 
 try:

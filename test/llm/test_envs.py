@@ -26,7 +26,7 @@ from tensordict import (
 )
 
 from torchrl._utils import logger as torchrl_logger
-from torchrl.data.llm.chat import History
+from torchrl.data.llm.history import History
 from torchrl.envs import StepCounter
 from torchrl.envs.llm import (
     as_padded_tensor,

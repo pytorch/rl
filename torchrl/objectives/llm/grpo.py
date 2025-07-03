@@ -27,7 +27,7 @@ from torchrl._utils import logger as torchrl_logger
 from torchrl.envs.transforms.transforms import Transform
 from torchrl.modules.llm import CategoricalSequential
 from torchrl.objectives.ppo import ClipPPOLoss
-from torchrl.objectives.utils import _maybe_get_or_select, _reduce, _sum_td_features
+from torchrl.objectives.utils import _reduce, _sum_td_features
 
 
 class GRPOLossOutput(TensorClass["nocast"]):
@@ -294,7 +294,7 @@ class GRPOLoss(ClipPPOLoss):
             else value,
         )
         if self.kl_to_ref_coeff is not None:
-            loss_kl, kl_penalty = self._kl_to_ref(tensordict, mask=mask)
+            loss_kl, kl_penalty = self._kl_to_ref(tensordict, mask=mask, dist=dist)
             td_out["loss_kl_to_ref"] = loss_kl
             td_out["kl_to_ref"] = kl_penalty.detach()
         if self.kl_to_inference_coeff is not None:
@@ -303,6 +303,7 @@ class GRPOLoss(ClipPPOLoss):
                 key=self.tensor_keys.sample_log_prob,
                 coeff=self.kl_to_inference_coeff,
                 mask=mask,
+                dist=dist,
             )
             td_out["loss_kl_to_inference"] = loss_kl
             td_out["kl_to_inference"] = kl_penalty.detach()
@@ -316,6 +317,7 @@ class GRPOLoss(ClipPPOLoss):
         ref_log_prob: torch.Tensor | None = None,
         coeff: float | None = None,
         mask: torch.Tensor | None = None,
+        dist: d.Distribution | None = None,
     ):
         if coeff is None:
             coeff = self.kl_to_ref_coeff
@@ -324,6 +326,8 @@ class GRPOLoss(ClipPPOLoss):
             ref_log_prob = tensordict.get(
                 key,
                 as_padded_tensor=True,
+                padding_side=dist.padding_side,
+                padding_value=dist.padding_value,
             ).squeeze(-1)
         cur_log_prob = tensordict.get("_cur_log_prob")
         # TODO: remove this
