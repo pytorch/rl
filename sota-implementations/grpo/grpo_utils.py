@@ -544,11 +544,9 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
     else:
         raise NotImplementedError(f"Dataset {cfg.env.dataset} not implemented")
     if cfg.env.reasoning:
-        # Set the thinking transform after the reward but before step-counter
-        env = env.insert_transform(
-            -2,
+        env = env.append_transform(
             AddThinkingPrompt(
-                cond=lambda td: td["reward"] <= reward_threshold,
+                cond=lambda td: td["reward"] <= reward_threshold and td["step_count"] < max_steps,
                 role="assistant",
                 edit_last_turn=True,
                 zero_reward=True,
