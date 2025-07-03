@@ -799,7 +799,6 @@ class RetrieveKL(Compose):
         kl_key: NestedKey = "kl",
         add_to_reward: bool = True,
         coeff: float = 1.0,
-        padding_side: str = "left",
         **kwargs,
     ):
         if isinstance(gen_model, str) and gen_model == "from_collector":
