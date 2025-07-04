@@ -7,12 +7,7 @@ from __future__ import annotations
 from typing import Any, Callable, Literal
 
 import torch
-from tensordict import (
-    NonTensorData,
-    NonTensorStack,
-    TensorClass,
-    TensorDict,
-)
+from tensordict import NonTensorData, NonTensorStack, TensorClass, TensorDict
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data import Composite, NonTensor, Unbounded
 from torchrl.envs import StepCounter
@@ -72,16 +67,23 @@ def _collate_fn(batch):
     batch = torch.stack([TensorDict.from_any(_batch) for _batch in batch])
     batch.rename_key_("prompt", "query")
     # we want instruction_id_list and kwargs to be lists, but not NonTensorStacks
-    instruction_id_list = batch.get("instruction_id_list")
+    instruction_id_list = batch["instruction_id_list"]
     # instruction_id_list should be a list of lists
     instruction_id_list = NonTensorStack(
-        *[NonTensorData([item] if not isinstance(item, list) else item) for item in instruction_id_list]
+        *[
+            NonTensorData([item] if not isinstance(item, list) else item)
+            for item in instruction_id_list
+        ]
     )
-    kwargs = batch.get("kwargs")
-    kwargs = NonTensorStack(*[NonTensorData([item] if not isinstance(item, dict) else item) for item in kwargs])
+    kwargs = batch["kwargs"]
+    kwargs = NonTensorStack(
+        *[
+            NonTensorData([item] if not isinstance(item, list) else item)
+            for item in kwargs
+        ]
+    )
     batch.set("instruction_id_list", instruction_id_list)
     batch.set("kwargs", kwargs)
-    torchrl_logger.info(f"Collated batch: {batch}")
     # we don't need a tensorclass here
     return batch
     # return IFEvalData.from_tensordict(batch)
