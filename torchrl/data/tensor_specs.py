@@ -2799,6 +2799,8 @@ class NonTensor(TensorSpec):
             batched = False
         elif batched is not None and feature_dims is not None:
             raise ValueError("Cannot specify both batched and feature_dims.")
+        else:
+            feature_dims = 0 if batched else len(self.shape)
         self.batched = batched
         self.feature_dims = feature_dims
         self.encode = self._encode_eager
@@ -2881,8 +2883,8 @@ class NonTensor(TensorSpec):
                 device=self.device,
             )
             if batch_shape:
-                for i in batch_shape:
-                    val = torch.stack([val.copy() for _ in range(i)], -1)
+                for i in reversed(batch_shape):
+                    val = torch.stack([val.copy() for _ in range(i)])
             return val
 
     def zero(self, shape=None):
