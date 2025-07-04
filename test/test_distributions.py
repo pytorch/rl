@@ -30,9 +30,11 @@ from torchrl.modules.distributions import (
     MaskedOneHotCategorical,
     TanhDelta,
 )
-from torchrl.modules.distributions.discrete import LLMMaskedCategorical
 from torchrl.modules.distributions.continuous import SafeTanhTransform
-from torchrl.modules.distributions.discrete import _generate_ordinal_logits
+from torchrl.modules.distributions.discrete import (
+    _generate_ordinal_logits,
+    LLMMaskedCategorical,
+)
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import get_default_devices
@@ -752,233 +754,238 @@ class TestMaskedOneHotCategorical:
 
 class TestLLMMaskedCategorical:
     """Test the LLM-optimized masked categorical distribution."""
-    
+
     def test_construction(self):
         """Test basic construction and properties."""
         torch.manual_seed(0)
         logits = torch.randn(2, 3, 4)  # batch=2, seq=3, vocab=4
         mask = torch.ones(2, 3, dtype=torch.bool)
         mask[0, :1] = False  # mask first token of first sequence
-        
+
         dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
-        
+
         # Check properties
         assert dist.mask.shape == mask.shape
         assert torch.equal(dist.mask, mask)
         assert dist.logits.shape == logits.shape
         assert torch.equal(dist.logits, logits)
         assert dist.ignore_index == -100
-        
+
         # Check that masked logits are created lazily
         assert dist._masked_logits is None
         assert dist._masked_dist is None
-        
+
         # Access masked logits to trigger creation
         masked_logits = dist.masked_logits
         assert dist._masked_logits is not None
         assert masked_logits.shape == logits.shape
-        
+
         # Check that masked positions have large negative values
         large_neg = torch.finfo(logits.dtype).min
         assert (masked_logits[0, :1] == large_neg).all()
         assert (masked_logits[0, 1:] != large_neg).all()
-    
+
     def test_log_prob_efficiency(self):
         """Test that log_prob uses ignore_index approach efficiently."""
         torch.manual_seed(0)
         logits = torch.randn(2, 3, 4, requires_grad=True)
         mask = torch.ones(2, 3, dtype=torch.bool)
         mask[0, :1] = False
-        
+
         dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
-        
+
         # Create target tokens with ignore_index for masked positions
         target_tokens = torch.randint(0, 4, (2, 3))
         target_tokens[~mask] = -100
-        
+
         # Compute log probabilities
         log_probs = dist.log_prob(target_tokens)
-        
+
         # Check shapes
         assert log_probs.shape == target_tokens.shape
-        
+
         # Check that masked positions have zero log probability
         assert (log_probs[~mask] == 0.0).all()
-        
+
         # Check that valid positions have finite log probabilities
         assert torch.isfinite(log_probs[mask]).all()
-        
+
         # Test backward pass
         loss = -log_probs.sum()
         loss.backward()
         assert logits.grad is not None
-    
+
     def test_sampling_correctness(self):
         """Test that sampling works correctly with masking."""
         torch.manual_seed(0)
         logits = torch.randn(2, 3, 4)
         mask = torch.ones(2, 3, dtype=torch.bool)
         mask[0, :1] = False  # mask first token of first sequence
-        
+
         dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
-        
+
         # Sample multiple times
         num_samples = 1000
         samples = dist.sample((num_samples,))
-        
+
         # Check shapes
         assert samples.shape == (num_samples, 2, 3)
-        
+
         # Check that valid positions are sampled within valid range
         assert (samples >= 0).all()
         assert (samples < 4).all()
-        
+
         # Check that sampling respects the mask (masked positions should have
         # very low probability of being sampled, but not impossible)
         # We'll just check that the distribution is valid for a single sample
         single_sample = samples[0]
         assert torch.isfinite(dist.log_prob(single_sample)).all()
-    
+
     def test_mode_correctness(self):
         """Test that mode computation works correctly."""
         torch.manual_seed(0)
         logits = torch.randn(2, 3, 4)
         mask = torch.ones(2, 3, dtype=torch.bool)
         mask[0, :1] = False
-        
+
         dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
-        
+
         mode = dist.mode
-        
+
         # Check shapes
         assert mode.shape == (2, 3)
-        
+
         # Check that mode values are valid indices
         assert (mode >= 0).all()
         assert (mode < 4).all()
-        
+
         # Check that mode matches the argmax of masked logits
         masked_logits = dist.masked_logits
         expected_mode = masked_logits.argmax(dim=-1)
         torch.testing.assert_close(mode, expected_mode)
-    
+
     def test_entropy_correctness(self):
         """Test that entropy computation works correctly."""
         torch.manual_seed(0)
         logits = torch.randn(2, 3, 4)
         mask = torch.ones(2, 3, dtype=torch.bool)
         mask[0, :1] = False
-        
+
         dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
-        
+
         entropy = dist.entropy()
-        
+
         # Check shapes
         assert entropy.shape == (2, 3)
-        
+
         # Check that entropy is finite for valid positions
         assert torch.isfinite(entropy[mask]).all()
-        
+
         # Check that entropy is reasonable (positive for valid positions)
         assert (entropy[mask] >= 0).all()
-    
+
     def test_clear_cache(self):
         """Test that cache clearing works correctly."""
         torch.manual_seed(0)
         logits = torch.randn(2, 3, 4)
         mask = torch.ones(2, 3, dtype=torch.bool)
-        
+
         dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
-        
+
         # Access masked logits to populate cache
         _ = dist.masked_logits
         _ = dist.masked_dist
-        
+
         # Check that cache is populated
         assert dist._masked_logits is not None
         assert dist._masked_dist is not None
-        
+
         # Clear cache
         dist.clear_cache()
-        
+
         # Check that cache is cleared
         assert dist._masked_logits is None
         assert dist._masked_dist is None
-    
+
     def test_memory_efficiency(self):
         """Test that the distribution is memory efficient."""
-        import psutil
         import os
-        
+
+        import psutil
+
         def get_memory_usage():
             process = psutil.Process(os.getpid())
             return process.memory_info().rss / 1024 / 1024
-        
+
         torch.manual_seed(0)
         # Use larger tensors to make memory differences more apparent
         logits = torch.randn(4, 512, 1000, requires_grad=True)
         mask = torch.ones(4, 512, dtype=torch.bool)
         mask[:, :100] = False  # mask first 100 tokens
-        
+
         target_tokens = torch.randint(0, 1000, (4, 512))
         target_tokens[~mask] = -100
-        
+
         # Test current MaskedCategorical approach
         torch.cuda.empty_cache() if torch.cuda.is_available() else None
         start_memory = get_memory_usage()
-        
-        dist_current = MaskedCategorical(logits=logits, mask=mask, use_cross_entropy=True)
+
+        dist_current = MaskedCategorical(
+            logits=logits, mask=mask, use_cross_entropy=True
+        )
         log_probs_current = dist_current.log_prob(target_tokens)
         loss_current = -log_probs_current.sum()
         loss_current.backward()
-        
+
         current_memory = get_memory_usage() - start_memory
-        
+
         # Reset gradients
         logits.grad = None
-        
+
         # Test new LLMMaskedCategorical approach
         torch.cuda.empty_cache() if torch.cuda.is_available() else None
         start_memory = get_memory_usage()
-        
+
         dist_new = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
         log_probs_new = dist_new.log_prob(target_tokens)
         loss_new = -log_probs_new.sum()
         loss_new.backward()
-        
+
         new_memory = get_memory_usage() - start_memory
-        
+
         # Check that results are similar
         torch.testing.assert_close(loss_current, loss_new, atol=1e-4, rtol=1e-4)
-        
+
         # Check that new approach uses less memory
         # Note: This might not always be true due to memory fragmentation,
         # but it should generally be the case
         print(f"Current approach memory: {current_memory:.2f} MB")
         print(f"New approach memory: {new_memory:.2f} MB")
-    
+
     def test_ignore_index_variations(self):
         """Test with different ignore_index values."""
         torch.manual_seed(0)
         logits = torch.randn(2, 3, 4)
         mask = torch.ones(2, 3, dtype=torch.bool)
         mask[0, :1] = False
-        
+
         # Test with different ignore_index values
         for ignore_idx in [-100, -1, 999]:
-            dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=ignore_idx)
-            
+            dist = LLMMaskedCategorical(
+                logits=logits, mask=mask, ignore_index=ignore_idx
+            )
+
             target_tokens = torch.randint(0, 4, (2, 3))
             target_tokens[~mask] = ignore_idx
-            
+
             log_probs = dist.log_prob(target_tokens)
-            
+
             # Check that ignored positions have zero log probability
             assert (log_probs[~mask] == 0.0).all()
-            
+
             # Check that valid positions have finite log probabilities
             assert torch.isfinite(log_probs[mask]).all()
-    
+
     def test_large_vocabulary(self):
         """Test with large vocabulary size to ensure scalability."""
         torch.manual_seed(0)
@@ -986,71 +993,75 @@ class TestLLMMaskedCategorical:
         logits = torch.randn(2, 10, vocab_size)
         mask = torch.ones(2, 10, dtype=torch.bool)
         mask[0, :3] = False  # mask first 3 tokens of first sequence
-        
+
         dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
-        
+
         # Test log_prob
         target_tokens = torch.randint(0, vocab_size, (2, 10))
         target_tokens[~mask] = -100
-        
+
         log_probs = dist.log_prob(target_tokens)
         assert log_probs.shape == (2, 10)
         assert (log_probs[~mask] == 0.0).all()
         assert torch.isfinite(log_probs[mask]).all()
-        
+
         # Test sampling
         samples = dist.sample()
         assert samples.shape == (2, 10)
         assert (samples >= 0).all()
         assert (samples < vocab_size).all()
-        
+
         # Test mode
         mode = dist.mode
         assert mode.shape == (2, 10)
         assert (mode >= 0).all()
         assert (mode < vocab_size).all()
-    
+
     def test_comparison_with_masked_categorical(self):
         """Compare results with the original MaskedCategorical."""
         torch.manual_seed(0)
         logits = torch.randn(2, 3, 4)
         mask = torch.ones(2, 3, dtype=torch.bool)
         mask[0, :1] = False
-        
+
         # Create both distributions
-        dist_original = MaskedCategorical(logits=logits, mask=mask, use_cross_entropy=True)
+        dist_original = MaskedCategorical(
+            logits=logits, mask=mask, use_cross_entropy=True
+        )
         dist_new = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
-        
+
         # Test log_prob with valid tokens
         target_tokens = torch.randint(0, 4, (2, 3))
         target_tokens[~mask] = -100  # Set masked positions to ignore_index
-        
+
         log_probs_original = dist_original.log_prob(target_tokens)
         log_probs_new = dist_new.log_prob(target_tokens)
-        
+
         # Results should be similar (might have small numerical differences)
-        torch.testing.assert_close(log_probs_original, log_probs_new, atol=1e-4, rtol=1e-4)
-        
+        torch.testing.assert_close(
+            log_probs_original, log_probs_new, atol=1e-4, rtol=1e-4
+        )
+
         # Test sampling
         samples_original = dist_original.sample()
         samples_new = dist_new.sample()
-        
+
         # Both should produce valid samples
         assert (samples_original >= 0).all()
         assert (samples_original < 4).all()
         assert (samples_new >= 0).all()
         assert (samples_new < 4).all()
-    
+
     def test_error_handling(self):
         """Test error handling for invalid inputs."""
         torch.manual_seed(0)
         logits = torch.randn(2, 3, 4)
         mask = torch.ones(2, 3, dtype=torch.bool)
-        
+
         # Test with mismatched shapes
         with pytest.raises(ValueError):
             LLMMaskedCategorical(logits=logits, mask=torch.ones(3, 4, dtype=torch.bool))
-        
+
         # Test with invalid ignore_index (should be fine since we don't validate this)
         # The current implementation doesn't validate ignore_index, so this should work
         dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=5)

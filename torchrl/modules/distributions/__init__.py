@@ -15,13 +15,13 @@ from .continuous import (
     TruncatedNormal,
 )
 from .discrete import (
+    LLMMaskedCategorical,
     MaskedCategorical,
     MaskedOneHotCategorical,
     OneHotCategorical,
     OneHotOrdinal,
     Ordinal,
     ReparamGradientStrategy,
-    LLMMaskedCategorical,
 )
 
 distributions_maps = {

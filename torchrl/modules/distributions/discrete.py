@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from enum import Enum
 from functools import wraps
-from typing import Any, Sequence
+from typing import Sequence
 
 import torch
 import torch.distributions as D
@@ -15,7 +15,13 @@ from tensordict.utils import expand_as_right
 
 from torch.distributions.utils import lazy_property, logits_to_probs, probs_to_logits
 
-__all__ = ["OneHotCategorical", "MaskedCategorical", "Ordinal", "OneHotOrdinal", "LLMMaskedCategorical"]
+__all__ = [
+    "OneHotCategorical",
+    "MaskedCategorical",
+    "Ordinal",
+    "OneHotOrdinal",
+    "LLMMaskedCategorical",
+]
 
 
 def _treat_categorical_params(
@@ -669,34 +675,34 @@ def _generate_ordinal_logits(scores: torch.Tensor) -> torch.Tensor:
 
 class LLMMaskedCategorical(D.Distribution):
     """LLM-optimized masked categorical distribution.
-    
+
     This class provides a more memory-efficient approach for LLM training by:
     1. Using ignore_index=-100 for log_prob computation (no masking overhead)
     2. Using traditional masking for sampling operations
-    
+
     This is particularly beneficial for large vocabulary sizes where masking
     all logits can be memory-intensive.
-    
+
     Args:
         logits (torch.Tensor): event log probabilities (unnormalized)
         mask (torch.Tensor): boolean mask indicating valid positions
         ignore_index (int, optional): index to ignore in log_prob computation. Defaults to -100.
-    
+
     Examples:
         >>> logits = torch.randn(2, 10, 50000)  # batch=2, seq_len=10, vocab=50000
         >>> mask = torch.ones(2, 10, dtype=torch.bool)
         >>> mask[0, :5] = False  # mask first 5 tokens of first sequence
         >>> dist = LLMMaskedCategorical(logits=logits, mask=mask)
-        >>> 
+        >>>
         >>> # Efficient log_prob computation (no masking overhead)
         >>> tokens = torch.randint(0, 50000, (2, 10))
         >>> tokens[0, :5] = -100  # set masked positions to ignore_index
         >>> log_probs = dist.log_prob(tokens)
-        >>> 
+        >>>
         >>> # Sampling still uses masking for correctness
         >>> samples = dist.sample()
     """
-    
+
     def __init__(
         self,
         logits: torch.Tensor,
@@ -708,20 +714,20 @@ class LLMMaskedCategorical(D.Distribution):
             raise ValueError(
                 f"Logits batch shape {logits.shape[:-1]} must match mask shape {mask.shape}"
             )
-        
+
         self._original_logits = logits
         self._mask = mask
         self.ignore_index = ignore_index
-        
+
         # Create masked logits for sampling (only when needed)
         self._masked_logits = None
         self._masked_dist = None
-        
+
         # Set up distribution properties
         batch_shape = logits.shape[:-1]
         event_shape = logits.shape[-1:]
         super().__init__(batch_shape=batch_shape, event_shape=event_shape)
-    
+
     @property
     def _sampling_logits(self):
         """Get masked logits for sampling operations."""
@@ -729,70 +735,74 @@ class LLMMaskedCategorical(D.Distribution):
             # Only create masked logits when needed for sampling
             large_neg = torch.finfo(self._original_logits.dtype).min
             self._masked_logits = self._original_logits.masked_fill(
-                ~expand_as_right(self._mask, self._original_logits), 
-                large_neg
+                ~expand_as_right(self._mask, self._original_logits), large_neg
             )
         return self._masked_logits
-    
+
     @property
     def _sampling_dist(self):
         """Get masked distribution for sampling operations."""
         if self._masked_dist is None:
             self._masked_dist = D.Categorical(logits=self._sampling_logits)
         return self._masked_dist
-    
+
     def log_prob(self, value: torch.Tensor) -> torch.Tensor:
         """Compute log probabilities using ignore_index approach.
-        
+
         This is memory-efficient as it doesn't require masking the logits.
         The value tensor should use ignore_index for masked positions.
         """
         # Use cross_entropy with ignore_index for efficiency
         if value.ndim > 1:
             # Reshape for cross_entropy: (batch, seq_len, vocab) -> (batch*seq_len, vocab)
-            logits_flat = self._original_logits.reshape(-1, self._original_logits.size(-1))
+            logits_flat = self._original_logits.reshape(
+                -1, self._original_logits.size(-1)
+            )
             value_flat = value.reshape(-1)
-            
+
             # Compute cross_entropy with ignore_index
             log_probs_flat = -F.cross_entropy(
-                logits_flat, value_flat, 
-                reduce=False, 
-                ignore_index=self.ignore_index
+                logits_flat, value_flat, reduce=False, ignore_index=self.ignore_index
             )
-            
+
             # Reshape back
             log_probs = log_probs_flat.reshape_as(value)
         else:
             log_probs = -F.cross_entropy(
-                self._original_logits, value,
+                self._original_logits,
+                value,
                 reduce=False,
-                ignore_index=self.ignore_index
+                ignore_index=self.ignore_index,
             )
-        
+
         return log_probs
-    
-    def sample(self, sample_shape: torch.Size | Sequence[int] | None = None) -> torch.Tensor:
+
+    def sample(
+        self, sample_shape: torch.Size | Sequence[int] | None = None
+    ) -> torch.Tensor:
         """Sample from the distribution using masked logits."""
         if sample_shape is None:
             sample_shape = torch.Size()
         return self._sampling_dist.sample(sample_shape)
-    
-    def rsample(self, sample_shape: torch.Size | Sequence[int] | None = None) -> torch.Tensor:
+
+    def rsample(
+        self, sample_shape: torch.Size | Sequence[int] | None = None
+    ) -> torch.Tensor:
         """Reparameterized sampling using masked logits."""
         # This would need to be implemented based on the specific reparameterization strategy
         # For now, fall back to regular sampling
         return self.sample(sample_shape)
-    
+
     @property
     def mode(self) -> torch.Tensor:
         """Get the mode using masked logits."""
         masked_logits = self._sampling_logits
         return masked_logits.argmax(dim=-1)
-    
+
     def entropy(self) -> torch.Tensor:
         """Compute entropy using masked logits."""
         return self._sampling_dist.entropy()
-    
+
     def clear_cache(self):
         """Clear cached masked tensors to free memory."""
         self._masked_logits = None
@@ -802,12 +812,12 @@ class LLMMaskedCategorical(D.Distribution):
     def mask(self) -> torch.Tensor:
         """Get the mask."""
         return self._mask
-    
+
     @property
     def logits(self) -> torch.Tensor:
         """Get the original logits."""
         return self._original_logits
-    
+
     @property
     def probs(self) -> torch.Tensor:
         """Get probabilities from original logits."""
@@ -817,7 +827,7 @@ class LLMMaskedCategorical(D.Distribution):
     def masked_logits(self) -> torch.Tensor:
         """Get the masked logits for sampling operations."""
         return self._sampling_logits
-    
+
     @property
     def masked_dist(self) -> D.Categorical:
         """Get the masked distribution for sampling operations."""

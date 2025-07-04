@@ -9,6 +9,7 @@ from .distributions import (
     Delta,
     distributions_maps,
     IndependentNormal,
+    LLMMaskedCategorical,
     MaskedCategorical,
     MaskedOneHotCategorical,
     NormalParamExtractor,
@@ -19,7 +20,6 @@ from .distributions import (
     ReparamGradientStrategy,
     TanhDelta,
     TanhNormal,
-    LLMMaskedCategorical,
     TruncatedNormal,
 )
 from .models import (

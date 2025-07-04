@@ -309,7 +309,7 @@ class GRPOLoss(ClipPPOLoss):
                     self.tensor_keys.ref_log_probs,
                     as_padded_tensor=True,
                     padding_side="left",
-                    padding_value=dist.padding_value,
+                    padding_value=0.0,
                 ),
             )
             td_out["loss_kl_to_ref"] = loss_kl
@@ -344,7 +344,7 @@ class GRPOLoss(ClipPPOLoss):
                 key,
                 as_padded_tensor=True,
                 padding_side="left",
-                padding_value=dist.padding_value,
+                padding_value=0.0,
             )
             if ref_log_prob is None:
                 raise KeyError(
@@ -378,7 +378,7 @@ class GRPOLoss(ClipPPOLoss):
             self.tensor_keys.sample_log_prob,
             as_padded_tensor=True,
             padding_side="left",
-            padding_value=dist.padding_value,
+            padding_value=0.0,
         )
 
         if prev_log_prob is None:

@@ -12,7 +12,7 @@ from torch import device as torch_device, dtype as torch_dtype
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
-from torchrl.envs.llm import GSM8KEnv, KLRewardTransform, RetrieveKL, AddThinkingPrompt
+from torchrl.envs.llm import AddThinkingPrompt, GSM8KEnv, KLRewardTransform, RetrieveKL
 from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
@@ -523,7 +523,7 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
     max_steps = cfg.env.max_steps if cfg.env.reasoning else 1
     if cfg.env.dataset == "gsm8k":
         # Reward scale is 0.0 to 100
-        reward_threshold=20
+        reward_threshold = 20
         env = GSM8KEnv(
             repeats=cfg.env.repeats,
             tokenizer=train_tokenizer,
@@ -533,7 +533,7 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
         )
     elif cfg.env.dataset == "ifeval":  # ifeval
         # Reward scale is 0.0 to 2.2
-        reward_threshold=1.0
+        reward_threshold = 1.0
         env = IFEvalEnv(
             repeats=cfg.env.repeats,
             tokenizer=train_tokenizer,
@@ -546,7 +546,11 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
     if cfg.env.reasoning:
         env = env.append_transform(
             AddThinkingPrompt(
-                cond=lambda td, reward_threshol=reward_threshold, max_steps=max_steps: td["reward"] <= reward_threshold and td["step_count"] < max_steps,
+                cond=lambda td, reward_threshol=reward_threshold, max_steps=max_steps: td[
+                    "reward"
+                ]
+                <= reward_threshold
+                and td["step_count"] < max_steps,
                 role="assistant",
                 edit_last_turn=True,
                 zero_reward=True,
