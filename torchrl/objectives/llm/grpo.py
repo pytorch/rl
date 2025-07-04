@@ -220,7 +220,7 @@ class GRPOLoss(ClipPPOLoss):
             action = tensordict.get(
                 self.tensor_keys.action,
                 as_padded_tensor=True,
-                padding_side=dist.padding_side,
+                padding_side="left",
                 padding_value=-100,
             )
             log_prob = dist.log_prob(action)
@@ -308,7 +308,7 @@ class GRPOLoss(ClipPPOLoss):
                 ref_log_prob=tensordict.get(
                     self.tensor_keys.ref_log_probs,
                     as_padded_tensor=True,
-                    padding_side=dist.padding_side,
+                    padding_side="left",
                     padding_value=dist.padding_value,
                 ),
             )
@@ -343,7 +343,7 @@ class GRPOLoss(ClipPPOLoss):
             ref_log_prob = tensordict.get(
                 key,
                 as_padded_tensor=True,
-                padding_side=dist.padding_side,
+                padding_side="left",
                 padding_value=dist.padding_value,
             )
             if ref_log_prob is None:
@@ -377,7 +377,7 @@ class GRPOLoss(ClipPPOLoss):
         prev_log_prob = tensordict.get(
             self.tensor_keys.sample_log_prob,
             as_padded_tensor=True,
-            padding_side=dist.padding_side,
+            padding_side="left",
             padding_value=dist.padding_value,
         )
 
