@@ -6531,7 +6531,9 @@ class TensorDictPrimer(Transform):
                             *reset_val.keys(True)
                         )
                     )
-                    tensordict_reset = tensordict_reset.where(_reset, reset_val, update_batch_size=True)
+                    tensordict_reset = tensordict_reset.where(
+                        _reset, reset_val, update_batch_size=True
+                    )
                 else:
                     resets = self.default_value(reset=_reset)
                     tensordict_reset.update(resets)
