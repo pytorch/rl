@@ -959,6 +959,7 @@ def make_composite_from_td(
                 # Assume all the non-tensors have the same datatype
                 example_data=tensor.view(-1)[0].data,
                 device=tensor.device,
+                feature_dims=len(tensor.shape) - len(data.shape),
             )
             if is_non_tensor(tensor)
             else Unbounded(

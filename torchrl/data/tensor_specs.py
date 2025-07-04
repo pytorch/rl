@@ -2747,6 +2747,13 @@ class NonTensor(TensorSpec):
         batched (bool, optional): Indicates whether the data is batched. If `True`, the `rand`, `zero`, and `one` methods
             will generate data with an additional batch dimension, stacking copies of the `example_data` across this dimension.
             Defaults to `False`.
+            Exclusive with `feature_dims`.
+        feature_dims (int, optional): The number of dimensions that are features.
+            The feature dimensions are the trailing dimensions that are not batch dimensions.
+            Every feature dimension is included in a single NonTensorData object, whereas these
+            are stacked across the batch dimension.
+            Exclusive with `batched`.
+            Defaults to `None` (all if batched=False, none if batched=True).
         **kwargs: Additional keyword arguments passed to the parent class.
 
     .. seealso:: :class:`~torchrl.data.Choice` which allows to randomly choose among different specs when calling
@@ -2773,7 +2780,8 @@ class NonTensor(TensorSpec):
         device: DEVICE_TYPING | None = None,
         dtype: torch.dtype | None = None,
         example_data: Any = None,
-        batched: bool = False,
+        batched: bool | None = None,
+        feature_dims: int | None = None,
         **kwargs,
     ):
         if isinstance(shape, int):
@@ -2784,7 +2792,15 @@ class NonTensor(TensorSpec):
             shape=shape, space=None, device=device, dtype=dtype, domain=domain, **kwargs
         )
         self.example_data = example_data
+        if batched is None and feature_dims is None:
+            batched = False
+            feature_dims = len(self.shape)
+        elif batched is None and feature_dims is not None:
+            batched = False
+        elif batched is not None and feature_dims is not None:
+            raise ValueError("Cannot specify both batched and feature_dims.")
         self.batched = batched
+        self.feature_dims = feature_dims
         self.encode = self._encode_eager
 
     def __repr__(self):
@@ -2851,22 +2867,23 @@ class NonTensor(TensorSpec):
         if shape is None:
             shape = ()
         if self.batched:
-            with set_capture_non_tensor_stack(False):
-                val = NonTensorData(
-                    data=self.example_data,
-                    batch_size=(),
-                    device=self.device,
-                )
-                shape = (*shape, *self._safe_shape)
-                if shape:
-                    for i in shape:
-                        val = torch.stack([val.copy() for _ in range(i)], -1)
-                return val
-        return NonTensorData(
-            data=self.example_data,
-            batch_size=(*shape, *self._safe_shape),
-            device=self.device,
-        )
+            # feature dim is None
+            feature_dims = 0
+        else:
+            feature_dims = self.feature_dims
+        total_shape = (*shape, *self._safe_shape)
+        batch_shape = total_shape[:-feature_dims]
+        feature_shape = total_shape[-feature_dims:]
+        with set_capture_non_tensor_stack(False):
+            val = NonTensorData(
+                data=self.example_data,
+                batch_size=feature_shape,
+                device=self.device,
+            )
+            if batch_shape:
+                for i in batch_shape:
+                    val = torch.stack([val.copy() for _ in range(i)], -1)
+            return val
 
     def zero(self, shape=None):
         return self.rand(shape=shape)
