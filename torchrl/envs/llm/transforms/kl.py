@@ -1159,17 +1159,8 @@ class KLComputation(Transform):
             for gen_lp, ref_lp in _zip_strict(gen_log_probs, ref_log_probs)
         ]
 
-        # Convert to appropriate format
-        if hasattr(gen_log_probs[0], "device"):
-            # If it's a tensor, use pad_sequence
-            kl = pad_sequence(
-                kl, batch_first=True, padding_value=0.0, padding_side=self.padding_side
-            )
-        else:
-            # If it's nested, use nested tensor
-            kl = torch.nested.as_nested_tensor(kl, layout=torch.strided)
+        kl = torch.nested.as_nested_tensor(kl, layout=torch.strided)
 
-        # Store KL
         next_tensordict.set(self.kl_key, kl)
 
         # Add to reward if requested
