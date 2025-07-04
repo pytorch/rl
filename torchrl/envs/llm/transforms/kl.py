@@ -1177,6 +1177,7 @@ class KLComputation(Transform):
                         r - self.coeff * k.unsqueeze(-1)
                         for r, k in _zip_strict(reward, kl)
                     ]
+                    next_tensordict.set("reward", torch.nested.as_nested_tensor(reward, layout=torch.strided))
                 else:
                     if reward.ndim != kl.ndim + 1:
                         raise ValueError(
@@ -1184,7 +1185,7 @@ class KLComputation(Transform):
                             f"The rewards should have one more dimension than the KL."
                         )
                     reward = reward - self.coeff * kl.unsqueeze(-1)
-                next_tensordict.set("reward", reward)
+                    next_tensordict.set("reward", reward)
 
         return next_tensordict
 
