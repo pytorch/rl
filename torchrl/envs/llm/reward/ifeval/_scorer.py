@@ -345,6 +345,7 @@ class IfEvalScorer(Transform):
                 answer_blocks=answer_blocks,
                 complete=complete,
             )
+            reward = reward.view(next_tensordict.batch_size + (1, 1,))
             next_tensordict.set("reward", reward)
 
         return next_tensordict
@@ -361,7 +362,7 @@ class IfEvalScorer(Transform):
 
     def transform_reward_spec(self, reward_spec: Composite) -> Composite:
         reward_spec["reward"] = Unbounded(
-            reward_spec.shape + (1,),
+            reward_spec.shape + (1, 1,),
             dtype=torch.get_default_dtype(),
             device=reward_spec.device,
         )

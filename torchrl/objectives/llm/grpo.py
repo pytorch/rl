@@ -121,6 +121,15 @@ class GRPOLoss(ClipPPOLoss):
     target_actor_network_params: TensorDictParams
     target_critic_network_params: TensorDictParams
 
+    @dataclass
+    class _AcceptedKeys(ClipPPOLoss._AcceptedKeys):
+        """Maintains default values for all configurable tensordict keys.
+
+        This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
+        default values
+        """
+        ref_log_probs: NestedKey = ("next", "ref_log_probs", "full")
+
     def __init__(
         self,
         actor_network: LLMWrapperBase | None = None,
@@ -290,7 +299,7 @@ class GRPOLoss(ClipPPOLoss):
                 tensordict,
                 mask=mask,
                 dist=dist,
-                ref_log_prob=tensordict.get(("next", "ref_log_probs", "full"), as_padded_tensor=True, padding_side=dist.padding_side, padding_value=dist.padding_value),
+                ref_log_prob=tensordict.get(self.tensor_keys.ref_log_probs, as_padded_tensor=True, padding_side=dist.padding_side, padding_value=dist.padding_value),
             )
             td_out["loss_kl_to_ref"] = loss_kl
             td_out["kl_to_ref"] = kl_penalty.detach()
