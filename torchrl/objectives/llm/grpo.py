@@ -8,6 +8,7 @@ from collections import defaultdict, deque
 from typing import Literal
 
 import torch
+from dataclasses import dataclass
 from tensordict import (
     is_tensor_collection,
     NestedKey,
