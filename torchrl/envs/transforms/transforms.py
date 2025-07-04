@@ -6525,7 +6525,7 @@ class TensorDictPrimer(Transform):
                     # FIXME: use masked op
                     # tensordict_reset = tensordict_reset.clone()
                     reset_val = self.default_value(reset=_reset)
-                    # This is safe because env.reset calls _update_during_reset which will discard the new data
+                    # This is safE because env.reset calls _update_during_reset which will discard the new data
                     # tensordict_reset = (
                     #     self.container.full_observation_spec.zero().select(
                     #         *reset_val.keys(True)

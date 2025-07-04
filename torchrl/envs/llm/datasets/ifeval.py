@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any, Callable, Literal
 
 import torch
-from tensordict import lazy_stack, TensorClass, TensorDict
+from tensordict import lazy_stack, TensorClass, TensorDict, NonTensorStack, NonTensorData
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data import Composite, NonTensor, Unbounded
 from torchrl.envs import StepCounter
