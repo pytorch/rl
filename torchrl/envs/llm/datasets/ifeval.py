@@ -37,13 +37,13 @@ class IFEvalData(TensorClass["nocast"]):
         return Composite(
             key=Unbounded(shape=shape, dtype=torch.int64, device=device),
             instruction_id_list=NonTensor(
-                shape=shape + (-1,),
+                shape=shape,
                 device=device,
                 feature_dims=0,
                 example_data=["punctuation:no_comma"],
             ),
             kwargs=NonTensor(
-                shape=shape + (-1,),
+                shape=shape,
                 device=device,
                 feature_dims=0,
                 example_data={
@@ -66,20 +66,14 @@ class IFEvalData(TensorClass["nocast"]):
 def _collate_fn(batch):
     batch = torch.stack([TensorDict.from_any(_batch) for _batch in batch])
     batch.rename_key_("prompt", "query")
-    if batch.get("instruction_id_list").ndim == batch.ndim:
-        # unsqueeze to ad a dimension - it must be a list
-        torchrl_logger.info(
-            f"Unsqueezing instruction_id_list from {batch.get('instruction_id_list').shape} to {batch.get('instruction_id_list').shape + (1,)}"
-        )
-        batch.set(
-            "instruction_id_list", lazy_stack([batch.get("instruction_id_list")], -1)
-        )
-    if batch.get("kwargs").ndim == batch.ndim:
-        # unsqueeze to ad a dimension - it must be a list
-        torchrl_logger.info(
-            f"Unsqueezing kwargs from {batch.get('kwargs').shape} to {batch.get('kwargs').shape + (1,)}"
-        )
-        batch.set("kwargs", lazy_stack([batch.get("kwargs")], -1))
+    # we want instruction_id_list and kwargs to be lists, but not NonTensorStacks
+    instruction_id_list = batch.get("instruction_id_list")
+    # instruction_id_list should be a list of lists
+    instruction_id_list = NonTensorStack(*[NonTensorData(item) for item in instruction_id_list])
+    kwargs = batch.get("kwargs")
+    kwargs = NonTensorStack(*[NonTensorData(item) for item in kwargs])
+    batch.set("instruction_id_list", instruction_id_list)
+    batch.set("kwargs", kwargs)
     torchrl_logger.info(f"Collated batch: {batch}")
     # we don't need a tensorclass here
     return batch
