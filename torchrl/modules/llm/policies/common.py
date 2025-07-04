@@ -17,7 +17,7 @@ from torch.distributions import Categorical
 from torch.nn.utils.rnn import pad_sequence
 from torchrl.data.llm import History
 from torchrl.data.tensor_specs import Unbounded
-from torchrl.modules import MaskedCategorical
+from torchrl.modules.distributions.discrete import LLMMaskedCategorical
 
 # TODOs:
 # - [ ] Remove the useless view(-1) calls when num_samples is not > 1
@@ -446,7 +446,7 @@ class LLMWrapperBase(TensorDictModuleBase):
             **kwargs: Additional arguments
 
         Returns:
-            Distribution (Categorical or MaskedCategorical)
+            Distribution (Categorical or LLMMaskedCategorical)
         """
         if self.generate:
             raise NotImplementedError(
@@ -489,11 +489,9 @@ class LLMWrapperBase(TensorDictModuleBase):
             mask = logits != padding_value
 
         if mask is not None:
-            return MaskedCategorical(
+            return LLMMaskedCategorical(
                 logits=logits,
                 mask=mask,
-                use_cross_entropy=True,
-                padding_side=padding_side,
             )
         return Categorical(logits)
 
@@ -603,11 +601,9 @@ class LLMWrapperBase(TensorDictModuleBase):
                 padding_side=padding_side,
             )
 
-        return MaskedCategorical(
+        return LLMMaskedCategorical(
             logits=logits,
             mask=response_mask.bool(),
-            use_cross_entropy=True,
-            padding_side=padding_side,
         )
 
     def _get_dist_with_assistant_mask(
@@ -668,11 +664,9 @@ class LLMWrapperBase(TensorDictModuleBase):
                 f"Assistant mask not found in tensordict at key {assistant_mask_key}. {post_msg}"
             )
 
-        return MaskedCategorical(
+        return LLMMaskedCategorical(
             logits=logits,
             mask=assistant_mask,
-            use_cross_entropy=True,
-            padding_side=padding_side,
         )
 
     def _get_dist_with_attention_mask(
@@ -722,11 +716,9 @@ class LLMWrapperBase(TensorDictModuleBase):
                 f"Attention mask not found in tensordict at key {attention_mask_key}"
             )
 
-        return MaskedCategorical(
+        return LLMMaskedCategorical(
             logits=logits,
             mask=attention_mask,
-            use_cross_entropy=True,
-            padding_side=padding_side,
         )
 
     def _get_dist_with_custom_mask(
@@ -764,11 +756,9 @@ class LLMWrapperBase(TensorDictModuleBase):
         if logits is None:
             raise ValueError(f"Logits not found in tensordict at key {logits_key}")
 
-        return MaskedCategorical(
+        return LLMMaskedCategorical(
             logits=logits,
             mask=mask,
-            use_cross_entropy=True,
-            padding_side=padding_side,
         )
 
     # Convenience methods for common LLM training scenarios
