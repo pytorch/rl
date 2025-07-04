@@ -670,6 +670,142 @@ Similarly, environments that load data from a dataset are just special instances
 augmented with a :class:`~torchrl.envs.llm.transforms.DataLoadingPrimer` transforms (and some dedicated reward parsing
 transforms).
 
+Designing Reward Transforms
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+When designing reward transforms for LLM environments, several key considerations must be 
+addressed to ensure proper integration with the training pipeline. 
+The examples of :class:`~torchrl.envs.llm.GSM8KRewardParser` and 
+:class:`~torchrl.envs.llm.IfEvalScorer` provide excellent templates for reward transform design.
+
+**Reward Shape Requirements**
+
+The reward tensor must have the same number of dimensions as the logits, which is typically 
+two more dimensions than the environment batch size:
+
+- **Sparse rewards**: Shape ``(*bsz, 1, 1)`` - single reward per sequence
+- **Dense rewards**: Shape ``(*bsz, num_tokens, 1)`` - per-token rewards
+
+This shape requirement ensures compatibility with the loss computation pipeline. 
+For example, in the GSM8K reward parser:
+
+.. code-block:: python
+
+    # Rewards need to have shape broadcastable to [batch x tokens x 1]
+    tds = tds.apply(lambda t: t.unsqueeze(-1).unsqueeze(-1))
+
+**Done State Management**
+
+It is crucial to properly manage the done state to prevent endless generation. Common strategies include:
+
+1. **Completion-based termination**: Set done when the response is complete (e.g., ``History.complete=True``)
+2. **Content-based termination**: Set done when specific content is detected (e.g., ``<answer>`` blocks)
+3. **Step-based termination**: Use :class:`~torchrl.envs.transforms.StepCounter` for predetermined step limits
+
+Example from IFEvalScorer:
+
+.. code-block:: python
+
+    if self.set_done_if_answer and bool(answer_blocks):
+        next_tensordict.set("done", torch.ones(...))
+        next_tensordict.set("terminated", torch.ones(...))
+
+**Input Mode Handling**
+
+Reward transforms must handle different input modes correctly:
+
+- **History mode**: Extract text from ``("history", "full")`` or ``("history", "response")``
+- **Text mode**: Use text directly from ``("text", "full")`` or ``("text", "response")``
+- **Tokens mode**: Decode tokens from ``("tokens", "full")`` or ``("tokens", "response")``
+
+The GSM8K reward parser demonstrates this pattern:
+
+.. code-block:: python
+
+    if input_mode == "history":
+        responses = lazy_stack([r[..., -1] for r in responses.unbind(0)])
+        if hasattr(responses, "content"):
+            text_completion = responses.content
+    elif input_mode == "text":
+        text_completion = responses
+    elif input_mode == "tokens":
+        text_completion = self.tokenizer.decode(responses.flatten(0, 1).tolist())
+
+**Specification Management**
+
+Accurate specification of reward and observation specs is essential for proper environment initialization. Both GSM8K and IFEval provide good examples:
+
+.. code-block:: python
+
+    def transform_reward_spec(self, reward_spec: Composite) -> Composite:
+        shape = reward_spec.shape + (1, 1)
+        reward_spec.update(
+            Composite(
+                reward_answer=Unbounded(shape),
+                reward_think=Unbounded(shape),
+                reward_right=Unbounded(shape),
+                reward_contained=Unbounded(shape),
+                reward=Unbounded(shape),
+                success=Unbounded(shape, dtype=torch.bool),
+            )
+        )
+        return reward_spec
+
+**Batch Processing Considerations**
+
+For efficient processing, handle batched data appropriately:
+
+1. **Flatten batch dimensions**: Use ``tensordict.view(-1)`` for processing
+2. **Reshape results**: Restore original batch structure after processing
+3. **Handle variable-length sequences**: Use proper padding and masking
+
+**Reward Aggregation Strategies**
+
+Consider different reward aggregation approaches:
+
+1. **Simple aggregation**: Sum or average multiple reward components
+2. **Weighted aggregation**: Apply different weights to different components
+3. **Conditional rewards**: Base rewards on specific conditions or thresholds
+
+The IFEvalScorer demonstrates a sophisticated aggregation strategy:
+
+.. code-block:: python
+
+    def default_reward_aggregator(self, score: IFEvalScoreData, ...):
+        # Format score (max 1.0)
+        format_score = (format_components * weights).sum(dim=-1, keepdim=True)
+        
+        # Structure score (max 1.0)
+        structure_score = think_score + answer_score
+        
+        # Completion bonus (max 0.2)
+        completion_bonus = float(complete) * 0.2
+        
+        return format_score + structure_score + completion_bonus
+
+**Post-Processing in Replay Buffers**
+
+Rewards can also be computed after the fact by appending transforms to the replay buffer. However, done state capture must remain in the environment transform since it needs to occur on-the-fly during data collection.
+
+**Error Handling and Robustness**
+
+Implement robust error handling for parsing failures:
+
+.. code-block:: python
+
+    try:
+        cot, potential_answer = self.extract_tags(compl)
+    except ET.ParseError:
+        cot, potential_answer = ("", "")
+
+**Performance Considerations**
+
+1. **Avoid redundant computations**: Cache parsed results when possible
+2. **Use efficient text processing**: Leverage regex or XML parsing as appropriate
+3. **Minimize memory allocations**: Reuse tensors and avoid unnecessary copies
+
+By following these design principles, reward transforms can be effectively integrated into the LLM training pipeline while maintaining performance and reliability.
+
 .. currentmodule:: torchrl.envs.llm.transforms
 
 .. autosummary::

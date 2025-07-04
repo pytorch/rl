@@ -357,8 +357,22 @@ class IfEvalScorer(Transform):
             )
             next_tensordict.set("reward", reward)
         if self.set_done_if_answer and bool(answer_blocks):
-            next_tensordict.set("done", torch.ones(next_tensordict.batch_size+(1,), device=next_tensordict.device, dtype=torch.bool))
-            next_tensordict.set("terminated", torch.ones(next_tensordict.batch_size+(1,), device=next_tensordict.device, dtype=torch.bool))
+            next_tensordict.set(
+                "done",
+                torch.ones(
+                    next_tensordict.batch_size + (1,),
+                    device=next_tensordict.device,
+                    dtype=torch.bool,
+                ),
+            )
+            next_tensordict.set(
+                "terminated",
+                torch.ones(
+                    next_tensordict.batch_size + (1,),
+                    device=next_tensordict.device,
+                    dtype=torch.bool,
+                ),
+            )
         return next_tensordict
 
     @property
