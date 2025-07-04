@@ -19,7 +19,7 @@ class IFEvalData(TensorClass["nocast"]):
     """A tensorclass for IFEval dta."""
 
     key: torch.Tensor
-    instruction_id_list: str
+    instruction_id_list: list[str]
     kwargs: list[dict]
     query: str
 
@@ -34,6 +34,9 @@ class IFEvalData(TensorClass["nocast"]):
 def _collate_fn(batch):
     batch = torch.stack([TensorDict.from_any(_batch) for _batch in batch])
     batch.rename_key_("prompt", "query")
+    if not batch.get("instruction_id_list").ndim:
+        # unsqueeze to ad a dimension - it must be a list
+        batch.set("instruction_id_list", batch.get("instruction_id_list").unsqueeze(-1))
     # we don't need a tensorclass here
     return batch
     # return IFEvalData.from_tensordict(batch)
