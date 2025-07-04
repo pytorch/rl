@@ -548,7 +548,7 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
             AddThinkingPrompt(
                 cond=lambda td: td["reward"] <= reward_threshold
                 and td["step_count"] < max_steps,
-                role="user",
+                role="assistant",
                 edit_last_turn=False,
                 zero_reward=False,
                 undo_done=True,

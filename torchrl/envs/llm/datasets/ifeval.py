@@ -8,7 +8,6 @@ from typing import Any, Callable, Literal
 
 import torch
 from tensordict import NonTensorData, NonTensorStack, TensorClass, TensorDict
-from torchrl._utils import logger as torchrl_logger
 from torchrl.data import Composite, NonTensor, Unbounded
 from torchrl.envs import StepCounter
 from torchrl.envs.llm.chat import DatasetChatEnv
