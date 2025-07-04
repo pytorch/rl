@@ -859,7 +859,7 @@ class RetrieveKL(Compose):
             )
         t1 = RetrieveLogProb(
             gen_model,
-            log_probs_key=gen_log_probs_full_key,
+            log_probs_full_key=gen_log_probs_full_key,
             assistant_only=assistant_only,
             tokenizer_kwargs=tokenizer_kwargs,
             detach=detach,
@@ -870,7 +870,7 @@ class RetrieveKL(Compose):
         )
         t2 = RetrieveLogProb(
             ref_model,
-            log_probs_key=ref_log_probs_full_key,
+            log_probs_full_key=ref_log_probs_full_key,
             assistant_only=assistant_only,
             tokenizer_kwargs=tokenizer_kwargs,
             detach=detach,

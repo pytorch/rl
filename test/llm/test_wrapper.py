@@ -1366,8 +1366,8 @@ class TestKLTransforms:
 
         # Create KLComputation transform
         kl_transform = KLComputation(
-            gen_log_probs_key=("gen_log_probs", "full"),
-            ref_log_probs_key=("ref_log_probs", "full"),
+            gen_log_probs_full_key=("gen_log_probs", "full"),
+            ref_log_probs_full_key=("ref_log_probs", "full"),
             kl_key="kl",
             add_to_reward=True,
             coeff=1.0,
