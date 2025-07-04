@@ -36,6 +36,7 @@ import tensordict
 import torch
 from tensordict import (
     is_tensor_collection,
+    lazy_stack,
     LazyStackedTensorDict,
     NonTensorData,
     NonTensorStack,
@@ -2853,7 +2854,7 @@ class NonTensor(TensorSpec):
             device=dest_device,
             dtype=None,
             example_data=self.example_data,
-            batched=self.batched,
+            feature_dims=self.feature_dims,
         )
 
     def clone(self) -> NonTensor:
@@ -2862,7 +2863,7 @@ class NonTensor(TensorSpec):
             device=self.device,
             dtype=self.dtype,
             example_data=self.example_data,
-            batched=self.batched,
+            feature_dims=self.feature_dims,
         )
 
     def rand(self, shape=None):
@@ -2873,6 +2874,8 @@ class NonTensor(TensorSpec):
             feature_dims = 0
         else:
             feature_dims = self.feature_dims
+        if isinstance(shape, int):
+            shape = _size([shape])
         total_shape = (*shape, *self._safe_shape)
         batch_shape = total_shape[:-feature_dims]
         feature_shape = total_shape[-feature_dims:]
@@ -2884,7 +2887,7 @@ class NonTensor(TensorSpec):
             )
             if batch_shape:
                 for i in reversed(batch_shape):
-                    val = torch.stack([val.copy() for _ in range(i)])
+                    val = lazy_stack([val.copy() for _ in range(i)])
             return val
 
     def zero(self, shape=None):
@@ -2931,18 +2934,20 @@ class NonTensor(TensorSpec):
             device=self.device,
             dtype=None,
             example_data=self.example_data,
-            batched=self.batched,
+            feature_dims=self.feature_dims,
         )
 
     def unsqueeze(self, dim: int) -> NonTensor:
         unsq = super().unsqueeze(dim=dim)
         unsq.example_data = self.example_data
+        unsq.feature_dims = self.feature_dims
         unsq.batched = self.batched
         return unsq
 
     def squeeze(self, dim: int | None = None) -> NonTensor:
         sq = super().squeeze(dim=dim)
         sq.example_data = self.example_data
+        sq.feature_dims = self.feature_dims
         sq.batched = self.batched
         return sq
 
@@ -2952,7 +2957,7 @@ class NonTensor(TensorSpec):
             device=self.device,
             dtype=self.dtype,
             example_data=self.example_data,
-            batched=self.batched,
+            feature_dims=self.feature_dims,
         )
 
     def _unflatten(self, dim, sizes):
@@ -2962,7 +2967,7 @@ class NonTensor(TensorSpec):
             device=self.device,
             dtype=self.dtype,
             example_data=self.example_data,
-            batched=self.batched,
+            feature_dims=self.feature_dims,
         )
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
@@ -2973,7 +2978,7 @@ class NonTensor(TensorSpec):
             device=self.device,
             dtype=self.dtype,
             example_data=self.example_data,
-            batched=self.batched,
+            feature_dims=self.feature_dims,
         )
 
     def unbind(self, dim: int = 0):
@@ -2991,7 +2996,7 @@ class NonTensor(TensorSpec):
                 device=self.device,
                 dtype=self.dtype,
                 example_data=self.example_data,
-                batched=self.batched,
+                feature_dims=self.feature_dims,
             )
             for i in range(self.shape[dim])
         )
@@ -3007,7 +3012,12 @@ class NonTensor(TensorSpec):
         *,
         ignore_device: bool = False,
     ) -> torch.Tensor | TensorDictBase:
-        return NonTensorData(val, device=self.device, batch_size=self.shape)
+        return NonTensorData(
+            val,
+            device=self.device,
+            batch_size=self.shape,
+            feature_dims=self.feature_dims,
+        )
 
 
 class _UnboundedMeta(abc.ABCMeta):

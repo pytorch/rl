@@ -3938,6 +3938,16 @@ class TestNonTensor:
         assert nts.rand((2,)).data == "example_data"
         assert nts.zero((2,)).data == "example_data"
 
+    def test_feature_dims(self):
+        nts = NonTensor(shape=(3, 4), example_data="example_data")
+        assert nts.feature_dims == 2
+        nts = NonTensor(shape=(3, 4), example_data="example_data", feature_dims=1)
+        assert nts.feature_dims == 1
+        assert isinstance(nts.zeros(), NonTensorStack)
+        assert isinstance(nts.zeros(2), NonTensorStack)
+        assert isinstance(nts.zeros()[0], NonTensorData)
+        assert nts.rand((2,)).shape == (2, 3, 4)
+
     def test_example_data_ineq(self):
         nts0 = NonTensor(shape=(3, 4), example_data="example_data")
         nts1 = NonTensor(shape=(3, 4), example_data="example_data 2")
