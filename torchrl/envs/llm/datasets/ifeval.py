@@ -11,7 +11,7 @@ from tensordict import TensorClass, TensorDict
 from torchrl.envs import StepCounter
 
 from torchrl.envs.llm.chat import DatasetChatEnv
-
+from torchrl._utils import logger as torchrl_logger
 from torchrl.envs.llm.reward.ifeval import IfEvalScorer
 
 
@@ -39,7 +39,9 @@ def _collate_fn(batch):
         torchrl_logger.info(
             f"Unsqueezing instruction_id_list from {batch.get('instruction_id_list').shape} to {batch.get('instruction_id_list').shape + (1,)}"
         )
-        batch.set("instruction_id_list", lazy_stack([batch.get("instruction_id_list")], -1))
+        batch.set(
+            "instruction_id_list", lazy_stack([batch.get("instruction_id_list")], -1)
+        )
     torchrl_logger.info(f"Collated batch: {batch}")
     # we don't need a tensorclass here
     return batch
