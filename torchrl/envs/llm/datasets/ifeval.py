@@ -34,10 +34,12 @@ class IFEvalData(TensorClass["nocast"]):
 def _collate_fn(batch):
     batch = torch.stack([TensorDict.from_any(_batch) for _batch in batch])
     batch.rename_key_("prompt", "query")
-    if not batch.get("instruction_id_list").ndim:
+    if batch.get("instruction_id_list").ndim == batch.ndim:
         # unsqueeze to ad a dimension - it must be a list
-        torchrl_logger.info(f"Unsqueezing instruction_id_list from {batch.get('instruction_id_list').shape} to {batch.get('instruction_id_list').shape + (1,)}")
-        batch.set("instruction_id_list", lazy_stack([batch.get("instruction_id_list")]))
+        torchrl_logger.info(
+            f"Unsqueezing instruction_id_list from {batch.get('instruction_id_list').shape} to {batch.get('instruction_id_list').shape + (1,)}"
+        )
+        batch.set("instruction_id_list", lazy_stack([batch.get("instruction_id_list")], -1))
     torchrl_logger.info(f"Collated batch: {batch}")
     # we don't need a tensorclass here
     return batch
