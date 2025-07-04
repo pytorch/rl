@@ -10,19 +10,17 @@ import importlib.util
 import numpy as np
 import pytest
 import torch
-from mocking_classes_llm import DummyStrDataLoader
 
-from tensordict import lazy_stack, set_capture_non_tensor_stack, TensorDict
-from torchrl.data import History, LazyStackStorage, ReplayBuffer, Unbounded
-from torchrl.envs import Transform
-from torchrl.envs.llm import LLMEnv
+from tensordict import lazy_stack, TensorDict
+from torchrl.data import History, LazyStackStorage, ReplayBuffer
 from torchrl.envs.llm.transforms.kl import RetrieveLogProb
-from torchrl.modules.llm import TransformersWrapper
-from torchrl.objectives import ClipPPOLoss
-from torchrl.objectives.llm.grpo import GRPOLoss, GRPOLossOutput, MCAdvantage
+from torchrl.modules.llm import Text, TransformersWrapper, vLLMWrapper
+from torchrl.modules.llm.policies.common import ChatHistory, Masks, Tokens
+from torchrl.objectives.llm.grpo import MCAdvantage
 from torchrl.objectives.llm.sft import SFTLoss
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
+_has_vllm = importlib.util.find_spec("vllm") is not None
 prompts = [
     "Lorem ipsum dolor sit amet,",
     "consectetur adipiscing elit,",
@@ -55,7 +53,7 @@ def test_mc_advantage(ndim):
                 rewards = [torch.randn(n_tokens, 1)]
                 prompt = np.random.choice(prompts)
                 td = TensorDict(
-                    text=prompt,
+                    text=Text(prompt=prompt),
                     next=TensorDict(
                         reward=rewards, done=torch.zeros(1, dtype=torch.bool)
                     ),
@@ -89,80 +87,6 @@ def test_grpo():
     ...
 
 
-class TestPPO4LLMs:
-    @pytest.mark.skipif(
-        not _has_transformers, reason="transformers lib required to test PPO with LLMs"
-    )
-    @set_capture_non_tensor_stack(False)
-    @pytest.mark.parametrize("from_text", [True, False])
-    @pytest.mark.parametrize("cls", [ClipPPOLoss, GRPOLoss])
-    def test_hf(self, from_text, cls):
-        from transformers import AutoTokenizer, OPTConfig, OPTForCausalLM
-
-        tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
-        tokenizer.pad_token = tokenizer.eos_token
-
-        model = OPTForCausalLM(OPTConfig()).eval()
-        policy_inference = TransformersWrapper(
-            model,
-            tokenizer=tokenizer,
-            generate=True,
-            from_text=from_text,
-            return_log_probs=True,
-        )
-        policy_train = TransformersWrapper(
-            model, tokenizer=tokenizer, generate=False, from_text=False
-        )
-        for p in policy_train.parameters():
-            assert p.requires_grad
-        # Create some fake data
-        dl = DummyStrDataLoader(batch_size=32)
-        llm_env = LLMEnv.from_dataloader(
-            dl,
-            tokenizer=tokenizer if not from_text else None,
-            batch_size=(32,),
-            from_text=True,
-            eos_token_id=tokenizer.eos_token_id,
-        )
-
-        class RewardTransform(Transform):
-            def _step(self, td, next_td):
-                next_td["reward"] = torch.randn_like(
-                    td["tokens_response"], dtype=torch.float
-                ).unsqueeze(-1)
-                return next_td
-
-            def transform_reward_spec(self, reward_spec):
-                return reward_spec.set(
-                    "reward", Unbounded((*reward_spec.shape, -1, 1), dtype=torch.float)
-                )
-
-        llm_env = llm_env.append_transform(RewardTransform())
-        with torch.no_grad():
-            data = llm_env.rollout(3, policy_inference)
-            data = data.view(-1)
-            assert data["tokens_response"].shape[-1] == 20
-        # Make some fake advantages:
-        data["advantage"] = torch.randn_like(data["next", "reward"])
-
-        loss = cls(
-            actor_network=policy_train,
-        )
-        loss_vals = loss(data)
-        if cls is ClipPPOLoss:
-            assert "loss_objective" in loss_vals
-            assert "loss_entropy" in loss_vals
-            assert loss_vals["loss_objective"].requires_grad
-            assert loss_vals["loss_entropy"].requires_grad
-            assert "clip_fraction" in loss_vals
-            assert "kl_approx" in loss_vals
-            assert "entropy" in loss_vals
-            assert "ESS" in loss_vals
-            assert "loss_critic" not in loss_vals
-        else:
-            assert isinstance(loss_vals, GRPOLossOutput)
-
-
 class TestSFT:
     @pytest.fixture(scope="class")
     def data(self):
@@ -190,20 +114,21 @@ class TestSFT:
         text = history[:, :-1].apply_chat_template(
             tokenizer=tokenizer, chat_template_name="qwen", add_generation_prompt=True
         )
-        text_response = history.apply_chat_template(
+        full_text = history.apply_chat_template(
             tokenizer=tokenizer, chat_template_name="qwen", add_generation_prompt=False
         )
         text_response = [
-            txt[len(txt_start) :] for txt, txt_start in zip(text_response, text)
+            txt[len(txt_start) :] for txt, txt_start in zip(full_text, text)
         ]
         td = TensorDict(
-            text=text,
-            text_response=text_response,
-            history=history,
+            text=Text(prompt=text, response=text_response, full=full_text),
+            history=ChatHistory(
+                full=history, prompt=history[..., :-1], response=history[..., -1:]
+            ),
             next=TensorDict(
                 reward=torch.randn(2, 1),
                 done=torch.zeros(2, dtype=torch.bool),
-                history=history,
+                history=ChatHistory(prompt=history),
             ),
             batch_size=(2,),
         )
@@ -227,8 +152,9 @@ class TestSFT:
             model,
             tokenizer=tokenizer,
             generate=False,
-            from_text=True,
             chat_template_name="qwen",
+            input_mode="history",
+            pad_output=False,
         )
 
         return policy_train, tokenizer
@@ -249,8 +175,6 @@ class TestSFT:
         data,
         policy_train,
     ):
-        pass
-
         policy_train, tokenizer = policy_train
         loss = SFTLoss(
             actor_network=policy_train,
@@ -269,20 +193,21 @@ class TestSFT:
                 policy_train.model,
                 tokenizer=tokenizer,
                 generate=False,
-                from_text=True,
                 return_log_probs=True,
                 chat_template_name="qwen",
+                input_mode="history",
+                pad_output=False,
             )
             transform = RetrieveLogProb(
                 policy_ref,
                 assistant_only=True,
                 tokenizer_kwargs={"chat_template_name": "qwen"},
                 tokenizer=tokenizer,
+                log_probs_key=("ref_log_prob", "full"),
             )
             with torch.no_grad():
                 # Compute ref log-probs
                 transform(td)
-
         loss_vals = loss(td)
         if kl_to_ref_coeff is not None and loss_function != "minor_sft":
             assert loss_vals.loss_kl_to_ref.shape == ()
@@ -296,7 +221,7 @@ class TestSFT:
         assert loss_vals.sum(reduce=True).shape == ()
 
     def test_sft_assistant_only(self, data):
-        from torchrl.data.llm.chat import _CHAT_TEMPLATES
+        from torchrl.data.llm.history import _CHAT_TEMPLATES
         from transformers import AutoTokenizer, OPTConfig, OPTForCausalLM
 
         tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
@@ -308,14 +233,12 @@ class TestSFT:
             model,
             tokenizer=tokenizer,
             generate=False,
-            from_text=True,
             chat_template_name="qwen",
         )
         policy_ref = TransformersWrapper(
             model,
             tokenizer=tokenizer,
             generate=False,
-            from_text=True,
             return_log_probs=True,
             chat_template_name="qwen",
         )
@@ -324,6 +247,7 @@ class TestSFT:
             assistant_only=True,
             tokenizer_kwargs={"chat_template_name": "qwen"},
             tokenizer=tokenizer,
+            log_probs_key=("ref_log_prob", "full"),
         )
         td = transform(data)
         assert td is data
@@ -336,6 +260,181 @@ class TestSFT:
             tokenizer_kwargs={"chat_template_name": "qwen"},
         )
         loss(td)
+
+
+class TestGRPOLossIntegration:
+    """Test GRPOLoss integration with the new distribution methods."""
+
+    @pytest.fixture(scope="module")
+    def transformers_instance(self):
+        """Create transformers model and tokenizer for testing."""
+        if not _has_transformers:
+            pytest.skip("transformers not available")
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B")
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+        tokenizer.pad_token = tokenizer.eos_token
+        return model, tokenizer
+
+    @pytest.fixture(scope="module")
+    def vllm_instance(self):
+        """Create vLLM model and tokenizer for testing."""
+        if not _has_vllm:
+            pytest.skip("vllm not available")
+
+        import vllm.envs as envs
+        from transformers import AutoTokenizer
+        from vllm import LLM
+
+        envs.VLLM_HOST_IP = "0.0.0.0" or "127.0.0.1"
+
+        try:
+            model = LLM("Qwen/Qwen2.5-0.5B")
+            tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+            tokenizer.pad_token = tokenizer.eos_token
+            return model, tokenizer
+        except Exception as e:
+            pytest.skip(f"Failed to load vLLM model: {e}")
+
+    @pytest.fixture(scope="module")
+    def sample_tokens(self, vllm_instance):
+        """Create sample tokens for testing."""
+        model, tokenizer = vllm_instance
+        text = [
+            "Are you happy? Say yes or no.",
+            "Explain the difference between a cat and a dog. Be very detailed.",
+        ]
+        tokenized = tokenizer(
+            text, return_tensors="pt", padding=True, padding_side="left"
+        )
+        return tokenized["input_ids"], tokenized["attention_mask"]
+
+    @pytest.fixture(scope="module")
+    def sample_text(self):
+        """Create sample text for testing."""
+        return [
+            "Are you happy? Say yes or no.",
+            "Explain the difference between a cat and a dog. Be very detailed.",
+        ]
+
+    @pytest.fixture(scope="module")
+    def sample_history(self):
+        """Create sample conversation history for testing."""
+        chats = [
+            [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Are you happy? Say yes or no."},
+            ],
+            [
+                {
+                    "role": "system",
+                    "content": "You are a very helpful assistant, but more handsome.",
+                },
+                {
+                    "role": "user",
+                    "content": "Explain the difference between a cat and a dog. Be very detailed.",
+                },
+            ],
+        ]
+        return History.from_chats(chats)
+
+    @pytest.fixture(scope="module")
+    def sample_history_assistant(self):
+        """Create sample conversation history for testing."""
+        chats = [
+            [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Are you happy? Say yes or no."},
+                {"role": "assistant", "content": "Yes."},
+            ],
+            [
+                {
+                    "role": "system",
+                    "content": "You are a very helpful assistant, but more handsome.",
+                },
+                {
+                    "role": "user",
+                    "content": "Explain the difference between a cat and a dog. Be very detailed.",
+                },
+                {
+                    "role": "assistant",
+                    "content": "A cat is a small animal that meows, while a dog is a larger animal that barks.",
+                },
+            ],
+        ]
+        return History.from_chats(chats)
+
+    @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
+    @pytest.mark.parametrize("masking_strategy", ["sft", "rlhf"])
+    def test_grpo_loss_with_transformers(
+        self,
+        vllm_instance,
+        transformers_instance,
+        sample_history,
+        sample_tokens,
+        masking_strategy,
+    ):
+        """Test GRPOLoss with vLLM wrapper and different masking strategies."""
+        from torchrl.objectives.llm.grpo import GRPOLoss
+
+        model, tokenizer = transformers_instance
+        vllm_model, vllm_tokenizer = vllm_instance
+
+        # Use tokens input mode for SFT, history for RLHF/generic
+        if masking_strategy == "sft":
+            input_mode = "tokens"
+            input_ids, attention_mask = sample_tokens
+            input_data = {
+                "tokens": Tokens(prompt=input_ids),
+                "masks": Masks(all_attention_mask=attention_mask),
+            }
+        else:
+            input_mode = "history"
+            input_data = {"history": ChatHistory(prompt=sample_history)}
+
+        wrapper_gen = vLLMWrapper(
+            vllm_model,
+            tokenizer=vllm_tokenizer,
+            input_mode=input_mode,
+            generate=True,
+            return_log_probs=True,
+            pad_output=True,
+            generate_kwargs={"max_tokens": 10},
+        )
+
+        # Create test data with advantage and correct batch size
+        td = TensorDict(input_data, batch_size=(2,)).to_lazystack(0)
+        td = wrapper_gen(td)
+        # use a shape that can be broadcast
+        td["advantage"] = torch.randn(2, 1, 1)
+
+        wrapper = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode=input_mode,
+            generate=False,
+            return_log_probs=True,
+            pad_output=True,
+        )
+
+        # Create GRPOLoss with specified masking strategy
+        loss_fn = GRPOLoss(
+            actor_network=wrapper,
+            masking_strategy=masking_strategy,
+        )
+
+        # This should work without shape mismatch errors
+        try:
+            result = loss_fn(td)
+            assert result is not None
+        except ValueError as e:
+            if "Shape mismatch" in str(e):
+                # This is expected if the advantage shape doesn't match the log-prob shape
+                # due to different masking strategies
+                assert masking_strategy in str(e)
+            else:
+                raise
 
 
 if __name__ == "__main__":

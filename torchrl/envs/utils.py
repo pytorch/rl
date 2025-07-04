@@ -93,11 +93,11 @@ class _StepMDP:
         exclude_done: bool = False,
         exclude_action: bool = True,
     ):
-        action_keys = env.action_keys
-        done_keys = env.done_keys
-        reward_keys = env.reward_keys
-        observation_keys = env.full_observation_spec.keys(True, True)
-        state_keys = env.full_state_spec.keys(True, True)
+        action_keys = env._action_keys_step_mdp
+        done_keys = env._done_keys_step_mdp
+        reward_keys = env._reward_keys_step_mdp
+        observation_keys = env._observation_keys_step_mdp
+        state_keys = env._state_keys_step_mdp
         self.action_keys = [unravel_key(key) for key in action_keys]
         self.done_keys = [unravel_key(key) for key in done_keys]
         self.observation_keys = list(observation_keys)
@@ -245,6 +245,8 @@ class _StepMDP:
             else:
                 if is_non_tensor(val):
                     val = val.clone()
+                if is_tensor_collection(val):
+                    val = val.copy()
                 data_out._set_str(
                     key, val, validated=True, inplace=False, non_blocking=False
                 )
@@ -957,6 +959,7 @@ def make_composite_from_td(
                 # Assume all the non-tensors have the same datatype
                 example_data=tensor.view(-1)[0].data,
                 device=tensor.device,
+                feature_dims=len(tensor.shape) - len(data.shape),
             )
             if is_non_tensor(tensor)
             else Unbounded(
@@ -1463,7 +1466,9 @@ def _update_during_reset(
                 reset = reset.any(-1)
             reset = reset.reshape(node.shape)
             # node.update(node.where(~reset, other=node_reset, pad=0))
-            node.where(~reset, other=node_reset, out=node, pad=0)
+            node.where(
+                ~reset, other=node_reset, out=node, pad=0, update_batch_size=True
+            )
             # node = node.clone()
             # idx = reset.nonzero(as_tuple=True)[0]
             # node[idx].update(node_reset[idx])

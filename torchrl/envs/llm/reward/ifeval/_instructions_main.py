@@ -40,6 +40,10 @@ def _test_instruction_following_strict(
 ):
     """Tests response to see if instructions are followed."""
     instruction_list = inp.instruction_id_list
+    if not isinstance(instruction_list, list):
+        raise ValueError(
+            f"instruction_list must be a list, got {type(instruction_list)}, {instruction_list=}"
+        )
     is_following_list = []
 
     for index, instruction_id in enumerate(instruction_list):

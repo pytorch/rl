@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import abc
 import warnings
+import weakref
 from copy import deepcopy
 from functools import partial, wraps
 from typing import Any, Callable, Iterator
@@ -538,6 +539,25 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             self.is_closed = True
         self._run_type_checks = run_type_checks
         self._allow_done_after_reset = allow_done_after_reset
+
+    _collector: weakref.ReferenceType[
+        LLMCollector  # noqa: F821 # type: ignore
+    ] | None = None
+
+    def register_collector(
+        self, collector: DataCollectorBase  # noqa: F821 # type: ignore
+    ):
+        """Registers a collector with the environment.
+
+        Args:
+            collector (DataCollectorBase): The collector to register.
+        """
+        self._collector = weakref.ref(collector)
+
+    @property
+    def collector(self) -> DataCollectorBase | None:  # noqa: F821 # type: ignore
+        """Returns the collector associated with the container, if it exists."""
+        return self._collector() if self._collector is not None else None
 
     def set_spec_lock_(self, mode: bool = True) -> EnvBase:
         """Locks or unlocks the environment's specs.
@@ -1221,6 +1241,56 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             self.full_observation_spec.keys(True, True), key=_repr_by_depth
         )
         return observation_keys
+
+    @property
+    @_cache_value
+    def _observation_keys_step_mdp(self) -> list[NestedKey]:
+        """The observation keys of an environment that are static under step_mdp (i.e. to be copied as-is during step_mdp)."""
+        observation_keys_leaves = sorted(
+            self.full_observation_spec.keys(True, True, step_mdp_static_only=True),
+            key=_repr_by_depth,
+        )
+        return observation_keys_leaves
+
+    @property
+    @_cache_value
+    def _state_keys_step_mdp(self) -> list[NestedKey]:
+        """The state keys of an environment that are static under step_mdp (i.e. to be copied as-is during step_mdp)."""
+        state_keys_leaves = sorted(
+            self.full_state_spec.keys(True, True, step_mdp_static_only=True),
+            key=_repr_by_depth,
+        )
+        return state_keys_leaves
+
+    @property
+    @_cache_value
+    def _action_keys_step_mdp(self) -> list[NestedKey]:
+        """The action keys of an environment that are static under step_mdp (i.e. to be copied as-is during step_mdp)."""
+        action_keys_leaves = sorted(
+            self.full_action_spec.keys(True, True, step_mdp_static_only=True),
+            key=_repr_by_depth,
+        )
+        return action_keys_leaves
+
+    @property
+    @_cache_value
+    def _done_keys_step_mdp(self) -> list[NestedKey]:
+        """The done keys of an environment that are static under step_mdp (i.e. to be copied as-is during step_mdp)."""
+        done_keys_leaves = sorted(
+            self.full_done_spec.keys(True, True, step_mdp_static_only=True),
+            key=_repr_by_depth,
+        )
+        return done_keys_leaves
+
+    @property
+    @_cache_value
+    def _reward_keys_step_mdp(self) -> list[NestedKey]:
+        """The reward keys of an environment that are static under step_mdp (i.e. to be copied as-is during step_mdp)."""
+        reward_keys_leaves = sorted(
+            self.full_reward_spec.keys(True, True, step_mdp_static_only=True),
+            key=_repr_by_depth,
+        )
+        return reward_keys_leaves
 
     @property
     def reward_key(self):
@@ -3409,7 +3479,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
     @property
     @_cache_value
-    def _step_mdp(self):
+    def _step_mdp(self) -> Callable[[TensorDictBase], TensorDictBase]:
         return _StepMDP(self, exclude_action=False)
 
     def _rollout_stop_early(
@@ -3586,8 +3656,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         # done and truncated are in done_keys
         # We read if any key is done.
         tensordict_ = self._step_mdp(tensordict)
+        # if self._post_step_mdp_hooks is not None:
+        # tensordict_ = self._post_step_mdp_hooks(tensordict_)
         tensordict_ = self.maybe_reset(tensordict_)
         return tensordict, tensordict_
+
+    # _post_step_mdp_hooks: Callable[[TensorDictBase], TensorDictBase] | None = None
 
     @property
     @_cache_value

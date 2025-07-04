@@ -464,23 +464,42 @@ class DataLoadingPrimer(TensorDictPrimer):
         while True:
             yield from obj
 
+    _device: torch.device | None = None
+
+    @property
+    def device(self) -> torch.device | None:
+        if self._device is None:
+            primers = getattr(self, "primers", None)
+            if primers is not None:
+                device = self.primers.device
+            else:
+                parent = getattr(self, "parent", None)
+                if parent is not None:
+                    device = getattr(parent, "device", None)
+                else:
+                    device = None
+            self._device = device
+        return self._device
+
+    @device.setter
+    def device(self, device: torch.device | None):
+        self._device = device
+
     def _load_from_dataloader(self, reset: torch.Tensor | None = None):
         """Loads a single element from the dataloader, or alternatively from the buffer.
 
         If `reset` is passed, then one element per reset will be loaded.
         """
+        device = self.device
+
         if reset is not None:
             if not reset.any():
                 raise RuntimeError("reset must have at least one True value.")
             if reset.ndim > 0:
-                loaded = [self._load_from_dataloader() for _ in range(reset.sum())]
+                loaded = [
+                    self._load_from_dataloader().to(device) for _ in range(reset.sum())
+                ]
                 return self.stack_method(loaded)
-
-        primers = getattr(self, "primers", None)
-        if primers is not None:
-            device = self.primers.device
-        else:
-            device = None
 
         if len(self._queue) > 0:
             result = self._queue.popleft()

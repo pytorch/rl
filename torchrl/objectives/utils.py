@@ -596,14 +596,31 @@ def _pseudo_vmap(
     return new_func
 
 
-def _reduce(tensor: torch.Tensor, reduction: str) -> float | torch.Tensor:
-    """Reduces a tensor given the reduction method."""
+def _reduce(
+    tensor: torch.Tensor, reduction: str, mask: torch.Tensor | None = None
+) -> float | torch.Tensor:
+    """Reduces a tensor given the reduction method.
+
+    Args:
+        tensor (torch.Tensor): The tensor to reduce.
+        reduction (str): The reduction method.
+        mask (torch.Tensor, optional): A mask to apply to the tensor before reducing.
+
+    Returns:
+        float | torch.Tensor: The reduced tensor.
+    """
     if reduction == "none":
         result = tensor
     elif reduction == "mean":
-        result = tensor.mean()
+        if mask is not None:
+            result = tensor[mask].mean()
+        else:
+            result = tensor.mean()
     elif reduction == "sum":
-        result = tensor.sum()
+        if mask is not None:
+            result = tensor[mask].sum()
+        else:
+            result = tensor.sum()
     else:
         raise NotImplementedError(f"Unknown reduction method {reduction}")
     return result
@@ -668,9 +685,20 @@ def _sum_td_features(data: TensorDictBase) -> torch.Tensor:
     return data.sum(dim="feature", reduce=True)
 
 
-def _maybe_get_or_select(td, key_or_keys, target_shape=None):
+def _maybe_get_or_select(
+    td,
+    key_or_keys,
+    target_shape=None,
+    padding_side: str = "left",
+    padding_value: int = 0,
+):
     if isinstance(key_or_keys, (str, tuple)):
-        return td.get(key_or_keys, as_padded_tensor=True)
+        return td.get(
+            key_or_keys,
+            as_padded_tensor=True,
+            padding_side=padding_side,
+            padding_value=padding_value,
+        )
     result = td.select(*key_or_keys)
     if target_shape is not None and result.shape != target_shape:
         result.batch_size = target_shape

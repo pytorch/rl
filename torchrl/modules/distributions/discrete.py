@@ -6,16 +6,22 @@ from __future__ import annotations
 
 from enum import Enum
 from functools import wraps
-from typing import Any, Sequence
+from typing import Sequence
 
 import torch
 import torch.distributions as D
 import torch.nn.functional as F
+from tensordict.utils import expand_as_right
 
 from torch.distributions.utils import lazy_property, logits_to_probs, probs_to_logits
 
-
-__all__ = ["OneHotCategorical", "MaskedCategorical", "Ordinal", "OneHotOrdinal"]
+__all__ = [
+    "OneHotCategorical",
+    "MaskedCategorical",
+    "Ordinal",
+    "OneHotOrdinal",
+    "LLMMaskedCategorical",
+]
 
 
 def _treat_categorical_params(
@@ -51,8 +57,8 @@ class _one_hot_wrapper:
 
 
 class ReparamGradientStrategy(Enum):
-    PassThrough: Any = 1
-    RelaxedOneHot: Any = 2
+    PassThrough = 1
+    RelaxedOneHot = 2
 
 
 class OneHotCategorical(D.Categorical):
@@ -105,7 +111,11 @@ class OneHotCategorical(D.Categorical):
         probs = _treat_categorical_params(probs)
         self.grad_method = grad_method
         super().__init__(probs=probs, logits=logits, **kwargs)
-        self.num_samples = self._param.shape[-1]
+        # Get num_samples from logits or probs shape
+        if logits is not None:
+            self.num_samples = logits.shape[-1]
+        else:
+            self.num_samples = probs.shape[-1]
 
     def log_prob(self, value: torch.Tensor) -> torch.Tensor:
         return super().log_prob(value.argmax(dim=-1))
@@ -185,7 +195,8 @@ class MaskedCategorical(D.Categorical):
         padding_value: The padding value in the mask tensor. When
             sparse_mask == True, the padding_value will be ignored.
         use_cross_entropy (bool, optional): For faster computation of the log-probability,
-            the cross_entropy loss functional can be used. Defaults to ``False``.
+            the cross_entropy loss functional can be used. Defaults to ``True``.
+        padding_side (str, optional): The side of the padding. Defaults to ``"left"``.
 
     Examples:
         >>> torch.manual_seed(0)
@@ -223,11 +234,12 @@ class MaskedCategorical(D.Categorical):
         logits: torch.Tensor | None = None,
         probs: torch.Tensor | None = None,
         *,
-        mask: torch.Tensor = None,
-        indices: torch.Tensor = None,
+        mask: torch.Tensor | None = None,
+        indices: torch.Tensor | None = None,
         neg_inf: float = float("-inf"),
         padding_value: int | None = None,
-        use_cross_entropy: bool = False,
+        use_cross_entropy: bool = True,
+        padding_side: str = "left",
     ) -> None:
         if not ((mask is None) ^ (indices is None)):
             raise ValueError(
@@ -267,8 +279,27 @@ class MaskedCategorical(D.Categorical):
         self._mask = mask
         self._sparse_mask = sparse_mask
         self._padding_value = padding_value
+        self._padding_side = padding_side
         super().__init__(logits=logits)
         self.num_samples = num_samples
+
+    @property
+    def padding_value(self):
+        """Padding value of the distribution mask.
+
+        If the padding value is not set, it will be inferred from the logits.
+        """
+        return self._padding_value if self._padding_value is not None else 0
+
+    @property
+    def padding_side(self):
+        return self._padding_side
+
+    @property
+    def mask(self):
+        if self._sparse_mask:
+            raise ValueError("MaskedCategorical.mask does not support sparse masks")
+        return self._mask
 
     def entropy(self):
         """Compute the entropy of the distribution.
@@ -281,7 +312,8 @@ class MaskedCategorical(D.Categorical):
         # Clamp logits to avoid numerical issues
         logits = self.logits
         if self._mask.dtype is torch.bool:
-            mask = (~self._mask) | (~logits.isfinite())
+            mask = expand_as_right(self._mask, logits)
+            mask = (~mask) | (~logits.isfinite())
             logits = torch.masked_fill(logits, mask, min_real)
         else:
             # logits are already masked
@@ -337,6 +369,10 @@ class MaskedCategorical(D.Categorical):
             if logits.ndim > 2:
                 # Bring channels in 2nd dim
                 logits = logits.transpose(-1, 1)
+            if logits.ndim <= idx.ndim:
+                logits = logits.expand(idx.shape + logits.shape)
+            print(f"logits: {logits.shape}")
+            print(f"idx: {idx.shape}")
             ret = -torch.nn.functional.cross_entropy(logits, idx, reduce=False)
         else:
             ret = super().log_prob(idx)
@@ -359,7 +395,9 @@ class MaskedCategorical(D.Categorical):
             return logits
 
         if not sparse_mask:
-            return logits.masked_fill(~mask, neg_inf)
+            # Use a large negative value instead of -inf to avoid numerical issues
+            large_neg = torch.finfo(logits.dtype).min
+            return logits.masked_fill(~expand_as_right(mask, logits), large_neg)
 
         if padding_value is not None:
             padding_mask = mask == padding_value
@@ -368,7 +406,8 @@ class MaskedCategorical(D.Categorical):
                 mask = mask.masked_fill(padding_mask, 0)
         logits = logits.gather(dim=-1, index=mask)
         if padding_value is not None:
-            logits.masked_fill_(padding_mask, neg_inf)
+            large_neg = torch.finfo(logits.dtype).min
+            logits.masked_fill_(padding_mask, large_neg)
         return logits
 
     @property
@@ -636,3 +675,164 @@ def _generate_ordinal_logits(scores: torch.Tensor) -> torch.Tensor:
     )
 
     return larger_than_log_probs + smaller_than_log_probs
+
+
+class LLMMaskedCategorical(D.Distribution):
+    """LLM-optimized masked categorical distribution.
+
+    This class provides a more memory-efficient approach for LLM training by:
+    1. Using ignore_index=-100 for log_prob computation (no masking overhead)
+    2. Using traditional masking for sampling operations
+
+    This is particularly beneficial for large vocabulary sizes where masking
+    all logits can be memory-intensive.
+
+    Args:
+        logits (torch.Tensor): event log probabilities (unnormalized)
+        mask (torch.Tensor): boolean mask indicating valid positions
+        ignore_index (int, optional): index to ignore in log_prob computation. Defaults to -100.
+
+    Examples:
+        >>> logits = torch.randn(2, 10, 50000)  # batch=2, seq_len=10, vocab=50000
+        >>> mask = torch.ones(2, 10, dtype=torch.bool)
+        >>> mask[0, :5] = False  # mask first 5 tokens of first sequence
+        >>> dist = LLMMaskedCategorical(logits=logits, mask=mask)
+        >>>
+        >>> # Efficient log_prob computation (no masking overhead)
+        >>> tokens = torch.randint(0, 50000, (2, 10))
+        >>> tokens[0, :5] = -100  # set masked positions to ignore_index
+        >>> log_probs = dist.log_prob(tokens)
+        >>>
+        >>> # Sampling still uses masking for correctness
+        >>> samples = dist.sample()
+    """
+
+    def __init__(
+        self,
+        logits: torch.Tensor,
+        mask: torch.Tensor,
+        ignore_index: int = -100,
+    ) -> None:
+        # Validate shapes
+        if logits.shape[:-1] != mask.shape:
+            raise ValueError(
+                f"Logits batch shape {logits.shape[:-1]} must match mask shape {mask.shape}"
+            )
+
+        self._original_logits = logits
+        self._mask = mask
+        self.ignore_index = ignore_index
+
+        # Create masked logits for sampling (only when needed)
+        self._masked_logits = None
+        self._masked_dist = None
+
+        # Set up distribution properties
+        batch_shape = logits.shape[:-1]
+        event_shape = logits.shape[-1:]
+        super().__init__(batch_shape=batch_shape, event_shape=event_shape)
+
+    @property
+    def _sampling_logits(self):
+        """Get masked logits for sampling operations."""
+        if self._masked_logits is None:
+            # Only create masked logits when needed for sampling
+            large_neg = torch.finfo(self._original_logits.dtype).min
+            self._masked_logits = self._original_logits.masked_fill(
+                ~expand_as_right(self._mask, self._original_logits), large_neg
+            )
+        return self._masked_logits
+
+    @property
+    def _sampling_dist(self):
+        """Get masked distribution for sampling operations."""
+        if self._masked_dist is None:
+            self._masked_dist = D.Categorical(logits=self._sampling_logits)
+        return self._masked_dist
+
+    def log_prob(self, value: torch.Tensor) -> torch.Tensor:
+        """Compute log probabilities using ignore_index approach.
+
+        This is memory-efficient as it doesn't require masking the logits.
+        The value tensor should use ignore_index for masked positions.
+        """
+        # Use cross_entropy with ignore_index for efficiency
+        if value.ndim > 1:
+            # Reshape for cross_entropy: (batch, seq_len, vocab) -> (batch*seq_len, vocab)
+            logits_flat = self._original_logits.reshape(
+                -1, self._original_logits.size(-1)
+            )
+            value_flat = value.reshape(-1)
+
+            # Compute cross_entropy with ignore_index
+            log_probs_flat = -F.cross_entropy(
+                logits_flat, value_flat, reduce=False, ignore_index=self.ignore_index
+            )
+
+            # Reshape back
+            log_probs = log_probs_flat.reshape_as(value)
+        else:
+            log_probs = -F.cross_entropy(
+                self._original_logits,
+                value,
+                reduce=False,
+                ignore_index=self.ignore_index,
+            )
+
+        return log_probs
+
+    def sample(
+        self, sample_shape: torch.Size | Sequence[int] | None = None
+    ) -> torch.Tensor:
+        """Sample from the distribution using masked logits."""
+        if sample_shape is None:
+            sample_shape = torch.Size()
+        return self._sampling_dist.sample(sample_shape)
+
+    def rsample(
+        self, sample_shape: torch.Size | Sequence[int] | None = None
+    ) -> torch.Tensor:
+        """Reparameterized sampling using masked logits."""
+        # This would need to be implemented based on the specific reparameterization strategy
+        # For now, fall back to regular sampling
+        return self.sample(sample_shape)
+
+    @property
+    def mode(self) -> torch.Tensor:
+        """Get the mode using masked logits."""
+        masked_logits = self._sampling_logits
+        return masked_logits.argmax(dim=-1)
+
+    def entropy(self) -> torch.Tensor:
+        """Compute entropy using masked logits."""
+        return self._sampling_dist.entropy()
+
+    def clear_cache(self):
+        """Clear cached masked tensors to free memory."""
+        self._masked_logits = None
+        self._masked_dist = None
+
+    @property
+    def mask(self) -> torch.Tensor:
+        """Get the mask."""
+        return self._mask
+
+    @property
+    def logits(self) -> torch.Tensor:
+        """Get the original logits."""
+        return self._original_logits
+
+    @property
+    def probs(self) -> torch.Tensor:
+        """Get probabilities from original logits."""
+        return torch.softmax(self._original_logits, dim=-1)
+
+    @property
+    def masked_logits(self) -> torch.Tensor:
+        """Get the masked logits for sampling operations."""
+        return self._sampling_logits
+
+    @property
+    def masked_dist(self) -> D.Categorical:
+        """Get the masked distribution for sampling operations."""
+        return self._sampling_dist

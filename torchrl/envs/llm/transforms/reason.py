@@ -9,8 +9,9 @@ import re
 from typing import Callable, Literal
 
 from tensordict import lazy_stack, TensorDictBase
+from torchrl._utils import logger as torchrl_logger
 
-from torchrl.data.llm.chat import History
+from torchrl.data.llm.history import History
 from torchrl.envs import Transform
 from torchrl.envs.common import EnvBase
 
@@ -161,12 +162,24 @@ class AddThinkingPrompt(Transform):
             next_tensordict.update(lazy_stack(ntds))
             return next_tensordict
 
+        # Check that base_env is on history mode
+        parent = self.parent
+        if parent is None:
+            raise RuntimeError("AddThinkingPrompt must be used with a ChatEnv")
+        base_env = parent.base_env
+        if base_env.input_mode != "history":
+            raise RuntimeError(
+                "AddThinkingPrompt must be used with a ChatEnv in history mode"
+            )
+
         # Check if we should add the thinking prompt
         if self.cond(next_tensordict):
-            history: History = next_tensordict["history"]
+            torchrl_logger.info("Adding thinking prompt.")
+            history: History = next_tensordict["history"].prompt
             last_turn = history[..., -1]
 
             if self.edit_last_turn:
+
                 # Edit the last assistant response
                 content = last_turn.content
                 modified_content = self._replace_answer_with_prompt(content)
@@ -181,14 +194,14 @@ class AddThinkingPrompt(Transform):
 
                 # Replace the last turn in history
                 history = history[..., :-1].append(new_turn)
-                next_tensordict["history"] = history
+                next_tensordict["history"].prompt = history
 
             else:
                 # Add a new message
                 prompt = self.prompt
 
                 history = history.append(History(role=self.role, content=prompt))
-                next_tensordict["history"] = history
+                next_tensordict["history"].prompt = history
 
             if self.undo_done:
                 parent: EnvBase = self.parent
@@ -208,6 +221,8 @@ class AddThinkingPrompt(Transform):
                         reward = next_tensordict.get(key)
                         if reward is not None:
                             next_tensordict.set(key, reward.zero_())
+        else:
+            torchrl_logger.info("Not adding thinking prompt.")
         return next_tensordict
 
     def _replace_answer_with_prompt(self, content: str) -> str:
@@ -223,6 +238,7 @@ class AddThinkingPrompt(Transform):
             The modified content with the answer replaced by the thinking prompt
         """
         # Pattern to match <answer>...</answer> with optional EOS token
+        # Use non-greedy matching and be more specific about the end
         answer_pattern = r"<answer>.*?</answer>(?:\s*<\|im_end\|>)?"
 
         # Check if there's an answer tag
@@ -230,11 +246,23 @@ class AddThinkingPrompt(Transform):
             # Replace the answer section with the thinking prompt
             prompt = self.prompt
 
-            # Replace the answer section
+            # Replace the answer section, but preserve the EOS token if it exists
             modified_content = re.sub(answer_pattern, prompt, content, flags=re.DOTALL)
 
             # Clean up any trailing whitespace
             modified_content = modified_content.rstrip()
+
+            # Ensure we end with the EOS token if the original content had it
+            if content.endswith("<|im_end|>"):
+                modified_content = modified_content.rstrip() + "<|im_end|>"
+
+            # Ensure proper spacing around the prompt
+            if not modified_content.endswith(prompt):
+                # If the prompt wasn't properly inserted, append it
+                modified_content = content.rstrip()
+                if modified_content.endswith("<|im_end|>"):
+                    modified_content = modified_content[: -len("<|im_end|>")].rstrip()
+                modified_content = modified_content + "\n\n" + prompt + "<|im_end|>"
 
         else:
             # No answer tag found, just append the prompt

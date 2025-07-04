@@ -4,24 +4,33 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import torch
-from tensordict import NestedKey, TensorDict, TensorDictBase
-from tensordict.utils import _zip_strict
+from typing import Literal
 
+import torch
+from tensordict import lazy_stack, NestedKey, TensorDict, TensorDictBase
+from tensordict.utils import _zip_strict, is_non_tensor
 from torchrl.data import Composite, Unbounded
 from torchrl.envs import Transform
+from torchrl.envs.common import EnvBase
 
 
 class GSM8KRewardParser(Transform):
     """Reward parser for GSM8KEnv or make_gsm8k_env.
 
+    This parser automatically detects the input_mode from the parent environment and handles
+    responses accordingly:
+    - "history" mode: response is in ("history", "response") and is a History object
+    - "text" mode: response is in ("text", "response") and is text
+    - "tokens" mode: response is in ("tokens", "response") and is tokens
+
     Args:
-        tokenizer (AutoTokenizer from transformers): the tokenizer asssociated with the model.
-        in_keys (list of NestedKey): the input keys. Defaults to `["text_response", "answer"]`.
+        tokenizer (AutoTokenizer from transformers): the tokenizer associated with the model.
+        in_keys (list of NestedKey): the input keys. If None, will be automatically determined based on parent's input_mode.
         out_keys (list of NestedKey): the output keys. Defaults to `[ "reward_answer", "reward_think", "reward_right", "reward_contained", "reward", "success"]`.
         eos_token (str): the end of sentence token. Defaults to `tokenizer.eos_token` if not provided.
         set_done_if_answer (bool): whether to set the done flag to `True` when an answer is present. Defaults to `True`.
-
+        input_mode (Literal["history", "text", "tokens"]): the input mode of the parent environment.
+            Defaults to `None` (will be automatically determined based on parent's input_mode).
     """
 
     def __init__(
@@ -31,6 +40,7 @@ class GSM8KRewardParser(Transform):
         out_keys: list[NestedKey] | None = None,
         eos_token: str | None = None,
         set_done_if_answer: bool = True,
+        input_mode: Literal["history", "text", "tokens"] | None = None,
     ):
         super().__init__()
         self.tokenizer = tokenizer
@@ -42,12 +52,8 @@ class GSM8KRewardParser(Transform):
             else None
         )
         self.set_done_if_answer = set_done_if_answer
-        if in_keys is None:
-            in_keys = ["text_response", "answer"]
-        if not isinstance(in_keys, list) or len(in_keys) != 2:
-            raise ValueError(
-                f"{type(self).__name__} requires in_keys to be of type list and have 2 elements."
-            )
+        self._input_mode = input_mode
+
         if out_keys is None:
             out_keys = [
                 "reward_answer",
@@ -57,7 +63,42 @@ class GSM8KRewardParser(Transform):
                 "reward",
                 "success",
             ]
-        super().__init__(in_keys, out_keys)
+        super().__init__()
+        if in_keys is not None:
+            self.in_keys = in_keys
+        self.out_keys = out_keys
+
+    def _maybe_get_in_keys(self):
+        if not self.in_keys:
+            parent = getattr(self, "parent", None)
+            if parent is not None:
+                if getattr(parent, "base_env", None) is not None:
+                    if getattr(parent.base_env, "input_mode", None) == "history":
+                        self.in_keys = [("history", "full"), "answer"]
+                    elif getattr(parent.base_env, "input_mode", None) == "text":
+                        self.in_keys = [("text", "full"), "answer"]
+                    elif getattr(parent.base_env, "input_mode", None) == "tokens":
+                        self.in_keys = [("tokens", "full"), "answer"]
+            else:
+                raise ValueError(f"No base env found for {self}")
+
+    def set_container(self, container: Transform | EnvBase) -> None:
+        result = super().set_container(container)
+        self._maybe_get_in_keys()
+        return result
+
+    _input_mode = None
+
+    @property
+    def input_mode(self):
+        if self._input_mode is None:
+            input_mode = (
+                getattr(self.parent, "input_mode", "history")
+                if hasattr(self, "parent") and self.parent is not None
+                else "history"
+            )
+            self._input_mode = input_mode
+        return self._input_mode
 
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
@@ -72,26 +113,72 @@ class GSM8KRewardParser(Transform):
             # did update in place
             return next_tensordict
 
-        # Get the completion
+        # Get the completion based on input_mode
+        self._maybe_get_in_keys()
         responses = tensordict[self.in_keys[0]]  # batch_size, grpo_size, L
 
-        if isinstance(responses, str):
-            responses = [responses for _ in range(next_tensordict.batch_size[0])]
+        # Handle different response types based on input_mode
+        input_mode = self.input_mode
+        if input_mode == "history":
+            # responses is a History object, extract the text content
+            responses = lazy_stack([r[..., -1] for r in responses.unbind(0)])
+            if hasattr(responses, "content"):
+                # If it's a History object with content attribute
+                text_completion = responses.content
+                if is_non_tensor(text_completion):
+                    text_completion = text_completion.tolist()
+                if not isinstance(text_completion, list):
+                    text_completion = [text_completion]
+            elif hasattr(responses, "apply_chat_template"):
+                # If it's a History object, apply chat template to get text
+                text_completion = responses.apply_chat_template(
+                    tokenizer=self.tokenizer, add_generation_prompt=False
+                )
+                if not isinstance(text_completion, list):
+                    text_completion = [text_completion]
+            else:
+                # Fallback: try to convert to string
+                text_completion = [str(responses)]
+        elif input_mode == "text":
+            # responses is already text
+            if isinstance(responses, str):
+                text_completion = [
+                    responses for _ in range(next_tensordict.batch_size[0])
+                ]
+            elif not isinstance(responses, list):
+                text_completion = [responses]
+            else:
+                text_completion = responses
+        elif input_mode == "tokens":
+            # responses is tokens, need to decode
+            if isinstance(responses, torch.Tensor):
+                if responses.ndim == 3:
+                    batch_size, grpo_size, _ = responses.shape
+                # decode
+                text_completion = self.tokenizer.decode(
+                    responses.flatten(0, 1).tolist()
+                )
+                if not isinstance(text_completion, list):
+                    text_completion = [
+                        text_completion for _ in range(next_tensordict.batch_size[0])
+                    ]
+            else:
+                # Assume it's already a list of token sequences
+                text_completion = []
+                for token_seq in responses:
+                    if isinstance(token_seq, torch.Tensor):
+                        text_completion.append(
+                            self.tokenizer.decode(token_seq.tolist())
+                        )
+                    else:
+                        text_completion.append(str(token_seq))
+        else:
+            raise ValueError(f"Unknown input_mode: {input_mode}")
 
         if self.eos_token is not None:
-            responses = [r.removesuffix(self.eos_token) for r in responses]
+            text_completion = [r.removesuffix(self.eos_token) for r in text_completion]
         answers = next_tensordict[self.in_keys[1]]  # batch_size, grpo_size
-        if isinstance(responses, torch.Tensor):
-            if responses.ndim == 3:
-                batch_size, grpo_size, _ = responses.shape
-            # decode
-            text_completion = self.tokenizer.decode(responses.flatten(0, 1).tolist())
-        else:
-            text_completion = responses
-        if not isinstance(text_completion, list):
-            text_completion = [
-                text_completion for _ in range(next_tensordict.batch_size[0])
-            ]
+
         # Decomposed reward
         tds = []
         # torchrl_logger.info(f"{answers=}")
@@ -114,10 +201,13 @@ class GSM8KRewardParser(Transform):
             #  With tensorclass comparison should be easy
             cot_orig, answer = answer.split("#### ")
             tds.append(
-                self._single_shaped_correctness_reward(answer, potential_answer, cot)
+                self._single_shaped_correctness_reward(
+                    answer, [potential_answer], [cot]
+                )
             )
         tds = torch.stack(tds)
         if isinstance(responses, torch.Tensor) and responses.ndim == 3:
+            batch_size, grpo_size, _ = responses.shape
             tds = tds.reshape(batch_size, grpo_size)
         # Rewards need to have shape broadcastable to [batch x tokens x 1]
         tds = tds.apply(lambda t: t.unsqueeze(-1).unsqueeze(-1))
@@ -220,7 +310,13 @@ class GSM8KRewardParser(Transform):
         except ET.ParseError:
             return ("", "")
 
+        think_elem = root.find("think")
+        answer_elem = root.find("answer")
         return (
-            root.find("think").text if root.find("think") is not None else "",
-            root.find("answer").text if root.find("answer") is not None else "",
+            think_elem.text
+            if think_elem is not None and think_elem.text is not None
+            else "",
+            answer_elem.text
+            if answer_elem is not None and answer_elem.text is not None
+            else "",
         )
