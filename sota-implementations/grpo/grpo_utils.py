@@ -549,9 +549,10 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
                 cond=lambda td: td["reward"] <= reward_threshold
                 and td["step_count"] < max_steps,
                 role="assistant",
-                edit_last_turn=False,
-                zero_reward=False,
+                edit_last_turn=True,
+                zero_reward=True,
                 undo_done=True,
+                random_prompt=True,
             ),
         )
         env = env.append_transform(
