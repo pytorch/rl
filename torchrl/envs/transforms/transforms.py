@@ -6526,12 +6526,15 @@ class TensorDictPrimer(Transform):
                     # tensordict_reset = tensordict_reset.clone()
                     reset_val = self.default_value(reset=_reset)
                     # This is safe because env.reset calls _update_during_reset which will discard the new data
-                    tensordict_reset = (
-                        self.container.full_observation_spec.zero().select(
-                            *reset_val.keys(True)
-                        )
-                    )
-                    tensordict_reset = torch.where(_reset, reset_val, 0)
+                    # tensordict_reset = (
+                    #     self.container.full_observation_spec.zero().select(
+                    #         *reset_val.keys(True)
+                    #     )
+                    # )
+                    tensordict_reset = _reset.new_zeros(_reset.shape)
+                    print(f"tensordict_reset: {tensordict_reset}")
+                    print(f"reset_val: {reset_val}")
+                    tensordict_reset[_reset] = reset_val
                 else:
                     resets = self.default_value(reset=_reset)
                     tensordict_reset.update(resets)
