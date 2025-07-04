@@ -29,7 +29,8 @@ class GSM8KRewardParser(Transform):
         out_keys (list of NestedKey): the output keys. Defaults to `[ "reward_answer", "reward_think", "reward_right", "reward_contained", "reward", "success"]`.
         eos_token (str): the end of sentence token. Defaults to `tokenizer.eos_token` if not provided.
         set_done_if_answer (bool): whether to set the done flag to `True` when an answer is present. Defaults to `True`.
-
+        input_mode (Literal["history", "text", "tokens"]): the input mode of the parent environment.
+            Defaults to `None` (will be automatically determined based on parent's input_mode).
     """
 
     def __init__(

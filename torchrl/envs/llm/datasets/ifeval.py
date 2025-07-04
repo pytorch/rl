@@ -8,10 +8,10 @@ from typing import Any, Callable, Literal
 
 import torch
 from tensordict import TensorClass, TensorDict
+from torchrl._utils import logger as torchrl_logger
 from torchrl.envs import StepCounter
 
 from torchrl.envs.llm.chat import DatasetChatEnv
-from torchrl._utils import logger as torchrl_logger
 from torchrl.envs.llm.reward.ifeval import IfEvalScorer
 
 
@@ -30,6 +30,16 @@ class IFEvalData(TensorClass["nocast"]):
     logits: torch.Tensor | None = None
     reward: torch.Tensor | None = None
 
+    @classmethod
+    def default_spec(cls, shape: torch.Size, device: torch.device|None=None) -> Composite:
+        return Composite(
+            key=Unbounded(shape=shape, dtype=torch.int64, device=device),
+            instruction_id_list=NonTensor(shape=shape + (-1,), dtype=torch.str, device=device, feature_dims=0, example_data=["punctuation:no_comma"]),
+            kwargs=NonTensor(shape=shape + (-1,), dtype=torch.dict, device=device, feature_dims=0, example_data={"num_highlights": None, "relation": None, "num_placeholders": None}),
+            query=NonTensor(shape=shape, dtype=torch.str, device=device, example_data="Plan a 2 week Europe trip and visit London, Paris, and Rome. Answer in all caps. The response must contain at least 8 placeholders (i.e., [restaurant])."),
+            step_mdp_static=True,
+            data_cls=cls,
+        )
 
 def _collate_fn(batch):
     batch = torch.stack([TensorDict.from_any(_batch) for _batch in batch])
@@ -192,6 +202,7 @@ You will be assessed by the content of the answer block only, so make sure it co
             collate_fn=collate_fn,
             input_mode=input_mode,
             data_key="query",
+            primers=IFEvalData.default_spec((num_envs,), device),
         )
         if max_steps:
             self.append_transform(StepCounter(max_steps=max_steps))

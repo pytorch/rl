@@ -443,6 +443,8 @@ class DatasetChatEnv(TransformedEnv):
             collate function is used that renames the `"text"` key to `"query"` to avoid conflicts with the `"text"` key
             in the tensordict returned by TorchRL components. Defaults to `None`.
         input_mode (Literal["history", "text", "tokens"], optional): The mode of input to the environment. Defaults to `"history"`.
+        data_key (str, optional): The spec of the data returned by the dataloader (or better, its collate_fn).
+            Defaults to `None` (automatically determined based on the input_mode).
 
     .. seealso:: `DatasetChatEnv` is a thin wrapper around :class:`~torchrl.envs.llm.ChatEnv` bucketed with a
         :class:`~torchrl.envs.llm.DataLoadingPrimer` transform. See these two classes for more insight on data format
@@ -473,6 +475,7 @@ class DatasetChatEnv(TransformedEnv):
         collate_fn: Callable[[Any], Any] | None = None,
         input_mode: Literal["history", "text", "tokens"] = "history",
         data_key: str | None = None,
+        primers: Composite | None = None,
     ):
         from datasets import load_dataset
         from tensordict import list_to_stack
@@ -510,6 +513,7 @@ class DatasetChatEnv(TransformedEnv):
             device=device,
             group_repeats=group_repeats,
             batch_size=batch_size,
+            primers=primers,
         )
         env_base = ChatEnv(
             batch_size=batch_size,
