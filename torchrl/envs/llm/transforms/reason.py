@@ -251,17 +251,17 @@ class AddThinkingPrompt(Transform):
 
             # Clean up any trailing whitespace
             modified_content = modified_content.rstrip()
-            
+
             # Ensure we end with the EOS token if the original content had it
             if content.endswith("<|im_end|>"):
                 modified_content = modified_content.rstrip() + "<|im_end|>"
-                
+
             # Ensure proper spacing around the prompt
             if not modified_content.endswith(prompt):
                 # If the prompt wasn't properly inserted, append it
                 modified_content = content.rstrip()
                 if modified_content.endswith("<|im_end|>"):
-                    modified_content = modified_content[:-len("<|im_end|>")].rstrip()
+                    modified_content = modified_content[: -len("<|im_end|>")].rstrip()
                 modified_content = modified_content + "\n\n" + prompt + "<|im_end|>"
 
         else:
