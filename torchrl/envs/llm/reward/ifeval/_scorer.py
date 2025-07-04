@@ -48,12 +48,22 @@ class IFEvalScoreData(TensorClass):
     inst_level_loose_acc: torch.Tensor | None
 
     @classmethod
-    def default_spec(cls, shape: torch.Size, device: torch.device|None=None) -> Composite:
+    def default_spec(
+        cls, shape: torch.Size, device: torch.device | None = None
+    ) -> Composite:
         return Composite(
-            prompt_level_strict_acc=Unbounded(shape=shape + (1,), dtype=torch.bool, device=device),
-            inst_level_strict_acc=Unbounded(shape=shape + (1,), dtype=torch.bool, device=device),
-            prompt_level_loose_acc=Unbounded(shape=shape + (1,), dtype=torch.bool, device=device),
-            inst_level_loose_acc=Unbounded(shape=shape + (1,), dtype=torch.bool, device=device),
+            prompt_level_strict_acc=Unbounded(
+                shape=shape + (1,), dtype=torch.bool, device=device
+            ),
+            inst_level_strict_acc=Unbounded(
+                shape=shape + (1,), dtype=torch.bool, device=device
+            ),
+            prompt_level_loose_acc=Unbounded(
+                shape=shape + (1,), dtype=torch.bool, device=device
+            ),
+            inst_level_loose_acc=Unbounded(
+                shape=shape + (1,), dtype=torch.bool, device=device
+            ),
             data_cls=cls,
             step_mdp_static=True,
         )
@@ -401,7 +411,7 @@ class IfEvalScorer(Transform):
             reward_spec.shape
             + (
                 1,
-                1,
+                1
             ),
             dtype=torch.get_default_dtype(),
             device=reward_spec.device,
@@ -409,5 +419,7 @@ class IfEvalScorer(Transform):
         return reward_spec
 
     def transform_observation_spec(self, observation_spec: Composite) -> Composite:
-        observation_spec[self.score_key] = IFEvalScoreData.default_spec(observation_spec.shape, device=observation_spec.device)
+        observation_spec[self.score_key] = IFEvalScoreData.default_spec(
+            observation_spec.shape, device=observation_spec.device
+        )
         return observation_spec
