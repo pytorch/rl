@@ -6523,7 +6523,7 @@ class TensorDictPrimer(Transform):
             if self.single_default_value and callable(self.default_value):
                 if not _reset.all():
                     # FIXME: use masked op
-                    tensordict_reset = tensordict_reset.clone()
+                    # tensordict_reset = tensordict_reset.clone()
                     reset_val = self.default_value(reset=_reset)
                     # This is safe because env.reset calls _update_during_reset which will discard the new data
                     tensordict_reset = (
@@ -6531,9 +6531,7 @@ class TensorDictPrimer(Transform):
                             *reset_val.keys(True)
                         )
                     )
-                    tensordict_reset = tensordict_reset.where(
-                        _reset, reset_val, update_batch_size=True
-                    )
+                    tensordict_reset = torch.where(_reset, reset_val, 0)
                 else:
                     resets = self.default_value(reset=_reset)
                     tensordict_reset.update(resets)
