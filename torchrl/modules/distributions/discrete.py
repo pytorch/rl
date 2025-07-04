@@ -667,7 +667,7 @@ def _generate_ordinal_logits(scores: torch.Tensor) -> torch.Tensor:
     return larger_than_log_probs + smaller_than_log_probs
 
 
-class LLMMaskedCategorical(D.Categorical):
+class LLMMaskedCategorical(D.Distribution):
     """LLM-optimized masked categorical distribution.
     
     This class provides a more memory-efficient approach for LLM training by:
@@ -679,7 +679,6 @@ class LLMMaskedCategorical(D.Categorical):
     
     Args:
         logits (torch.Tensor): event log probabilities (unnormalized)
-        probs (torch.Tensor): event probabilities
         mask (torch.Tensor): boolean mask indicating valid positions
         ignore_index (int, optional): index to ignore in log_prob computation. Defaults to -100.
     
@@ -703,8 +702,13 @@ class LLMMaskedCategorical(D.Categorical):
         logits: torch.Tensor,
         mask: torch.Tensor,
         ignore_index: int = -100,
-        **kwargs,
     ) -> None:
+        # Validate shapes
+        if logits.shape[:-1] != mask.shape:
+            raise ValueError(
+                f"Logits batch shape {logits.shape[:-1]} must match mask shape {mask.shape}"
+            )
+        
         self._original_logits = logits
         self._mask = mask
         self.ignore_index = ignore_index
@@ -713,8 +717,10 @@ class LLMMaskedCategorical(D.Categorical):
         self._masked_logits = None
         self._masked_dist = None
         
-        # Initialize parent with original logits
-        super().__init__(logits=logits, **kwargs)
+        # Set up distribution properties
+        batch_shape = logits.shape[:-1]
+        event_shape = logits.shape[-1:]
+        super().__init__(batch_shape=batch_shape, event_shape=event_shape)
     
     @property
     def _sampling_logits(self):
@@ -744,8 +750,8 @@ class LLMMaskedCategorical(D.Categorical):
         # Use cross_entropy with ignore_index for efficiency
         if value.ndim > 1:
             # Reshape for cross_entropy: (batch, seq_len, vocab) -> (batch*seq_len, vocab)
-            logits_flat = self._original_logits.view(-1, self._original_logits.size(-1))
-            value_flat = value.view(-1)
+            logits_flat = self._original_logits.reshape(-1, self._original_logits.size(-1))
+            value_flat = value.reshape(-1)
             
             # Compute cross_entropy with ignore_index
             log_probs_flat = -F.cross_entropy(
@@ -755,7 +761,7 @@ class LLMMaskedCategorical(D.Categorical):
             )
             
             # Reshape back
-            log_probs = log_probs_flat.view_as(value)
+            log_probs = log_probs_flat.reshape_as(value)
         else:
             log_probs = -F.cross_entropy(
                 self._original_logits, value,
@@ -767,9 +773,11 @@ class LLMMaskedCategorical(D.Categorical):
     
     def sample(self, sample_shape: torch.Size | Sequence[int] | None = None) -> torch.Tensor:
         """Sample from the distribution using masked logits."""
+        if sample_shape is None:
+            sample_shape = torch.Size()
         return self._sampling_dist.sample(sample_shape)
     
-    def rsample(self, sample_shape: torch.Size | Sequence = None) -> torch.Tensor:
+    def rsample(self, sample_shape: torch.Size | Sequence[int] | None = None) -> torch.Tensor:
         """Reparameterized sampling using masked logits."""
         # This would need to be implemented based on the specific reparameterization strategy
         # For now, fall back to regular sampling
@@ -779,7 +787,7 @@ class LLMMaskedCategorical(D.Categorical):
     def mode(self) -> torch.Tensor:
         """Get the mode using masked logits."""
         masked_logits = self._sampling_logits
-        return (masked_logits == masked_logits.max(-1, True)[0]).to(torch.long)
+        return masked_logits.argmax(dim=-1)
     
     def entropy(self) -> torch.Tensor:
         """Compute entropy using masked logits."""
@@ -799,6 +807,11 @@ class LLMMaskedCategorical(D.Categorical):
     def logits(self) -> torch.Tensor:
         """Get the original logits."""
         return self._original_logits
+    
+    @property
+    def probs(self) -> torch.Tensor:
+        """Get probabilities from original logits."""
+        return torch.softmax(self._original_logits, dim=-1)
 
     @property
     def masked_logits(self) -> torch.Tensor:

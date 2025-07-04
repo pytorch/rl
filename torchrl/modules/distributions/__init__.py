@@ -21,6 +21,7 @@ from .discrete import (
     OneHotOrdinal,
     Ordinal,
     ReparamGradientStrategy,
+    LLMMaskedCategorical,
 )
 
 distributions_maps = {
@@ -57,6 +58,7 @@ __all__ = [
     "distributions",
     "Delta",
     "IndependentNormal",
+    "LLMMaskedCategorical",
     "NormalParamWrapper",
     "TanhDelta",
     "TanhNormal",

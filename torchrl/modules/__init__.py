@@ -19,6 +19,7 @@ from .distributions import (
     ReparamGradientStrategy,
     TanhDelta,
     TanhNormal,
+    LLMMaskedCategorical,
     TruncatedNormal,
 )
 from .models import (
@@ -138,6 +139,7 @@ __all__ = [
     "MaskedOneHotCategorical",
     "MultiAgentConvNet",
     "MultiAgentMLP",
+    "LLMMaskedCategorical",
     "MultiAgentNetBase",
     "MultiStepActorWrapper",
     "NoisyLazyLinear",
