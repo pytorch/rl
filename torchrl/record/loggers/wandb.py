@@ -234,6 +234,6 @@ class WandbLogger(Logger):
         table = wandb.Table(columns=["text"], data=[[value]])
 
         if step is not None:
-            self.experiment.log({name: table, "trainer/step": step})
+            self.experiment.log({name: value}, step=step)
         else:
             self.experiment.log({name: table})

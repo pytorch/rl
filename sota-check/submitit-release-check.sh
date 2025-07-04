@@ -13,7 +13,7 @@ EXAMPLES:
   ./submitit-release-check.sh --partition <PARTITION_NAME> --n_runs 5
 
 EOF
-    return 1
+    exit 1
 }
 
 # Check if the script is called with --help or without any arguments

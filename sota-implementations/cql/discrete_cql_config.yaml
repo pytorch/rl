@@ -22,7 +22,7 @@ collector:
 
 # Logger
 logger:
-  backend: wandb
+  backend: csv
   project_name: torchrl_example_cql
   group_name: null
   exp_name: cql_cartpole_gym

@@ -190,6 +190,7 @@ def main(cfg: DictConfig):  # noqa: F821
         with timeit("log"):
             metrics_to_log.update(timeit.todict(prefix="time"))
             metrics_to_log["time/speed"] = pbar.format_dict["rate"]
+
             log_metrics(logger, metrics_to_log, i)
 
     pbar.close()
