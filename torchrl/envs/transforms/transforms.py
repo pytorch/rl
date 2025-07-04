@@ -6532,6 +6532,8 @@ class TensorDictPrimer(Transform):
                     #     )
                     # )
                     tensordict_reset = reset_val.new_zeros(_reset.shape, empty_lazy=True)
+                    print(f"tensordict_reset: {tensordict_reset}")
+                    print(f"reset_val: {reset_val}")
                     tensordict_reset[_reset] = reset_val
                 else:
                     resets = self.default_value(reset=_reset)
