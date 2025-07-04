@@ -18,8 +18,7 @@ from torchrl.data import (
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
-from torchrl.data.datasets.d4rl import D4RLExperienceReplay
-from torchrl.data.datasets.minari_data  import MinariExperienceReplay 
+from torchrl.data.datasets.minari_data import MinariExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.envs import (
     CatTensors,
