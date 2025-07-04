@@ -9,8 +9,8 @@ from typing import Any, Callable, Literal
 import torch
 from tensordict import TensorClass, TensorDict
 from torchrl._utils import logger as torchrl_logger
-from torchrl.envs import StepCounter
 from torchrl.data import Composite, NonTensor, Unbounded
+from torchrl.envs import StepCounter
 from torchrl.envs.llm.chat import DatasetChatEnv
 from torchrl.envs.llm.reward.ifeval import IfEvalScorer
 
@@ -38,14 +38,12 @@ class IFEvalData(TensorClass["nocast"]):
             key=Unbounded(shape=shape, dtype=torch.int64, device=device),
             instruction_id_list=NonTensor(
                 shape=shape + (-1,),
-                dtype=torch.str,
                 device=device,
                 feature_dims=0,
                 example_data=["punctuation:no_comma"],
             ),
             kwargs=NonTensor(
                 shape=shape + (-1,),
-                dtype=torch.dict,
                 device=device,
                 feature_dims=0,
                 example_data={
@@ -56,7 +54,6 @@ class IFEvalData(TensorClass["nocast"]):
             ),
             query=NonTensor(
                 shape=shape,
-                dtype=torch.str,
                 device=device,
                 example_data="Plan a 2 week Europe trip and visit London, Paris, and Rome. Answer in all caps. The response must contain at least 8 placeholders (i.e., [restaurant]).",
             ),
