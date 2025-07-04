@@ -34,7 +34,7 @@ class IFEvalData(TensorClass["nocast"]):
 def _collate_fn(batch):
     batch = torch.stack([TensorDict.from_any(_batch) for _batch in batch])
     batch.rename_key_("prompt", "query")
-    # we don't need a tensorclass here
+    # we don't need a tensorclass here
     return batch
     # return IFEvalData.from_tensordict(batch)
 

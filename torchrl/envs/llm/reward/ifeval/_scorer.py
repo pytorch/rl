@@ -47,6 +47,17 @@ class IFEvalScoreData(TensorClass):
     prompt_level_loose_acc: torch.Tensor | None
     inst_level_loose_acc: torch.Tensor | None
 
+    @classmethod
+    def default_spec(cls, shape: torch.Size, device: torch.device|None=None) -> Composite:
+        return Composite(
+            prompt_level_strict_acc=Unbounded(shape=shape + (1,), dtype=torch.bool, device=device),
+            inst_level_strict_acc=Unbounded(shape=shape + (1,), dtype=torch.bool, device=device),
+            prompt_level_loose_acc=Unbounded(shape=shape + (1,), dtype=torch.bool, device=device),
+            inst_level_loose_acc=Unbounded(shape=shape + (1,), dtype=torch.bool, device=device),
+            data_cls=cls,
+            step_mdp_static=True,
+        )
+
     def __post_init__(self):
         prompt_level_loose_acc = self.get(
             "prompt_level_loose_acc", as_padded_tensor=True
@@ -398,26 +409,5 @@ class IfEvalScorer(Transform):
         return reward_spec
 
     def transform_observation_spec(self, observation_spec: Composite) -> Composite:
-        observation_spec[self.score_key] = Composite(
-            prompt_level_strict_acc=Unbounded(
-                shape=observation_spec.shape,
-                dtype=torch.bool,
-                device=observation_spec.device,
-            ),
-            inst_level_strict_acc=Unbounded(
-                shape=observation_spec.shape,
-                dtype=torch.bool,
-                device=observation_spec.device,
-            ),
-            prompt_level_loose_acc=Unbounded(
-                shape=observation_spec.shape,
-                dtype=torch.bool,
-                device=observation_spec.device,
-            ),
-            inst_level_loose_acc=Unbounded(
-                shape=observation_spec.shape,
-                dtype=torch.bool,
-                device=observation_spec.device,
-            ),
-        )
+        observation_spec[self.score_key] = IFEvalScoreData.default_spec(observation_spec.shape, device=observation_spec.device)
         return observation_spec
