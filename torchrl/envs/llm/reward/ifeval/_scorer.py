@@ -149,6 +149,7 @@ class IfEvalScorer(Transform):
             `prompt_level_loose_acc`, `inst_level_loose_acc`, in that order). Defaults to `[0.4, 0.3, 0.2, 0.1]`.
             This is only used if `aggregate_reward` is `True` and the default aggregator is used.
         verbose (bool, optional): Whether to print verbose information. Defaults to `False`.
+        set_done_if_answer (bool): whether to set the done flag to `True` when an answer is present. Defaults to `True`.
 
     .. note:: `IFEvalScorer` requires the following libraries to be installed: `langdetect`, `nltk` and `immutabledict`.
 
@@ -169,9 +170,11 @@ class IfEvalScorer(Transform):
         ] = True,
         format_weights: list[float] | None = None,
         verbose: bool = False,
+        set_done_if_answer: bool = True,
     ):
         self.aggregate_reward = aggregate_reward
         self.score_key = score_key
+        self.set_done_if_answer = set_done_if_answer
         out_keys = [self.score_key]
         if aggregate_reward:
             out_keys.append("reward")
@@ -345,9 +348,26 @@ class IfEvalScorer(Transform):
                 answer_blocks=answer_blocks,
                 complete=complete,
             )
-            reward = reward.view(next_tensordict.batch_size + (1, 1,))
+            reward = reward.view(
+                next_tensordict.batch_size
+                + (
+                    1,
+                    1,
+                )
+            )
             next_tensordict.set("reward", reward)
-
+        if (
+            self.set_done_if_answer
+            and bool(answer_blocks)
+        ):
+            done = next_tensordict.get("done")
+            if done is not None:
+                next_tensordict.set("done", torch.ones_like(done))
+            terminated = next_tensordict.get("terminated")
+            if terminated is not None:
+                next_tensordict.set(
+                    "terminated", torch.ones_like(terminated)
+                )
         return next_tensordict
 
     @property
@@ -362,7 +382,11 @@ class IfEvalScorer(Transform):
 
     def transform_reward_spec(self, reward_spec: Composite) -> Composite:
         reward_spec["reward"] = Unbounded(
-            reward_spec.shape + (1, 1,),
+            reward_spec.shape
+            + (
+                1,
+                1,
+            ),
             dtype=torch.get_default_dtype(),
             device=reward_spec.device,
         )

@@ -5,10 +5,10 @@
 from __future__ import annotations
 
 from collections import defaultdict, deque
+from dataclasses import dataclass
 from typing import Literal
 
 import torch
-from dataclasses import dataclass
 from tensordict import (
     is_tensor_collection,
     NestedKey,
@@ -129,6 +129,7 @@ class GRPOLoss(ClipPPOLoss):
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
         default values
         """
+
         ref_log_probs: NestedKey = ("next", "ref_log_probs", "full")
 
     def __init__(
@@ -300,7 +301,12 @@ class GRPOLoss(ClipPPOLoss):
                 tensordict,
                 mask=mask,
                 dist=dist,
-                ref_log_prob=tensordict.get(self.tensor_keys.ref_log_probs, as_padded_tensor=True, padding_side=dist.padding_side, padding_value=dist.padding_value),
+                ref_log_prob=tensordict.get(
+                    self.tensor_keys.ref_log_probs,
+                    as_padded_tensor=True,
+                    padding_side=dist.padding_side,
+                    padding_value=dist.padding_value,
+                ),
             )
             td_out["loss_kl_to_ref"] = loss_kl
             td_out["kl_to_ref"] = kl_penalty.detach()
