@@ -85,11 +85,6 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
     # For the collector actor, we want inference_model devices first, then ref_model devices
     train_tokenizer = get_tokenizer(cfg)
 
-    # Get device information
-    num_inf_devices = cfg.inference_model.num_devices
-    num_ref_devices = cfg.ref_model.num_devices
-    num_inf_devices + num_ref_devices
-
     # Create a new config with adjusted device assignments
     ref_cfg = DictConfig(dict(cfg))
     ref_model = get_ref_model(ref_cfg, train_tokenizer, devices=devices)
