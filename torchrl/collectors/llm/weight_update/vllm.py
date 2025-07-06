@@ -286,10 +286,8 @@ class vLLMUpdater(WeightUpdaterBase):
         """
         # Check if the model has a LoRA adapter
         if hasattr(model.model, 'merge_and_unload'):
-            # This is a LoRA model
             sd = model.model.merge_and_unload().state_dict()
         else:
-            # This is a regular model without LoRA
             sd = model.model.state_dict()
         model_metadata = {k: (v.dtype, v.shape) for k, v in sd.items()}
         return model_metadata
