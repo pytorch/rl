@@ -7,14 +7,14 @@ env:
 # collector
 collector:
   frames_per_batch: 800
-  total_frames: 40_000_000
+  total_frames: 40_000_00
 
 # logger
 logger:
   backend: wandb
-  project_name: torchrl_example_a2c
+  project_name: torchrl_example_a3c
   group_name: null
-  exp_name: Atari_Schulman17
+  exp_name: a3c_atari_training
   test_interval: 40_000_000
   num_test_episodes: 3
   video: False
