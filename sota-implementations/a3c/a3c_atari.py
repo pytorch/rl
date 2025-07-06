@@ -181,7 +181,10 @@ class A3CWorker(mp.Process):
                 metrics_to_log[f"train/{key}"] = value.item()
 
             metrics_to_log["train/lr"] = lr * alpha
-            if self.logger:
+
+            # Logging only on the first worker in the dashboard.
+            # Alternatively, you can use a distributed logger, or aggregate metrics from all workers.
+            if self.logger and self.name == "worker_0":
                 for key, value in metrics_to_log.items():
                     self.logger.log_scalar(key, value, collected_frames)
         collector.shutdown()
