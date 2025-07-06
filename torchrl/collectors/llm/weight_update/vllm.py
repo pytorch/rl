@@ -285,7 +285,7 @@ class vLLMUpdater(WeightUpdaterBase):
             dict[str, tuple[torch.dtype, torch.Size]]: The model metadata.
         """
         # Check if the model has a LoRA adapter
-        if hasattr(model.model, 'merge_and_unload'):
+        if hasattr(model.model, "merge_and_unload"):
             sd = model.model.merge_and_unload().state_dict()
         else:
             sd = model.model.state_dict()
