@@ -738,7 +738,7 @@ class Transform(nn.Module):
         self.__dict__.update(state)
 
     @property
-    def parent(self) -> EnvBase | None:
+    def parent(self) -> TransformedEnv | None:
         """Returns the parent env of the transform.
 
         The parent env is the env that contains all the transforms up until the current one.
@@ -1249,6 +1249,7 @@ but got an object of type {type(transform)}."""
     def empty_cache(self):
         self.__dict__["_output_spec"] = None
         self.__dict__["_input_spec"] = None
+        self.transform.empty_cache()
         super().empty_cache()
 
     def append_transform(
@@ -1429,6 +1430,50 @@ class Compose(Transform):
         for t in transforms:
             t.set_container(self)
 
+    def pop(self, index: int | None = None) -> Transform:
+        """Pop a transform from the chain.
+
+        Args:
+            index (int, optional): The index of the transform to pop. If None, the last transform is popped.
+
+        Returns:
+            The popped transform.
+        """
+        if index is None:
+            index = len(self.transforms) - 1
+        result = self.transforms.pop(index)
+        parent = self.parent
+        self.empty_cache()
+        if parent is not None:
+            parent.empty_cache()
+        return result
+
+    def __delitem__(self, index: int | slice | list):
+        """Delete a transform in the chain.
+
+        :class:`~torchrl.envs.transforms.Transform` or callable are accepted.
+        """
+        del self.transforms[index]
+        parent = self.parent
+        self.empty_cache()
+        if parent is not None:
+            parent.empty_cache()
+
+    def __setitem__(
+        self,
+        index: int | slice | list,
+        value: Transform | Callable[[TensorDictBase], TensorDictBase],
+    ):
+        """Set a transform in the chain.
+
+        :class:`~torchrl.envs.transforms.Transform` or callable are accepted.
+        """
+        self.transforms[index] = value
+        parent = self.parent
+        self.empty_cache()
+        if parent is not None:
+            parent.empty_cache()
+
     def close(self):
         """Close the transform."""
         for t in self.transforms:
@@ -1594,6 +1639,9 @@ class Compose(Transform):
         else:
             self.transforms.append(transform)
         transform.set_container(self)
+        parent = self.parent
+        if parent is not None:
+            parent.empty_cache()
 
     def set_container(self, container: Transform | EnvBase) -> None:
         self.reset_parent()
@@ -1626,6 +1674,9 @@ class Compose(Transform):
 
         # empty cache of all transforms to reset parents and specs
         self.empty_cache()
+        parent = self.parent
+        if parent is not None:
+            parent.empty_cache()
         if index < 0:
             index = index + len(self.transforms)
         transform.eval()
@@ -3599,7 +3650,7 @@ class CatFrames(ObservationTransform):
                     n = buffer_reset.ndimension() + self.dim
                 else:
                     raise ValueError(self._CAT_DIM_ERR)
-                idx = [slice(None, None) for _ in range(n)] + [slice(-d, None)]
+                idx = tuple([slice(None, None) for _ in range(n)] + [slice(-d, None)])
                 if not _all:
                     buffer_reset = buffer[_reset]
                 buffer_reset[idx] = data_reset
@@ -3612,7 +3663,7 @@ class CatFrames(ObservationTransform):
                     n = buffer.ndimension() + self.dim
                 else:
                     raise ValueError(self._CAT_DIM_ERR)
-                idx = [slice(None, None) for _ in range(n)] + [slice(-d, None)]
+                idx = tuple([slice(None, None) for _ in range(n)] + [slice(-d, None)])
                 buffer[idx] = buffer[idx].copy_(data)
             # add to tensordict
             next_tensordict.set(out_key, buffer.clone())
@@ -8726,8 +8777,10 @@ class Reward2GoTransform(Transform):
 class ActionMask(Transform):
     """An adaptive action masker.
 
-    This transform reads the mask from the input tensordict after the step is executed,
-    and adapts the mask of the one-hot / categorical action spec.
+    This transform is useful to ensure that randomly generated actions
+    respect legal actions, by masking the action specs.
+    It reads the mask from the input tensordict after the step is executed,
+    and adapts the mask of the finite action spec.
 
       .. note:: This transform will fail when used without an environment.
 
@@ -8773,8 +8826,6 @@ class ActionMask(Transform):
         >>> base_env = MaskedEnv()
         >>> env = TransformedEnv(base_env, ActionMask())
         >>> r = env.rollout(10)
-        >>> env = TransformedEnv(base_env, ActionMask())
-        >>> r = env.rollout(10)
         >>> r["action_mask"]
         tensor([[ True,  True,  True,  True],
                 [ True,  True, False,  True],
@@ -8810,15 +8861,8 @@ class ActionMask(Transform):
         raise RuntimeError(FORWARD_NOT_IMPLEMENTED.format(type(self)))
 
     @property
-    def action_spec(self):
-        action_spec = self.container.full_action_spec
-        keys = self.container.action_keys
-        if len(keys) == 1:
-            action_spec = action_spec[keys[0]]
-        else:
-            raise ValueError(
-                f"Too many action keys for {self.__class__.__name__}: {keys=}"
-            )
+    def action_spec(self) -> TensorSpec:
+        action_spec = self.container.full_action_spec[self.in_keys[0]]
         if not isinstance(action_spec, self.ACCEPTED_SPECS):
             raise ValueError(
                 self.SPEC_TYPE_ERROR.format(self.ACCEPTED_SPECS, type(action_spec))
@@ -8826,29 +8870,20 @@ class ActionMask(Transform):
         return action_spec
 
     def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
-        parent = self.parent
-        if parent is None:
+        if self.parent is None:
             raise RuntimeError(
                 f"{type(self)}.parent cannot be None: make sure this transform is executed within an environment."
             )
+
         mask = next_tensordict.get(self.in_keys[1])
-        action_spec = self.action_spec
-        action_spec.update_mask(mask.to(action_spec.device))
+        self.action_spec.update_mask(mask.to(self.action_spec.device))
+
         return next_tensordict
 
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
-        action_spec = self.action_spec
-        mask = tensordict.get(self.in_keys[1], None)
-        if mask is not None:
-            mask = mask.to(action_spec.device)
-        action_spec.update_mask(mask)
-
-        # TODO: Check that this makes sense
-        with _set_missing_tolerance(self, True):
-            tensordict_reset = self._call(tensordict_reset)
-        return tensordict_reset
+        return self._call(tensordict_reset)
 
 
 class VecGymEnvTransform(Transform):

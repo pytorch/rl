@@ -13,7 +13,7 @@ import time
 
 import pytest
 import torch
-from mocking_classes import DummyStrDataLoader, DummyTensorDataLoader
+from mocking_classes_llm import DummyStrDataLoader, DummyTensorDataLoader
 
 from tensordict import (
     lazy_stack,
@@ -1128,6 +1128,128 @@ else:
 
         finally:
             env_pool.close()
+
+
+class TestThinkingPrompt:
+    @pytest.fixture(autouse=True, scope="class")
+    def base_env(self):
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B")
+        env = GSM8KEnv(shuffle=False, tokenizer=tokenizer, max_steps=10)
+        return env
+
+    @pytest.mark.skipif(not _has_transformers, reason="requires transformers")
+    @pytest.mark.skipif(not _has_datasets, reason="requires gsm8k")
+    @pytest.mark.parametrize(
+        "role,edit_last_turn",
+        [("assistant", True), ("assistant", False), ("user", False)],
+    )
+    @pytest.mark.parametrize("zero_reward", [True, False])
+    @pytest.mark.parametrize("undo_done", [True, False])
+    @pytest.mark.parametrize("random_prompt", [True, False])
+    def test_thinking_prompt_wrong_answer(
+        self,
+        role,
+        edit_last_turn,
+        zero_reward,
+        undo_done,
+        random_prompt,
+        tmp_path,
+        base_env,
+    ):
+        from torchrl.envs.llm.transforms import AddThinkingPrompt
+
+        if isinstance(base_env.transform[-1], AddThinkingPrompt):
+            base_env.transform.pop()
+        env = base_env.reset_dataloader()
+        env = base_env.append_transform(
+            AddThinkingPrompt(
+                cond=lambda td: td["reward"] < 50,
+                role=role,
+                edit_last_turn=edit_last_turn,
+                zero_reward=zero_reward,
+                undo_done=undo_done,
+                random_prompt=random_prompt,
+            )
+        )
+        reset = env.reset()
+        assert reset[0]["history"][-1].content.startswith(
+            "Natalia sold clips to 48 of her friends in April"
+        )
+        policy_anser = (
+            "<think>Let me solve this step by step. Natalia sold clips to 48 friends in April. Then she sold half as many in May. Half of 48 is 24. So in May she sold 24 clips. "
+            "To find the total, I need to add April and May: 48 + 24 = 72. Therefore, Natalia sold 72 clips altogether in April and May.</think>\n<answer>322 clips</answer><|im_end|>"
+        )
+        reset["text_response"] = [policy_anser]
+        s = env.step(reset)
+        if zero_reward:
+            assert (s["next", "reward"] == 0).all()
+        else:
+            assert (s["next", "reward"] != 0).all()
+        if undo_done:
+            assert (s["next", "done"] == 0).all()
+        else:
+            assert (s["next", "done"] != 0).all()
+        if edit_last_turn:
+            assert s["next", "history"].shape == (1, 3)
+        else:
+            assert s["next", "history"].shape == (1, 4)
+        if role == "assistant":
+            assert s[0]["next", "history", "role"][-1] == "assistant"
+        else:
+            assert s[0]["next", "history", "role"][-1] == "user"
+
+    @pytest.mark.skipif(not _has_transformers, reason="requires transformers")
+    @pytest.mark.skipif(not _has_datasets, reason="requires gsm8k")
+    @pytest.mark.parametrize(
+        "role,edit_last_turn",
+        [("assistant", True), ("assistant", False), ("user", False)],
+    )
+    @pytest.mark.parametrize("zero_reward", [True, False])
+    @pytest.mark.parametrize("undo_done", [True, False])
+    @pytest.mark.parametrize("random_prompt", [True, False])
+    def test_thinking_prompt_correct_answer(
+        self,
+        role,
+        edit_last_turn,
+        zero_reward,
+        undo_done,
+        random_prompt,
+        tmp_path,
+        base_env,
+    ):
+        # checks that if cond returns False, nothing is changed
+        from torchrl.envs.llm.transforms import AddThinkingPrompt
+
+        if isinstance(base_env.transform[-1], AddThinkingPrompt):
+            base_env.transform.pop()
+        env = base_env
+        env = env.reset_dataloader()
+        env = env.append_transform(
+            AddThinkingPrompt(
+                cond=lambda td: td["reward"] < 50,
+                role=role,
+                edit_last_turn=edit_last_turn,
+                zero_reward=zero_reward,
+                undo_done=undo_done,
+                random_prompt=random_prompt,
+            )
+        )
+        reset = env.reset()
+        assert reset[0]["history"][-1].content.startswith(
+            "Natalia sold clips to 48 of her friends in April"
+        )
+        policy_anser = (
+            "<think>Let me solve this step by step. Natalia sold clips to 48 friends in April. Then she sold half as many in May. Half of 48 is 24. So in May she sold 24 clips. "
+            "To find the total, I need to add April and May: 48 + 24 = 72. Therefore, Natalia sold 72 clips altogether in April and May.</think>\n<answer>72</answer><|im_end|>"
+        )
+        reset["text_response"] = [policy_anser]
+        s = env.step(reset)
+        assert (s["next", "reward"] != 0).all(), s["next", "reward"]
+        assert s[0]["next", "history", "role"][-1] == "assistant"
+        assert s["next", "done"].all()
+        assert len(s[0]["next", "history", "content"]) == 3
 
 
 if __name__ == "__main__":

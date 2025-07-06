@@ -453,6 +453,11 @@ class ReplayBuffer:
         # To access properties in remote settings, see RayReplayBuffer.write_count for instance
         return getattr(self, attr)
 
+    def _setattr(self, attr, value):
+        # To set properties in remote settings
+        setattr(self, attr, value)
+        return None  # explicit return for remote calls
+
     @property
     def write_count(self):
         """The total number of items written so far in the buffer through add and extend."""
@@ -697,7 +702,7 @@ class ReplayBuffer:
             self._sampler.add(index)
         return index
 
-    def _extend(self, data: Sequence) -> torch.Tensor:
+    def _extend(self, data: Sequence, *, update_priority: bool = True) -> torch.Tensor:
         is_comp = is_compiling()
         nc = contextlib.nullcontext()
         with self._replay_lock if not is_comp else nc, self._write_lock if not is_comp else nc:
@@ -707,7 +712,9 @@ class ReplayBuffer:
             self._sampler.extend(index)
         return index
 
-    def extend(self, data: Sequence) -> torch.Tensor:
+    def extend(
+        self, data: Sequence, *, update_priority: bool | None = None
+    ) -> torch.Tensor:
         """Extends the replay buffer with one or more elements contained in an iterable.
 
         If present, the inverse transforms will be called.`
@@ -715,6 +722,10 @@ class ReplayBuffer:
         Args:
             data (iterable): collection of data to be added to the replay
                 buffer.
+
+        Keyword Args:
+            update_priority (bool, optional): Whether to update the priority of the data. Defaults to True.
+                Without effect in this class. See :meth:`~torchrl.data.TensorDictReplayBuffer.extend` for more details.
 
         Returns:
             Indices of the data added to the replay buffer.
@@ -730,12 +741,16 @@ class ReplayBuffer:
           unbound elements can be provided (no PyTrees).
 
         """
+        if update_priority is not None:
+            raise NotImplementedError(
+                "update_priority is not supported in this class. See :meth:`~torchrl.data.TensorDictReplayBuffer.extend` for more details."
+            )
         if self._transform is not None and len(self._transform):
             with _set_dispatch_td_nn_modules(is_tensor_collection(data)):
                 data = self._transform.inv(data)
         if data is None:
             return torch.zeros((0, self._storage.ndim), dtype=torch.long)
-        return self._extend(data)
+        return self._extend(data, update_priority=update_priority)
 
     def update_priority(
         self,
@@ -896,6 +911,26 @@ class ReplayBuffer:
         self._transform.insert(index, transform)
         return self
 
+    _iterator = None
+
+    def next(self):
+        """Returns the next item in the replay buffer.
+
+        This method is used to iterate over the replay buffer in contexts where __iter__ is not available,
+        such as :class:`~torchrl.data.replay_buffers.RayReplayBuffer`.
+        """
+        try:
+            if self._iterator is None:
+                self._iterator = iter(self)
+            out = next(self._iterator)
+            # if any, we don't want the device ref to be passed in distributed settings
+            if out is not None and (out.device != "cpu"):
+                out = out.copy().clear_device_()
+            return out
+        except StopIteration:
+            self._iterator = None
+            return None
+
     def __iter__(self):
         if self._sampler.ran_out:
             self._sampler.ran_out = False
@@ -990,6 +1025,9 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         storage (Storage, optional): the storage to be used. If none is provided
             a default :class:`~torchrl.data.replay_buffers.ListStorage` with
             ``max_size`` of ``1_000`` will be created.
+        sampler (Sampler, optional): the sampler to be used. If none is provided,
+            a default :class:`~torchrl.data.replay_buffers.PrioritizedSampler` with
+            ``alpha``, ``beta``, and ``eps`` will be created.
         collate_fn (callable, optional): merges a list of samples to form a
             mini-batch of Tensor(s)/outputs.  Used when using batched
             loading from a map-style dataset. The default value will be decided
@@ -1082,6 +1120,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         eps: float = 1e-8,
         dtype: torch.dtype = torch.float,
         storage: Storage | None = None,
+        sampler: Sampler | None = None,
         collate_fn: Callable | None = None,
         pin_memory: bool = False,
         prefetch: int | None = None,
@@ -1091,7 +1130,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
     ) -> None:
         if storage is None:
             storage = ListStorage(max_size=1_000)
-        sampler = PrioritizedSampler(storage.max_size, alpha, beta, eps, dtype)
+        if sampler is None:
+            sampler = PrioritizedSampler(storage.max_size, alpha, beta, eps, dtype)
         super().__init__(
             storage=storage,
             sampler=sampler,
@@ -1322,7 +1362,20 @@ class TensorDictReplayBuffer(ReplayBuffer):
             self.update_tensordict_priority(data)
         return index
 
-    def extend(self, tensordicts: TensorDictBase) -> torch.Tensor:
+    def extend(
+        self, tensordicts: TensorDictBase, *, update_priority: bool | None = None
+    ) -> torch.Tensor:
+        """Extends the replay buffer with a batch of data.
+
+        Args:
+            tensordicts (TensorDictBase): The data to extend the replay buffer with.
+
+        Keyword Args:
+            update_priority (bool, optional): Whether to update the priority of the data. Defaults to True.
+
+        Returns:
+            The indices of the data that were added to the replay buffer.
+        """
         if not isinstance(tensordicts, TensorDictBase):
             raise ValueError(
                 f"{self.__class__.__name__} only accepts TensorDictBase subclasses. tensorclasses "
@@ -1340,8 +1393,17 @@ class TensorDictReplayBuffer(ReplayBuffer):
         #  is that just doing this results in indices that are not sorted like the original data
         #  so the actually indices will have to be used on the _storage directly (not on the buffer)
         self._set_index_in_td(tensordicts, index)
-        # TODO: in principle this is a good idea but currently it doesn't work + it re-writes a priority that has just been written
-        # self.update_tensordict_priority(tensordicts)
+        if update_priority is None:
+            update_priority = True
+        if update_priority:
+            try:
+                vector = tensordicts.get(self.priority_key)
+                if vector is not None:
+                    self.update_priority(index, vector)
+            except Exception as e:
+                raise RuntimeError(
+                    "Failed to update priority of extended data. You can try to set update_priority=False in the extend method and update the priority manually."
+                ) from e
         return index
 
     def _set_index_in_td(self, tensordict, index):
@@ -1660,8 +1722,10 @@ class RemoteTensorDictReplayBuffer(TensorDictReplayBuffer):
     def add(self, data: TensorDictBase) -> int:
         return super().add(data)
 
-    def extend(self, tensordicts: list | TensorDictBase) -> torch.Tensor:
-        return super().extend(tensordicts)
+    def extend(
+        self, tensordicts: list | TensorDictBase, *, update_priority: bool | None = None
+    ) -> torch.Tensor:
+        return super().extend(tensordicts, update_priority=update_priority)
 
     def update_priority(
         self, index: int | torch.Tensor, priority: int | torch.Tensor

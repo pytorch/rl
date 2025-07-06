@@ -11,7 +11,7 @@ import time
 
 import pytest
 import torch
-from mocking_classes import DummyStrDataLoader
+from mocking_classes_llm import DummyStrDataLoader
 from torchrl import logger as torchrl_logger
 from torchrl.collectors.llm import LLMCollector
 from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater

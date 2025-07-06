@@ -246,7 +246,12 @@ class MaskedCategorical(D.Categorical):
                 )
             # unnormalized logits
             probs = probs.clone()
-            probs[~mask] = 0
+            if mask.dtype == torch.bool:
+                probs[~mask] = 0
+            else:
+                probs = torch.scatter(
+                    torch.zeros_like(probs), -1, indices, probs.gather(-1, indices)
+                )
             probs = probs / probs.sum(-1, keepdim=True)
             logits = probs.log()
         num_samples = logits.shape[-1]
@@ -264,6 +269,31 @@ class MaskedCategorical(D.Categorical):
         self._padding_value = padding_value
         super().__init__(logits=logits)
         self.num_samples = num_samples
+
+    def entropy(self):
+        """Compute the entropy of the distribution.
+
+        For masked distributions, we only consider the entropy over the valid (unmasked) outcomes.
+        Invalid outcomes have zero probability and don't contribute to entropy.
+        """
+        min_real = torch.finfo(self.logits.dtype).min
+
+        # Clamp logits to avoid numerical issues
+        logits = self.logits
+        if self._mask.dtype is torch.bool:
+            mask = (~self._mask) | (~logits.isfinite())
+            logits = torch.masked_fill(logits, mask, min_real)
+        else:
+            # logits are already masked
+            pass
+        logits = logits - logits.logsumexp(-1, keepdim=True)
+
+        # Get probabilities and mask them
+        probs = logits.exp()
+
+        # Compute entropy only for valid outcomes
+        p_log_p = logits * probs
+        return -p_log_p.sum(-1)
 
     def sample(
         self, sample_shape: torch.Size | Sequence[int] | None = None

@@ -1483,8 +1483,9 @@ if __name__ == "__main__":
         assert_allclose_td(data10, data20)
 
     @pytest.mark.parametrize("use_async", [False, True])
+    @pytest.mark.parametrize("cudagraph", [False, True])
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device found")
-    def test_update_weights(self, use_async):
+    def test_update_weights(self, use_async, cudagraph):
         def create_env():
             return ContinuousActionVecMockEnv()
 
@@ -1504,48 +1505,141 @@ if __name__ == "__main__":
             storing_device=[torch.device("cuda:0")] * 3,
             frames_per_batch=20,
             cat_results="stack",
+            cudagraph_policy=cudagraph,
         )
-        # collect state_dict
-        state_dict = collector.state_dict()
-        policy_state_dict = policy.state_dict()
-        for worker in range(3):
-            for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
-                torch.testing.assert_close(
-                    state_dict[f"worker{worker}"]["policy_state_dict"][k],
-                    policy_state_dict[k].cpu(),
-                )
-
-        # change policy weights
-        for p in policy.parameters():
-            p.data += torch.randn_like(p)
-
-        # collect state_dict
-        state_dict = collector.state_dict()
-        policy_state_dict = policy.state_dict()
-        # check they don't match
-        for worker in range(3):
-            for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
-                with pytest.raises(AssertionError):
+        try:
+            # collect state_dict
+            state_dict = collector.state_dict()
+            policy_state_dict = policy.state_dict()
+            for worker in range(3):
+                assert "policy_state_dict" in state_dict[f"worker{worker}"], state_dict[
+                    f"worker{worker}"
+                ].keys()
+                for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
                     torch.testing.assert_close(
                         state_dict[f"worker{worker}"]["policy_state_dict"][k],
                         policy_state_dict[k].cpu(),
                     )
 
-        # update weights
-        collector.update_policy_weights_()
+            # change policy weights
+            for p in policy.parameters():
+                p.data += torch.randn_like(p)
 
-        # collect state_dict
-        state_dict = collector.state_dict()
-        policy_state_dict = policy.state_dict()
-        for worker in range(3):
-            for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
-                torch.testing.assert_close(
-                    state_dict[f"worker{worker}"]["policy_state_dict"][k],
-                    policy_state_dict[k].cpu(),
+            # collect state_dict
+            state_dict = collector.state_dict()
+            policy_state_dict = policy.state_dict()
+            # check they don't match
+            for worker in range(3):
+                for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
+                    with pytest.raises(AssertionError):
+                        torch.testing.assert_close(
+                            state_dict[f"worker{worker}"]["policy_state_dict"][k],
+                            policy_state_dict[k].cpu(),
+                        )
+
+            # update weights
+            collector.update_policy_weights_()
+
+            # collect state_dict
+            state_dict = collector.state_dict()
+            policy_state_dict = policy.state_dict()
+            for worker in range(3):
+                for k in state_dict[f"worker{worker}"]["policy_state_dict"]:
+                    torch.testing.assert_close(
+                        state_dict[f"worker{worker}"]["policy_state_dict"][k],
+                        policy_state_dict[k].cpu(),
+                    )
+        finally:
+            collector.shutdown()
+            del collector
+
+    @pytest.mark.parametrize("num_env", [1, 2])
+    @pytest.mark.parametrize("env_name", ["vec"])
+    @pytest.mark.parametrize("frames_per_batch_worker", [[10, 10], [15, 5]])
+    def test_collector_frames_per_batch_worker(
+        self,
+        num_env,
+        env_name,
+        frames_per_batch_worker,
+        seed=100,
+        num_workers=2,
+    ):
+        """Tests that there are 'sum(frames_per_batch_worker)' frames in each batch of a collection."""
+        if num_env == 1:
+
+            def env_fn():
+                env = make_make_env(env_name)()
+                return env
+
+        else:
+
+            def env_fn():
+                # 1226: For efficiency, we don't use Parallel but Serial
+                # env = ParallelEnv(
+                env = SerialEnv(
+                    num_workers=num_env, create_env_fn=make_make_env(env_name)
                 )
+                return env
 
-        collector.shutdown()
-        del collector
+        policy = make_policy(env_name)
+
+        torch.manual_seed(0)
+        np.random.seed(0)
+
+        frames_per_batch = sum(frames_per_batch_worker)
+
+        collector = MultiaSyncDataCollector(
+            create_env_fn=[env_fn for _ in range(num_workers)],
+            policy=policy,
+            frames_per_batch=frames_per_batch_worker,
+            max_frames_per_traj=1000,
+            total_frames=frames_per_batch * 100,
+        )
+        try:
+            collector.set_seed(seed)
+            for i, b in enumerate(collector):
+                assert b.numel() == -(-frames_per_batch // num_env) * num_env
+                if i == 5:
+                    break
+            assert b.names[-1] == "time"
+        finally:
+            collector.shutdown()
+
+        collector = MultiSyncDataCollector(
+            create_env_fn=[env_fn for _ in range(num_workers)],
+            policy=policy,
+            frames_per_batch=frames_per_batch,
+            max_frames_per_traj=1000,
+            total_frames=frames_per_batch * 100,
+            cat_results="stack",
+        )
+        try:
+            collector.set_seed(seed)
+            for i, b in enumerate(collector):
+                assert (
+                    b.numel()
+                    == -(-frames_per_batch // num_env // num_workers)
+                    * num_env
+                    * num_workers
+                )
+                if i == 5:
+                    break
+            assert b.names[-1] == "time"
+        finally:
+            collector.shutdown()
+            del collector
+
+        with pytest.raises(
+            ValueError,
+            match="If `frames_per_batch` is provided as a sequence, it should contain exactly one value per worker.",
+        ):
+            collector = MultiSyncDataCollector(
+                create_env_fn=[env_fn for _ in range(num_workers)],
+                policy=policy,
+                frames_per_batch=frames_per_batch_worker[:-1],
+                max_frames_per_traj=1000,
+                total_frames=frames_per_batch * 100,
+            )
 
 
 class TestCollectorDevices:

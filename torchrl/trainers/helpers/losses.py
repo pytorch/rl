@@ -84,7 +84,7 @@ class A2CLossConfig:
 
     gamma: float = 0.99
     # Decay factor for return computation. Default=0.99.
-    entropy_coef: float = 1e-3
+    entropy_coeff: float = 1e-3
     # Entropy factor for the A2C loss
     critic_coef: float = 1.0
     # Critic factor for the A2C loss
@@ -106,7 +106,7 @@ class PPOLossConfig:
     # lambda factor in GAE (using 'lambda' as attribute is prohibited in python, hence the misspelling)
     entropy_bonus: bool = True
     # whether to add an entropy term to the PPO loss.
-    entropy_coef: float = 1e-3
+    entropy_coeff: float = 1e-3
     # Entropy factor for the PPO loss
     samples_mc_entropy: int = 1
     # Number of samples to use for a Monte-Carlo estimate if the policy distribution has not closed formula.

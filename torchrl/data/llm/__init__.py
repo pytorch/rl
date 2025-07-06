@@ -13,6 +13,7 @@ from .dataset import (
 )
 from .prompt import PromptData, PromptTensorDictTokenizer
 from .reward import PairwiseDataset, RewardData
+from .topk import TopKRewardSelector
 from .utils import AdaptiveKLController, ConstantKLController, RolloutFromModel
 
 __all__ = [
@@ -30,4 +31,5 @@ __all__ = [
     "TokenizedDatasetLoader",
     "create_infinite_iterator",
     "get_dataloader",
+    "TopKRewardSelector",
 ]

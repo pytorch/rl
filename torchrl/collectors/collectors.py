@@ -30,7 +30,7 @@ import torch.nn as nn
 
 from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 from tensordict.base import NO_DEFAULT
-from tensordict.nn import CudaGraphModule, TensorDictModule
+from tensordict.nn import CudaGraphModule, TensorDictModule, TensorDictModuleBase
 from tensordict.utils import _zip_strict, Buffer
 from torch import multiprocessing as mp
 from torch.nn import Parameter
@@ -155,6 +155,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     compiled_policy: bool
     cudagraphed_policy: bool
     _weight_updater: WeightUpdaterBase | None = None
+    verbose: bool = False
 
     @property
     def weight_updater(self) -> WeightUpdaterBase:
@@ -163,8 +164,9 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     @weight_updater.setter
     def weight_updater(self, value: WeightUpdaterBase | None):
         if value is not None:
-            if not isinstance(value, WeightUpdaterBase) and callable(value):
-                # then it's a constructor
+            if not isinstance(value, WeightUpdaterBase) and callable(
+                value
+            ):  # Fall back to default constructor
                 value = value()
             value.register_collector(self)
             if value.collector is not self:
@@ -294,7 +296,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
 
     def update_policy_weights_(
         self,
-        policy_weights: TensorDictBase | None = None,
+        policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,
         *,
         worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
         **kwargs,
@@ -307,9 +309,11 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         can be transferred to the children workers from a server.
 
         Args:
-            policy_weights (TensorDictBase, optional): A TensorDict containing the weights of the policy to be used
-                for the update. If not provided, the method will attempt to fetch the weights using the configured
-                weight updater.
+            policy_or_weights (TensorDictBase | TensorDictModuleBase | dict | None): The weights to update with. Can be:
+                - TensorDictModuleBase: A policy module whose weights will be extracted
+                - TensorDictBase: A TensorDict containing weights
+                - dict: A regular dict containing weights
+                - None: Will try to get weights from server using _get_server_weights()
             worker_ids (int | List[int] | torch.device | List[torch.device] | None, optional): Identifiers for the
                 workers that need to be updated. This is relevant when the collector has more than one worker associated
                 with it.
@@ -324,7 +328,16 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             :meth:`~torchrl.collectors.RemoteWeightsUpdaterBase`.
 
         """
-        self.weight_updater(policy_weights, worker_ids=worker_ids, **kwargs)
+        if "policy_weights" in kwargs:
+            warnings.warn(
+                "`policy_weights` is deprecated. Use `policy_or_weights` instead.",
+                DeprecationWarning,
+            )
+            policy_or_weights = kwargs.pop("policy_weights")
+
+        self.weight_updater(
+            policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
+        )
 
     def __iter__(self) -> Iterator[TensorDictBase]:
         try:
@@ -339,8 +352,8 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 self._iterator = iter(self)
             out = next(self._iterator)
             # if any, we don't want the device ref to be passed in distributed settings
-            if out is not None:
-                out.clear_device_()
+            if out is not None and (out.device != "cpu"):
+                out = out.copy().clear_device_()
             return out
         except StopIteration:
             return None
@@ -386,6 +399,19 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
         if self.total_frames > 0:
             return -(self.total_frames // -self.requested_frames_per_batch)
         raise RuntimeError("Non-terminating collectors do not have a length")
+
+    def init_updater(self, *args, **kwargs):
+        """Initialize the weight updater with custom arguments.
+
+        This method passes the arguments to the weight updater's init method.
+        If no weight updater is set, this is a no-op.
+
+        Args:
+            *args: Positional arguments for weight updater initialization
+            **kwargs: Keyword arguments for weight updater initialization
+        """
+        if self.weight_updater is not None:
+            self.weight_updater.init(*args, **kwargs)
 
 
 @accept_remote_rref_udf_invocation
@@ -866,7 +892,10 @@ class SyncDataCollector(DataCollectorBase):
             and hasattr(self.postproc, "to")
             and self.storing_device
         ):
-            self.postproc.to(self.storing_device)
+            postproc = self.postproc.to(self.storing_device)
+            if postproc is not self.postproc and postproc is not None:
+                self.postproc = postproc
+
         if frames_per_batch % self.n_env != 0 and RL_WARNINGS:
             warnings.warn(
                 f"frames_per_batch ({frames_per_batch}) is not exactly divisible by the number of batched environments ({self.n_env}), "
@@ -900,7 +929,9 @@ class SyncDataCollector(DataCollectorBase):
                 weight_getter=self.get_weights_fn, policy_weights=self.policy_weights
             )
         elif not isinstance(weight_updater, WeightUpdaterBase):
-            raise TypeError("weight_updater must be a subclass of WeightUpdaterBase")
+            raise TypeError(
+                f"weight_updater must be a subclass of WeightUpdaterBase. Got {type(weight_updater)} instead."
+            )
 
         self.weight_updater = weight_updater
 
@@ -1115,12 +1146,20 @@ class SyncDataCollector(DataCollectorBase):
     # for RPC
     def update_policy_weights_(
         self,
-        policy_weights: TensorDictBase | None = None,
+        policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,
         *,
         worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
+        **kwargs,
     ) -> None:
+        if "policy_weights" in kwargs:
+            warnings.warn(
+                "`policy_weights` is deprecated. Use `policy_or_weights` instead.",
+                DeprecationWarning,
+            )
+            policy_or_weights = kwargs.pop("policy_weights")
+
         super().update_policy_weights_(
-            policy_weights=policy_weights, worker_ids=worker_ids
+            policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
         )
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
@@ -1207,14 +1246,19 @@ class SyncDataCollector(DataCollectorBase):
 
             while self._frames < self.total_frames:
                 self._iter += 1
+                if self.verbose:
+                    torchrl_logger.info("Collector: rollout.")
                 tensordict_out = self.rollout()
                 if tensordict_out is None:
                     # if a replay buffer is passed and self.extend_buffer=False, there is no tensordict_out
                     #  frames are updated within the rollout function
+                    torchrl_logger.info("Collector: No tensordict_out. Yielding.")
                     yield
                     continue
                 self._increment_frames(tensordict_out.numel())
                 tensordict_out = self._postproc(tensordict_out)
+                if self.verbose:
+                    torchrl_logger.info("Collector: postproc done.")
                 if self.return_same_td:
                     # This is used with multiprocessed collectors to use the buffers
                     # stored in the tensordict.
@@ -1225,6 +1269,10 @@ class SyncDataCollector(DataCollectorBase):
                     yield tensordict_out
                 elif self.replay_buffer is not None:
                     self.replay_buffer.extend(tensordict_out)
+                    if self.verbose:
+                        torchrl_logger.info(
+                            f"Collector: Added {tensordict_out.numel()} frames to replay buffer. Yielding."
+                        )
                     yield
                 else:
                     # we must clone the values, as the tensordict is updated in-place.
@@ -1720,8 +1768,9 @@ class _MultiDataCollector(DataCollectorBase):
             .. warning:: `policy_factory` is currently not compatible with multiprocessed data
                 collectors.
 
-        frames_per_batch (int): A keyword-only argument representing the
-            total number of elements in a batch.
+        frames_per_batch (int, Sequence[int]): A keyword-only argument representing the
+            total number of elements in a batch. If a sequence is provided, represents the number of elements in a
+            batch per worker. Total number of elements in a batch is then the sum over the sequence.
         total_frames (int, optional): A keyword-only argument representing the
             total number of frames returned by the collector
             during its lifespan. If the ``total_frames`` is not divisible by
@@ -1878,7 +1927,7 @@ class _MultiDataCollector(DataCollectorBase):
         policy_factory: Callable[[], Callable]
         | list[Callable[[], Callable]]
         | None = None,
-        frames_per_batch: int,
+        frames_per_batch: int | Sequence[int],
         total_frames: int | None = -1,
         device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
         storing_device: DEVICE_TYPING | Sequence[DEVICE_TYPING] | None = None,
@@ -1913,6 +1962,22 @@ class _MultiDataCollector(DataCollectorBase):
     ):
         self.closed = True
         self.num_workers = len(create_env_fn)
+
+        if (
+            isinstance(frames_per_batch, Sequence)
+            and len(frames_per_batch) != self.num_workers
+        ):
+            raise ValueError(
+                "If `frames_per_batch` is provided as a sequence, it should contain exactly one value per worker."
+                f"Got {len(frames_per_batch)} values for {self.num_workers} workers."
+            )
+
+        self._frames_per_batch = frames_per_batch
+        total_frames_per_batch = (
+            sum(frames_per_batch)
+            if isinstance(frames_per_batch, Sequence)
+            else frames_per_batch
+        )
 
         self.set_truncated = set_truncated
         self.num_sub_threads = num_sub_threads
@@ -2031,11 +2096,11 @@ class _MultiDataCollector(DataCollectorBase):
         if total_frames is None or total_frames < 0:
             total_frames = float("inf")
         else:
-            remainder = total_frames % frames_per_batch
+            remainder = total_frames % total_frames_per_batch
             if remainder != 0 and RL_WARNINGS:
                 warnings.warn(
-                    f"total_frames ({total_frames}) is not exactly divisible by frames_per_batch ({frames_per_batch}). "
-                    f"This means {frames_per_batch - remainder} additional frames will be collected. "
+                    f"total_frames ({total_frames}) is not exactly divisible by frames_per_batch ({total_frames_per_batch}). "
+                    f"This means {total_frames_per_batch - remainder} additional frames will be collected. "
                     "To silence this message, set the environment variable RL_WARNINGS to False."
                 )
         self.total_frames = (
@@ -2046,7 +2111,8 @@ class _MultiDataCollector(DataCollectorBase):
         self.max_frames_per_traj = (
             int(max_frames_per_traj) if max_frames_per_traj is not None else 0
         )
-        self.requested_frames_per_batch = int(frames_per_batch)
+
+        self.requested_frames_per_batch = total_frames_per_batch
         self.reset_when_done = reset_when_done
         if split_trajs is None:
             split_trajs = False
@@ -2176,8 +2242,7 @@ class _MultiDataCollector(DataCollectorBase):
         )
         return storing_device, policy_device, env_device
 
-    @property
-    def frames_per_batch_worker(self):
+    def frames_per_batch_worker(self, worker_idx: int | None = None) -> int:
         raise NotImplementedError
 
     @property
@@ -2236,7 +2301,7 @@ class _MultiDataCollector(DataCollectorBase):
                     "create_env_kwargs": env_fun_kwargs,
                     "policy": policy,
                     "max_frames_per_traj": self.max_frames_per_traj,
-                    "frames_per_batch": self.frames_per_batch_worker,
+                    "frames_per_batch": self.frames_per_batch_worker(worker_idx=i),
                     "reset_at_each_iter": self.reset_at_each_iter,
                     "policy_device": policy_device,
                     "storing_device": storing_device,
@@ -2712,16 +2777,25 @@ class MultiSyncDataCollector(_MultiDataCollector):
     # for RPC
     def update_policy_weights_(
         self,
-        policy_weights: TensorDictBase | None = None,
+        policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,
         *,
         worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
+        **kwargs,
     ) -> None:
+        if "policy_weights" in kwargs:
+            warnings.warn(
+                "`policy_weights` is deprecated. Use `policy_or_weights` instead.",
+                DeprecationWarning,
+            )
+            policy_or_weights = kwargs.pop("policy_weights")
+
         super().update_policy_weights_(
-            policy_weights=policy_weights, worker_ids=worker_ids
+            policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
         )
 
-    @property
-    def frames_per_batch_worker(self):
+    def frames_per_batch_worker(self, worker_idx: int | None) -> int:
+        if worker_idx is not None and isinstance(self._frames_per_batch, Sequence):
+            return self._frames_per_batch[worker_idx]
         if self.requested_frames_per_batch % self.num_workers != 0 and RL_WARNINGS:
             warnings.warn(
                 f"frames_per_batch {self.requested_frames_per_batch} is not exactly divisible by the number of collector workers {self.num_workers},"
@@ -2802,9 +2876,9 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 use_buffers = self._use_buffers
                 if self.replay_buffer is not None:
                     idx = new_data
-                    workers_frames[idx] = (
-                        workers_frames[idx] + self.frames_per_batch_worker
-                    )
+                    workers_frames[idx] = workers_frames[
+                        idx
+                    ] + self.frames_per_batch_worker(worker_idx=idx)
                     continue
                 elif j == 0 or not use_buffers:
                     try:
@@ -2850,7 +2924,12 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
             if self.replay_buffer is not None:
                 yield
-                self._frames += self.frames_per_batch_worker * self.num_workers
+                self._frames += sum(
+                    [
+                        self.frames_per_batch_worker(worker_idx)
+                        for worker_idx in range(self.num_workers)
+                    ]
+                )
                 continue
 
             # we have to correct the traj_ids to make sure that they don't overlap
@@ -3087,16 +3166,23 @@ class MultiaSyncDataCollector(_MultiDataCollector):
     # for RPC
     def update_policy_weights_(
         self,
-        policy_weights: TensorDictBase | None = None,
+        policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,
         *,
         worker_ids: int | list[int] | torch.device | list[torch.device] | None = None,
+        **kwargs,
     ) -> None:
+        if "policy_weights" in kwargs:
+            warnings.warn(
+                "`policy_weights` is deprecated. Use `policy_or_weights` instead.",
+                DeprecationWarning,
+            )
+            policy_or_weights = kwargs.pop("policy_weights")
+
         super().update_policy_weights_(
-            policy_weights=policy_weights, worker_ids=worker_ids
+            policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
         )
 
-    @property
-    def frames_per_batch_worker(self):
+    def frames_per_batch_worker(self, worker_idx: int | None = None) -> int:
         return self.requested_frames_per_batch
 
     def _get_from_queue(self, timeout=None) -> tuple[int, int, TensorDictBase]:
@@ -3160,7 +3246,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
                 if self.split_trajs:
                     out = split_trajectories(out, prefix="collector")
             else:
-                worker_frames = self.frames_per_batch_worker
+                worker_frames = self.frames_per_batch_worker()
             self._frames += worker_frames
             workers_frames[idx] = workers_frames[idx] + worker_frames
             if self.postprocs:

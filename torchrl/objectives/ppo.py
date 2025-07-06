@@ -29,7 +29,7 @@ from tensordict.nn import (
 from tensordict.utils import NestedKey
 from torch import distributions as d
 
-from torchrl._utils import _standardize
+from torchrl._utils import _standardize, logger as torchrl_logger, VERBOSE
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
@@ -76,6 +76,21 @@ class PPOLoss(LossModule):
         critic_network (ValueOperator): value operator. The critic will usually take the observations as input
             and return a scalar value (``state_value`` by default) in the output keys.
 
+    .. note::
+        While this loss module does not enforce any specific model mode (train/eval), it is highly recommended
+        to keep your model in eval mode during RL training to ensure deterministic behavior.
+        A failure to learn due to a train/eval mode mismatch is often observed when the Effective Sample Size (ESS)
+        drops or increases significantly (see note below).
+
+    .. note::
+        The PPO loss exposes a couple of additional metrics that can be used to monitor the training process:
+
+        - The clip fraction is the ratio of the number of clipped weights in the PPO loss (i.e. the ratio of the number of weights that were clipped to the total number of weights).
+        - The Effective Sample Size (ESS) is a measure of the effective number of samples in the batch, computed as the inverse of the sum of the squared importance weights.
+          A value of 1 indicates that the importance weights are all equal to 1 (i.e., the samples are equally weighted).
+          Any value below 1 indicates that the samples are not equally weighted, and the ESS is a measure of the effective number of samples.
+          If the value drops or increases significantly, it often indicates issues with the model configuration (such as a train/eval mode mismatch, or a large policy update).
+
     Keyword Args:
         entropy_bonus (bool, optional): if ``True``, an entropy bonus will be added to the
             loss to favour exploratory policies.
@@ -85,10 +100,13 @@ class PPOLoss(LossModule):
             ``samples_mc_entropy`` will control how many
             samples will be used to compute this estimate.
             Defaults to ``1``.
-        entropy_coef (scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.
+        entropy_coeff: scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.
             * **Scalar**: one value applied to the summed entropy of every action head.
             * **Mapping** ``{head_name: coef}`` gives an individual coefficient for each action-head's entropy.
             Defaults to ``0.01``.
+        log_explained_variance (bool, optional): if ``True``, the explained variance of the critic
+            predictions w.r.t. value targets will be computed and logged as ``"explained_variance"``.
+            This can help monitor critic quality during training. Best possible score is 1.0, lower values are worse. Defaults to ``True``.
         critic_coef (scalar, optional): critic loss multiplier when computing the total
             loss. Defaults to ``1.0``. Set ``critic_coef`` to ``None`` to exclude the value
             loss from the forward outputs.
@@ -333,7 +351,8 @@ class PPOLoss(LossModule):
         *,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
-        entropy_coef: float | Mapping[str, float] = 0.01,
+        entropy_coeff: float | Mapping[str, float] = 0.01,
+        log_explained_variance: bool = True,
         critic_coef: float | None = None,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
@@ -398,6 +417,7 @@ class PPOLoss(LossModule):
             self.critic_network_params = None
             self.target_critic_network_params = None
 
+        self.log_explained_variance = log_explained_variance
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_bonus = entropy_bonus
         self.separate_losses = separate_losses
@@ -411,22 +431,32 @@ class PPOLoss(LossModule):
                     torch, "get_default_device", lambda: torch.device("cpu")
                 )()
 
-        if isinstance(entropy_coef, Mapping):
-            # Store the mapping for per-head coefficients
-            self._entropy_coef_map = {str(k): float(v) for k, v in entropy_coef.items()}
-            # Register an empty buffer for compatibility
-            self.register_buffer("entropy_coef", torch.tensor(0.0))
-        elif isinstance(entropy_coef, (float, int, torch.Tensor)):
-            # Register the scalar entropy coefficient
-            coef = (
-                float(entropy_coef)
-                if not torch.is_tensor(entropy_coef)
-                else float(entropy_coef.item())
+        # Handle deprecated entropy_coeff argument
+        if "entropy_coeff" in kwargs:
+            warnings.warn(
+                "'entropy_coeff' is deprecated and will be removed in torchrl v0.11. Please use 'entropy_coeff' instead.",
+                DeprecationWarning,
             )
-            self.register_buffer("entropy_coef", torch.tensor(coef))
-            self._entropy_coef_map = None
+            entropy_coeff = kwargs.pop("entropy_coeff")
+
+        if isinstance(entropy_coeff, Mapping):
+            # Store the mapping for per-head coefficients
+            self._entropy_coeff_map = {
+                str(k): float(v) for k, v in entropy_coeff.items()
+            }
+            # Register an empty buffer for compatibility
+            self.register_buffer("entropy_coeff", torch.tensor(0.0))
+        elif isinstance(entropy_coeff, (float, int, torch.Tensor)):
+            # Register the scalar entropy coefficient
+            coeff = (
+                float(entropy_coeff)
+                if not torch.is_tensor(entropy_coeff)
+                else float(entropy_coeff.item())
+            )
+            self.register_buffer("entropy_coeff", torch.tensor(coeff))
+            self._entropy_coeff_map = None
         else:
-            raise TypeError("entropy_coef must be a float or a Mapping[str, float]")
+            raise TypeError("entropy_coeff must be a float or a Mapping[str, float]")
         if critic_coef is not None:
             self.register_buffer(
                 "critic_coef", torch.tensor(critic_coef, device=device)
@@ -537,7 +567,18 @@ class PPOLoss(LossModule):
     ) -> torch.Tensor | TensorDict:
         try:
             entropy = dist.entropy()
+            if not entropy.isfinite().all():
+                del entropy
+                if VERBOSE:
+                    torchrl_logger.info(
+                        "Entropy is not finite. Using Monte Carlo sampling."
+                    )
+                raise NotImplementedError
         except NotImplementedError:
+            if VERBOSE:
+                torchrl_logger.warning(
+                    f"Entropy not implemented for {type(dist)} or is not finite. Using Monte Carlo sampling."
+                )
             if getattr(dist, "has_rsample", False):
                 x = dist.rsample((self.samples_mc_entropy,))
             else:
@@ -649,7 +690,9 @@ class PPOLoss(LossModule):
 
         return log_weight, dist, kl_approx
 
-    def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
+    def loss_critic(
+        self, tensordict: TensorDictBase
+    ) -> tuple[torch.Tensor | TensorDict, ...]:
         """Returns the critic loss multiplied by ``critic_coef``, if it is not ``None``."""
         # TODO: if the advantage is gathered by forward, this introduces an
         # overhead that we could easily reduce.
@@ -668,14 +711,12 @@ class PPOLoss(LossModule):
             )
 
         if self.clip_value:
-            old_state_value = tensordict.get(
-                self.tensor_keys.value, None
-            )  # TODO: None soon to be removed
+            old_state_value = tensordict.get(self.tensor_keys.value)
             if old_state_value is None:
                 raise KeyError(
                     f"clip_value is set to {self.clip_value}, but "
                     f"the key {self.tensor_keys.value} was not found in the input tensordict. "
-                    f"Make sure that the value_key passed to PPO exists in the input tensordict."
+                    f"Make sure that the 'value_key' passed to PPO exists in the input tensordict."
                 )
 
         with self.critic_network_params.to_module(
@@ -683,13 +724,11 @@ class PPOLoss(LossModule):
         ) if self.functional else contextlib.nullcontext():
             state_value_td = self.critic_network(tensordict)
 
-        state_value = state_value_td.get(
-            self.tensor_keys.value, None
-        )  # TODO: None soon to be removed
+        state_value = state_value_td.get(self.tensor_keys.value)
         if state_value is None:
             raise KeyError(
                 f"the key {self.tensor_keys.value} was not found in the critic output tensordict. "
-                f"Make sure that the value_key passed to PPO is accurate."
+                f"Make sure that the 'value_key' passed to PPO is accurate."
             )
 
         loss_value = distance_loss(
@@ -709,6 +748,17 @@ class PPOLoss(LossModule):
                 self.loss_critic_type,
             )
 
+        explained_variance = None
+        if self.log_explained_variance:
+            with torch.no_grad():  # <‑‑ break grad‐flow
+                tgt = target_return.detach()
+                pred = state_value.detach()
+                eps = torch.finfo(tgt.dtype).eps
+
+                resid = torch.var(tgt - pred, correction=0, dim=0)
+                total = torch.var(tgt, correction=0, dim=0)
+                explained_variance = 1.0 - resid / (total + eps)
+
         self._clear_weakrefs(
             tensordict,
             "actor_network_params",
@@ -717,8 +767,8 @@ class PPOLoss(LossModule):
             "target_critic_network_params",
         )
         if self._has_critic:
-            return self.critic_coef * loss_value, clip_fraction
-        return loss_value, clip_fraction
+            return self.critic_coef * loss_value, clip_fraction, explained_variance
+        return loss_value, clip_fraction, explained_variance
 
     @property
     @_cache_values
@@ -768,10 +818,14 @@ class PPOLoss(LossModule):
                 td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", self._weighted_loss_entropy(entropy))
         if self._has_critic:
-            loss_critic, value_clip_fraction = self.loss_critic(tensordict)
+            loss_critic, value_clip_fraction, explained_variance = self.loss_critic(
+                tensordict
+            )
             td_out.set("loss_critic", loss_critic)
             if value_clip_fraction is not None:
                 td_out.set("value_clip_fraction", value_clip_fraction)
+            if explained_variance is not None:
+                td_out.set("explained_variance", explained_variance)
         td_out = td_out.named_apply(
             lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
             if name.startswith("loss_")
@@ -838,20 +892,20 @@ class PPOLoss(LossModule):
     ) -> torch.Tensor:
         """Compute the weighted entropy loss.
 
-        If `self._entropy_coef_map` is provided, apply per-head entropy coefficients.
-        Otherwise, use the scalar `self.entropy_coef`.
+        If `self._entropy_coeff_map` is provided, apply per-head entropy coefficients.
+        Otherwise, use the scalar `self.entropy_coeff`.
         """
-        if self._entropy_coef_map is None:
+        if self._entropy_coeff_map is None:
             if is_tensor_collection(entropy):
                 entropy = _sum_td_features(entropy)
-            return -self.entropy_coef * entropy
+            return -self.entropy_coeff * entropy
 
         loss_term = None  # running sum over heads
         for head_name, entropy_head in entropy.items():
             try:
-                coeff = self._entropy_coef_map[head_name]
+                coeff = self._entropy_coeff_map[head_name]
             except KeyError as exc:
-                raise KeyError(f"Missing entropy coef for head '{head_name}'") from exc
+                raise KeyError(f"Missing entropy coeff for head '{head_name}'") from exc
             coeff_t = torch.as_tensor(
                 coeff, dtype=entropy_head.dtype, device=entropy_head.device
             )
@@ -873,6 +927,21 @@ class ClipPPOLoss(PPOLoss):
         actor_network (ProbabilisticTensorDictSequential): policy operator.
         critic_network (ValueOperator): value operator.
 
+    .. note::
+        While this loss module does not enforce any specific model mode (train/eval), it is highly recommended
+        to keep your model in eval mode during RL training to ensure deterministic behavior.
+        A failure to learn due to a train/eval mode mismatch is often observed when the Effective Sample Size (ESS)
+        drops or increases significantly (see note below).
+
+    .. note::
+        The PPO loss exposes a couple of additional metrics that can be used to monitor the training process:
+
+        - The clip fraction is the ratio of the number of clipped weights in the PPO loss (i.e. the ratio of the number of weights that were clipped to the total number of weights).
+        - The Effective Sample Size (ESS) is a measure of the effective number of samples in the batch, computed as the inverse of the sum of the squared importance weights.
+          A value of 1 indicates that the importance weights are all equal to 1 (i.e., the samples are equally weighted).
+          Any value below 1 indicates that the samples are not equally weighted, and the ESS is a measure of the effective number of samples.
+          If the value drops or increases significantly, it often indicates issues with the model configuration (such as a train/eval mode mismatch, or a large policy update).
+
     Keyword Args:
         clip_epsilon (scalar, optional): weight clipping threshold in the clipped PPO loss equation.
             default: 0.2
@@ -884,7 +953,7 @@ class ClipPPOLoss(PPOLoss):
             ``samples_mc_entropy`` will control how many
             samples will be used to compute this estimate.
             Defaults to ``1``.
-        entropy_coef (scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.
+        entropy_coeff: (scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.
             * **Scalar**: one value applied to the summed entropy of every action head.
             * **Mapping** ``{head_name: coef}`` gives an individual coefficient for each action-head's entropy.
             Defaults to ``0.01``.
@@ -989,7 +1058,7 @@ class ClipPPOLoss(PPOLoss):
         clip_epsilon: float = 0.2,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
-        entropy_coef: float | Mapping[str, float] = 0.01,
+        entropy_coeff: float | Mapping[str, float] = 0.01,
         critic_coef: float | None = None,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
@@ -1010,7 +1079,7 @@ class ClipPPOLoss(PPOLoss):
             critic_network,
             entropy_bonus=entropy_bonus,
             samples_mc_entropy=samples_mc_entropy,
-            entropy_coef=entropy_coef,
+            entropy_coeff=entropy_coeff,
             critic_coef=critic_coef,
             loss_critic_type=loss_critic_type,
             normalize_advantage=normalize_advantage,
@@ -1121,10 +1190,14 @@ class ClipPPOLoss(PPOLoss):
                 td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", self._weighted_loss_entropy(entropy))
         if self._has_critic:
-            loss_critic, value_clip_fraction = self.loss_critic(tensordict)
+            loss_critic, value_clip_fraction, explained_variance = self.loss_critic(
+                tensordict
+            )
             td_out.set("loss_critic", loss_critic)
             if value_clip_fraction is not None:
                 td_out.set("value_clip_fraction", value_clip_fraction)
+            if explained_variance is not None:
+                td_out.set("explained_variance", explained_variance)
 
         td_out.set("ESS", _reduce(ess, self.reduction) / batch)
         td_out = td_out.named_apply(
@@ -1173,7 +1246,7 @@ class KLPENPPOLoss(PPOLoss):
             ``samples_mc_entropy`` will control how many
             samples will be used to compute this estimate.
             Defaults to ``1``.
-        entropy_coef (scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.
+        entropy_coeff: scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.
             * **Scalar**: one value applied to the summed entropy of every action head.
             * **Mapping** ``{head_name: coef}`` gives an individual coefficient for each action-head's entropy.
             Defaults to ``0.01``.
@@ -1279,7 +1352,7 @@ class KLPENPPOLoss(PPOLoss):
         samples_mc_kl: int = 1,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
-        entropy_coef: float | Mapping[str, float] = 0.01,
+        entropy_coeff: float | Mapping[str, float] = 0.01,
         critic_coef: float | None = None,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
@@ -1296,7 +1369,7 @@ class KLPENPPOLoss(PPOLoss):
             critic_network,
             entropy_bonus=entropy_bonus,
             samples_mc_entropy=samples_mc_entropy,
-            entropy_coef=entropy_coef,
+            entropy_coeff=entropy_coeff,
             critic_coef=critic_coef,
             loss_critic_type=loss_critic_type,
             normalize_advantage=normalize_advantage,
@@ -1467,10 +1540,14 @@ class KLPENPPOLoss(PPOLoss):
                 td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", self._weighted_loss_entropy(entropy))
         if self._has_critic:
-            loss_critic, value_clip_fraction = self.loss_critic(tensordict_copy)
+            loss_critic, value_clip_fraction, explained_variance = self.loss_critic(
+                tensordict_copy
+            )
             td_out.set("loss_critic", loss_critic)
             if value_clip_fraction is not None:
                 td_out.set("value_clip_fraction", value_clip_fraction)
+            if explained_variance is not None:
+                td_out.set("explained_variance", explained_variance)
         td_out = td_out.named_apply(
             lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
             if name.startswith("loss_")

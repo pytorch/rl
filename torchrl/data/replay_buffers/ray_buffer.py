@@ -4,21 +4,26 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import Any, Callable
+import contextlib
+import importlib
+
+from typing import Any, Callable, Iterator
 
 import torch
-
+from torchrl._utils import logger as torchrl_logger
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.envs.transforms.transforms import Transform
 
 RAY_ERR = None
-try:
+_has_ray = importlib.util.find_spec("ray") is not None
+if _has_ray:
     import ray
+else:
 
-    _has_ray = True
-except ImportError as err:
-    _has_ray = False
-    RAY_ERR = err
+    def ray():  # noqa: D103
+        raise ImportError(
+            "ray is not installed. Please install it with `pip install ray`."
+        )
 
 
 @classmethod
@@ -49,9 +54,12 @@ class RayReplayBuffer(ReplayBuffer):
     """A Ray implementation of the Replay Buffer that can be extended and sampled remotely.
 
     Keyword Args:
+        replay_buffer_cls (type[ReplayBuffer], optional): the class to use for the replay buffer.
+            Defaults to :class:`~torchrl.data.ReplayBuffer`.
         ray_init_config (dict[str, Any], optiona): keyword arguments to pass to `ray.init()`.
         remote_config (dict[str, Any], optiona): keyword arguments to pass to `cls.as_remote()`.
             Defaults to `torchrl.collectors.distributed.ray.DEFAULT_REMOTE_CLASS_CONFIG`.
+        **kwargs: keyword arguments to pass to the replay buffer class.
 
     .. seealso:: :class:`~torchrl.data.ReplayBuffer` for a list of other keyword arguments.
 
@@ -114,6 +122,7 @@ class RayReplayBuffer(ReplayBuffer):
     def __init__(
         self,
         *args,
+        replay_buffer_cls: type[ReplayBuffer] | None = ReplayBuffer,
         ray_init_config: dict[str, Any] | None = None,
         remote_config: dict[str, Any] | None = None,
         **kwargs,
@@ -129,14 +138,40 @@ class RayReplayBuffer(ReplayBuffer):
                 ray_init_config = DEFAULT_RAY_INIT_CONFIG
             ray.init(**ray_init_config)
 
-        remote_cls = ReplayBuffer.as_remote(remote_config).remote
+        remote_cls = replay_buffer_cls.as_remote(remote_config).remote
+        # We can detect if the buffer has a GPU allocated, if not
+        #  we'll make sure that the data is sent to CPU when needed.
+        if remote_config is not None:
+            self.has_gpu = remote_config.get("num_gpus", 0) > 0
+        else:
+            self.has_gpu = False
         self._rb = remote_cls(*args, **kwargs)
+
+    def close(self):
+        """Terminates the Ray actor associated with this replay buffer."""
+        if hasattr(self, "_rb"):
+            torchrl_logger.info("Killing Ray actor.")
+            ray.kill(self._rb)  # Forcefully terminate the actor
+            delattr(self, "_rb")  # Remove the reference to the terminated actor
+            torchrl_logger.info("Ray actor killed.")
+
+    @property
+    def _replay_lock(self):
+        """Placeholder for the replay lock.
+
+        Replay-lock is not supported yet by RayReplayBuffer.
+        """
+        return contextlib.nullcontext()
 
     def sample(self, *args, **kwargs):
         pending_task = self._rb.sample.remote(*args, **kwargs)
         return ray.get(pending_task)
 
     def extend(self, *args, **kwargs):
+        if not self.has_gpu:
+            # Move the data to GPU
+            args = [arg.to("cpu") for arg in args if hasattr(arg, "to")]
+            kwargs = {k: v.to("cpu") for k, v in kwargs.items() if hasattr(v, "to")}
         pending_task = self._rb.extend.remote(*args, **kwargs)
         return ray.get(pending_task)
 
@@ -163,6 +198,21 @@ class RayReplayBuffer(ReplayBuffer):
 
     def empty(self):
         return ray.get(self._rb.empty.remote())
+
+    def __getitem__(self, index):
+        return ray.get(self._rb.__getitem__.remote(index))
+
+    def next(self):
+        return ray.get(self._rb.next.remote())
+
+    def __iter__(self) -> Iterator[Any]:
+        """Returns an iterator that yields None as the collector writes directly to the replay buffer."""
+        while True:
+            data = self.next()
+            if data is not None:
+                yield data
+            else:
+                break
 
     def insert_transform(
         self,
@@ -215,3 +265,17 @@ class RayReplayBuffer(ReplayBuffer):
     @property
     def dim_extend(self):
         return ray.get(self._rb._getattr.remote("dim_extend"))
+
+    @dim_extend.setter
+    def dim_extend(self, value):
+        return ray.get(self._rb._setattr.remote("dim_extend", value))
+
+    def __setitem__(self, index, value) -> None:
+        return ray.get(self._rb.__setitem__.remote(index, value))
+
+    def __repr__(self) -> str:
+        rb_repr = ray.get(self._rb.__repr__.remote())
+        return f"RayReplayBuffer(\n    remote_buffer={rb_repr}\n)"
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        return ray.get(self._rb.load_state_dict.remote(state_dict))

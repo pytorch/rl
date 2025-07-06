@@ -4,20 +4,34 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 import torch
 from omegaconf import DictConfig
 from torch import device as torch_device, dtype as torch_dtype
 
-from torchrl import logger as torchrl_logger
+from torchrl._utils import logger as torchrl_logger
+from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from transformers.tokenization_utils import PreTrainedTokenizer
 
 
+def get_tokenizer(cfg: DictConfig) -> PreTrainedTokenizer:
+    from transformers import AutoTokenizer
+
+    model_name = cfg.model.name
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    # tokenizer.eos_token = "<|im_end|>"
+    if tokenizer.pad_token == tokenizer.eos_token:
+        tokenizer.pad_token = "PAD"
+    tokenizer.padding_side = "left"
+    return tokenizer
+
+
 def get_train_model(
     cfg: DictConfig,
+    devices: list[int] | None = None,
 ) -> tuple[TransformersWrapper, PreTrainedTokenizer]:
     """Creates and configures the training model with LoRA adapters.
 
@@ -44,7 +58,7 @@ def get_train_model(
     model_dtype = getattr(torch, cfg.train_model.torch_dtype)
 
     # Get configured devices or default to [0]
-    train_devices = cfg.train_model.get("devices", [0])
+    train_devices = devices if devices is not None else [0]
 
     # Create max_memory dict - set 0 memory for GPUs we don't want to use
     max_memory = {}
@@ -83,10 +97,15 @@ def get_train_model(
         generate=False,
         return_log_probs=True,
     )
+    # Ensure model stays in eval mode after wrapping
+    policy_training.model.eval()
+    policy_training.model.train(False)
     return policy_training, train_tokenizer
 
 
-def get_inference_model(cfg: DictConfig) -> vLLMWrapper:
+def get_inference_model(
+    cfg: DictConfig, devices: list[int] | None = None, make_ray_worker: bool = True
+) -> vLLMWrapper:
     """Creates the vLLM-based inference model for fast generation.
 
     This function initializes a vLLM model server for efficient inference and wraps
@@ -97,6 +116,7 @@ def get_inference_model(cfg: DictConfig) -> vLLMWrapper:
         cfg (DictConfig): The hydra configuration object containing model settings.
             Expected to have inference_model section with vLLM-specific parameters
             like gpu_memory_utilization and generation settings.
+        make_ray_worker (bool, optional): Whether to make a ray worker. Default: True
 
     Returns:
         vLLMWrapper: The wrapped vLLM model ready for inference.
@@ -106,17 +126,27 @@ def get_inference_model(cfg: DictConfig) -> vLLMWrapper:
     """
     from torchrl.modules.llm.backends.vllm import make_vllm_worker
 
-    vllm_devices = cfg.inference_model.get("devices", [1])
-    torchrl_logger.info(f"Creating inference model on devices {vllm_devices}")
+    num_devices = cfg.inference_model.num_devices
+    if num_devices is None:
+        vllm_devices = devices if devices is not None else [1]
+    else:
+        vllm_devices = None
+    torchrl_logger.info(
+        f"Creating inference model with num_devices={num_devices}, devices={vllm_devices}"
+    )
 
     model_name = cfg.model.name
 
     # vLLM handles device mapping internally
     inference_server = make_vllm_worker(
-        model_name,
+        model_name=model_name,
         gpu_memory_utilization=cfg.inference_model.gpu_memory_utilization,
-        devices=list(vllm_devices),  # Convert to list for type compatibility
-        make_ray_worker=True,
+        num_devices=num_devices,
+        devices=list(vllm_devices)
+        if vllm_devices is not None
+        else None,  # Convert to list for type compatibility
+        make_ray_worker=make_ray_worker,
+        enforce_eager=cfg.inference_model.enforce_eager,
     )
     assert inference_server is not None
     policy = vLLMWrapper(
@@ -134,7 +164,7 @@ def get_inference_model(cfg: DictConfig) -> vLLMWrapper:
 
 
 def get_ref_model(
-    cfg: DictConfig, tokenizer: PreTrainedTokenizer
+    cfg: DictConfig, tokenizer: PreTrainedTokenizer, devices: list[int] | None = None
 ) -> TransformersWrapper:
     """Creates the reference model for KL penalty computation.
 
@@ -155,7 +185,10 @@ def get_ref_model(
     torchrl_logger.info("Creating ref model")
 
     # Get configured devices or default to [2]
-    ref_devices = cfg.ref_model.get("devices", [2])
+    if cfg.ref_model.num_devices is None:
+        ref_devices = devices if devices is not None else [2]
+    else:
+        ref_devices = list(range(cfg.ref_model.num_devices))
 
     # Create max_memory dict - set 0 memory for GPUs we don't want to use
     max_memory = {}
@@ -250,6 +283,7 @@ def get_hf_model(
         max_memory = {}
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
+    # tokenizer.eos_token = "<|im_end|>"
     if tokenizer.pad_token == tokenizer.eos_token:
         tokenizer.pad_token = "PAD"
     tokenizer.padding_side = "left"
@@ -325,10 +359,10 @@ def get_hf_model(
                 r=lora_r,
                 lora_alpha=lora_alpha,
                 target_modules="all-linear",
-                lora_dropout=lora_dropout,
+                lora_dropout=0.0,  # Disable dropout for RL training
                 bias="none",
                 task_type="CAUSAL_LM",
-                inference_mode=False,
+                inference_mode=True,  # Force inference mode for consistent behavior
                 init_lora_weights=True,  # This ensures weights are initialized
             )
 
@@ -339,11 +373,12 @@ def get_hf_model(
                 autocast_adapter_dtype=False,  # Prevent automatic casting of adapter layers
             )
 
-            # Force LoRA layers to correct dtype
+            # Force LoRA layers to correct dtype and eval mode
             for n, p in model.named_parameters():
                 if "lora_" in n:  # Only convert LoRA parameters
                     p.data = p.data.to(torch_dtype)
 
+        model.eval()  # Ensure model is in eval mode
         if requires_grad:
             model.requires_grad_(True)
 
@@ -352,3 +387,89 @@ def get_hf_model(
     finally:
         # Restore original dtype
         torch.set_default_dtype(original_dtype)
+
+
+def make_weight_updater(
+    policy_training=None,
+    master_address=None,
+    master_port=None,
+    model_metadata=None,
+    vllm_tp_size=None,
+) -> vLLMUpdater | Callable[[], vLLMUpdater]:
+    """Creates a vLLM weight updater for the policy.
+
+    This function can be used in two ways:
+    1. Synchronous mode (grpo.py): Pass policy_training to get an initialized updater with metadata
+    2. Async mode (grpo-async.py): Pass master_address, master_port, model_metadata, and remote_actor
+
+    Args:
+        policy_training (Optional[TransformersWrapper]): The training policy model. Required for sync mode.
+        master_address (Optional[str]): Ray master address for async mode.
+        master_port (Optional[int]): Ray master port for async mode.
+        model_metadata (Optional[dict]): Model metadata for async mode. If not provided but policy_training is,
+            it will be extracted from the policy.
+        vllm_tp_size (Optional[int]): vLLM tensor parallel size. If not provided, will be set to 1.
+
+    Returns:
+        vLLMUpdater | partial[vLLMUpdater]: An instance of the weight updater configured to update
+            the vLLM worker's weights.
+    """
+    if model_metadata is None and policy_training is not None:
+        # Extract metadata from training policy
+        model_metadata = {
+            k: (v.dtype, v.shape) for k, v in policy_training.model.state_dict().items()
+        }
+
+    return vLLMUpdater(
+        master_address=master_address,
+        master_port=master_port,
+        model_metadata=model_metadata,
+        vllm_tp_size=vllm_tp_size,
+    )
+
+
+def compute_device_allocation(cfg):
+    """Compute device allocations and Ray GPU config based on sync mode.
+
+    Args:
+        cfg: The configuration object
+
+    Returns:
+        dict: Updated device configuration containing:
+            - train_model_devices: list of devices for training
+            - inference_model_devices: list of devices for inference
+            - ref_model_devices: list of devices for reference model
+            - ray_num_gpus: number of GPUs to tell Ray about
+            - cuda_visible_devices: string for CUDA_VISIBLE_DEVICES
+    """
+    train_devices = cfg.train_model.num_devices
+    inf_devices = cfg.inference_model.num_devices
+    ref_devices = cfg.ref_model.num_devices
+
+    # So we need all GPUs for Ray
+    train_start = 0
+    train_end = train_devices
+    inference_start = 0
+    inference_end = inf_devices
+    ref_start = inference_end
+    ref_end = ref_start + ref_devices
+    ray_num_gpus = train_devices + inf_devices + ref_devices
+
+    # Create device lists
+    train_model_devices = list(range(train_start, train_end))
+    inference_model_devices = list(range(inference_start, inference_end))
+    ref_model_devices = list(range(ref_start, ref_end))
+
+    # Get total unique devices for CUDA_VISIBLE_DEVICES
+    all_devices = sorted(
+        set(train_model_devices + inference_model_devices + ref_model_devices)
+    )
+    cuda_visible_devices = ",".join(map(str, all_devices))
+
+    return {
+        "train_model_devices": train_model_devices,
+        "inference_model_devices": inference_model_devices,
+        "ref_model_devices": ref_model_devices,
+        "ray_num_gpus": ray_num_gpus,
+        "cuda_visible_devices": cuda_visible_devices,
+    }

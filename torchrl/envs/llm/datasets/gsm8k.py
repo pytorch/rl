@@ -135,6 +135,7 @@ class GSM8KEnv(DatasetChatEnv):
 
     Keyword Args:
         dataset (str, optional): The name of the dataset. Defaults to `"gsm8k"`.
+        shuffle (bool, optional): Whether to shuffle the dataset. Defaults to `True`.
         num_envs (int, optional): The number of environments to create. Defaults to `1`.
         repeats (int | None, optional): The number of times to repeat each sample from the dataset (mainly for Monte-Carlo
             based value estimation). If `None`, the dataset is not repeated. Defaults to `None`.
@@ -148,8 +149,7 @@ class GSM8KEnv(DatasetChatEnv):
 
         device (torch.device | None, optional): The device to use for computations. Defaults to None.
         template_kwargs (dict[str, Any] | None, optional): Additional keyword arguments for the template. Defaults to `None`.
-        apply_template (bool | None, optional): Whether to apply the template to the text. Defaults to `True` if the
-            kwargs or the tokenizer is passed.
+        apply_template (bool | None, optional): Whether to apply the template to the text. Defaults to `False`.
         compute_reward (bool, optional): Whether to compute rewards. Defaults to `True`.
         collate_fn (Callable | None, optional): A custom collate function for data loading. If `None`, a default
             collate function is used. Defaults to `None`.
@@ -285,12 +285,13 @@ class GSM8KEnv(DatasetChatEnv):
     SYSTEM_PROMPT = """A conversation between User and Assistant. The user asks a question, and the Assistant solves it.
 The assistant first thinks about the reasoning process in the mind and then provides the user with the answer.
 The reasoning process and answer are enclosed within <think></think> and <answer></answer> tags, respectively,
-i.e., <think>reasoning process here</think> <answer>answer here</answer>."""
+i.e., <think>reasoning process here</think> <answer>answer here</answer>. The answer should be a number."""
 
     def __init__(
         self,
         *,
         dataset: str = "gsm8k",
+        shuffle: bool = True,
         num_envs: int = 1,
         repeats: int | None = None,
         batch_size_dl: int = 1,
@@ -299,7 +300,7 @@ i.e., <think>reasoning process here</think> <answer>answer here</answer>."""
         tokenizer: transformers.AutoTokenizer | None = None,  # noqa
         device: torch.device | None = None,
         template_kwargs: dict[str, Any] | None = None,
-        apply_template: bool | None = None,
+        apply_template: bool | None = False,
         compute_reward: bool = True,
         collate_fn: Callable | None = None,
         max_steps: int = 1,
@@ -308,6 +309,7 @@ i.e., <think>reasoning process here</think> <answer>answer here</answer>."""
             collate_fn = _collate_fn
         super().__init__(
             dataset=dataset,
+            shuffle=shuffle,
             name="main",
             num_envs=num_envs,
             repeats=repeats,

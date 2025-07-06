@@ -447,6 +447,18 @@ class DataLoadingPrimer(TensorDictPrimer):
         )
         self._reset_key = "_reset"
 
+    def reset_dataloader(self):
+        """Reset the dataloader.
+
+        This is useful when the dataloader is not infinite and we want to reset it.
+
+        Returns:
+            self: The transform itself.
+        """
+        self._queue.clear()
+        self.endless_dataloader = self._endless_iter(self.dataloader)
+        return self
+
     @classmethod
     def _endless_iter(self, obj):
         while True:

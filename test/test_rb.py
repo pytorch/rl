@@ -17,7 +17,6 @@ from unittest import mock
 import numpy as np
 import pytest
 import torch
-
 from packaging import version
 from packaging.version import parse
 from tensordict import (
@@ -32,7 +31,7 @@ from tensordict import (
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map
 
-from torchrl._utils import _replace_last
+from torchrl._utils import _replace_last, logger as torchrl_logger
 from torchrl.collectors import RandomPolicy, SyncDataCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
@@ -40,6 +39,7 @@ from torchrl.data import (
     MultiStep,
     NestedStorageCheckpointer,
     PrioritizedReplayBuffer,
+    RayReplayBuffer,
     RemoteTensorDictReplayBuffer,
     ReplayBuffer,
     ReplayBufferEnsemble,
@@ -128,6 +128,8 @@ _has_gym = importlib.util.find_spec("gym") is not None
 _has_snapshot = importlib.util.find_spec("torchsnapshot") is not None
 _os_is_windows = sys.platform == "win32"
 _has_transformers = importlib.util.find_spec("transformers") is not None
+_has_ray = importlib.util.find_spec("ray") is not None
+
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 torch_2_3 = version.parse(
@@ -2851,11 +2853,11 @@ class TestSamplers:
         )
         if not circ:
             # Simplest case: the buffer is full but no overlap
-            index = rb.extend(data)
+            index = rb.extend(data, update_priority=False)
         else:
             # The buffer is 2/3 -> 1/3 overlapping
-            rb.extend(data[..., : data.shape[-1] // 3])
-            index = rb.extend(data)
+            rb.extend(data[..., : data.shape[-1] // 3], update_priority=False)
+            index = rb.extend(data, update_priority=False)
         rb.update_priority(index, data["priority"])
         samples = []
         found_shorter_batch = False
@@ -2879,7 +2881,7 @@ class TestSamplers:
             assert (sc == 1).sum() == (sc == 2).sum()
             assert (sc == 1).sum() == (sc == 4).sum()
         assert rb._sampler._cache
-        rb.extend(data)
+        rb.extend(data, update_priority=False)
         assert not rb._sampler._cache
 
     @pytest.mark.parametrize("ndim", [1, 2])
@@ -3094,7 +3096,9 @@ class TestSamplers:
         )
         data = TensorDict({"a": torch.arange(10), "p": torch.ones(10) / 2}, [10])
         idx = rb.extend(data)
-        assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 1).all()
+        assert (
+            torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 0.5
+        ).all()
         rb.update_priority(idx, 2)
         assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 2).all()
         s = rb.sample()
@@ -3170,7 +3174,9 @@ class TestSamplers:
             {"a": torch.arange(5).expand(2, 5), "p": torch.ones(2, 5) / 2}, [2, 5]
         )
         idx = rb.extend(data)
-        assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 1).all()
+        assert (
+            torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 0.5
+        ).all()
         rb.update_priority(idx, torch.ones(()) * 2)
         assert (torch.tensor([rb._sampler._sum_tree[i] for i in range(10)]) == 2).all()
         s = rb.sample()
@@ -3961,6 +3967,64 @@ class TestCheckpointers:
             rb_test.loads(tmpdir)
             assert_allclose_td(rb_test[:], rb[:])
             assert rb._writer._cursor == rb_test._writer._cursor
+
+
+@pytest.mark.skipif(not _has_ray, reason="ray required for this test.")
+class TestRayRB:
+    @pytest.fixture(autouse=True, scope="module")
+    def cleanup(self):
+        import ray
+
+        torchrl_logger.info("Initializing Ray.")
+        ray.init(num_cpus=1)
+        yield
+        torchrl_logger.info("Shutting down Ray.")
+        ray.shutdown()
+
+    def test_ray_rb(self):
+        rb = RayReplayBuffer(
+            storage=partial(LazyTensorStorage, 100), ray_init_config={"num_cpus": 1}
+        )
+        try:
+            rb.extend(
+                TensorDict(
+                    {"x": torch.ones(100, 2), "y": torch.ones(100, 2)}, batch_size=100
+                )
+            )
+            assert rb.write_count == 100
+            assert len(rb) == 100
+            assert rb.sample(2).shape == (2,)
+        finally:
+            rb.close()
+
+    def test_ray_rb_iter(self):
+        rb = RayReplayBuffer(
+            storage=partial(LazyTensorStorage, 100),
+            ray_init_config={"num_cpus": 1},
+            sampler=SamplerWithoutReplacement,
+            batch_size=25,
+        )
+        try:
+            rb.extend(
+                TensorDict(
+                    {
+                        "x": torch.ones(
+                            100,
+                        ),
+                        "y": torch.ones(
+                            100,
+                        ),
+                    },
+                    batch_size=100,
+                )
+            )
+            for _ in range(2):
+                for d in rb:
+                    torchrl_logger.info(f"d: {d}")
+                    assert d is not None
+                    assert d.shape == (25,)
+        finally:
+            rb.close()
 
 
 if __name__ == "__main__":

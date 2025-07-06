@@ -13,8 +13,9 @@ from __future__ import annotations
 
 import os
 
-import torch
+from contextlib import nullcontext
 
+import torch
 from torchrl._utils import logger as torchrl_logger
 
 from torchrl.modules.llm.utils import _cuda_visible_devices
@@ -93,7 +94,16 @@ class vLLMWorker(Worker):
 
         torchrl_logger.info(f"=> in {type(self).__name__}.init_weight_update_group")
 
-        rank = get_world_group().rank + rank_offset
+        # Before
+        # rank = get_world_group().rank + rank_offset
+        # Get the local rank within the tensor parallel group
+        tp_group = get_world_group()
+        local_rank = tp_group.rank
+        torchrl_logger.info(f"Local rank in tensor parallel group: {local_rank}")
+
+        # Calculate the global rank for weight update group
+        # rank_offset is 1, so ranks will be [1, 2] for tp_size=2
+        rank = local_rank + rank_offset
         torchrl_logger.info(
             f"Initializing {type(self).__name__} weight update group with {master_address=}, {master_port=}, {rank=}, {world_size=}, device={self.device}"
         )
@@ -135,117 +145,118 @@ class vLLMWorker(Worker):
 class LLMOnDevice(LLM):
     """A thin wrapper around `vllm.LLM` to control its placement devices."""
 
-    def __init__(self, *args, **kwargs):
-        import ray
+    def __init__(self, *args, bundle_indices: list | None = None, **kwargs):
+        # Stop Ray from manipulating CUDA_VISIBLE_DEVICES at the top-level
+        os.environ.pop("CUDA_VISIBLE_DEVICES", None)
 
-        gpu_ids = ray.get_gpu_ids()
-        torchrl_logger.info(f"=> in {type(self)}.__init__: {gpu_ids=}")
-        assert len(gpu_ids) > 0, "No visible cuda device"
-        os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(
-            str(int(gpu_id)) for gpu_id in gpu_ids
-        )
-        torch.cuda.set_device(0)  # Since only one GPU is visible, it's cuda:0
+        # Configure GPU utilization for Ray workers
+        if bundle_indices is not None:
+            os.environ[
+                "VLLM_RAY_PER_WORKER_GPUS"
+            ] = "0.4"  # Allow multiple workers per GPU
+            os.environ["VLLM_RAY_BUNDLE_INDICES"] = ",".join(map(str, bundle_indices))
+            torchrl_logger.info(
+                f"Initializing LLM with bundle_indices={bundle_indices}"
+            )
+
         self.args = args
         self.kwargs = kwargs
 
     def initialize(self):
-        super().__init__(*self.args, device="cuda:0", **self.kwargs)
+        # Let vLLM handle device placement
+        super().__init__(*self.args, **self.kwargs)
         return True
 
 
 def make_vllm_worker(
-    model_name,
-    devices: list[torch.device | int],
+    *,
+    model_name: str,
+    devices: list[torch.device | int] | None = None,
+    num_devices: int | None = None,
     make_ray_worker: bool = True,
+    enforce_eager: bool = False,
     **kwargs,
 ) -> LLM | ray.actor.ActorClass:  # noqa
-    """Launches the vLLM inference engine.
+    """Creates a vLLM inference engine with tensor parallelism support.
 
     Args:
-        model_name (str): a model name to pass to `vllm.LLM`.
-        devices (list[torch.device | int]): a list of devices to use.
-        make_ray_worker (bool, optional): whether to use ray's worker, or just a plain
-            `LLM` instance. Defaults to `True`.
-        **kwargs: keyword arguments to pass to `vllm.LLM.__init__`.
+        model_name (str): The model name to pass to vLLM.LLM.
+        devices (list[torch.device | int], optional): List of devices to use. Exclusive with num_devices.
+        num_devices (int, optional): Number of devices to use. Exclusive with devices.
+        make_ray_worker (bool, optional): Whether to create a Ray actor. Defaults to True.
+        enforce_eager (bool, optional): Whether to enforce eager execution. Defaults to `False`.
+        **kwargs: Additional arguments passed to vLLM.LLM.__init__.
 
-    Update weights example:
-        >>> # simulate training, modify the weights of the model.
-        >>> for name, p in train_model.named_parameters():
-        ...     p.data.zero_()
-        >>>
-        >>> # sync weight from the training process to the inference engine.
-        >>> for name, p in train_model.named_parameters():
-        ...     handle = inference_server .collective_rpc.remote("update_weight_broadcast",
-        ...                                        args=(name, p.dtype, p.shape))
-        ...     model_update_group.broadcast(p, src=0, stream=torch.cuda.current_stream())
-        ...     ray.get(handle)
+    Returns:
+        LLM | ray.actor.ActorClass: Either a local vLLM LLM instance or a Ray actor handle.
+
+    Example:
+        >>> # Create a 2-GPU tensor parallel worker with Ray
+        >>> worker = make_vllm_worker("Qwen/Qwen2.5-3B", num_devices=2)
+        >>> # Create a local LLM instance on GPU 1
+        >>> llm = make_vllm_worker("Qwen/Qwen2.5-3B", devices=[1], make_ray_worker=False)
     """
-    if make_ray_worker:
-        if len(devices) > 1:
-            raise ValueError(
-                "ray-based instantiation of vLLM does not support multiple devices at the moment."
-            )
+    # Handle device specification
+    if num_devices is not None and devices is not None:
+        raise ValueError("Cannot specify both num_devices and devices")
+    if num_devices is not None:
+        devices = None
+    elif devices is None:
+        devices = [0]  # Default to first GPU
+        num_devices = 1
+    elif len(devices) > 1:
+        # Convert devices to indices
         devices = [
             torch.device(device).index if not isinstance(device, int) else device
             for device in devices
         ]
-        for d in devices:
-            assert d < torch.cuda.device_count()
+        num_devices = len(devices)
 
+    # Validate devices
+    if devices is not None:
+        for d in devices:
+            if not isinstance(d, int) or d < 0 or d >= torch.cuda.device_count():
+                raise ValueError(f"Invalid device index: {d}")
+
+    if make_ray_worker:
         import ray
-        from ray.util.placement_group import placement_group
-        from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
         if not ray.is_initialized():
-            ray.init()
+            raise RuntimeError("Ray is not initialized")
 
-        pipeline_parallel_size = 1
-        node_id = 0
-        pg = placement_group(
-            [{"CPU": 1, "GPU": 1}] * torch.cuda.device_count(),
-            strategy="SPREAD"
-            if (pipeline_parallel_size and pipeline_parallel_size > 1)
-            else "STRICT_PACK",
-            _soft_target_node_id=node_id if pipeline_parallel_size is None else None,
-        )
-
-        ray.get(pg.ready())
-        scheduling_inference = PlacementGroupSchedulingStrategy(
-            placement_group=pg,
-            placement_group_capture_child_tasks=True,
-            placement_group_bundle_index=devices[0] if devices else None,
-        )
         torchrl_logger.info(
-            f"Create vLLM worker with {devices=}, {scheduling_inference=}"
+            f"Creating vLLM Ray worker with tensor_parallel_size={num_devices}"
         )
+
+        # Configure Ray remote class with minimal resources
+        # Let vLLM handle GPU allocation through environment variables
         worker_cls = ray.remote(
-            num_gpus=1,
-            num_cpus=1,
-            scheduling_strategy=scheduling_inference,
+            num_cpus=4,  # Minimal CPU request
+            num_gpus=0,  # Let vLLM handle GPU allocation
         )(LLMOnDevice)
+
+        # Create worker with tensor parallelism config
         worker = worker_cls.remote(
             model=model_name,
-            # enforce_eager=True,
-            dtype="bfloat16",
-            worker_cls="torchrl.modules.llm.backends.vllm.vLLMWorker",
-            tensor_parallel_size=len(devices),
+            bundle_indices=devices,  # Pass device indices to LLMOnDevice
+            tensor_parallel_size=num_devices,
             distributed_executor_backend="ray",
-            enable_chunked_prefill=True,
+            enforce_eager=enforce_eager,
+            worker_cls="torchrl.modules.llm.backends.vllm.vLLMWorker",
             **kwargs,
         )
         ray.get(worker.initialize.remote())
         return worker
 
     else:
-        with _cuda_visible_devices(devices):
+        # Local non-Ray mode - use LLM directly
+        with _cuda_visible_devices(devices) if devices is not None else nullcontext():
+            torchrl_logger.info(
+                f"Creating local vLLM LLM with tensor_parallel_size={num_devices}, devices={devices}"
+            )
             return LLM(
                 model=model_name,
-                # enforce_eager=True,
-                dtype="bfloat16",
-                # worker_cls="torchrl.modules.llm.backends.vllm.VLLMWorker",
-                worker_cls=vLLMWorker,
-                tensor_parallel_size=len(devices),
-                # distributed_executor_backend="ray",
-                enable_chunked_prefill=True,
+                tensor_parallel_size=num_devices,
+                enforce_eager=True,
                 **kwargs,
             )

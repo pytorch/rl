@@ -11,7 +11,7 @@ import torch
 
 from tensordict import lazy_stack, TensorDictBase
 
-from torchrl._utils import logger as torchrl_logger
+from torchrl._utils import as_remote, logger as torchrl_logger
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.collectors.llm.utils import _QueueAsRB
@@ -19,6 +19,7 @@ from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.envs import AsyncEnvPool
 from torchrl.envs.common import EnvBase
+from torchrl.envs.llm.transforms.policy_version import PolicyVersion
 
 
 class LLMCollector(SyncDataCollector):
@@ -72,6 +73,13 @@ class LLMCollector(SyncDataCollector):
             or its subclass, responsible for updating the policy weights on remote inference workers.
             This is typically not used in :class:`~torchrl.collectors.SyncDataCollector` as it operates in a single-process environment.
             Consider using a constructor if the updater needs to be serialized.
+        track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.
+            This will be mediated by the :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform, which will be added to the environment.
+            Alternatively, a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` instance can be passed, which will be used to track
+            the policy version.
+            Defaults to `False`.
+        verbose (bool, optional): if ``True``, the collector will print progress information.
+            Defaults to `False`.
 
     Examples:
         >>> import vllm
@@ -154,6 +162,8 @@ class LLMCollector(SyncDataCollector):
         | Callable[[], WeightUpdaterBase]
         | None = None,
         queue: Any | None = None,
+        track_policy_version: bool | PolicyVersion = False,
+        verbose: bool = False,
     ):
         if queue is not None and replay_buffer is not None:
             raise RuntimeError(
@@ -201,6 +211,7 @@ class LLMCollector(SyncDataCollector):
         self.flatten_data = flatten_data
         self.yield_completed_trajectories = yield_completed_trajectories
         self.yield_only_last_steps = yield_only_last_steps
+        self.verbose = verbose
         if self.yield_completed_trajectories:
             if len(self.env.batch_size) != 1:
                 raise ValueError(
@@ -216,6 +227,52 @@ class LLMCollector(SyncDataCollector):
             raise RuntimeError(
                 "async_envs requires the environment to be an AsyncEnvPool instance."
             )
+        self.policy_version_tracker = track_policy_version
+        if isinstance(track_policy_version, bool) and track_policy_version:
+            if isinstance(self.env, AsyncEnvPool):
+                raise RuntimeError(
+                    "AsyncEnvPool is not supported for policy version tracking. Please add the PolicyVersion transform to the environment manually, "
+                    "and pass that transform to the collector."
+                )
+            self.policy_version_tracker = PolicyVersion()
+            self.env = self.env.append_transform(self.policy_version_tracker)  # type: ignore
+        elif isinstance(track_policy_version, PolicyVersion):
+            self.policy_version_tracker = track_policy_version
+            self.env = self.env.append_transform(self.policy_version_tracker)  # type: ignore
+        else:
+            self.policy_version_tracker = None
+
+    def set_postproc(self, postproc: Callable[[TensorDictBase], TensorDictBase]):
+        if self.postproc is not None:
+            raise RuntimeError("Postproc already set")
+        self.postproc = postproc
+
+    def increment_version(self):
+        """Increment the policy version."""
+        if self.policy_version_tracker is not None:
+            if not isinstance(self.policy_version_tracker, PolicyVersion):
+                raise RuntimeError(
+                    "Policy version tracker is not a PolicyVersion instance. Please pass a PolicyVersion instance to the collector."
+                )
+            self.policy_version_tracker.increment_version()
+
+    @property
+    def policy_version(self) -> str | int | None:
+        """The current policy version."""
+        if not isinstance(self.policy_version_tracker, PolicyVersion):
+            return None
+        return self.policy_version_tracker.version
+
+    def get_policy_version(self) -> str | int | None:
+        """Get the current policy version.
+
+        This method exists to support remote calls in Ray actors, since properties
+        cannot be accessed directly through Ray's RPC mechanism.
+
+        Returns:
+            The current version number (int) or UUID (str), or None if version tracking is disabled.
+        """
+        return self.policy_version
 
     @property
     def total_dialog_turns(self):
@@ -242,8 +299,12 @@ class LLMCollector(SyncDataCollector):
 
         trajectory = []
         collected_steps = 0
+        policy_input = self._shuttle
         while collected_steps < self.dialog_turns_per_batch:
-            policy_input = self._shuttle
+            if self.verbose:
+                torchrl_logger.info(
+                    f"LLMCollector: Collected {collected_steps} steps over {self.dialog_turns_per_batch} requested."
+                )
             env_input = self.policy(policy_input)
             env_output, env_next_output = self.env.step_and_maybe_reset(env_input)
 
@@ -251,11 +312,9 @@ class LLMCollector(SyncDataCollector):
             collector_data = env_output.get("collector").copy()
             env_next_output.set("collector", collector_data)
             self._update_traj_ids(env_output)
-            data = env_output
-            torchrl_logger.info(f"extending with {data=}")
-            trajectory.append(data.clone())
-            collected_steps += data.numel()
-            self._shuttle = env_next_output
+            trajectory.append(env_output.clone())
+            collected_steps += env_output.numel()
+            policy_input = self._shuttle = env_next_output
         trajectory = lazy_stack(trajectory, -1)
         if self.flatten_data:
             return trajectory.view(-1)
@@ -293,7 +352,7 @@ class LLMCollector(SyncDataCollector):
                 queue.append(_data)
                 dones[i] = _data["next", "done"].any()
             if dones.any():
-                for idx in dones.nonzero()[0].tolist():
+                for idx in dones.nonzero(as_tuple=True)[0].tolist():
                     if not self.yield_only_last_steps:
                         self._trajectory_queue.append(
                             lazy_stack(self._yield_queues[idx], -1)
@@ -306,8 +365,11 @@ class LLMCollector(SyncDataCollector):
                             lazy_stack([self._yield_queues[idx][-1]])
                         )
                     self._yield_queues[idx].clear()
-
         result = self._trajectory_queue.popleft()
+        if self.verbose:
+            torchrl_logger.info(
+                f"LLMCollector: Yielding completed trajectory with shape {result.shape}."
+            )
         return result
 
     started = False
@@ -345,7 +407,7 @@ class LLMCollector(SyncDataCollector):
                 queue.append(_data)
                 dones[i] = _data["next", "done"].any()
             if dones.any():
-                for idx in dones.nonzero()[0].tolist():
+                for idx in dones.nonzero(as_tuple=True)[0].tolist():
                     if not self.yield_only_last_steps:
                         self._trajectory_queue.append(
                             lazy_stack(self._yield_queues[idx], -1)
@@ -366,4 +428,34 @@ class LLMCollector(SyncDataCollector):
                 self.env.async_step_and_maybe_reset_send(env_input)
 
         result = self._trajectory_queue.popleft()
+        if self.verbose:
+            torchrl_logger.info(
+                f"LLMCollector: Yielding completed trajectory with shape {result.shape}."
+            )
         return result
+
+    as_remote = as_remote
+
+    def get_policy_model(self):
+        """Get the policy model.
+
+        This method is used by RayLLMCollector to get the remote LLM instance
+        for weight updates.
+
+        Returns:
+            The policy model instance
+        """
+        return self.policy.model
+
+    def is_initialized(self) -> bool:
+        """Check if the collector is initialized and ready.
+
+        Returns:
+            bool: True if the collector is initialized and ready to collect data.
+        """
+        # The collector is initialized if it has a valid environment and policy
+        return hasattr(self, "_env") and hasattr(self, "_policy")
+
+    def set_weight_updater(self, weight_updater: WeightUpdaterBase):
+        self.weight_updater = weight_updater
+        return True

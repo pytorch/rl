@@ -468,6 +468,29 @@ class TestMaskedCategorical:
         sample_probs = torch.bincount(samples) / num_samples
         torch.testing.assert_close(sample_probs, ref_probs, rtol=1e-5, atol=1e-2)
 
+    @pytest.mark.parametrize("sparse", [False, True])
+    @pytest.mark.parametrize("neg_inf", [-1e20, float("-inf")])
+    def test_entropy(self, neg_inf: float, sparse: bool) -> None:
+        torch.manual_seed(0)
+        logits = torch.randn(4)
+        probs = F.softmax(logits, dim=-1)
+        mask = torch.tensor([True, False, True, True])
+        ref_probs = probs.masked_fill(~mask, 0.0)
+        ref_probs /= ref_probs.sum(dim=-1, keepdim=True)
+        indices = mask.nonzero(as_tuple=True)[0]
+        dist = MaskedCategorical(
+            probs=probs,
+            mask=mask if not sparse else None,
+            indices=indices if sparse else None,
+            neg_inf=neg_inf,
+        )
+        assert dist.entropy().isfinite().all()
+        lp = torch.log(ref_probs)
+        lp = lp.masked_fill(~mask, -1e20)
+        entropy = lp * lp.exp()
+        entropy = -entropy.sum(dim=-1)
+        torch.testing.assert_close(dist.entropy(), entropy)
+
     @pytest.mark.parametrize("neg_inf", [-1e20, float("-inf")])
     def test_sample_sparse(self, neg_inf: float) -> None:
         torch.manual_seed(0)

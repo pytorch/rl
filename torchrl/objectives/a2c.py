@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import contextlib
+import warnings
 from copy import deepcopy
 from dataclasses import dataclass
 
@@ -68,7 +69,7 @@ class A2CLoss(LossModule):
             ``samples_mc_entropy`` will control how many
             samples will be used to compute this estimate.
             Defaults to ``1``.
-        entropy_coef (:obj:`float`): the weight of the entropy loss. Defaults to `0.01``.
+        entropy_coeff (:obj:`float`): the weight of the entropy loss. Defaults to `0.01``.
         critic_coef (:obj:`float`): the weight of the critic loss. Defaults to ``1.0``. If ``None``, the critic
             loss won't be included and the in-keys will miss the critic inputs.
         loss_critic_type (str): loss function for the value discrepancy.
@@ -276,7 +277,7 @@ class A2CLoss(LossModule):
         *,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
-        entropy_coef: float = 0.01,
+        entropy_coeff: float = 0.01,
         critic_coef: float = 1.0,
         loss_critic_type: str = "smooth_l1",
         gamma: float | None = None,
@@ -288,7 +289,15 @@ class A2CLoss(LossModule):
         critic: ProbabilisticTensorDictSequential = None,
         reduction: str = None,
         clip_value: float | None = None,
+        **kwargs,
     ):
+        if "entropy_coef" in kwargs:
+            warnings.warn(
+                "'entropy_coef' is deprecated and will be removed in torchrl v0.11. Please use 'entropy_coeff' instead.",
+                DeprecationWarning,
+            )
+            entropy_coeff = kwargs.pop("entropy_coef")
+
         if actor is not None:
             actor_network = actor
             del actor
@@ -332,13 +341,13 @@ class A2CLoss(LossModule):
             self.target_critic_network_params = None
 
         self.samples_mc_entropy = samples_mc_entropy
-        self.entropy_bonus = entropy_bonus and entropy_coef
+        self.entropy_bonus = entropy_bonus and entropy_coeff
         self.reduction = reduction
 
         device = _get_default_device(self)
 
         self.register_buffer(
-            "entropy_coef", torch.as_tensor(entropy_coef, device=device)
+            "entropy_coeff", torch.as_tensor(entropy_coeff, device=device)
         )
         if critic_coef is not None:
             self.register_buffer(
@@ -558,7 +567,7 @@ class A2CLoss(LossModule):
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
             td_out.set("entropy", entropy.detach().mean())  # for logging
-            td_out.set("loss_entropy", -self.entropy_coef * entropy)
+            td_out.set("loss_entropy", -self.entropy_coeff * entropy)
         if self.critic_coef is not None:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)

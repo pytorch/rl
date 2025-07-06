@@ -15,6 +15,7 @@ from .envs import LLMEnv, LLMHashingEnv
 from .libs import make_mlgym, MLGymWrapper
 from .reward import GSM8KRewardParser, IFEvalScoreData, IfEvalScorer
 from .transforms import (
+    AddThinkingPrompt,
     as_nested_tensor,
     as_padded_tensor,
     BrowserTransform,
@@ -22,15 +23,18 @@ from .transforms import (
     KLRewardTransform,
     MCPToolTransform,
     PythonInterpreter,
+    RetrieveLogProb,
     TemplateTransform,
     Tokenizer,
 )
 
 __all__ = [
     "BrowserTransform",
+    "RetrieveLogProb",
     "ChatEnv",
     "DataLoadingPrimer",
     "DatasetChatEnv",
+    "AddThinkingPrompt",
     "GSM8KEnv",
     "GSM8KPrepareQuestion",
     "GSM8KRewardParser",

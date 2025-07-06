@@ -11,10 +11,18 @@ from typing import Mapping
 
 import pytest
 import torch
-from tensordict import lazy_stack, set_list_to_stack
+from tensordict import lazy_stack, set_list_to_stack, TensorDict
 
-from torchrl.data import History
+from torchrl import torchrl_logger
+
+from torchrl.data import (
+    History,
+    LazyStackStorage,
+    ReplayBuffer,
+    SamplerWithoutReplacement,
+)
 from torchrl.data.llm.chat import ContentBase
+from torchrl.data.llm.topk import TopKRewardSelector
 
 _has_transformers = importlib.util.find_spec("transformers")
 _has_vllm = importlib.util.find_spec("vllm")
@@ -192,10 +200,12 @@ class TestHistory:
     @pytest.mark.skipif(not _has_transformers, reason="requires transformers library")
     def test_history_template_recover(self, mock_history, tokenizer):
         history = mock_history
-        data_str = history.apply_chat_template(tokenizer=tokenizer)
+        data_str = history.apply_chat_template(
+            tokenizer=tokenizer, add_generation_prompt=False
+        )
         # Test inverse
         recovered = history._inv_chatml(data_str)
-        assert recovered.role == history.role
+        assert recovered.role == history.role, (recovered.role, history.role)
         assert recovered.content == history.content
         data_token = history.apply_chat_template(
             tokenizer=tokenizer, tokenize=True, add_generation_prompt=False
@@ -258,12 +268,208 @@ class TestHistory:
             tokenize=True,
         )
         assert isinstance(proc, Mapping)
-        assert proc["input_ids"].shape == (1, 7294)
-        assert proc["attention_mask"].shape == (1, 7294)
-        assert proc["pixel_values"].shape == (1, 37, 3, 384, 384), proc[
+        assert proc["input_ids"].shape == (7294,)
+        assert proc["attention_mask"].shape == (7294,)
+        assert proc["pixel_values"].shape == (37, 3, 384, 384), proc[
             "pixel_values"
         ].shape
         assert (proc["image_sizes"] == torch.tensor([[2096, 2324]])).all()
+
+    TEST_CASES = [
+        # Case 1: All messages complete
+        """<|im_start|>system
+I am a helpful assistant.<|im_end|>
+<|im_start|>user
+What is the capital of France?<|im_end|>
+<|im_start|>assistant
+The capital of France is Paris.<|im_end|>""",
+        # Case 2: Last message incomplete
+        """<|im_start|>system
+I am a helpful assistant.<|im_end|>
+<|im_start|>user
+What is the capital of France?<|im_end|>
+<|im_start|>assistant
+The capital of France is""",
+        # Case 3: Multiple messages with mix of endings
+        """<|im_start|>system
+I am a helpful assistant.<|im_end|>
+<|im_start|>user
+Tell me about Python.<|im_end|>
+<|im_start|>assistant
+Python is a programming language.<|endoftext|>
+<|im_start|>user
+Can you elaborate?<|im_end|>
+<|im_start|>assistant
+Python is known for its simplicity""",
+        # Case 4: Single incomplete message
+        """<|im_start|>assistant
+Let me help you with that""",
+        # Case 5: Empty content but complete
+        """<|im_start|>system
+<|im_end|>
+<|im_start|>user
+<|im_end|>""",
+        # Case 6: Message with tool calls
+        """<|im_start|>system
+I am an assistant that can use tools.<|im_end|>
+<|im_start|>assistant
+Let me help you with that.
+<tool_call>
+{"name": "calculator", "arguments": {"expression": "2+2"}}
+</tool_call>
+<|im_end|>
+<|im_start|>tool
+4<|im_end|>
+<|im_start|>assistant
+The result is""",
+    ]
+
+    @pytest.mark.parametrize("test_case", TEST_CASES)
+    def test_history_assistant_mask(self, test_case):
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B")
+        history = History.from_text(test_case, chat_template_name="qwen")
+        proc = history.apply_chat_template(
+            tokenizer=tokenizer,
+            chat_template_name="qwen",
+            add_generation_prompt=False,
+            return_dict=True,
+            return_assistant_tokens_mask=True,
+        )
+        role_assistant = torch.tensor([r == "assistant" for r in history.role])
+        last_item: str = history[role_assistant].apply_chat_template(
+            tokenizer=tokenizer,
+            chat_template_name="qwen",
+            add_generation_prompt=False,
+        )
+
+        if "assistant" in history.role:
+            assert proc["assistant_masks"].any()
+        else:
+            assert not proc["assistant_masks"].any()
+        if last_item:
+            decoded = tokenizer.decode(
+                proc["input_ids"][proc["assistant_masks"].bool()]
+            )
+            assert type(decoded) is str
+            assert last_item.endswith(decoded), (decoded, last_item)
+
+    def test_history_completion(self):
+        """Test the History class's handling of complete and incomplete messages."""
+
+        for i, test_case in enumerate(self.TEST_CASES):
+            history = History.from_text(test_case, chat_template_name="qwen")
+
+            # Print details about each message
+            for j, (role, content, is_complete) in enumerate(
+                zip(history.role, history.content, history.is_complete)
+            ):
+                torchrl_logger.info(f"Message {j}:")
+                torchrl_logger.info(f"  Role: {role}")
+                torchrl_logger.info(f"  Content: {content[:50]}...")
+                torchrl_logger.info(f"  Complete: {is_complete}")
+
+            # Basic assertions
+            assert len(history.role) > 0, f"Case {i} should have at least one message"
+            assert (
+                len(history.role) == len(history.content) == len(history.is_complete)
+            ), f"Case {i} should have matching lengths for role, content, and is_complete"
+
+            # Case-specific assertions
+            if i == 0:  # All messages complete
+                assert all(
+                    history.is_complete
+                ), "Case 0 should have all complete messages"
+
+            elif i == 1:  # Last message incomplete
+                assert all(
+                    history.is_complete[:-1]
+                ), "Case 1 should have all but last message complete"
+                assert not history.is_complete[
+                    -1
+                ], "Case 1 should have last message incomplete"
+
+            elif i == 2:  # Mix of endings
+                assert not history.is_complete[
+                    -1
+                ], "Case 2 should have last message incomplete"
+                assert history.is_complete[
+                    -2
+                ], "Case 2 should have second-to-last message complete"
+
+            elif i == 3:  # Single incomplete message
+                assert len(history.role) == 1, "Case 3 should have exactly one message"
+                assert not history.is_complete[
+                    0
+                ], "Case 3 should have an incomplete message"
+
+            elif i == 4:  # Empty but complete messages
+                assert all(
+                    history.is_complete
+                ), "Case 4 should have all complete messages"
+                assert all(
+                    not content.strip() for content in history.content
+                ), "Case 4 should have empty content"
+
+            elif i == 5:  # Tool calls
+                assert not history.is_complete[
+                    -1
+                ], "Case 5 should have last message incomplete"
+                assert history[2].role == "tool"
+
+
+class TestTopK:
+    @pytest.mark.parametrize("per_token_reward", [True, False])
+    def test_topk(self, per_token_reward):
+        rb = ReplayBuffer(
+            storage=LazyStackStorage(50),
+            sampler=SamplerWithoutReplacement,
+            batch_size=5,
+        )
+
+        def _per_token_reward(i):
+            if per_token_reward:
+                return torch.full((i + 5, 1), i)
+            else:
+                return torch.full((1, 1), i)
+
+        td = lazy_stack(
+            [
+                TensorDict(
+                    {
+                        ("next", "done"): torch.full((1, 1), True),
+                        ("next", "reward"): _per_token_reward(i),
+                        # total of 10 dialogs per prompt
+                        "text": f"Prompt {i // 5}",
+                    }
+                )
+                for i in range(50)
+            ]
+        )
+        topk = TopKRewardSelector(total_dialog_turns=5, topk_size=3)
+        rb.append_transform(topk)
+        for _td in td.chunk(25):
+            rb.extend(_td)
+        # Only wrote top3 of 50 items in 10 groups of 5
+        #  Because we only write items that are strictly greater than the median,
+        #  only 20 items are written.
+        assert rb.write_count == 20
+        assert len(rb) == 20
+        r3 = rb[:2].get(("next", "reward"), as_padded_tensor=True).squeeze()
+        # 0 and 1 are missing because they're not part of the top-k
+        if per_token_reward:
+            assert (
+                r3
+                == torch.tensor(
+                    [
+                        [4, 4, 4, 4, 4, 4, 4, 4, 4],
+                        [3, 3, 3, 3, 3, 3, 3, 3, 0],
+                    ]
+                )
+            ).all()
+        else:
+            assert (r3 == torch.tensor([[4, 3]])).all()
 
 
 if __name__ == "__main__":
