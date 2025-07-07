@@ -15,14 +15,11 @@ mkdir -p logs
 
 # Set up Ray cluster configuration
 export HEAD_NODE=$(scontrol show hostname "$SLURM_NODELIST" | head -n 1)
-# Grab the first valid IPv4 address only
 export HEAD_NODE_IP=$(srun --nodes=1 --ntasks=1 -w "$HEAD_NODE" hostname -I | awk '{for(i=1;i<=NF;i++) if ($i ~ /^[0-9]+\./) {print $i; exit}}')
 export RAY_PORT=6379
 
-# Environment variables for the application
 export LIST_TO_STACK=1
 export VLLM_USE_V1=0
-
 # Indicate that Ray cluster is managed externally
 export RAY_CLUSTER_MANAGED_EXTERNALLY=1
 

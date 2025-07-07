@@ -136,7 +136,7 @@ The async mode offers better performance by:
 
 ### Running GRPO on More Than One Node with SLURM
 
-GRPO can be run across more than one node using Ray and SLURM, enabling distributed training for moderately scaled workloads.
+GRPO can be run across more than one node using SLURM, enabling distributed training for moderately scaled workloads.
 
 Two scripts are provided for launching multi-node runs:
 
