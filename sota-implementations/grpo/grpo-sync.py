@@ -102,6 +102,9 @@ def train(
         masking_strategy="rlhf" if cfg.env.reasoning else "sft",
         device=train_device,
     )
+    if cfg.env.reasoning:
+        # TODO: this is clunky, we should find a way to do this more naturally
+        loss_fn.set_keys(sample_log_prob=("next", "log_probs", "full"))
     if cfg.model.compile:
         loss_fn = torch.compile(loss_fn)
 
