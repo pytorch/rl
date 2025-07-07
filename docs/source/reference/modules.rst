@@ -440,6 +440,7 @@ Some distributions are typically used in RL scripts.
     TruncatedNormal
     TanhDelta
     OneHotCategorical
+    LLMMaskedCategorical
     MaskedCategorical
     MaskedOneHotCategorical
     Ordinal
