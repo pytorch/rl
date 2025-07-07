@@ -81,7 +81,6 @@ class LLMCollector(SyncDataCollector):
         verbose (bool, optional): if ``True``, the collector will print progress information.
             Defaults to `False`.
 
-
     Examples:
         >>> import vllm
         >>> from torchrl.modules import vLLMWrapper
