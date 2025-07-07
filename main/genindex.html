@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../versions.html"><span style="font-size:110%">main (0.9.0+7691318) &#x25BC</span></a>
+      <a href="../versions.html"><span style="font-size:110%">main (0.9.0+c1322a2) &#x25BC</span></a>
     </div>
     
 
@@ -1886,6 +1886,8 @@
         <li><a href="reference/generated/torchrl.objectives.llm.SFTLoss.html#torchrl.objectives.llm.SFTLoss.children">(torchrl.objectives.llm.SFTLoss method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.modules.LLMMaskedCategorical.html#torchrl.modules.LLMMaskedCategorical.clear_cache">clear_cache() (torchrl.modules.LLMMaskedCategorical method)</a>
+</li>
       <li><a href="reference/generated/torchrl.data.Binary.html#torchrl.data.Binary.clear_device_">clear_device_() (torchrl.data.Binary method)</a>
 
       <ul>
@@ -3316,9 +3318,11 @@
       </ul></li>
       <li><a href="reference/generated/torchrl.envs.transforms.EndOfLifeTransform.html#torchrl.envs.transforms.EndOfLifeTransform">EndOfLifeTransform (class in torchrl.envs.transforms)</a>
 </li>
-      <li><a href="reference/generated/torchrl.modules.MaskedCategorical.html#torchrl.modules.MaskedCategorical.entropy">entropy() (torchrl.modules.MaskedCategorical method)</a>
+      <li><a href="reference/generated/torchrl.modules.LLMMaskedCategorical.html#torchrl.modules.LLMMaskedCategorical.entropy">entropy() (torchrl.modules.LLMMaskedCategorical method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.modules.MaskedCategorical.html#torchrl.modules.MaskedCategorical.entropy">(torchrl.modules.MaskedCategorical method)</a>
+</li>
         <li><a href="reference/generated/torchrl.modules.OneHotCategorical.html#torchrl.modules.OneHotCategorical.entropy">(torchrl.modules.OneHotCategorical method)</a>
 </li>
       </ul></li>
@@ -6086,6 +6090,8 @@
         <li><a href="reference/generated/torchrl.envs.llm.LLMHashingEnv.html#torchrl.envs.llm.LLMHashingEnv">(class in torchrl.envs.llm)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.modules.LLMMaskedCategorical.html#torchrl.modules.LLMMaskedCategorical">LLMMaskedCategorical (class in torchrl.modules)</a>
+</li>
       <li><a href="reference/generated/torchrl.modules.llm.LLMOnDevice.html#torchrl.modules.llm.LLMOnDevice">LLMOnDevice (class in torchrl.modules.llm)</a>
 </li>
       <li><a href="reference/generated/torchrl.modules.tensordict_module.LMHeadActorValueOperator.html#torchrl.modules.tensordict_module.LMHeadActorValueOperator">LMHeadActorValueOperator (class in torchrl.modules.tensordict_module)</a>
@@ -6365,6 +6371,8 @@
       <li><a href="reference/generated/torchrl.modules.Delta.html#torchrl.modules.Delta.log_prob">log_prob() (torchrl.modules.Delta method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.modules.LLMMaskedCategorical.html#torchrl.modules.LLMMaskedCategorical.log_prob">(torchrl.modules.LLMMaskedCategorical method)</a>
+</li>
         <li><a href="reference/generated/torchrl.modules.MaskedCategorical.html#torchrl.modules.MaskedCategorical.log_prob">(torchrl.modules.MaskedCategorical method)</a>
 </li>
         <li><a href="reference/generated/torchrl.modules.MaskedOneHotCategorical.html#torchrl.modules.MaskedOneHotCategorical.log_prob">(torchrl.modules.MaskedOneHotCategorical method)</a>
@@ -6375,6 +6383,8 @@
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.record.loggers.Logger.html#torchrl.record.loggers.Logger">Logger() (in module torchrl.record.loggers)</a>
+</li>
+      <li><a href="reference/generated/torchrl.modules.LLMMaskedCategorical.html#torchrl.modules.LLMMaskedCategorical.logits">logits (torchrl.modules.LLMMaskedCategorical property)</a>
 </li>
       <li><a href="reference/generated/torchrl.data.RolloutFromModel.html#torchrl.data.RolloutFromModel.logprobs_of_labels">logprobs_of_labels() (torchrl.data.RolloutFromModel static method)</a>
 </li>
@@ -6560,7 +6570,13 @@
 </li>
       <li><a href="reference/generated/torchrl.envs.MarlGroupMapType.html#torchrl.envs.MarlGroupMapType">MarlGroupMapType() (in module torchrl.envs)</a>
 </li>
+      <li><a href="reference/generated/torchrl.modules.LLMMaskedCategorical.html#torchrl.modules.LLMMaskedCategorical.mask">mask (torchrl.modules.LLMMaskedCategorical property)</a>
+</li>
       <li><a href="reference/generated/torchrl.modules.tensordict_module.DecisionTransformerInferenceWrapper.html#torchrl.modules.tensordict_module.DecisionTransformerInferenceWrapper.mask_context">mask_context() (torchrl.modules.tensordict_module.DecisionTransformerInferenceWrapper method)</a>
+</li>
+      <li><a href="reference/generated/torchrl.modules.LLMMaskedCategorical.html#torchrl.modules.LLMMaskedCategorical.masked_dist">masked_dist (torchrl.modules.LLMMaskedCategorical property)</a>
+</li>
+      <li><a href="reference/generated/torchrl.modules.LLMMaskedCategorical.html#torchrl.modules.LLMMaskedCategorical.masked_logits">masked_logits (torchrl.modules.LLMMaskedCategorical property)</a>
 </li>
       <li><a href="reference/generated/torchrl.modules.MaskedCategorical.html#torchrl.modules.MaskedCategorical">MaskedCategorical (class in torchrl.modules)</a>
 </li>
@@ -6786,6 +6802,8 @@
 
       <ul>
         <li><a href="reference/generated/torchrl.modules.IndependentNormal.html#torchrl.modules.IndependentNormal.mode">(torchrl.modules.IndependentNormal property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.modules.LLMMaskedCategorical.html#torchrl.modules.LLMMaskedCategorical.mode">(torchrl.modules.LLMMaskedCategorical property)</a>
 </li>
         <li><a href="reference/generated/torchrl.modules.MaskedOneHotCategorical.html#torchrl.modules.MaskedOneHotCategorical.mode">(torchrl.modules.MaskedOneHotCategorical property)</a>
 </li>
@@ -7916,6 +7934,8 @@
 <h2 id="P">P</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/generated/torchrl.modules.MaskedCategorical.html#torchrl.modules.MaskedCategorical.padding_value">padding_value (torchrl.modules.MaskedCategorical property)</a>
+</li>
       <li><a href="reference/generated/torchrl.data.PairwiseDataset.html#torchrl.data.PairwiseDataset">PairwiseDataset (class in torchrl.data)</a>
 </li>
       <li><a href="reference/generated/torchrl.trainers.helpers.parallel_env_constructor.html#torchrl.trainers.helpers.parallel_env_constructor">parallel_env_constructor() (in module torchrl.trainers.helpers)</a>
@@ -8122,6 +8142,8 @@
         <li><a href="reference/generated/torchrl.envs.transforms.Compose.html#torchrl.envs.transforms.Compose.pop">(torchrl.envs.transforms.Compose method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.modules.LLMMaskedCategorical.html#torchrl.modules.LLMMaskedCategorical.position_level_masking">position_level_masking (torchrl.modules.LLMMaskedCategorical property)</a>
+</li>
       <li><a href="reference/generated/torchrl.collectors.distributed.DistributedWeightUpdater.html#torchrl.collectors.distributed.DistributedWeightUpdater.post_hooks">post_hooks (torchrl.collectors.distributed.DistributedWeightUpdater property)</a>
 
       <ul>
@@ -8149,6 +8171,8 @@
       <li><a href="reference/generated/torchrl.data.replay_buffers.PrioritizedSliceSampler.html#torchrl.data.replay_buffers.PrioritizedSliceSampler">PrioritizedSliceSampler (class in torchrl.data.replay_buffers)</a>
 </li>
       <li><a href="reference/generated/torchrl.modules.tensordict_module.ProbabilisticActor.html#torchrl.modules.tensordict_module.ProbabilisticActor">ProbabilisticActor (class in torchrl.modules.tensordict_module)</a>
+</li>
+      <li><a href="reference/generated/torchrl.modules.LLMMaskedCategorical.html#torchrl.modules.LLMMaskedCategorical.probs">probs (torchrl.modules.LLMMaskedCategorical property)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.ProcessorAsyncEnvPool.html#torchrl.envs.ProcessorAsyncEnvPool">ProcessorAsyncEnvPool (class in torchrl.envs)</a>
 </li>
@@ -10259,6 +10283,8 @@
       <li><a href="reference/generated/torchrl.modules.Delta.html#torchrl.modules.Delta.rsample">rsample() (torchrl.modules.Delta method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.modules.LLMMaskedCategorical.html#torchrl.modules.LLMMaskedCategorical.rsample">(torchrl.modules.LLMMaskedCategorical method)</a>
+</li>
         <li><a href="reference/generated/torchrl.modules.MaskedOneHotCategorical.html#torchrl.modules.MaskedOneHotCategorical.rsample">(torchrl.modules.MaskedOneHotCategorical method)</a>
 </li>
         <li><a href="reference/generated/torchrl.modules.OneHotCategorical.html#torchrl.modules.OneHotCategorical.rsample">(torchrl.modules.OneHotCategorical method)</a>
@@ -10352,6 +10378,8 @@
         <li><a href="reference/generated/torchrl.data.UnboundedDiscreteTensorSpec.html#torchrl.data.UnboundedDiscreteTensorSpec.sample">(torchrl.data.UnboundedDiscreteTensorSpec method)</a>
 </li>
         <li><a href="reference/generated/torchrl.modules.Delta.html#torchrl.modules.Delta.sample">(torchrl.modules.Delta method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.modules.LLMMaskedCategorical.html#torchrl.modules.LLMMaskedCategorical.sample">(torchrl.modules.LLMMaskedCategorical method)</a>
 </li>
         <li><a href="reference/generated/torchrl.modules.MaskedCategorical.html#torchrl.modules.MaskedCategorical.sample">(torchrl.modules.MaskedCategorical method)</a>
 </li>

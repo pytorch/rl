@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+7691318) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+c1322a2) &#x25BC</span></a>
     </div>
     
 
@@ -428,16 +428,22 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">wraps</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sequence</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch.distributions</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">D</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch.nn.functional</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">F</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">expand_as_right</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch.distributions.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">lazy_property</span><span class="p">,</span> <span class="n">logits_to_probs</span><span class="p">,</span> <span class="n">probs_to_logits</span>
 
-
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;OneHotCategorical&quot;</span><span class="p">,</span> <span class="s2">&quot;MaskedCategorical&quot;</span><span class="p">,</span> <span class="s2">&quot;Ordinal&quot;</span><span class="p">,</span> <span class="s2">&quot;OneHotOrdinal&quot;</span><span class="p">]</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;OneHotCategorical&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;MaskedCategorical&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Ordinal&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;OneHotOrdinal&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;LLMMaskedCategorical&quot;</span><span class="p">,</span>
+<span class="p">]</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_treat_categorical_params</span><span class="p">(</span>
@@ -473,8 +479,8 @@
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">ReparamGradientStrategy</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
-    <span class="n">PassThrough</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="mi">1</span>
-    <span class="n">RelaxedOneHot</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="mi">2</span>
+    <span class="n">PassThrough</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">RelaxedOneHot</span> <span class="o">=</span> <span class="mi">2</span>
 
 
 <div class="viewcode-block" id="OneHotCategorical"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.OneHotCategorical.html#torchrl.modules.OneHotCategorical">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">OneHotCategorical</span><span class="p">(</span><span class="n">D</span><span class="o">.</span><span class="n">Categorical</span><span class="p">):</span>
@@ -527,7 +533,11 @@
         <span class="n">probs</span> <span class="o">=</span> <span class="n">_treat_categorical_params</span><span class="p">(</span><span class="n">probs</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">grad_method</span> <span class="o">=</span> <span class="n">grad_method</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">probs</span><span class="o">=</span><span class="n">probs</span><span class="p">,</span> <span class="n">logits</span><span class="o">=</span><span class="n">logits</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_param</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="c1"># Get num_samples from logits or probs shape</span>
+        <span class="k">if</span> <span class="n">logits</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span> <span class="o">=</span> <span class="n">logits</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span> <span class="o">=</span> <span class="n">probs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
 
 <div class="viewcode-block" id="OneHotCategorical.log_prob"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.OneHotCategorical.html#torchrl.modules.OneHotCategorical.log_prob">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">))</span></div>
@@ -607,7 +617,8 @@
 <span class="sd">        padding_value: The padding value in the mask tensor. When</span>
 <span class="sd">            sparse_mask == True, the padding_value will be ignored.</span>
 <span class="sd">        use_cross_entropy (bool, optional): For faster computation of the log-probability,</span>
-<span class="sd">            the cross_entropy loss functional can be used. Defaults to ``False``.</span>
+<span class="sd">            the cross_entropy loss functional can be used. Defaults to ``True``.</span>
+<span class="sd">        padding_side (str, optional): The side of the padding. Defaults to ``&quot;left&quot;``.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; torch.manual_seed(0)</span>
@@ -645,11 +656,12 @@
         <span class="n">logits</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">probs</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">indices</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">indices</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">neg_inf</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;-inf&quot;</span><span class="p">),</span>
         <span class="n">padding_value</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">use_cross_entropy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">use_cross_entropy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">padding_side</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;left&quot;</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="p">((</span><span class="n">mask</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="o">^</span> <span class="p">(</span><span class="n">indices</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -689,8 +701,27 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_mask</span> <span class="o">=</span> <span class="n">mask</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_sparse_mask</span> <span class="o">=</span> <span class="n">sparse_mask</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_padding_value</span> <span class="o">=</span> <span class="n">padding_value</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_padding_side</span> <span class="o">=</span> <span class="n">padding_side</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">logits</span><span class="o">=</span><span class="n">logits</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span> <span class="o">=</span> <span class="n">num_samples</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">padding_value</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Padding value of the distribution mask.</span>
+
+<span class="sd">        If the padding value is not set, it will be inferred from the logits.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_padding_value</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_padding_value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">0</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">padding_side</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_padding_side</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">mask</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sparse_mask</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;MaskedCategorical.mask does not support sparse masks&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mask</span>
 
 <div class="viewcode-block" id="MaskedCategorical.entropy"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.MaskedCategorical.html#torchrl.modules.MaskedCategorical.entropy">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">entropy</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute the entropy of the distribution.</span>
@@ -703,7 +734,8 @@
         <span class="c1"># Clamp logits to avoid numerical issues</span>
         <span class="n">logits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">logits</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mask</span><span class="o">.</span><span class="n">dtype</span> <span class="ow">is</span> <span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">:</span>
-            <span class="n">mask</span> <span class="o">=</span> <span class="p">(</span><span class="o">~</span><span class="bp">self</span><span class="o">.</span><span class="n">_mask</span><span class="p">)</span> <span class="o">|</span> <span class="p">(</span><span class="o">~</span><span class="n">logits</span><span class="o">.</span><span class="n">isfinite</span><span class="p">())</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="n">expand_as_right</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_mask</span><span class="p">,</span> <span class="n">logits</span><span class="p">)</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="p">(</span><span class="o">~</span><span class="n">mask</span><span class="p">)</span> <span class="o">|</span> <span class="p">(</span><span class="o">~</span><span class="n">logits</span><span class="o">.</span><span class="n">isfinite</span><span class="p">())</span>
             <span class="n">logits</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">masked_fill</span><span class="p">(</span><span class="n">logits</span><span class="p">,</span> <span class="n">mask</span><span class="p">,</span> <span class="n">min_real</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="c1"># logits are already masked</span>
@@ -743,7 +775,15 @@
                 <span class="k">if</span> <span class="n">logits</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">2</span><span class="p">:</span>
                     <span class="c1"># Bring channels in 2nd dim</span>
                     <span class="n">logits</span> <span class="o">=</span> <span class="n">logits</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+                <span class="n">original_value_shape</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="k">if</span> <span class="n">logits</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">value</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;=</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">value</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">:</span>
+                        <span class="n">original_value_shape</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">shape</span>
+                        <span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+                    <span class="n">logits</span> <span class="o">=</span> <span class="n">logits</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="n">logits</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
                 <span class="n">result</span> <span class="o">=</span> <span class="o">-</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">cross_entropy</span><span class="p">(</span><span class="n">logits</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">original_value_shape</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">unflatten</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">original_value_shape</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">result</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
             <span class="n">result</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">result</span><span class="p">),</span> <span class="n">result</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">neg_inf</span><span class="p">)</span>
@@ -759,7 +799,22 @@
             <span class="k">if</span> <span class="n">logits</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">2</span><span class="p">:</span>
                 <span class="c1"># Bring channels in 2nd dim</span>
                 <span class="n">logits</span> <span class="o">=</span> <span class="n">logits</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="c1"># possible shapes:</span>
+            <span class="c1"># Don&#39;t work with cross_entropy (missing batch dimension)</span>
+            <span class="c1"># logits.shape = (C,) and idx.shape = (B,)</span>
+            <span class="c1"># logits.shape = (C,) and idx.shape = (B0, B1, ...) =&gt; requires flattening of idx, only one batch dimension</span>
+            <span class="c1"># work with cross_entropy:</span>
+            <span class="c1"># logits.shape = (B, C) and idx.shape = (B,)</span>
+            <span class="c1"># logits.shape = (B, C, d1, d2, ...) and idx.shape = (B, d1, d2, ...)</span>
+            <span class="n">original_idx_shape</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">logits</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">idx</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;=</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">idx</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">:</span>
+                    <span class="n">original_idx_shape</span> <span class="o">=</span> <span class="n">idx</span><span class="o">.</span><span class="n">shape</span>
+                    <span class="n">idx</span> <span class="o">=</span> <span class="n">idx</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+                <span class="n">logits</span> <span class="o">=</span> <span class="n">logits</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">idx</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="n">logits</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
             <span class="n">ret</span> <span class="o">=</span> <span class="o">-</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">cross_entropy</span><span class="p">(</span><span class="n">logits</span><span class="p">,</span> <span class="n">idx</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">original_idx_shape</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">ret</span> <span class="o">=</span> <span class="n">ret</span><span class="o">.</span><span class="n">unflatten</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">original_idx_shape</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">ret</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
         <span class="c1"># Fill masked values with neg_inf.</span>
@@ -1058,6 +1113,219 @@
     <span class="p">)</span>
 
     <span class="k">return</span> <span class="n">larger_than_log_probs</span> <span class="o">+</span> <span class="n">smaller_than_log_probs</span>
+
+
+<div class="viewcode-block" id="LLMMaskedCategorical"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.LLMMaskedCategorical.html#torchrl.modules.LLMMaskedCategorical">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">LLMMaskedCategorical</span><span class="p">(</span><span class="n">D</span><span class="o">.</span><span class="n">Distribution</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;LLM-optimized masked categorical distribution.</span>
+
+<span class="sd">    This class provides a more memory-efficient approach for LLM training by:</span>
+<span class="sd">    1. Using ignore_index=-100 for log_prob computation (no masking overhead)</span>
+<span class="sd">    2. Using traditional masking for sampling operations</span>
+
+<span class="sd">    This is particularly beneficial for large vocabulary sizes where masking</span>
+<span class="sd">    all logits can be memory-intensive.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        logits (torch.Tensor): Event log probabilities (unnormalized), shape [B, T, C].</span>
+<span class="sd">            - *B*: batch size (optional)</span>
+<span class="sd">            - T: sequence length</span>
+<span class="sd">            - C: vocabulary size (number of classes)</span>
+<span class="sd">        mask (torch.Tensor): Boolean mask indicating valid positions/tokens.</span>
+<span class="sd">            - If shape [*B, T]: position-level masking. True means the position is valid (all tokens allowed).</span>
+<span class="sd">            - If shape [*B, T, C]: token-level masking. True means the token is valid at that position.</span>
+
+<span class="sd">               .. warning:: Token-level masking is considerably more memory-intensive than position-level masking.</span>
+<span class="sd">                   Only use this if you need to mask tokens.</span>
+
+<span class="sd">        ignore_index (int, optional): Index to ignore in log_prob computation. Defaults to -100.</span>
+
+<span class="sd">    Input shapes:</span>
+<span class="sd">        - logits: [*B, T, C] (required)</span>
+<span class="sd">        - mask: [*B, T] (position-level) or [*B, T, C] (token-level)</span>
+<span class="sd">        - tokens (for log_prob): [*B, T] (token indices, with ignore_index for masked positions)</span>
+
+<span class="sd">    Use cases:</span>
+<span class="sd">        1. **Position-level masking**</span>
+<span class="sd">            &gt;&gt;&gt; logits = torch.randn(2, 10, 50000)  # [B=2, T=10, C=50000]</span>
+<span class="sd">            &gt;&gt;&gt; mask = torch.ones(2, 10, dtype=torch.bool)  # [B, T]</span>
+<span class="sd">            &gt;&gt;&gt; mask[0, :5] = False  # mask first 5 positions of first sequence</span>
+<span class="sd">            &gt;&gt;&gt; dist = LLMMaskedCategorical(logits=logits, mask=mask)</span>
+<span class="sd">            &gt;&gt;&gt; tokens = torch.randint(0, 50000, (2, 10))  # [B, T]</span>
+<span class="sd">            &gt;&gt;&gt; tokens[0, :5] = -100  # set masked positions to ignore_index</span>
+<span class="sd">            &gt;&gt;&gt; log_probs = dist.log_prob(tokens)</span>
+<span class="sd">            &gt;&gt;&gt; samples = dist.sample()  # [B, T]</span>
+
+<span class="sd">        2. **Token-level masking**</span>
+<span class="sd">            &gt;&gt;&gt; logits = torch.randn(2, 10, 50000)</span>
+<span class="sd">            &gt;&gt;&gt; mask = torch.ones(2, 10, 50000, dtype=torch.bool)  # [B, T, C]</span>
+<span class="sd">            &gt;&gt;&gt; mask[0, :5, :1000] = False  # mask first 1000 tokens for first 5 positions</span>
+<span class="sd">            &gt;&gt;&gt; dist = LLMMaskedCategorical(logits=logits, mask=mask)</span>
+<span class="sd">            &gt;&gt;&gt; tokens = torch.randint(0, 50000, (2, 10))</span>
+<span class="sd">            &gt;&gt;&gt; # Optionally, set tokens at fully-masked positions to ignore_index</span>
+<span class="sd">            &gt;&gt;&gt; log_probs = dist.log_prob(tokens)</span>
+<span class="sd">            &gt;&gt;&gt; samples = dist.sample()  # [B, T]</span>
+
+<span class="sd">    Notes:</span>
+<span class="sd">        - For log_prob, tokens must be of shape [B, T] and contain valid token indices (0 &lt;= token &lt; C), or ignore_index for masked/ignored positions.</span>
+<span class="sd">        - For token-level masking, if a token is masked at a given position, log_prob will return -inf for that entry.</span>
+<span class="sd">        - For position-level masking, if a position is masked (ignore_index), log_prob will return 0.0 for that entry (correct for cross-entropy loss).</span>
+<span class="sd">        - Sampling always respects the mask (masked tokens/positions are never sampled).</span>
+
+<span class="sd">    All documented use cases are covered by tests in test_distributions.py.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">logits</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">ignore_index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">100</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># Validate shapes</span>
+        <span class="k">if</span> <span class="n">logits</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="n">mask</span><span class="o">.</span><span class="n">shape</span> <span class="ow">and</span> <span class="n">logits</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">mask</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Mask shape </span><span class="si">{</span><span class="n">mask</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> must be either logits batch shape </span><span class="si">{</span><span class="n">logits</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2"> &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;(for position-level masking) or logits shape </span><span class="si">{</span><span class="n">logits</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;(for token-level masking)&quot;</span>
+            <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_original_logits</span> <span class="o">=</span> <span class="n">logits</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_mask</span> <span class="o">=</span> <span class="n">mask</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ignore_index</span> <span class="o">=</span> <span class="n">ignore_index</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_position_level_masking</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">logits</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+        <span class="c1"># Create masked logits for sampling (only when needed)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_masked_logits</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_masked_dist</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># Set up distribution properties</span>
+        <span class="n">batch_shape</span> <span class="o">=</span> <span class="n">logits</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">event_shape</span> <span class="o">=</span> <span class="n">logits</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">:]</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">batch_shape</span><span class="o">=</span><span class="n">batch_shape</span><span class="p">,</span> <span class="n">event_shape</span><span class="o">=</span><span class="n">event_shape</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_sampling_logits</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get masked logits for sampling operations.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_masked_logits</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Only create masked logits when needed for sampling</span>
+            <span class="n">large_neg</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">finfo</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_original_logits</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">min</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_position_level_masking</span><span class="p">:</span>
+                <span class="c1"># Position-level masking: expand mask to match logits shape</span>
+                <span class="n">mask_expanded</span> <span class="o">=</span> <span class="n">expand_as_right</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_mask</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_original_logits</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_masked_logits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_original_logits</span><span class="o">.</span><span class="n">masked_fill</span><span class="p">(</span>
+                    <span class="o">~</span><span class="n">mask_expanded</span><span class="p">,</span> <span class="n">large_neg</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Token-level masking: direct masking</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_masked_logits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_original_logits</span><span class="o">.</span><span class="n">masked_fill</span><span class="p">(</span>
+                    <span class="o">~</span><span class="bp">self</span><span class="o">.</span><span class="n">_mask</span><span class="p">,</span> <span class="n">large_neg</span>
+                <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_masked_logits</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_sampling_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get masked distribution for sampling operations.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_masked_dist</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_masked_dist</span> <span class="o">=</span> <span class="n">D</span><span class="o">.</span><span class="n">Categorical</span><span class="p">(</span><span class="n">logits</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_sampling_logits</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_masked_dist</span>
+
+<div class="viewcode-block" id="LLMMaskedCategorical.log_prob"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.LLMMaskedCategorical.html#torchrl.modules.LLMMaskedCategorical.log_prob">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute log probabilities using ignore_index approach.</span>
+
+<span class="sd">        This is memory-efficient as it doesn&#39;t require masking the logits.</span>
+<span class="sd">        The value tensor should use ignore_index for masked positions.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_position_level_masking</span><span class="p">:</span>
+            <span class="n">logits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">masked_logits</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Use cross_entropy with ignore_index for efficiency</span>
+
+            <span class="c1"># For position-level masking, keep the default behavior (0.0 for ignore_index)</span>
+            <span class="c1"># This is correct for cross-entropy loss computation</span>
+            <span class="c1"># For token-level masking, we need to check if specific tokens are masked</span>
+
+            <span class="n">logits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_original_logits</span>
+        <span class="k">if</span> <span class="n">value</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="c1"># Reshape for cross_entropy: (batch, seq_len, vocab) -&gt; (batch*seq_len, vocab)</span>
+            <span class="n">logits_flat</span> <span class="o">=</span> <span class="n">logits</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">logits</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span>
+            <span class="n">value_flat</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+            <span class="c1"># Compute cross_entropy with ignore_index</span>
+            <span class="n">log_probs_flat</span> <span class="o">=</span> <span class="o">-</span><span class="n">F</span><span class="o">.</span><span class="n">cross_entropy</span><span class="p">(</span>
+                <span class="n">logits_flat</span><span class="p">,</span> <span class="n">value_flat</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">ignore_index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">ignore_index</span>
+            <span class="p">)</span>
+
+            <span class="c1"># Reshape back</span>
+            <span class="n">log_probs</span> <span class="o">=</span> <span class="n">log_probs_flat</span><span class="o">.</span><span class="n">reshape_as</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">log_probs</span> <span class="o">=</span> <span class="o">-</span><span class="n">F</span><span class="o">.</span><span class="n">cross_entropy</span><span class="p">(</span>
+                <span class="n">logits</span><span class="p">,</span>
+                <span class="n">value</span><span class="p">,</span>
+                <span class="n">reduce</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">ignore_index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">ignore_index</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">log_probs</span></div>
+
+<div class="viewcode-block" id="LLMMaskedCategorical.sample"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.LLMMaskedCategorical.html#torchrl.modules.LLMMaskedCategorical.sample">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">sample_shape</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span> <span class="o">|</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Sample from the distribution using masked logits.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">sample_shape</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">sample_shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampling_dist</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">sample_shape</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="LLMMaskedCategorical.rsample"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.LLMMaskedCategorical.html#torchrl.modules.LLMMaskedCategorical.rsample">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">rsample</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">sample_shape</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span> <span class="o">|</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reparameterized sampling using masked logits.&quot;&quot;&quot;</span>
+        <span class="c1"># This would need to be implemented based on the specific reparameterization strategy</span>
+        <span class="c1"># For now, fall back to regular sampling</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">sample_shape</span><span class="p">)</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">mode</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the mode using masked logits.&quot;&quot;&quot;</span>
+        <span class="n">masked_logits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampling_logits</span>
+        <span class="k">return</span> <span class="n">masked_logits</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+
+<div class="viewcode-block" id="LLMMaskedCategorical.entropy"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.LLMMaskedCategorical.html#torchrl.modules.LLMMaskedCategorical.entropy">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">entropy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute entropy using masked logits.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampling_dist</span><span class="o">.</span><span class="n">entropy</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="LLMMaskedCategorical.clear_cache"><a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.LLMMaskedCategorical.html#torchrl.modules.LLMMaskedCategorical.clear_cache">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">clear_cache</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Clear cached masked tensors to free memory.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_masked_logits</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_masked_dist</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">mask</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the mask.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mask</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">logits</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the original logits.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_original_logits</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">probs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get probabilities from original logits.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_original_logits</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">masked_logits</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the masked logits for sampling operations.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampling_logits</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">masked_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">D</span><span class="o">.</span><span class="n">Categorical</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the masked distribution for sampling operations.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampling_dist</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">position_level_masking</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Whether the mask is position-level (True) or token-level (False).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_position_level_masking</span></div>
 </pre></div>
 
              </article>
