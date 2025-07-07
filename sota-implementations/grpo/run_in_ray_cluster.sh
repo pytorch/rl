@@ -5,8 +5,22 @@ set -euo pipefail
 # Get command from argument
 CMD="$1"
 
+# Set up Ray cluster configuration
+HEAD_NODE=$(scontrol show hostname "$SLURM_NODELIST" | head -n 1)
+RAY_PORT=6379
+
 # Get current node name (normalize hostname)
 CURRENT_NODE=$(hostname | cut -d. -f1)
+
+# Get HEAD_NODE_IP
+if [ "$SLURM_NODEID" -eq 0 ]; then
+    # We're on the head node, get our own IP
+    HEAD_NODE_IP=$(hostname -I | awk '{print $1}')
+else
+    # We're on a worker, resolve the head node's IP using DNS
+    HEAD_NODE_IP=$(getent hosts "$HEAD_NODE" | awk '{print $1}')
+fi
+
 # Set up cleanup function
 cleanup() {
     if command -v ray &>/dev/null; then
