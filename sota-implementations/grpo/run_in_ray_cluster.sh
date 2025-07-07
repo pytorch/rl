@@ -2,6 +2,14 @@
 
 set -euo pipefail
 
+# Define cleanup function BEFORE trap
+cleanup() {
+    if command -v ray &>/dev/null; then
+        echo "Stopping Ray on node $CURRENT_NODE"
+        ray stop || true
+    fi
+}
+
 # Set up cleanup trap early
 trap cleanup EXIT
 
@@ -32,34 +40,23 @@ check_env_var "SLURM_NNODES"
 # Node 0 is the Ray head node
 if [ "$SLURM_NODEID" -eq 0 ]; then
     echo "Starting Ray head on Node 0"
-    ray start --head --disable-usage-stats --port=$RAY_PORT
+    ray start --head --disable-usage-stats --port="$RAY_PORT"
     echo "Ray head node started at $HEAD_NODE_IP:$RAY_PORT"
-    
-    # Give Ray head time to initialize
-    sleep 5
-    
-    # Run the command on head node
-    echo "Running command on head node $CURRENT_NODE"
-    bash -c "$CMD"
-    
+
+    echo "Ray head is running on $CURRENT_NODE — waiting indefinitely to keep cluster alive..."
+    sleep infinity
 else
     echo "Waiting for Ray head node to be ready..."
     sleep 10
-    
+
     echo "Starting Ray worker on node $CURRENT_NODE (ID: $SLURM_NODEID)"
-    ray start --disable-usage-stats --address="$HEAD_NODE_IP:$RAY_PORT"
-    
-    # Run the command on worker node
+    ray start --disable-usage-stats --address="$HEAD_NODE_IP:$RAY_PORT" || {
+        echo "Failed to start Ray worker"
+        exit 1
+    }
+
     echo "Running command on worker node $CURRENT_NODE"
     bash -c "$CMD"
 fi
 
 echo "Node $CURRENT_NODE: Done"
-
-# Define cleanup function at the end
-cleanup() {
-    if [ -n "$(command -v ray)" ]; then
-        echo "Stopping Ray on node $CURRENT_NODE"
-        ray stop
-    fi
-}

@@ -117,7 +117,7 @@ def train(
     weight_updater: vLLMUpdater = make_weight_updater(
         master_address="localhost"
         if not ray_managed_externally
-        else ray.util.get_node_ip_address(),  # Since we're running locally
+        else ray.util.get_node_ip_address(),
         master_port=None,  # Will auto-assign an open port
         model_metadata=model_metadata,
         vllm_tp_size=cfg.inference_model.num_devices
