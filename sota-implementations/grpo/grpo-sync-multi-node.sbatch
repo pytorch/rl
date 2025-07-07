@@ -19,6 +19,7 @@ export VLLM_USE_V1=0
 export RAY_CLUSTER_MANAGED_EXTERNALLY=1
 
 # Run command in Ray cluster
+CMD="python grpo-sync.py mode=sync train_model.num_devices=8 ref_model.num_devices=4 inference_model.num_devices=4"
 srun bash run_in_ray_cluster.sh "$CMD"
 
 echo "Job completed"
