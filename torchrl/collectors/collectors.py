@@ -1358,7 +1358,7 @@ class SyncDataCollector(DataCollectorBase):
         """
         if self.replay_buffer is None:
             raise RuntimeError("Replay buffer must be defined for execution.")
-        if not hasattr(self, "_thread") or not self._thread.is_alive():
+        if not self.is_running():
             self._stop = False
             self._thread = threading.Thread(target=self._run_iterator)
             self._thread.daemon = (
@@ -1370,6 +1370,9 @@ class SyncDataCollector(DataCollectorBase):
         for _ in self:
             if self._stop:
                 return
+
+    def is_running(self):
+        return hasattr(self, "_thread") and self._thread.is_alive()
 
     def async_shutdown(
         self, timeout: float | None = None, close_env: bool = True

@@ -177,6 +177,9 @@ def train(
     start_time = time.time()
 
     for step in range(total_steps):
+        if not collector.is_running():
+            torchrl_logger.info("Collector stopped, stopping training")
+            break
         pbar.update(1)
         pbar.set_description(f"Step {step}, writes: {replay_buffer.write_count}")
 

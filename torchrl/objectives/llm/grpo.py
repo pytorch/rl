@@ -261,10 +261,6 @@ class GRPOLoss(ClipPPOLoss):
             raise ValueError(
                 f"advantage and log_weight must have the same number of dimensions, got {advantage.ndim=} and {log_weight.ndim=}"
             )
-        print(f"log_weight: {log_weight.shape}")
-        print(f"advantage: {advantage.shape}")
-        print(f"mask: {mask.shape}")
-        print(f"data: {tensordict}")
         gain1 = log_weight.exp() * advantage
 
         log_weight_clip = log_weight.clamp(*self._clip_bounds)
@@ -503,6 +499,7 @@ class MCAdvantage(Transform):
                     torchrl_logger.info(f"Computing advantage for {prompt=}")
                 # Cat is the most robust way to combine the trajs
                 tds = torch.cat(list(self.queues[prompt]), -1)
+                del self.queues[prompt]
                 # Collect rewards
                 reward = tds.get(self.rewards_key, as_nested_tensor=True)
                 reward_mean = reward.values().mean()
