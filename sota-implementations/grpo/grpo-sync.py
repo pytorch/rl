@@ -156,11 +156,6 @@ def train(
         project="grpo-sync", exp_name="-".join(["grpo-sync"] + experiment_name)
     )
 
-    # Wait for the replay buffer to be filled
-    while (replay_buffer.write_count < replay_buffer.batch_size):
-        torchrl_logger.info(f"Waiting for replay buffer to be filled, {replay_buffer.write_count=}")
-        time.sleep(1)
-
     # Training loop
     torchrl_logger.info("Starting training loop.")
     pbar = tqdm.tqdm(collector)
@@ -171,6 +166,14 @@ def train(
     global_step = 0
     start_time = time.time()
     for data in pbar:
+        # Wait for the replay buffer to be filled - when reasoning, we collect trajectories
+        #  so the buffer may not be filled straight away
+        while replay_buffer.write_count < replay_buffer.batch_size:
+                torchrl_logger.info(
+                f"Waiting for replay buffer to be filled, {replay_buffer.write_count=}"
+            )
+            time.sleep(1)
+
         pbar.update(1)
 
         # data is None as the collector directly writes to the replay buffer

@@ -189,7 +189,7 @@ class RoundRobinWriter(Writer):
         else:
             batch_size = len(tree_leaves(data)[0])
         if batch_size == 0:
-            raise RuntimeError("Expected at least one element in extend.")
+            raise RuntimeError(f"Expected at least one element in extend. Got {data=}")
         device = data.device if hasattr(data, "device") else None
         max_size_along0 = self._storage._max_size_along_dim0(batched_data=data)
         index = (
