@@ -256,9 +256,12 @@ class vLLMUpdater(WeightUpdaterBase):
             # Extract weights from policy module using merge_and_unload for LLMs
             if not hasattr(server_weights, "model"):
                 raise ValueError("TensorDictModuleBase must have a 'model' attribute")
-            if not hasattr(server_weights.model, "merge_and_unload"):
-                raise ValueError("Model must have a 'merge_and_unload' method")
-            return TensorDict(server_weights.model.merge_and_unload().state_dict(), [])
+            # Check if it's a LoRA model
+            if hasattr(server_weights.model, "merge_and_unload"):
+                state_dict = server_weights.model.merge_and_unload().state_dict()
+            else:
+                state_dict = server_weights.model.state_dict()
+            return TensorDict(state_dict, [])
         elif isinstance(server_weights, TensorDictBase):
             return server_weights
         elif isinstance(server_weights, dict):
@@ -281,7 +284,11 @@ class vLLMUpdater(WeightUpdaterBase):
         Returns:
             dict[str, tuple[torch.dtype, torch.Size]]: The model metadata.
         """
-        sd = model.model.merge_and_unload().state_dict()
+        # Check if the model has a LoRA adapter
+        if hasattr(model.model, "merge_and_unload"):
+            sd = model.model.merge_and_unload().state_dict()
+        else:
+            sd = model.model.state_dict()
         model_metadata = {k: (v.dtype, v.shape) for k, v in sd.items()}
         return model_metadata
 
