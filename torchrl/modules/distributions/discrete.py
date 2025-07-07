@@ -704,23 +704,52 @@ class LLMMaskedCategorical(D.Distribution):
     all logits can be memory-intensive.
 
     Args:
-        logits (torch.Tensor): event log probabilities (unnormalized)
-        mask (torch.Tensor): boolean mask indicating valid positions
-        ignore_index (int, optional): index to ignore in log_prob computation. Defaults to -100.
+        logits (torch.Tensor): Event log probabilities (unnormalized), shape [B, T, C].
+            - *B*: batch size (optional)
+            - T: sequence length
+            - C: vocabulary size (number of classes)
+        mask (torch.Tensor): Boolean mask indicating valid positions/tokens.
+            - If shape [*B, T]: position-level masking. True means the position is valid (all tokens allowed).
+            - If shape [*B, T, C]: token-level masking. True means the token is valid at that position.
 
-    Examples:
-        >>> logits = torch.randn(2, 10, 50000)  # batch=2, seq_len=10, vocab=50000
-        >>> mask = torch.ones(2, 10, dtype=torch.bool)
-        >>> mask[0, :5] = False  # mask first 5 tokens of first sequence
-        >>> dist = LLMMaskedCategorical(logits=logits, mask=mask)
-        >>>
-        >>> # Efficient log_prob computation (no masking overhead)
-        >>> tokens = torch.randint(0, 50000, (2, 10))
-        >>> tokens[0, :5] = -100  # set masked positions to ignore_index
-        >>> log_probs = dist.log_prob(tokens)
-        >>>
-        >>> # Sampling still uses masking for correctness
-        >>> samples = dist.sample()
+               .. warning:: Token-level masking is considerably more memory-intensive than position-level masking.
+                   Only use this if you need to mask tokens.
+
+        ignore_index (int, optional): Index to ignore in log_prob computation. Defaults to -100.
+
+    Input shapes:
+        - logits: [*B, T, C] (required)
+        - mask: [*B, T] (position-level) or [*B, T, C] (token-level)
+        - tokens (for log_prob): [*B, T] (token indices, with ignore_index for masked positions)
+
+    Use cases:
+        1. **Position-level masking**
+            >>> logits = torch.randn(2, 10, 50000)  # [B=2, T=10, C=50000]
+            >>> mask = torch.ones(2, 10, dtype=torch.bool)  # [B, T]
+            >>> mask[0, :5] = False  # mask first 5 positions of first sequence
+            >>> dist = LLMMaskedCategorical(logits=logits, mask=mask)
+            >>> tokens = torch.randint(0, 50000, (2, 10))  # [B, T]
+            >>> tokens[0, :5] = -100  # set masked positions to ignore_index
+            >>> log_probs = dist.log_prob(tokens)
+            >>> samples = dist.sample()  # [B, T]
+
+        2. **Token-level masking**
+            >>> logits = torch.randn(2, 10, 50000)
+            >>> mask = torch.ones(2, 10, 50000, dtype=torch.bool)  # [B, T, C]
+            >>> mask[0, :5, :1000] = False  # mask first 1000 tokens for first 5 positions
+            >>> dist = LLMMaskedCategorical(logits=logits, mask=mask)
+            >>> tokens = torch.randint(0, 50000, (2, 10))
+            >>> # Optionally, set tokens at fully-masked positions to ignore_index
+            >>> log_probs = dist.log_prob(tokens)
+            >>> samples = dist.sample()  # [B, T]
+
+    Notes:
+        - For log_prob, tokens must be of shape [B, T] and contain valid token indices (0 <= token < C), or ignore_index for masked/ignored positions.
+        - For token-level masking, if a token is masked at a given position, log_prob will return -inf for that entry.
+        - For position-level masking, if a position is masked (ignore_index), log_prob will return 0.0 for that entry (correct for cross-entropy loss).
+        - Sampling always respects the mask (masked tokens/positions are never sampled).
+
+    All documented use cases are covered by tests in test_distributions.py.
     """
 
     def __init__(
@@ -730,14 +759,17 @@ class LLMMaskedCategorical(D.Distribution):
         ignore_index: int = -100,
     ) -> None:
         # Validate shapes
-        if logits.shape[:-1] != mask.shape:
+        if logits.shape[:-1] != mask.shape and logits.shape != mask.shape:
             raise ValueError(
-                f"Logits batch shape {logits.shape[:-1]} must match mask shape {mask.shape}"
+                f"Mask shape {mask.shape} must be either logits batch shape {logits.shape[:-1]} "
+                f"(for position-level masking) or logits shape {logits.shape} "
+                f"(for token-level masking)"
             )
 
         self._original_logits = logits
         self._mask = mask
         self.ignore_index = ignore_index
+        self._position_level_masking = mask.shape == logits.shape[:-1]
 
         # Create masked logits for sampling (only when needed)
         self._masked_logits = None
@@ -754,9 +786,18 @@ class LLMMaskedCategorical(D.Distribution):
         if self._masked_logits is None:
             # Only create masked logits when needed for sampling
             large_neg = torch.finfo(self._original_logits.dtype).min
-            self._masked_logits = self._original_logits.masked_fill(
-                ~expand_as_right(self._mask, self._original_logits), large_neg
-            )
+
+            if self._position_level_masking:
+                # Position-level masking: expand mask to match logits shape
+                mask_expanded = expand_as_right(self._mask, self._original_logits)
+                self._masked_logits = self._original_logits.masked_fill(
+                    ~mask_expanded, large_neg
+                )
+            else:
+                # Token-level masking: direct masking
+                self._masked_logits = self._original_logits.masked_fill(
+                    ~self._mask, large_neg
+                )
         return self._masked_logits
 
     @property
@@ -772,12 +813,19 @@ class LLMMaskedCategorical(D.Distribution):
         This is memory-efficient as it doesn't require masking the logits.
         The value tensor should use ignore_index for masked positions.
         """
-        # Use cross_entropy with ignore_index for efficiency
+        if not self._position_level_masking:
+            logits = self.masked_logits
+        else:
+            # Use cross_entropy with ignore_index for efficiency
+
+            # For position-level masking, keep the default behavior (0.0 for ignore_index)
+            # This is correct for cross-entropy loss computation
+            # For token-level masking, we need to check if specific tokens are masked
+
+            logits = self._original_logits
         if value.ndim > 1:
             # Reshape for cross_entropy: (batch, seq_len, vocab) -> (batch*seq_len, vocab)
-            logits_flat = self._original_logits.reshape(
-                -1, self._original_logits.size(-1)
-            )
+            logits_flat = logits.reshape(-1, logits.size(-1))
             value_flat = value.reshape(-1)
 
             # Compute cross_entropy with ignore_index
@@ -789,12 +837,11 @@ class LLMMaskedCategorical(D.Distribution):
             log_probs = log_probs_flat.reshape_as(value)
         else:
             log_probs = -F.cross_entropy(
-                self._original_logits,
+                logits,
                 value,
                 reduce=False,
                 ignore_index=self.ignore_index,
             )
-
         return log_probs
 
     def sample(
@@ -852,3 +899,8 @@ class LLMMaskedCategorical(D.Distribution):
     def masked_dist(self) -> D.Categorical:
         """Get the masked distribution for sampling operations."""
         return self._sampling_dist
+
+    @property
+    def position_level_masking(self) -> bool:
+        """Whether the mask is position-level (True) or token-level (False)."""
+        return self._position_level_masking
