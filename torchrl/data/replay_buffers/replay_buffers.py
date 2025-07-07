@@ -383,6 +383,10 @@ class ReplayBuffer:
     def dim_extend(self):
         return self._dim_extend
 
+    @property
+    def batch_size(self):
+        return self._batch_size
+
     @dim_extend.setter
     def dim_extend(self, value):
         if (

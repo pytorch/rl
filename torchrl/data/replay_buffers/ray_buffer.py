@@ -163,6 +163,10 @@ class RayReplayBuffer(ReplayBuffer):
         """
         return contextlib.nullcontext()
 
+    @property
+    def batch_size(self):
+        return ray.get(self._rb._getattr.remote("_batch_size"))
+
     def sample(self, *args, **kwargs):
         pending_task = self._rb.sample.remote(*args, **kwargs)
         return ray.get(pending_task)
