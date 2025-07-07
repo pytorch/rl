@@ -168,11 +168,12 @@ def train(
     for data in pbar:
         # Wait for the replay buffer to be filled - when reasoning, we collect trajectories
         #  so the buffer may not be filled straight away
-        while replay_buffer.write_count < replay_buffer.batch_size:
-                torchrl_logger.info(
+        if replay_buffer.write_count < replay_buffer.batch_size:
+            torchrl_logger.info(
                 f"Waiting for replay buffer to be filled, {replay_buffer.write_count=}"
             )
-            time.sleep(1)
+            continue
+            
 
         pbar.update(1)
 
