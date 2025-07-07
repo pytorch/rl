@@ -9,7 +9,7 @@ CMD="$1"
 HEAD_NODE=$(scontrol show hostname "$SLURM_NODELIST" | head -n 1)
 RAY_PORT=6379
 
-# Get current node name (normalize hostname)
+# Get current node name 
 CURRENT_NODE=$(hostname | cut -d. -f1)
 
 # Get HEAD_NODE_IP
@@ -51,7 +51,6 @@ if [ "$SLURM_NODEID" -eq 0 ]; then
     bash -c "$CMD"
 else
     # Worker nodes just wait for the head to finish
-    echo "Worker node $CURRENT_NODE waiting for head node to complete..."
     while ray status --address="$HEAD_NODE_IP:$RAY_PORT" &>/dev/null; do
         sleep 10
     done
