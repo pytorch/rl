@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+95637f3) &#x25BC</span></a>
+      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+82c9707) &#x25BC</span></a>
     </div>
     
 
@@ -678,9 +678,12 @@
             <span class="c1"># Extract weights from policy module using merge_and_unload for LLMs</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">server_weights</span><span class="p">,</span> <span class="s2">&quot;model&quot;</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;TensorDictModuleBase must have a &#39;model&#39; attribute&quot;</span><span class="p">)</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">server_weights</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;merge_and_unload&quot;</span><span class="p">):</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Model must have a &#39;merge_and_unload&#39; method&quot;</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">server_weights</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">merge_and_unload</span><span class="p">()</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(),</span> <span class="p">[])</span>
+            <span class="c1"># Check if it&#39;s a LoRA model</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">server_weights</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;merge_and_unload&quot;</span><span class="p">):</span>
+                <span class="n">state_dict</span> <span class="o">=</span> <span class="n">server_weights</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">merge_and_unload</span><span class="p">()</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">state_dict</span> <span class="o">=</span> <span class="n">server_weights</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">state_dict</span><span class="p">,</span> <span class="p">[])</span>
         <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">server_weights</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">):</span>
             <span class="k">return</span> <span class="n">server_weights</span>
         <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">server_weights</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
@@ -703,7 +706,11 @@
 <span class="sd">        Returns:</span>
 <span class="sd">            dict[str, tuple[torch.dtype, torch.Size]]: The model metadata.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">sd</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">merge_and_unload</span><span class="p">()</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+        <span class="c1"># Check if the model has a LoRA adapter</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;merge_and_unload&quot;</span><span class="p">):</span>
+            <span class="n">sd</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">merge_and_unload</span><span class="p">()</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">sd</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
         <span class="n">model_metadata</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="p">(</span><span class="n">v</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">v</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">sd</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
         <span class="k">return</span> <span class="n">model_metadata</span></div>
 
