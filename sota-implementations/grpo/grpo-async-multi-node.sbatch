@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=grpo-sync-multi-node
+#SBATCH --job-name=grpo-async-multi-node
 #SBATCH --nodes=2
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=96
