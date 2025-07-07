@@ -156,6 +156,11 @@ def train(
         project="grpo-sync", exp_name="-".join(["grpo-sync"] + experiment_name)
     )
 
+    # Wait for the replay buffer to be filled
+    while (replay_buffer.write_count < replay_buffer.batch_size):
+        torchrl_logger.info(f"Waiting for replay buffer to be filled, {replay_buffer.write_count=}")
+        time.sleep(1)
+
     # Training loop
     torchrl_logger.info("Starting training loop.")
     pbar = tqdm.tqdm(collector)
