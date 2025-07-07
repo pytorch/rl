@@ -35,11 +35,11 @@ class LLMCollector(SyncDataCollector):
 
             .. note:: `policy_factory` comes in handy whenever the policy cannot be serialized.
 
-        steps_per_batch (int): A keyword-only argument representing the total
-            number of elements in a batch; -1 is never ending (until shutdown).
-        total_steps (int): A keyword-only argument representing the total
-            number of steps returned by the collector
-            during its lifespan.
+        dialog_turns_per_batch (int, optional): A keyword-only argument representing the total
+            number of elements in a batch. It is always required except when `yield_completed_trajectories=True`.
+        total_dialog_turns (int): A keyword-only argument representing the total
+            number of steps returned by the collector during its lifespan. -1 is never ending (until shutdown).
+            Defaults to -1.
         yield_completed_trajectories (bool, optional): whether to yield batches of rollouts with a given number of steps
             (`yield_completed_trajectories=False`, default) or single, completed trajectories
             (`yield_completed_trajectories=True`).
@@ -149,7 +149,7 @@ class LLMCollector(SyncDataCollector):
         policy: Callable[[TensorDictBase], TensorDictBase] | None = None,
         policy_factory: Callable[[], Callable[[TensorDictBase], TensorDictBase]]
         | None = None,
-        dialog_turns_per_batch: int,
+        dialog_turns_per_batch: int | None = None,
         yield_only_last_steps: bool | None = None,
         yield_completed_trajectories: bool | None = None,
         postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
@@ -172,6 +172,8 @@ class LLMCollector(SyncDataCollector):
         elif queue is not None:
             # disguise the queue as a replay buffer
             replay_buffer = _QueueAsRB(queue)
+        if dialog_turns_per_batch is None and yield_completed_trajectories:
+            dialog_turns_per_batch = 0
         super().__init__(
             create_env_fn=env,
             policy=policy,
