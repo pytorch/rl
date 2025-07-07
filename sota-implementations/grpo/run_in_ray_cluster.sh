@@ -2,61 +2,50 @@
 
 set -euo pipefail
 
-# Define cleanup function BEFORE trap
+# Get command from argument
+CMD="$1"
+
+# Set up Ray cluster configuration
+export HEAD_NODE=$(scontrol show hostname "$SLURM_NODELIST" | head -n 1)
+export HEAD_NODE_IP=$(srun --nodes=1 --ntasks=1 -w "$HEAD_NODE" hostname -I | awk '{for(i=1;i<=NF;i++) if ($i ~ /^[0-9]+\./) {print $i; exit}}')
+export RAY_PORT=6379
+
+# Get current node name (normalize hostname)
+CURRENT_NODE=$(hostname | cut -d. -f1)
+# Set up cleanup function
 cleanup() {
     if command -v ray &>/dev/null; then
         echo "Stopping Ray on node $CURRENT_NODE"
         ray stop || true
     fi
 }
-
-# Set up cleanup trap early
 trap cleanup EXIT
 
-# Utility to check required environment variables
-check_env_var() {
-    if [ -z "${!1}" ]; then
-        echo "Error: Required environment variable $1 is not set"
-        exit 1
-    fi
-}
-
-CURRENT_NODE=$(hostname | cut -d. -f1)
-CMD="$1"
-
-echo "SLURM_NODEID: $SLURM_NODEID"
-echo "SLURM_NNODES: $SLURM_NNODES"
-echo "Current node: $CURRENT_NODE"
-echo "Head node: $HEAD_NODE ($HEAD_NODE_IP)"
-echo "Ray port: $RAY_PORT"
-echo "Command: $CMD"
-
-check_env_var "HEAD_NODE"
-check_env_var "HEAD_NODE_IP"
-check_env_var "RAY_PORT"
-check_env_var "SLURM_NODEID"
-check_env_var "SLURM_NNODES"
-
-# Node 0 is the Ray head node
+# Start Ray based on node role
 if [ "$SLURM_NODEID" -eq 0 ]; then
-    echo "Starting Ray head on Node 0"
-    ray start --head --disable-usage-stats --port="$RAY_PORT"
+    echo "Starting Ray head node on $CURRENT_NODE"
+    ray start --head --disable-usage-stats --port=$RAY_PORT
     echo "Ray head node started at $HEAD_NODE_IP:$RAY_PORT"
-
-    echo "Ray head is running on $CURRENT_NODE — waiting indefinitely to keep cluster alive..."
-    sleep infinity
 else
-    echo "Waiting for Ray head node to be ready..."
+    echo "Waiting for head node to be ready..."
     sleep 10
-
     echo "Starting Ray worker on node $CURRENT_NODE (ID: $SLURM_NODEID)"
-    ray start --disable-usage-stats --address="$HEAD_NODE_IP:$RAY_PORT" || {
-        echo "Failed to start Ray worker"
-        exit 1
-    }
+    ray start --disable-usage-stats --address="$HEAD_NODE_IP:$RAY_PORT"
+fi
 
-    echo "Running command on worker node $CURRENT_NODE"
+# Ensure Ray cluster is ready
+sleep 2
+
+# Only head node runs the training command
+if [ "$SLURM_NODEID" -eq 0 ]; then
+    echo "Starting training process on head node $CURRENT_NODE"
     bash -c "$CMD"
+else
+    # Worker nodes just wait for the head to finish
+    echo "Worker node $CURRENT_NODE waiting for head node to complete..."
+    while ray status --address="$HEAD_NODE_IP:$RAY_PORT" &>/dev/null; do
+        sleep 10
+    done
 fi
 
 echo "Node $CURRENT_NODE: Done"
