@@ -30,7 +30,7 @@ echo "Starting Ray cluster with head node: $HEAD_NODE ($HEAD_NODE_IP)"
 echo "Total nodes: $SLURM_NNODES"
 echo "Job ID: $SLURM_JOB_ID"
 
-CMD="python grpo-sync.py mode=sync train_model.num_devices=8 ref_model.num_devices=4 inference_model.num_devices=4"
+CMD="python grpo-async.py mode=sync train_model.num_devices=8 ref_model.num_devices=4 inference_model.num_devices=4"
 
 # Run the Ray cluster
 srun bash run_in_ray_cluster.sh "$CMD"
