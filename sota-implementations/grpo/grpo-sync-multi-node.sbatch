@@ -21,6 +21,9 @@ export RAY_PORT=6379
 # Environment variables for the application
 export VLLM_USE_V1=0
 
+# Indicate that Ray cluster is managed externally
+export RAY_CLUSTER_MANAGED_EXTERNALLY=1
+
 # Optional: Set Ray-specific environment variables
 export RAY_DEDUP_LOGS=0  # Avoid duplicate logs
 export PYTHONUNBUFFERED=1  # Ensure Python output is not buffered
