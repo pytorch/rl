@@ -286,7 +286,7 @@ def train(
                                     [
                                         t.numel()
                                         for t in rb_content.get(
-                                            "tokens_response", as_list=True
+                                            ("tokens", "response"), as_list=True
                                         )
                                     ],
                                     dtype=torch.float,
