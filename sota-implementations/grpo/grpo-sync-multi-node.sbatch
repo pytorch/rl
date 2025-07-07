@@ -13,6 +13,11 @@ set -euo pipefail
 # Ensure logs directory exists
 mkdir -p logs
 
+# Set up Ray cluster configuration
+export HEAD_NODE=$(scontrol show hostname "$SLURM_NODELIST" | head -n 1)
+export HEAD_NODE_IP=$(srun --nodes=1 --ntasks=1 -w "$HEAD_NODE" hostname -I | awk '{for(i=1;i<=NF;i++) if ($i ~ /^[0-9]+\./) {print $i; exit}}')
+export RAY_PORT=6379
+
 # Environment variables
 export LIST_TO_STACK=1
 export VLLM_USE_V1=0

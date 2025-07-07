@@ -5,11 +5,6 @@ set -euo pipefail
 # Get command from argument
 CMD="$1"
 
-# Set up Ray cluster configuration
-export HEAD_NODE=$(scontrol show hostname "$SLURM_NODELIST" | head -n 1)
-export HEAD_NODE_IP=$(srun --nodes=1 --ntasks=1 -w "$HEAD_NODE" hostname -I | awk '{for(i=1;i<=NF;i++) if ($i ~ /^[0-9]+\./) {print $i; exit}}')
-export RAY_PORT=6379
-
 # Get current node name (normalize hostname)
 CURRENT_NODE=$(hostname | cut -d. -f1)
 # Set up cleanup function
