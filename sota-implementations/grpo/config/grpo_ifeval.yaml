@@ -47,7 +47,7 @@ train:
   checkpoint_frequency: 100  # Save checkpoint every N steps/batches
 
   # Batch size for optimization. Higher values will use more GPU memory.
-  optim_batch_size: 2
+  optim_batch_size: 4
 
   # Whether to include the KL coefficient in the loss function. Alternatively, the KL ref-to-train will be added to the reward.
   kl_coef_in_loss: false

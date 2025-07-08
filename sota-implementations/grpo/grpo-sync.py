@@ -375,6 +375,11 @@ def main(cfg):
             "buffer_size must be equal to dialog_turns_per_batch in sync settings."
         )
 
+    if cfg.train.optim_batch_size % cfg.train.gradient_accumulation_steps != 0:
+        raise ValueError(
+            "optim_batch_size must be divisible by gradient_accumulation_steps"
+        )
+
     rb = RayReplayBuffer(
         storage=partial(
             LazyStackStorage,
@@ -386,7 +391,7 @@ def main(cfg):
         ),
         sampler=SamplerWithoutReplacement,
         transform_factory=partial(MCAdvantage, grpo_size=cfg.env.repeats, verbose=True),
-        batch_size=cfg.train.optim_batch_size,
+        batch_size=cfg.train.optim_batch_size // cfg.train.gradient_accumulation_steps,
         remote_config=replay_buffer_config,
     )
     torchrl_logger.info(f"Replay buffer: {rb}")
