@@ -198,7 +198,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             env = getattr(self, "env", None)
             policy = _make_compatible_policy(
                 policy,
-                self.env.observation_spec,
+                getattr(env, "observation_spec", None),
                 env=env,
                 env_maker=env_maker,
                 env_maker_kwargs=env_maker_kwargs,

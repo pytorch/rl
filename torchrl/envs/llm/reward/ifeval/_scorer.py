@@ -262,15 +262,33 @@ class IfEvalScorer(Transform):
 
         # Critical failure check - no answer = no reward
         if not answer_blocks:
-            return torch.zeros(score.batch_size + (1,), device=score.device, dtype=default_dtype)
+            return torch.zeros(
+                score.batch_size + (1,), device=score.device, dtype=default_dtype
+            )
 
         # Base format score calculation (0-1)
         format_components = torch.stack(
             [
-                score.prompt_level_strict_acc.sum(-1, keepdim=True) if score.prompt_level_strict_acc is not None else torch.zeros(score.batch_size + (1,), device=score.device, dtype=default_dtype),  # Single value
-                score.inst_level_strict_acc.mean(-1, keepdim=True) if score.inst_level_strict_acc is not None else torch.zeros(score.batch_size + (1,), device=score.device, dtype=default_dtype),   # Average across instructions
-                score.prompt_level_loose_acc.sum(-1, keepdim=True) if score.prompt_level_loose_acc is not None else torch.zeros(score.batch_size + (1,), device=score.device, dtype=default_dtype),   # Single value
-                score.inst_level_loose_acc.mean(-1, keepdim=True) if score.inst_level_loose_acc is not None else torch.zeros(score.batch_size + (1,), device=score.device, dtype=default_dtype),    # Average across instructions
+                score.prompt_level_strict_acc.sum(-1, keepdim=True)
+                if score.prompt_level_strict_acc is not None
+                else torch.zeros(
+                    score.batch_size + (1,), device=score.device, dtype=default_dtype
+                ),  # Single value
+                score.inst_level_strict_acc.mean(-1, keepdim=True)
+                if score.inst_level_strict_acc is not None
+                else torch.zeros(
+                    score.batch_size + (1,), device=score.device, dtype=default_dtype
+                ),  # Average across instructions
+                score.prompt_level_loose_acc.sum(-1, keepdim=True)
+                if score.prompt_level_loose_acc is not None
+                else torch.zeros(
+                    score.batch_size + (1,), device=score.device, dtype=default_dtype
+                ),  # Single value
+                score.inst_level_loose_acc.mean(-1, keepdim=True)
+                if score.inst_level_loose_acc is not None
+                else torch.zeros(
+                    score.batch_size + (1,), device=score.device, dtype=default_dtype
+                ),  # Average across instructions
             ],
             -1,
         )
@@ -283,24 +301,24 @@ class IfEvalScorer(Transform):
 
         # Structure multiplier (0.1-1.0)
         structure_multiplier = 1.0
-        
+
         # Heavy penalty for missing think blocks (but not zero)
         if not think_blocks:
             structure_multiplier *= 0.3
         elif len(think_blocks) > 1:
             structure_multiplier *= 0.7  # Penalty for multiple think blocks
-        
+
         # Penalty for multiple answer blocks
         if len(answer_blocks) > 1:
             structure_multiplier *= 0.7
 
         # Quality bonus (0-0.5)
         quality_bonus = torch.zeros_like(format_score)
-        
+
         # Bonus for high quality responses
         if format_score > 0.8:
             quality_bonus += 0.3
-        
+
         # Completion bonus
         if complete is not None:
             if isinstance(complete, torch.Tensor):
@@ -311,14 +329,21 @@ class IfEvalScorer(Transform):
 
         # Task complexity scaling based on number of instructions
         # More instructions = higher potential rewards
-        if score.inst_level_strict_acc is not None and score.inst_level_strict_acc.numel() > 0:
+        if (
+            score.inst_level_strict_acc is not None
+            and score.inst_level_strict_acc.numel() > 0
+        ):
             num_instructions = score.inst_level_strict_acc.shape[-1]
         else:
             num_instructions = 1
-        complexity_scale = 1.0 + (num_instructions - 1) * 0.2  # 1.0 for 1 instruction, 1.2 for 2, etc.
+        complexity_scale = (
+            1.0 + (num_instructions - 1) * 0.2
+        )  # 1.0 for 1 instruction, 1.2 for 2, etc.
 
         # Final reward: (format + quality) * structure_multiplier * complexity_scale
-        final_reward = (format_score + quality_bonus) * structure_multiplier * complexity_scale
+        final_reward = (
+            (format_score + quality_bonus) * structure_multiplier * complexity_scale
+        )
         final_reward = final_reward.to(default_dtype)
 
         return final_reward

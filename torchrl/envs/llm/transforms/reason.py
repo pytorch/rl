@@ -247,29 +247,31 @@ class AddThinkingPrompt(Transform):
         if "<answer>" in content:
             # Find all matches to get the last one
             matches = list(re.finditer(answer_pattern, content, flags=re.DOTALL))
-            
+
             if matches:
                 # Get the last match
                 last_match = matches[-1]
                 start, end = last_match.span()
-                
+
                 # Replace only the last answer section with the thinking prompt
                 prompt = self.prompt
                 modified_content = content[:start] + prompt + content[end:]
-                
+
                 # Clean up any trailing whitespace
                 modified_content = modified_content.rstrip()
-                
+
                 # Ensure we end with the EOS token if the original content had it
                 if content.endswith("<|im_end|>"):
                     modified_content = modified_content.rstrip() + "<|im_end|>"
-                
+
                 # Ensure proper spacing around the prompt
                 if not modified_content.endswith(prompt):
                     # If the prompt wasn't properly inserted, append it
                     modified_content = content.rstrip()
                     if modified_content.endswith("<|im_end|>"):
-                        modified_content = modified_content[: -len("<|im_end|>")].rstrip()
+                        modified_content = modified_content[
+                            : -len("<|im_end|>")
+                        ].rstrip()
                     modified_content = modified_content + "\n\n" + prompt + "<|im_end|>"
             else:
                 # No matches found, just append the prompt
