@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import time
 from typing import Any, Callable, Literal
 
 import torch
@@ -581,3 +582,96 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
             )
         )
     return env
+
+
+def log_training_metrics(
+    wandb_logger,
+    replay_buffer,
+    batch,
+    loss,
+    grad_norm,
+    global_step,
+    data_read_count,
+    collector,
+    start_time,
+    gradient_accumulation_steps,
+    history_str=None,
+):
+    """Log training metrics to wandb.
+
+    Args:
+        wandb_logger: The wandb logger instance
+        replay_buffer: The replay buffer containing collected data
+        batch: The current training batch
+        loss: The computed loss object
+        grad_norm: The gradient norm value
+        global_step: Current global training step
+        data_read_count: Total data read count
+        collector: The collector instance
+        start_time: Training start time
+        gradient_accumulation_steps: Number of gradient accumulation steps
+        history_str: Optional history string for logging
+    """
+    with torch.no_grad():
+        rb_content = replay_buffer[:]
+        step_count = rb_content.get(("next", "step_count")).view(-1).float().mean()
+        batch_policy_version = batch["next", "policy_version"].view(-1).min()
+        batch_policy_age = collector.policy_version - batch_policy_version
+
+        metrics = {
+            "step_count from buffer": float(step_count),
+            "reward from buffer": float(
+                torch.cat(rb_content.get(("next", "reward"), as_list=True)).mean()
+            ),
+            "kl_penalty (inference to ref) from buffer": float(
+                torch.cat(rb_content.get(("next", "kl_penalty"), as_list=True)).mean()
+            ),
+            "seq_length from buffer": float(
+                torch.tensor(
+                    [
+                        t.numel()
+                        for t in rb_content.get(("tokens", "response"), as_list=True)
+                    ],
+                    dtype=torch.float,
+                ).mean()
+            ),
+            "ESS, from loss": float(loss.ESS),
+            "loss_objective, from loss": float(loss.loss_objective),
+            "clip_fraction, from loss": float(loss.clip_fraction),
+            "kl_approx (train to inference), from loss": float(loss.kl_approx),
+            "kl_to_inference (train to inference - differentiable), from loss": float(
+                loss.kl_to_inference.mean()
+            ),
+            "kl_to_ref, from loss": float(loss.kl_to_ref.mean()),
+            "loss_kl_to_inference, from loss": float(loss.loss_kl_to_inference.mean()),
+            "loss_kl_to_ref, from loss": float(loss.loss_kl_to_ref.mean()),
+            "entropy loss, from loss": float(loss.loss_entropy.mean()),
+            "grad_norm": float(grad_norm)
+            if global_step % gradient_accumulation_steps == 0
+            else 0.0,
+            "write_count, from buffer": int(replay_buffer.write_count),
+            # how many gradient steps per write
+            "gradient_step_throughput (gradient step per write)": float(
+                global_step / replay_buffer.write_count
+            ),
+            # how many optim steps per write
+            "optim_step_throughput (optim step per write)": float(
+                (global_step // gradient_accumulation_steps) / replay_buffer.write_count
+            ),
+            "data_read_count (total)": data_read_count,
+            "current_policy_version (collector)": collector.policy_version,
+            # FIXME: Assume batch is a single trajectory
+            # FIXME: The addition of the transform after the env instantiation + _shuttle creation
+            #  is messed up - we need the next data
+            "batch_policy_version (sampled batch)": batch_policy_version,
+            "batch_policy_age (sampled batch)": batch_policy_age,
+            "throughput (steps per second)": float(
+                global_step / (time.time() - start_time)
+            ),
+        }
+
+        for name, value in metrics.items():
+            wandb_logger.log_scalar(name, value, step=global_step)
+
+        if history_str is not None:
+            wandb_logger.log_str("history", history_str, step=global_step)

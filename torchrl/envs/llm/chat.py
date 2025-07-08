@@ -269,6 +269,55 @@ class ChatEnv(EnvBase):
             device=self.device,
         )
 
+    @classmethod
+    def from_dataloader(
+        cls,
+        dataloader: DataLoader,
+        *,
+        repeats: int | None = None,
+        device: torch.device | None = None,
+        group_repeats: bool = False,
+        batch_size: tuple | torch.Size | None = None,
+        primers: Composite | None = None,
+        tokenizer: transformers.AutoTokenizer | None = None,
+        template_kwargs: dict[str, Any] | None = None,
+        input_mode: Literal["history", "text", "tokens"] = "history",
+        data_key: str | None = None,
+    ):
+        """Create a chat environment from a dataloader.
+
+        Args:
+            dataloader (DataLoader): The dataloader to use.
+
+        Keyword Args:
+            repeats (int | None, optional): The number of times to repeat each sample from the dataset (mainly for Monte-Carlo
+                based value estimation). If `None`, the dataset is not repeated. Defaults to `None`.
+            device (torch.device | None, optional): The device to use for computations. Defaults to None.
+            group_repeats (bool, optional): Whether to group repeated samples together. Defaults to `False`.
+            batch_size (tuple | torch.Size | None, optional): The batch size for data loading. Defaults to `1`.
+            primers (Composite | None, optional): The primers to use for data loading. Defaults to `None`.
+            tokenizer (transformers.AutoTokenizer | None, optional): The tokenizer to use for text processing. Defaults to `None`.
+            template_kwargs (dict[str, Any] | None, optional): Additional keyword arguments for the template. Defaults to `None`.
+            input_mode (Literal["history", "text", "tokens"], optional): The mode of input to the environment. Defaults to `"history"`.
+            data_key (str, optional): The spec of the data returned by the dataloader (or better, its collate_fn).
+                Defaults to `None` (automatically determined based on the input_mode).
+
+        Returns:
+            DatasetChatEnv: The chat environment.
+        """
+        return DatasetChatEnv.from_dataloader(
+            dataloader=dataloader,
+            repeats=repeats,
+            device=device,
+            group_repeats=group_repeats,
+            batch_size=batch_size,
+            primers=primers,
+            tokenizer=tokenizer,
+            template_kwargs=template_kwargs,
+            input_mode=input_mode,
+            data_key=data_key,
+        )
+
     # def _post_step_mdp_hooks(self, tensordict: TensorDictBase) -> TensorDictBase:
     #     """Allows modification of the tensordict after the step_mdp."""
     # if self.input_mode == "history":
@@ -506,7 +555,52 @@ class DatasetChatEnv(TransformedEnv):
             collate_fn=collate_fn if collate_fn is not None else _default_collate_fn,
             generator=generator,
         )
+        return self.from_dataloader(
+            dataloader=dataloader,
+            repeats=repeats,
+            device=device,
+            group_repeats=group_repeats,
+            batch_size=batch_size,
+            primers=primers,
+            tokenizer=tokenizer,
+            template_kwargs=template_kwargs,
+            input_mode=input_mode,
+            data_key=data_key,
+        )
 
+    @classmethod
+    def from_dataloader(
+        cls,
+        dataloader: DataLoader,
+        *,
+        repeats: int | None = None,
+        device: torch.device | None = None,
+        group_repeats: bool = False,
+        batch_size: tuple | torch.Size | None = None,
+        primers: Composite | None = None,
+        tokenizer: transformers.AutoTokenizer | None = None,
+        template_kwargs: dict[str, Any] | None = None,
+        input_mode: Literal["history", "text", "tokens"] = "history",
+        data_key: str | None = None,
+    ):
+        """Create a chat environment from a dataloader.
+
+        Args:
+            dataloader (DataLoader): The dataloader to use.
+
+        Keyword Args:
+            repeats (int | None, optional): The number of times to repeat each sample from the dataset (mainly for Monte-Carlo
+                based value estimation). If `None`, the dataset is not repeated. Defaults to `None`.
+            device (torch.device | None, optional): The device to use for computations. Defaults to None.
+            group_repeats (bool, optional): Whether to group repeated samples together. Defaults to `False`.
+            batch_size (tuple | torch.Size | None, optional): The batch size for data loading. Defaults to `1`.
+            primers (Composite | None, optional): The primers to use for data loading. Defaults to `None`.
+            tokenizer (transformers.AutoTokenizer | None, optional): The tokenizer to use for text processing. Defaults to `None`.
+            template_kwargs (dict[str, Any] | None, optional): Additional keyword arguments for the template. Defaults to `None`.
+
+        Returns:
+            ChatEnv: The chat environment.
+        """
         primer = DataLoadingPrimer(
             dataloader=dataloader,
             repeats=repeats,
@@ -517,14 +611,16 @@ class DatasetChatEnv(TransformedEnv):
         )
         env_base = ChatEnv(
             batch_size=batch_size,
-            system_prompt=self.SYSTEM_PROMPT,
+            system_prompt=cls.SYSTEM_PROMPT,
             tokenizer=tokenizer,
             template_kwargs=template_kwargs,
             input_mode=input_mode,
             data_key=data_key,
             device=device,
         )
-        return super().__init__(env_base, primer)
+        new_env = cls.__new__(cls)
+        TransformedEnv.__init__(new_env, env_base, primer)
+        return new_env
 
     def reset_dataloader(self):
         """Reset the dataloader.
