@@ -18,7 +18,7 @@ from torchrl.data import (
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
-from torchrl.data.datasets.d4rl import D4RLExperienceReplay
+from torchrl.data.datasets.minari_data import MinariExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.envs import (
     CatTensors,
@@ -181,13 +181,13 @@ def make_replay_buffer(
 
 
 def make_offline_replay_buffer(rb_cfg):
-    data = D4RLExperienceReplay(
+    data = MinariExperienceReplay(
         dataset_id=rb_cfg.dataset,
         split_trajs=False,
         batch_size=rb_cfg.batch_size,
         sampler=SamplerWithoutReplacement(drop_last=True),
         prefetch=4,
-        direct_download=True,
+        download=True,
     )
 
     data.append_transform(DoubleToFloat())
