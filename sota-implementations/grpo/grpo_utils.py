@@ -530,6 +530,7 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
             tokenizer=train_tokenizer,
             num_envs=cfg.env.num_envs,
             max_steps=max_steps,
+            group_repeats=cfg.env.group_repeats,
             device=torch.device("cuda:0") if devices is not None else None,
         )
     elif cfg.env.dataset == "ifeval":  # ifeval
@@ -540,6 +541,7 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
             tokenizer=train_tokenizer,
             num_envs=cfg.env.num_envs,
             max_steps=max_steps,
+            group_repeats=cfg.env.group_repeats,
             device=torch.device("cuda:0") if devices is not None else None,
         )
     else:

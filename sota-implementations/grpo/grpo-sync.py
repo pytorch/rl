@@ -172,7 +172,7 @@ def train(
         # Wait for the replay buffer to be filled - when reasoning, we collect trajectories
         #  so the buffer may not be filled straight away
         if not len(replay_buffer):
-            torchrl_logger.info(f"Waiting for replay buffer to be filled")
+            torchrl_logger.info("Waiting for replay buffer to be filled")
             continue
         else:
             torchrl_logger.info(f"Replay buffer filled: {len(replay_buffer)}")
