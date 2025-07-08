@@ -226,16 +226,18 @@ class AddThinkingPrompt(Transform):
         return next_tensordict
 
     def _replace_answer_with_prompt(self, content: str) -> str:
-        """Replace the answer section with a thinking prompt.
+        """Replace the last answer section with a thinking prompt.
 
-        This method uses regex to find and replace the <answer>...</answer> section
+        This method uses regex to find and replace the last <answer>...</answer> section
         with the thinking prompt, preserving any content before the answer tag.
+        Only the last answer block is replaced to avoid interfering with earlier
+        examples or instructions that might contain answer tags.
 
         Args:
             content: The original content string
 
         Returns:
-            The modified content with the answer replaced by the thinking prompt
+            The modified content with the last answer replaced by the thinking prompt
         """
         # Pattern to match <answer>...</answer> with optional EOS token
         # Use non-greedy matching and be more specific about the end
@@ -243,31 +245,40 @@ class AddThinkingPrompt(Transform):
 
         # Check if there's an answer tag
         if "<answer>" in content:
-            # Replace the answer section with the thinking prompt
-            prompt = self.prompt
-
-            # Replace the answer section, but preserve the EOS token if it exists
-            modified_content = re.sub(answer_pattern, prompt, content, flags=re.DOTALL)
-
-            # Clean up any trailing whitespace
-            modified_content = modified_content.rstrip()
-
-            # Ensure we end with the EOS token if the original content had it
-            if content.endswith("<|im_end|>"):
-                modified_content = modified_content.rstrip() + "<|im_end|>"
-
-            # Ensure proper spacing around the prompt
-            if not modified_content.endswith(prompt):
-                # If the prompt wasn't properly inserted, append it
-                modified_content = content.rstrip()
-                if modified_content.endswith("<|im_end|>"):
-                    modified_content = modified_content[: -len("<|im_end|>")].rstrip()
-                modified_content = modified_content + "\n\n" + prompt + "<|im_end|>"
+            # Find all matches to get the last one
+            matches = list(re.finditer(answer_pattern, content, flags=re.DOTALL))
+            
+            if matches:
+                # Get the last match
+                last_match = matches[-1]
+                start, end = last_match.span()
+                
+                # Replace only the last answer section with the thinking prompt
+                prompt = self.prompt
+                modified_content = content[:start] + prompt + content[end:]
+                
+                # Clean up any trailing whitespace
+                modified_content = modified_content.rstrip()
+                
+                # Ensure we end with the EOS token if the original content had it
+                if content.endswith("<|im_end|>"):
+                    modified_content = modified_content.rstrip() + "<|im_end|>"
+                
+                # Ensure proper spacing around the prompt
+                if not modified_content.endswith(prompt):
+                    # If the prompt wasn't properly inserted, append it
+                    modified_content = content.rstrip()
+                    if modified_content.endswith("<|im_end|>"):
+                        modified_content = modified_content[: -len("<|im_end|>")].rstrip()
+                    modified_content = modified_content + "\n\n" + prompt + "<|im_end|>"
+            else:
+                # No matches found, just append the prompt
+                prompt = self.prompt
+                modified_content = content.rstrip() + "\n\n" + prompt
 
         else:
             # No answer tag found, just append the prompt
             prompt = self.prompt
-
             modified_content = content.rstrip() + "\n\n" + prompt
 
         return modified_content
