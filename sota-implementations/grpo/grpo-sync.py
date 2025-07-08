@@ -297,7 +297,7 @@ def train(
         timeit.reset()
 
         if cfg.train.empty_replay_buffer:
-            replay_buffer.empty()
+            replay_buffer.empty(empty_write_count=False)
 
     pbar.close()
     collector.shutdown()
@@ -375,7 +375,9 @@ def main(cfg):
             LazyStackStorage,
             # Since we cache the values in the queue until we have "repeats" samples,
             # the buffer can be bigger than what the dialog_turns_per_batch (at most repeats * num_envs)
-            cfg.env.repeats * cfg.env.num_envs,
+            cfg.train.buffer_size
+            if cfg.train.buffer_size
+            else cfg.env.repeats * cfg.env.num_envs,      
         ),
         sampler=SamplerWithoutReplacement,
         transform_factory=partial(MCAdvantage, grpo_size=cfg.env.repeats),

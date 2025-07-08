@@ -357,7 +357,7 @@ def main(cfg):
             LazyStackStorage,
             cfg.train.buffer_size
             if cfg.train.buffer_size
-            else cfg.train.dialog_turns_per_batch,
+            else cfg.env.repeats * cfg.env.num_envs,
         ),
         transform_factory=partial(MCAdvantage, grpo_size=cfg.env.repeats),
         batch_size=cfg.train.optim_batch_size,
