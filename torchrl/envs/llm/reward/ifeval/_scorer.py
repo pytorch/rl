@@ -122,7 +122,7 @@ def _process_results(
     inp = _InputExample(
         key=data["key"],
         instruction_id_list=data["instruction_id_list"],
-        prompt=prompt,
+        prompt=prompt if prompt is not None else "",
         kwargs=data["kwargs"],
     )
 
@@ -230,7 +230,7 @@ class IfEvalScorer(Transform):
         answer_blocks: list[str] | None = None,
         complete: bool | torch.Tensor | None = None,
     ) -> torch.Tensor:
-        r"""Default reward aggregation function that provides a more nuanced scoring system.
+        r"""Improved reward aggregation function with tiered multiplicative scoring.
 
         Args:
             score (IFEvalScoreData): The score data.
@@ -238,79 +238,87 @@ class IfEvalScorer(Transform):
             answer_blocks (list[str], optional): The list of answer blocks.
             complete (bool, optional): Whether the response is complete (ends with a eos token).
 
-        The reward is composed of three main components:
-        1. Format score (max 1.0):
-           - prompt_level_strict_acc: 0.4 (highest weight for strict adherence to all instructions)
-           - inst_level_strict_acc: 0.3 (high weight for strict adherence to individual instructions)
-           - prompt_level_loose_acc: 0.2 (medium weight for loose adherence to all instructions)
-           - inst_level_loose_acc: 0.1 (lowest weight for loose adherence to individual instructions)
-           All instruction-level metrics are averaged to ensure balanced contribution.
+        The reward uses a tiered multiplicative system:
 
-        2. Structure score (max 1.0):
-           - think_block: 0.5 (presence of exactly one think block)
-           - answer_block: 0.5 (presence of exactly one answer block)
+        1. Critical failure check: No answer blocks = 0 reward
+        2. Base format score (0-1): Weighted average of format metrics
+        3. Structure multiplier (0.1-1.0): Penalties for missing/multiple blocks
+        4. Quality bonus (0-0.5): Rewards for high quality and completion
+        5. Task complexity scaling: More requirements = higher potential rewards
 
-        3. Completion bonus (max 0.2):
-           - complete: 0.2 (response ends with eos token)
+        The final formula is:
+            reward = (format_score + quality_bonus) * structure_multiplier * complexity_scale
 
-        The overall formula for the reward is:
+        This provides better learning signals by:
+        - Requiring critical elements (answer tags) for meaningful rewards
+        - Using multiplicative scaling to reward doing everything well
+        - Scaling rewards based on task complexity
+        - Providing clear failure modes and success incentives
 
-          .. math::
-
-            reward = format\_score + structure\_score + completion\_bonus
-
-        Therefore, the maximum value the reward can take is 2.2, with:
-        - 1.0 from format adherence
-        - 1.0 from structural elements (think/answer blocks)
-        - 0.2 from completion bonus
+        Reward range: 0.0 to ~1.5-2.7 depending on task complexity (more instructions = higher max reward).
         """
         default_dtype = torch.get_default_dtype()
         score = score.to(default_dtype)
 
-        # Format score calculation - using mean for instruction-level metrics
+        # Critical failure check - no answer = no reward
+        if not answer_blocks:
+            return torch.zeros(score.batch_size + (1,), device=score.device, dtype=default_dtype)
+
+        # Base format score calculation (0-1)
         format_components = torch.stack(
             [
-                score.prompt_level_strict_acc.sum(-1, keepdim=True),  # Single value
-                score.inst_level_strict_acc.mean(
-                    -1, keepdim=True
-                ),  # Average across instructions
-                score.prompt_level_loose_acc.sum(-1, keepdim=True),  # Single value
-                score.inst_level_loose_acc.mean(
-                    -1, keepdim=True
-                ),  # Average across instructions
+                score.prompt_level_strict_acc.sum(-1, keepdim=True) if score.prompt_level_strict_acc is not None else torch.zeros(score.batch_size + (1,), device=score.device, dtype=default_dtype),  # Single value
+                score.inst_level_strict_acc.mean(-1, keepdim=True) if score.inst_level_strict_acc is not None else torch.zeros(score.batch_size + (1,), device=score.device, dtype=default_dtype),   # Average across instructions
+                score.prompt_level_loose_acc.sum(-1, keepdim=True) if score.prompt_level_loose_acc is not None else torch.zeros(score.batch_size + (1,), device=score.device, dtype=default_dtype),   # Single value
+                score.inst_level_loose_acc.mean(-1, keepdim=True) if score.inst_level_loose_acc is not None else torch.zeros(score.batch_size + (1,), device=score.device, dtype=default_dtype),    # Average across instructions
             ],
             -1,
         )
         weights = torch.tensor(
             self.format_weights,
             device=format_components.device,
-            dtype=torch.get_default_dtype(),
+            dtype=default_dtype,
         )
         format_score = (format_components * weights).sum(dim=-1, keepdim=True)
 
-        # Structure score calculation
-        if think_blocks is not None:
-            think_score = float(len(think_blocks) == 1) * 0.5
-        else:
-            think_score = 0.0
+        # Structure multiplier (0.1-1.0)
+        structure_multiplier = 1.0
+        
+        # Heavy penalty for missing think blocks (but not zero)
+        if not think_blocks:
+            structure_multiplier *= 0.3
+        elif len(think_blocks) > 1:
+            structure_multiplier *= 0.7  # Penalty for multiple think blocks
+        
+        # Penalty for multiple answer blocks
+        if len(answer_blocks) > 1:
+            structure_multiplier *= 0.7
 
-        if answer_blocks is not None:
-            answer_score = float(len(answer_blocks) == 1) * 0.5
-        else:
-            answer_score = 0.0
-
-        structure_score = think_score + answer_score
-
+        # Quality bonus (0-0.5)
+        quality_bonus = torch.zeros_like(format_score)
+        
+        # Bonus for high quality responses
+        if format_score > 0.8:
+            quality_bonus += 0.3
+        
         # Completion bonus
-        if complete is None:
-            completion_bonus = 0.0
-        elif isinstance(complete, torch.Tensor):
-            completion_bonus = complete.to(default_dtype) * 0.2
-        else:
-            completion_bonus = float(complete) * 0.2
+        if complete is not None:
+            if isinstance(complete, torch.Tensor):
+                completion_bonus = complete.to(default_dtype) * 0.2
+            else:
+                completion_bonus = float(complete) * 0.2
+            quality_bonus += completion_bonus
 
-        # Combine all components
-        final_reward = format_score + structure_score + completion_bonus
+        # Task complexity scaling based on number of instructions
+        # More instructions = higher potential rewards
+        if score.inst_level_strict_acc is not None and score.inst_level_strict_acc.numel() > 0:
+            num_instructions = score.inst_level_strict_acc.shape[-1]
+        else:
+            num_instructions = 1
+        complexity_scale = 1.0 + (num_instructions - 1) * 0.2  # 1.0 for 1 instruction, 1.2 for 2, etc.
+
+        # Final reward: (format + quality) * structure_multiplier * complexity_scale
+        final_reward = (format_score + quality_bonus) * structure_multiplier * complexity_scale
         final_reward = final_reward.to(default_dtype)
 
         return final_reward
