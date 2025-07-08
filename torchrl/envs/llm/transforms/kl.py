@@ -675,8 +675,7 @@ class RetrieveKL(Compose):
 
     Keyword Args:
         assistant_only (bool): whether to only retrieve the log-probs of the assistant tokens (i.e., steps of history
-            where the role is `"assistant"`). Defaults to `None` (takes the opposite value from the `gen_model` and `ref_model` if they match, as
-            selection needs to happen only once, or `False` if not specified within the models).
+            where the role is `"assistant"`). Defaults to `True`.
 
             .. note:: When `assistant_only=True`, both models must have `input_mode='history'` to properly identify assistant tokens.
                 For other input modes (`"text"` or `"tokens"`), set `assistant_only=False`.
@@ -787,7 +786,7 @@ class RetrieveKL(Compose):
         gen_model: LLMWrapperBase | Literal["from_collector"] = "from_collector",
         ref_model: LLMWrapperBase | None = None,
         *,
-        assistant_only: bool | None = None,
+        assistant_only: bool | None = True,
         history_key: str = "history",
         tokenizer_kwargs: dict[str, Any] | None = None,
         detach: bool = True,
