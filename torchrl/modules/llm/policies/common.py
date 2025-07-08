@@ -489,10 +489,16 @@ class LLMWrapperBase(TensorDictModuleBase):
             mask = logits != padding_value
 
         if mask is not None:
-            return LLMMaskedCategorical(
+            dist = LLMMaskedCategorical(
                 logits=logits,
                 mask=mask,
             )
+            if not dist._position_level_masking:
+                raise ValueError(
+                    "Mask is not a position-level mask. "
+                    "This is likely because the mask is not a position-level mask."
+                )
+            return dist
         return Categorical(logits)
 
     def _get_dist_with_prompt_mask(
@@ -601,10 +607,16 @@ class LLMWrapperBase(TensorDictModuleBase):
                 padding_side=padding_side,
             )
 
-        return LLMMaskedCategorical(
+        dist = LLMMaskedCategorical(
             logits=logits,
             mask=response_mask.bool(),
         )
+        if not dist._position_level_masking:
+            raise ValueError(
+                "Mask is not a position-level mask. "
+                "This is likely because the mask is not a position-level mask."
+            )
+        return dist
 
     def _get_dist_with_assistant_mask(
         self,
@@ -664,10 +676,16 @@ class LLMWrapperBase(TensorDictModuleBase):
                 f"Assistant mask not found in tensordict at key {assistant_mask_key}. {post_msg}"
             )
 
-        return LLMMaskedCategorical(
+        dist = LLMMaskedCategorical(
             logits=logits,
             mask=assistant_mask,
         )
+        if not dist._position_level_masking:
+            raise ValueError(
+                "Assistant mask is not a position-level mask. "
+                "This is likely because the assistant mask is not a position-level mask."
+            )
+        return dist
 
     def _get_dist_with_attention_mask(
         self,
@@ -716,10 +734,16 @@ class LLMWrapperBase(TensorDictModuleBase):
                 f"Attention mask not found in tensordict at key {attention_mask_key}"
             )
 
-        return LLMMaskedCategorical(
+        dist = LLMMaskedCategorical(
             logits=logits,
             mask=attention_mask,
         )
+        if not dist._position_level_masking:
+            raise ValueError(
+                "Attention mask is not a position-level mask. "
+                "This is likely because the attention mask is not a position-level mask."
+            )
+        return dist
 
     def _get_dist_with_custom_mask(
         self,
@@ -756,10 +780,16 @@ class LLMWrapperBase(TensorDictModuleBase):
         if logits is None:
             raise ValueError(f"Logits not found in tensordict at key {logits_key}")
 
-        return LLMMaskedCategorical(
+        dist = LLMMaskedCategorical(
             logits=logits,
             mask=mask,
         )
+        if not dist._position_level_masking:
+            raise ValueError(
+                "Custom mask is not a position-level mask. "
+                "This is likely because the custom mask is not a position-level mask."
+            )
+        return dist
 
     # Convenience methods for common LLM training scenarios
     def _get_sft_dist(self, tensordict: TensorDictBase, **kwargs) -> D.Distribution:

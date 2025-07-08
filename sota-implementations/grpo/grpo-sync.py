@@ -172,14 +172,10 @@ def train(
         # Wait for the replay buffer to be filled - when reasoning, we collect trajectories
         #  so the buffer may not be filled straight away
         if not len(replay_buffer):
-            torchrl_logger.info(
-                f"Waiting for replay buffer to be filled"
-            )
+            torchrl_logger.info(f"Waiting for replay buffer to be filled")
             continue
         else:
-            torchrl_logger.info(
-                f"Replay buffer filled: {len(replay_buffer)}"
-            )
+            torchrl_logger.info(f"Replay buffer filled: {len(replay_buffer)}")
 
         pbar.update(1)
 
@@ -209,7 +205,9 @@ def train(
                 with timeit("forward_pass"):
                     # Forward pass with mixed precision
                     with autocast("cuda", enabled=cfg.train.mixed_precision):
-                        torchrl_logger.info(f"Batch for forward pass: {batch.unbind(0)}")
+                        torchrl_logger.info(
+                            f"Batch for forward pass: {batch.unbind(0)}"
+                        )
                         loss = loss_fn(batch)
                         loss_val = (
                             loss.mean(reduce=True)
