@@ -171,7 +171,7 @@ def train(
     for data in pbar:
         # Wait for the replay buffer to be filled - when reasoning, we collect trajectories
         #  so the buffer may not be filled straight away
-        if replay_buffer.write_count < replay_buffer.batch_size:
+        if not replay_buffer.write_count:
             torchrl_logger.info(
                 f"Waiting for replay buffer to be filled, {replay_buffer.write_count=}"
             )
@@ -296,6 +296,9 @@ def train(
             wandb_logger.log_scalar(f"timeit/{key}", val)
         timeit.reset()
 
+        if cfg.train.empty_replay_buffer:
+            replay_buffer.empty()
+
     pbar.close()
     collector.shutdown()
 
@@ -370,7 +373,9 @@ def main(cfg):
     rb = RayReplayBuffer(
         storage=partial(
             LazyStackStorage,
-            cfg.train.dialog_turns_per_batch,
+            # Since we cache the values in the queue until we have "repeats" samples,
+            # the buffer can be bigger than what the dialog_turns_per_batch (at most repeats * num_envs)
+            cfg.env.repeats * cfg.env.num_envs,
         ),
         sampler=SamplerWithoutReplacement,
         transform_factory=partial(MCAdvantage, grpo_size=cfg.env.repeats),

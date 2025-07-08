@@ -60,6 +60,10 @@ train:
   # Fields used only by grpo-async.py / grpo-sync.py
   logging_frequency: 1  # Log metrics every N steps - here at each optimization step
 
+  # Whether to empty the replay buffer at the end of training epochs (sync only). Guarantees that data
+  # is used only once.
+  empty_replay_buffer: true
+
 # Training model configuration
 train_model:
   gradient_checkpointing: true  # Enabled for memory efficiency
