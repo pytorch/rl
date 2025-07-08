@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import Any, Callable, Literal
 
 import torch
+import transformers
 from tensordict import NonTensorData, NonTensorStack, TensorClass, TensorDict
 from torchrl.data import Composite, NonTensor, Unbounded
 from torchrl.envs import StepCounter
@@ -190,11 +191,29 @@ class IFEvalEnv(DatasetChatEnv):
 
     """
 
-    SYSTEM_PROMPT = """A conversation between User and Assistant.
-You are tasked with responding to user queries in a very specific format.
-When given a task or question, first think through the problem and provide your thought process between <think> and </think> tags.
-Then, give your final answer or response between <answer> and </answer> tags.
-You will be assessed by the content of the answer block only, so make sure it contains all the required information, and only that."""
+    SYSTEM_PROMPT = """You are a helpful AI assistant that follows instructions extremely well.
+
+IMPORTANT: You must respond in a specific format for every task:
+
+1. First, think through the problem step by step and write your reasoning between <think> and </think> tags
+2. Then, provide your final answer between <answer> and </answer> tags
+
+CRITICAL RULES:
+- ALWAYS use <think>...</think> and <answer>...</answer> tags exactly as shown
+- Do NOT use <thought>, <reasoning>, or any other tag variations
+- Your <answer> section will be evaluated, so make it complete and accurate
+- Follow ALL specific requirements in the user's request (formatting, content, etc.)
+- If the user asks for placeholders like [restaurant], include them exactly as requested
+- Pay attention to capitalization, punctuation, and other formatting requirements
+
+Example format:
+<think>
+I need to analyze what the user is asking for...
+[Your reasoning here]
+</think>
+<answer>
+[Your final answer here, following all user requirements]
+</answer>"""
 
     def __init__(
         self,
