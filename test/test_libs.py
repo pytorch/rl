@@ -133,6 +133,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import (
         _make_multithreaded_env,
         CARTPOLE_VERSIONED,
+        CLIFFWALKING_VERSIONED,
         get_available_devices,
         get_default_devices,
         HALFCHEETAH_VERSIONED,
@@ -146,6 +147,7 @@ else:
     from _utils_internal import (
         _make_multithreaded_env,
         CARTPOLE_VERSIONED,
+        CLIFFWALKING_VERSIONED,
         get_available_devices,
         get_default_devices,
         HALFCHEETAH_VERSIONED,
@@ -1028,11 +1030,15 @@ class TestGym:
 
     def _test_one_hot_and_categorical(self):
         # tests that one-hot and categorical work ok when an integer is expected as action
-        cliff_walking = GymEnv("CliffWalking-v0", categorical_action_encoding=True)
+        cliff_walking = GymEnv(
+            CLIFFWALKING_VERSIONED(), categorical_action_encoding=True
+        )
         cliff_walking.rollout(10)
         check_env_specs(cliff_walking)
 
-        cliff_walking = GymEnv("CliffWalking-v0", categorical_action_encoding=False)
+        cliff_walking = GymEnv(
+            CLIFFWALKING_VERSIONED(), categorical_action_encoding=False
+        )
         cliff_walking.rollout(10)
         check_env_specs(cliff_walking)
 
