@@ -165,8 +165,6 @@ class ChatEnv(EnvBase):
 
         self.system_prompt = system_prompt
 
-        self.system_prompt = system_prompt
-
         if template_kwargs is None:
             template_kwargs = {}
         self.template_kwargs = template_kwargs
@@ -283,6 +281,7 @@ class ChatEnv(EnvBase):
         template_kwargs: dict[str, Any] | None = None,
         input_mode: Literal["history", "text", "tokens"] = "history",
         data_key: str | None = None,
+        system_prompt: str | None = None,
     ):
         """Create a chat environment from a dataloader.
 
@@ -301,6 +300,7 @@ class ChatEnv(EnvBase):
             input_mode (Literal["history", "text", "tokens"], optional): The mode of input to the environment. Defaults to `"history"`.
             data_key (str, optional): The spec of the data returned by the dataloader (or better, its collate_fn).
                 Defaults to `None` (automatically determined based on the input_mode).
+            system_prompt (str | None, optional): The system prompt to use for the environment. Defaults to `None`.
 
         Returns:
             DatasetChatEnv: The chat environment.
@@ -316,6 +316,7 @@ class ChatEnv(EnvBase):
             template_kwargs=template_kwargs,
             input_mode=input_mode,
             data_key=data_key,
+            system_prompt=system_prompt,
         )
 
     # def _post_step_mdp_hooks(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -494,6 +495,7 @@ class DatasetChatEnv(TransformedEnv):
         input_mode (Literal["history", "text", "tokens"], optional): The mode of input to the environment. Defaults to `"history"`.
         data_key (str, optional): The spec of the data returned by the dataloader (or better, its collate_fn).
             Defaults to `None` (automatically determined based on the input_mode).
+        system_prompt (str | None, optional): The system prompt to use for the environment. Defaults to `None`.
 
     .. seealso:: `DatasetChatEnv` is a thin wrapper around :class:`~torchrl.envs.llm.ChatEnv` bucketed with a
         :class:`~torchrl.envs.llm.DataLoadingPrimer` transform. See these two classes for more insight on data format
@@ -525,6 +527,7 @@ class DatasetChatEnv(TransformedEnv):
         input_mode: Literal["history", "text", "tokens"] = "history",
         data_key: str | None = None,
         primers: Composite | None = None,
+        system_prompt: str | None = None,
     ):
         from datasets import load_dataset
         from tensordict import list_to_stack
@@ -566,6 +569,7 @@ class DatasetChatEnv(TransformedEnv):
             template_kwargs=template_kwargs,
             input_mode=input_mode,
             data_key=data_key,
+            system_prompt=system_prompt,
         )
 
     @classmethod
@@ -578,10 +582,11 @@ class DatasetChatEnv(TransformedEnv):
         group_repeats: bool = False,
         batch_size: tuple | torch.Size | None = None,
         primers: Composite | None = None,
-        tokenizer: transformers.AutoTokenizer | None = None,
+        tokenizer: transformers.AutoTokenizer | None = None,  # noqa: F821
         template_kwargs: dict[str, Any] | None = None,
         input_mode: Literal["history", "text", "tokens"] = "history",
         data_key: str | None = None,
+        system_prompt: str | None = None,
     ):
         """Create a chat environment from a dataloader.
 
@@ -597,6 +602,10 @@ class DatasetChatEnv(TransformedEnv):
             primers (Composite | None, optional): The primers to use for data loading. Defaults to `None`.
             tokenizer (transformers.AutoTokenizer | None, optional): The tokenizer to use for text processing. Defaults to `None`.
             template_kwargs (dict[str, Any] | None, optional): Additional keyword arguments for the template. Defaults to `None`.
+            input_mode (Literal["history", "text", "tokens"], optional): The mode of input to the environment. Defaults to `"history"`.
+            data_key (str, optional): The spec of the data returned by the dataloader (or better, its collate_fn).
+                Defaults to `None` (automatically determined based on the input_mode).
+            system_prompt (str | None, optional): The system prompt to use for the environment. Defaults to `None`.
 
         Returns:
             ChatEnv: The chat environment.
@@ -611,7 +620,7 @@ class DatasetChatEnv(TransformedEnv):
         )
         env_base = ChatEnv(
             batch_size=batch_size,
-            system_prompt=cls.SYSTEM_PROMPT,
+            system_prompt=cls.SYSTEM_PROMPT if system_prompt is None else system_prompt,
             tokenizer=tokenizer,
             template_kwargs=template_kwargs,
             input_mode=input_mode,

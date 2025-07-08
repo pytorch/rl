@@ -163,7 +163,6 @@ def train(
     # Training loop
     torchrl_logger.info("Starting training loop.")
     pbar = tqdm.tqdm(collector)
-    metrics = {}  # Initialize metrics dict
     grad_norm = 0.0  # Initialize grad_norm
     data_read_count = 0
 

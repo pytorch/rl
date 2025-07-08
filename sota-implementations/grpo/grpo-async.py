@@ -172,7 +172,6 @@ def train(
     torchrl_logger.info(f"Total steps: {total_steps}")
 
     pbar = tqdm.tqdm(total=total_steps)
-    metrics = {}  # Initialize metrics dict
     grad_norm = 0.0  # Initialize grad_norm
     data_read_count = 0
     start_time = time.time()

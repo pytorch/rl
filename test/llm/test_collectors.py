@@ -12,6 +12,7 @@ import time
 import pytest
 import torch
 from mocking_classes_llm import DummyStrDataLoader
+from tensordict import set_list_to_stack
 from torchrl import logger as torchrl_logger
 from torchrl.collectors.llm import LLMCollector
 from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
@@ -19,11 +20,11 @@ from torchrl.data import LazyStackStorage, ReplayBuffer
 from torchrl.envs import AsyncEnvPool, StepCounter
 from torchrl.envs.llm.chat import ChatEnv
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
-from tensordict import set_list_to_stack
 from torchrl.modules.llm.backends.vllm import make_vllm_worker
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_vllm = importlib.util.find_spec("vllm") is not None
+
 
 @pytest.fixture(scope="module", autouse=True)
 def set_list_to_stack_fixture():
@@ -148,7 +149,9 @@ class TestLLMCollector:
             assert sample["text", "response"] is not None
             for i in range(4):
                 # Check that there are more chars in the next step
-                assert len(sample["history", "prompt"][i]) < len(sample["next", "history", "prompt"][i])
+                assert len(sample["history", "prompt"][i]) < len(
+                    sample["next", "history", "prompt"][i]
+                )
         else:
             stack = torch.cat(stack)
             assert not stack._has_exclusive_keys
@@ -156,7 +159,9 @@ class TestLLMCollector:
             stack = stack.view(-1)
             for i in range(stack.numel()):
                 # Check that there are more chars in the next step
-                assert len(stack["history", "prompt"][i]) < len(stack["next", "history", "prompt"][i])
+                assert len(stack["history", "prompt"][i]) < len(
+                    stack["next", "history", "prompt"][i]
+                )
         assert collector._frames >= total_steps
 
     @pytest.mark.slow
@@ -195,7 +200,9 @@ class TestLLMCollector:
                 assert sample.ndim == 1
                 for i in range(10):
                     # Check that there are more chars in the next step
-                    assert len(sample["history", "prompt"][i]) < len(sample["next", "history", "prompt"][i])
+                    assert len(sample["history", "prompt"][i]) < len(
+                        sample["next", "history", "prompt"][i]
+                    )
                 assert not sample._has_exclusive_keys, sample
                 j += 1
                 if rb.write_count >= total_steps:
@@ -206,14 +213,22 @@ class TestLLMCollector:
 
     @pytest.mark.slow
     @pytest.mark.parametrize("rb", [False, True], ids=["rb_false", "rb_true"])
-    @pytest.mark.parametrize("yield_only_last_steps", [False, True], ids=["yield_only_last_steps_false", "yield_only_last_steps_true"])
-    @pytest.mark.parametrize("dialog_turns_per_batch", [4, None], ids=["dialog_turns_per_batch_4", "dialog_turns_per_batch_none"])
+    @pytest.mark.parametrize(
+        "yield_only_last_steps",
+        [False, True],
+        ids=["yield_only_last_steps_false", "yield_only_last_steps_true"],
+    )
+    @pytest.mark.parametrize(
+        "dialog_turns_per_batch",
+        [4, None],
+        ids=["dialog_turns_per_batch_4", "dialog_turns_per_batch_none"],
+    )
     def test_llm_collector_completed(
         self, vllm_instance_opt, rb, yield_only_last_steps, dialog_turns_per_batch
     ):
         torch.manual_seed(0)
         policy = vLLMWrapper(vllm_instance_opt)
-        tokenizer = vllm_instance_opt.get_tokenizer()
+        vllm_instance_opt.get_tokenizer()
         bsz = 4
         total_steps = 20
         max_steps = 20
@@ -232,8 +247,12 @@ class TestLLMCollector:
             rb = ReplayBuffer(storage=LazyStackStorage(max_size=total_steps * 2))
         else:
             rb = None
-        
-        kwargs = {"dialog_turns_per_batch": dialog_turns_per_batch} if dialog_turns_per_batch is not None else {}
+
+        kwargs = (
+            {"dialog_turns_per_batch": dialog_turns_per_batch}
+            if dialog_turns_per_batch is not None
+            else {}
+        )
         collector = LLMCollector(
             env=env,
             policy_factory=lambda: policy,
@@ -259,16 +278,22 @@ class TestLLMCollector:
                     if data[i]["next", "step_count"] == max_steps:
                         continue
                     # Check that there are more chars in the next step
-                    assert len(data["history", "prompt"][i]) < len(data["next", "history", "prompt"][i]), (
-                            i,
-                            data[i]["next", "step_count"],
-                            data[i]["next", "done"],
-                            data[i]["text_response"],
-                        )
+                    assert len(data["history", "prompt"][i]) < len(
+                        data["next", "history", "prompt"][i]
+                    ), (
+                        i,
+                        data[i]["next", "step_count"],
+                        data[i]["next", "done"],
+                        data[i]["text_response"],
+                    )
 
-                expected_shape = collector.dialog_turns_per_batch if collector.dialog_turns_per_batch else 1
+                expected_shape = (
+                    collector.dialog_turns_per_batch
+                    if collector.dialog_turns_per_batch
+                    else 1
+                )
                 # since we want only completed trajs, either we have all the steps (and hence the number of elements is
-                # bigger than dialog_turns_per_batch) or we have all the last steps in number strictly equal to dialog_turns_per_batch
+                # bigger than dialog_turns_per_batch) or we have all the last steps in number strictly equal to dialog_turns_per_batch
                 if yield_only_last_steps:
                     assert data.numel() == expected_shape, (data.shape, expected_shape)
                 else:
@@ -307,7 +332,7 @@ class TestLLMCollector:
     ):
         torch.manual_seed(0)
         policy = vLLMWrapper(vllm_instance_opt)
-        tokenizer = vllm_instance_opt.get_tokenizer()
+        vllm_instance_opt.get_tokenizer()
         bsz = 4
         total_steps = 20
         max_steps = 20
@@ -353,12 +378,14 @@ class TestLLMCollector:
                     if data[i]["next", "step_count"] == max_steps:
                         continue
                     # Check that there are more chars in the next step
-                    assert len(data["history", "prompt"][i]) < len(data["next", "history", "prompt"][i]), (
-                            i,
-                            data[i]["next", "step_count"],
-                            data[i]["next", "done"],
-                            data[i]["text_response"],
-                        )
+                    assert len(data["history", "prompt"][i]) < len(
+                        data["next", "history", "prompt"][i]
+                    ), (
+                        i,
+                        data[i]["next", "step_count"],
+                        data[i]["next", "done"],
+                        data[i]["text_response"],
+                    )
 
                 if yield_only_last_steps:
                     assert data.shape == (1,)
@@ -373,12 +400,12 @@ class TestLLMCollector:
                     # Check that there are more chars in the next step
                     assert len(sample["history", "prompt"][i]) < len(
                         sample["next", "history", "prompt"][i]
-                        ), (
-                            i,
-                            sample[i]["next", "step_count"],
-                            sample[i]["next", "done"],
-                            sample[i]["text_response"],
-                        )
+                    ), (
+                        i,
+                        sample[i]["next", "step_count"],
+                        sample[i]["next", "done"],
+                        sample[i]["text_response"],
+                    )
 
                 assert sample.ndim == 1
                 assert sample.shape == (5,)

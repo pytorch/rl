@@ -1453,8 +1453,6 @@ def _update_during_reset(
             # by contract, a reset signal at one level cannot
             # be followed by other resets at nested levels, so it's safe to
             # simply update
-            print("update", node_reset)
-            print("node", node)
             node.update(node_reset, update_batch_size=True)
         else:
             # there can be two cases: (1) the key is present in both tds,
