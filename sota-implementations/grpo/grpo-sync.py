@@ -209,6 +209,7 @@ def train(
                 with timeit("forward_pass"):
                     # Forward pass with mixed precision
                     with autocast("cuda", enabled=cfg.train.mixed_precision):
+                        torchrl_logger.info(f"Batch for forward pass: {batch.unbind(0)}")
                         loss = loss_fn(batch)
                         loss_val = (
                             loss.mean(reduce=True)
