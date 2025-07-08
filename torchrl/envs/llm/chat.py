@@ -558,7 +558,8 @@ class DatasetChatEnv(TransformedEnv):
             collate_fn=collate_fn if collate_fn is not None else _default_collate_fn,
             generator=generator,
         )
-        return self.from_dataloader(
+        self._from_dataloader(
+            self,
             dataloader=dataloader,
             repeats=repeats,
             device=device,
@@ -610,6 +611,39 @@ class DatasetChatEnv(TransformedEnv):
         Returns:
             ChatEnv: The chat environment.
         """
+        self = cls.__new__(cls)
+        return cls._from_dataloader(
+            self,
+            dataloader,
+            repeats=repeats,
+            device=device,
+            group_repeats=group_repeats,
+            batch_size=batch_size,
+            primers=primers,
+            tokenizer=tokenizer,
+            template_kwargs=template_kwargs,
+            input_mode=input_mode,
+            data_key=data_key,
+            system_prompt=system_prompt,
+        )
+
+    @classmethod
+    def _from_dataloader(
+        cls,
+        self,
+        dataloader,
+        *,
+        repeats: int | None = None,
+        device: torch.device | None = None,
+        group_repeats: bool = False,
+        batch_size: tuple | torch.Size | None = None,
+        primers: Composite | None = None,
+        tokenizer: transformers.AutoTokenizer | None = None,
+        template_kwargs: dict[str, Any] | None = None,
+        input_mode: Literal["history", "text", "tokens"] = "history",
+        data_key: str | None = None,
+        system_prompt: str | None = None,
+    ):
         primer = DataLoadingPrimer(
             dataloader=dataloader,
             repeats=repeats,
@@ -627,9 +661,8 @@ class DatasetChatEnv(TransformedEnv):
             data_key=data_key,
             device=device,
         )
-        new_env = cls.__new__(cls)
-        TransformedEnv.__init__(new_env, env_base, primer)
-        return new_env
+        TransformedEnv.__init__(self, env_base, primer)
+        return self
 
     def reset_dataloader(self):
         """Reset the dataloader.
