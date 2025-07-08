@@ -476,6 +476,8 @@ class MCAdvantage(Transform):
         return tensordict
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self.verbose:
+            torchrl_logger.info(f"Invoking MCAdvantage.\nData size: {tensordict.shape}.\nCurrent queue size: {len(self.queues)}.\nTotal queue content: {sum(len(q) for q in self.queues.values())}")
         # Tensordict can be any number of dims, but it must contain entire trajectories
         if tensordict.ndim == 1:
             # Check how many done states we have
