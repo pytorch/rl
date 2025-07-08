@@ -513,7 +513,7 @@ class MCAdvantage(Transform):
         elif tensordict.ndim > 2:
             # keep the time dim at the end
             tensordict = tensordict.flatten(0, -2)
-        trajs = tensordict.unbind(-1)
+        trajs = tensordict.unbind(0)
         # Iterate over the trajectories
         result = []
         for traj in trajs:
@@ -522,5 +522,5 @@ class MCAdvantage(Transform):
                 continue
             result.append(td_out)
         if result:
-            return torch.cat(result, -1)
+            return torch.cat(result, 0)
         return
