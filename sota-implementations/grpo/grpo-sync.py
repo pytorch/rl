@@ -171,11 +171,15 @@ def train(
     for data in pbar:
         # Wait for the replay buffer to be filled - when reasoning, we collect trajectories
         #  so the buffer may not be filled straight away
-        if not replay_buffer.write_count:
+        if not len(replay_buffer):
             torchrl_logger.info(
-                f"Waiting for replay buffer to be filled, {replay_buffer.write_count=}"
+                f"Waiting for replay buffer to be filled"
             )
             continue
+        else:
+            torchrl_logger.info(
+                f"Replay buffer filled: {len(replay_buffer)}"
+            )
 
         pbar.update(1)
 
@@ -377,10 +381,10 @@ def main(cfg):
             # the buffer can be bigger than what the dialog_turns_per_batch (at most repeats * num_envs)
             cfg.train.buffer_size
             if cfg.train.buffer_size
-            else cfg.env.repeats * cfg.env.num_envs,      
+            else cfg.env.repeats * cfg.env.num_envs,
         ),
         sampler=SamplerWithoutReplacement,
-        transform_factory=partial(MCAdvantage, grpo_size=cfg.env.repeats),
+        transform_factory=partial(MCAdvantage, grpo_size=cfg.env.repeats, verbose=True),
         batch_size=cfg.train.optim_batch_size,
         remote_config=replay_buffer_config,
     )

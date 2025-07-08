@@ -277,7 +277,7 @@ class ChatEnv(EnvBase):
         group_repeats: bool = False,
         batch_size: tuple | torch.Size | None = None,
         primers: Composite | None = None,
-        tokenizer: transformers.AutoTokenizer | None = None,
+        tokenizer: transformers.AutoTokenizer | None = None,  # noqa: F821
         template_kwargs: dict[str, Any] | None = None,
         input_mode: Literal["history", "text", "tokens"] = "history",
         data_key: str | None = None,
@@ -638,7 +638,7 @@ class DatasetChatEnv(TransformedEnv):
         group_repeats: bool = False,
         batch_size: tuple | torch.Size | None = None,
         primers: Composite | None = None,
-        tokenizer: transformers.AutoTokenizer | None = None,
+        tokenizer: transformers.AutoTokenizer | None = None,  # noqa: F821
         template_kwargs: dict[str, Any] | None = None,
         input_mode: Literal["history", "text", "tokens"] = "history",
         data_key: str | None = None,
