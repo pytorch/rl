@@ -62,6 +62,7 @@ from torchrl.objectives.llm.sft import SFTLoss
 
 DEFAULT_DIALOG_TURNS_PER_BATCH = 256
 
+
 def setup_environment() -> None:
     """Setup required environment variables and configurations."""
     if os.getenv("VLLM_USE_V1", "1") != "0":
@@ -499,8 +500,8 @@ def main(cfg):
             rb_size = int(
                 math.ceil(
                     dialog_turns_per_batch * cfg.train.topk_size / cfg.env.repeats
+                )
             )
-        )
     rb = RayReplayBuffer(
         storage=partial(
             LazyStackStorage,

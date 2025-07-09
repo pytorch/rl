@@ -693,7 +693,7 @@ class RemoteDataLogger:
 
         # Response length
         lengths = []
-        responses = data["text_response"]
+        responses = data["text", "response"]
         for r in responses:
             lengths.append(len(r))
         lengths = torch.tensor(lengths, dtype=torch.float32)
