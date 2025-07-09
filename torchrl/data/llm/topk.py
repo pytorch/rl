@@ -75,7 +75,7 @@ class TopKRewardSelector(Transform):
         self,
         total_dialog_turns: int,
         topk_size: int,
-        prompt_key: NestedKey = "text",
+        prompt_key: NestedKey = ("text", "prompt"),
         rewards_key: NestedKey = ("next", "reward"),
         done_key: NestedKey = ("next", "done"),
         verbose: bool = True,
