@@ -124,7 +124,6 @@ class AddThinkingPrompt(Transform):
     ) -> None:
         super().__init__()
 
-
         # Set condition and role
         self.cond = cond
         self.role = role
@@ -134,7 +133,11 @@ class AddThinkingPrompt(Transform):
 
         # Set the prompt
         if prompt is None:
-            prompt = self.DEFAULT_PROMPTS_EG[0] if egocentric else self.DEFAULT_PROMPTS_COG[0]
+            prompt = (
+                self.DEFAULT_PROMPTS_EG[0]
+                if egocentric
+                else self.DEFAULT_PROMPTS_COG[0]
+            )
         self._prompt = prompt
         self.random_prompt = random_prompt
 
@@ -154,7 +157,9 @@ class AddThinkingPrompt(Transform):
         if self.random_prompt:
             import random
 
-            return random.choice(self.DEFAULT_PROMPTS_EG if self.egocentric else self.DEFAULT_PROMPTS_COG)
+            return random.choice(
+                self.DEFAULT_PROMPTS_EG if self.egocentric else self.DEFAULT_PROMPTS_COG
+            )
         return self._prompt
 
     def _step(
