@@ -1166,6 +1166,8 @@ class History(TensorClass["nocast"]):
         Returns:
             History: The appended History object.
         """
+        # TODO: we should remove the <none> role from the history before appending / extending
+        #  It works when keeping them, but it may lead to a lot of useless padding in between valid messages
         if not self.batch_dims:
             raise RuntimeError(
                 "Cannot append an element to a batchless History. Call unsqueeze(dim=0) first on self."
