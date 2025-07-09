@@ -1102,7 +1102,7 @@ class TestTopK:
                         ("next", "done"): torch.full((1, 1), True),
                         ("next", "reward"): _per_token_reward(i),
                         # total of 10 dialogs per prompt
-                        "text": f"Prompt {i // 5}",
+                        ("text", "prompt"): f"Prompt {i // 5}",
                     }
                 )
                 for i in range(50)
