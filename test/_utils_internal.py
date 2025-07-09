@@ -9,7 +9,6 @@ import logging
 import os
 import os.path
 import sys
-import sys.version_info
 import time
 import unittest
 import warnings
