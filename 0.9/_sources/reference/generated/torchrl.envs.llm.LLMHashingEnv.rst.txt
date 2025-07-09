@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.envs.llm
+
+
+LLMHashingEnv
+=============
+
+.. autoclass:: LLMHashingEnv
+    :members:
+    :inherited-members:

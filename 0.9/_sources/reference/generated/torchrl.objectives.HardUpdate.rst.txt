@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives
+
+
+HardUpdate
+==========
+
+.. autoclass:: HardUpdate
+    :members:

@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules.utils
+
+
+inv_softplus
+============
+
+.. autoclass:: inv_softplus
+    :members:
