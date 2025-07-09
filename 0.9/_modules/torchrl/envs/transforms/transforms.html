@@ -4929,9 +4929,9 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Moves data from one device to another.</span>
 
 <span class="sd">    Args:</span>
-<span class="sd">        device (torch.device or equivalent): the destination device.</span>
-<span class="sd">        orig_device (torch.device or equivalent): the origin device. If not specified and</span>
-<span class="sd">            a parent environment exists, it it retrieved from it. In all other cases,</span>
+<span class="sd">        device (torch.device or equivalent): the destination device (outside the environment or buffer).</span>
+<span class="sd">        orig_device (torch.device or equivalent): the origin device (inside the environment or buffer).</span>
+<span class="sd">            If not specified and a parent environment exists, it it retrieved from it. In all other cases,</span>
 <span class="sd">            it remains unspecified.</span>
 
 <span class="sd">    Keyword Args:</span>
