@@ -113,8 +113,11 @@ def train(
     model_metadata = vLLMUpdater.get_model_metadata(policy_training)
 
     # Create weight updater with remote LLM
+    ray_managed_externally = os.environ.get("RAY_CLUSTER_MANAGED_EXTERNALLY")
     weight_updater: vLLMUpdater = make_weight_updater(
-        master_address="localhost",  # Since we're running locally
+        master_address="localhost"
+        if not ray_managed_externally
+        else ray.util.get_node_ip_address(),
         master_port=None,  # Will auto-assign an open port
         model_metadata=model_metadata,
         vllm_tp_size=cfg.inference_model.num_devices
@@ -338,7 +341,11 @@ def main(cfg):
                 ray_init_config["runtime_env"]["env_vars"]
             )
         torchrl_logger.info(f"Ray init config: {ray_init_config=}")
-        ray.init(**ray_init_config)
+        ray_managed_externally = os.environ.get("RAY_CLUSTER_MANAGED_EXTERNALLY")
+        if ray_managed_externally:
+            ray.init(address="auto")
+        else:
+            ray.init(**ray_init_config)
 
     # Check if num_devices is set
     if cfg.inference_model.num_devices is None:
