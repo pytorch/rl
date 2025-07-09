@@ -4,15 +4,17 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, TYPE_CHECKING
 
 import torch
-import transformers
 from tensordict import NonTensorData, NonTensorStack, TensorClass, TensorDict
 from torchrl.data import Composite, NonTensor, Unbounded
 from torchrl.envs import StepCounter
 from torchrl.envs.llm.chat import DatasetChatEnv
 from torchrl.envs.llm.reward.ifeval import IfEvalScorer
+
+if TYPE_CHECKING:
+    import transformers
 
 
 class IFEvalData(TensorClass["nocast"]):

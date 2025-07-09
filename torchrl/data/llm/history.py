@@ -7,7 +7,7 @@ from __future__ import annotations
 import dataclasses
 
 import re
-from typing import Literal
+from typing import Literal, TYPE_CHECKING
 
 import torch
 
@@ -21,10 +21,8 @@ from tensordict import (
 from tensordict.utils import _maybe_correct_neg_dim
 from torchrl._utils import logger as torchrl_logger
 
-try:
+if TYPE_CHECKING:
     import transformers
-except ImportError:
-    transformers = None
 
 
 # Global storage for custom templates and their metadata

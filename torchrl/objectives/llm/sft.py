@@ -8,7 +8,7 @@ import contextlib
 import warnings
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, TYPE_CHECKING
 
 import torch
 from tensordict import NestedKey, TensorClass, TensorDictBase
@@ -17,6 +17,9 @@ from tensordict.utils import _zip_strict
 from torchrl.data import History
 from torchrl.modules.llm.policies.transformers_wrapper import TransformersWrapper
 from torchrl.objectives.common import LossModule
+
+if TYPE_CHECKING:
+    import transformers
 
 
 def sft_loss(summed_log_probs: torch.Tensor, reduction: str) -> torch.Tensor:

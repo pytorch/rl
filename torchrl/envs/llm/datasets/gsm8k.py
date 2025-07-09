@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, TYPE_CHECKING
 
 import torch
 from tensordict import NestedKey, TensorDict, TensorDictBase
@@ -19,6 +19,9 @@ from torchrl.envs.llm.chat import DatasetChatEnv
 
 from torchrl.envs.llm.envs import LLMEnv
 from torchrl.envs.llm.reward.gsm8k import GSM8KRewardParser
+
+if TYPE_CHECKING:
+    import transformers
 
 BASE_PROMPT = (
     "A conversation between User and Assistant. The user asks a question, and the Assistant solves it. "

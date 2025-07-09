@@ -18,7 +18,16 @@ from copy import copy
 from enum import IntEnum
 from functools import wraps
 from textwrap import indent
-from typing import Any, Callable, Mapping, OrderedDict, Sequence, TypeVar, Union
+from typing import (
+    Any,
+    Callable,
+    Mapping,
+    OrderedDict,
+    Sequence,
+    TYPE_CHECKING,
+    TypeVar,
+    Union,
+)
 
 import numpy as np
 
@@ -90,6 +99,10 @@ from torchrl.envs.utils import (
     make_composite_from_td,
     step_mdp,
 )
+
+if TYPE_CHECKING:
+    import transformers
+
 
 _has_tv = importlib.util.find_spec("torchvision", None) is not None
 

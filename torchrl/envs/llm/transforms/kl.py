@@ -8,7 +8,7 @@ import warnings
 
 from contextlib import nullcontext
 from copy import copy
-from typing import Any, Literal
+from typing import Any, Literal, TYPE_CHECKING
 
 import torch
 from tensordict import NestedKey, set_list_to_stack, TensorDictBase, unravel_key
@@ -20,10 +20,8 @@ from torchrl.envs.transforms.transforms import Compose
 from torchrl.envs.transforms.utils import _set_missing_tolerance
 from torchrl.modules.llm.policies.common import LLMWrapperBase
 
-try:
+if TYPE_CHECKING:
     import transformers
-except ImportError:
-    transformers = None
 
 
 class KLRewardTransform(Transform):

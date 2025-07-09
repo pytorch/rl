@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import warnings
 
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, TYPE_CHECKING
 
 import torch
 
@@ -35,6 +35,9 @@ from torchrl.data.tensor_specs import (
 from torchrl.envs import EnvBase
 from torchrl.envs.utils import _StepMDP
 from torchrl.modules.utils.utils import _unpad_tensors
+
+if TYPE_CHECKING:
+    import transformers
 
 
 class LLMEnv(EnvBase):
