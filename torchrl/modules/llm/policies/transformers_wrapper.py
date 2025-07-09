@@ -24,6 +24,7 @@ from torch import distributions as D
 from torch.nn.utils.rnn import pad_sequence
 
 from torchrl.modules.llm.policies.common import (
+    _extract_responses_from_full_histories,
     ChatHistory,
     LLMWrapperBase,
     LogProbs,
@@ -680,16 +681,11 @@ class TransformersWrapper(LLMWrapperBase):
             for h in history_chat.unbind(1):
                 h.prompt = history
         with history_chat.view(-1) as history_chat_flat:
-            history_chat_flat.full = full_histories = History.from_text(text_full)
             prompt_histories = history_chat_flat.prompt
-            # iterate over batch
-            h_responses = []
-            for h_full, h_prompt in _zip_strict(
-                full_histories.unbind(0), prompt_histories.unbind(0)
-            ):
-                if h_full.shape[0] <= h_prompt.shape[0]:
-                    raise RuntimeError("Full history is shorter than prompt history")
-                h_responses.append(h_full[h_prompt.shape[0] :])
+            # Extract response histories from full text
+            h_responses = _extract_responses_from_full_histories(
+                text_full, prompt_histories, self.chat_template_name, self.tokenizer
+            )
             history_chat_flat.response = torch.stack(h_responses)
         result.set(self.history_key, history_chat)
         return result

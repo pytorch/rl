@@ -705,7 +705,9 @@ class ReplayBuffer:
                 make_none = False
                 # Transforms usually expect a time batch dimension when called within a RB, so we unsqueeze the data temporarily
                 is_tc = is_tensor_collection(data)
-                with data.unsqueeze(-1) if is_tc else contextlib.nullcontext(data) as data_unsq:
+                with data.unsqueeze(-1) if is_tc else contextlib.nullcontext(
+                    data
+                ) as data_unsq:
                     data_unsq_r = self._transform.inv(data_unsq)
                     if is_tc and data_unsq_r is not None:
                         # this is a no-op whenever the result matches the input

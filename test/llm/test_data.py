@@ -966,6 +966,119 @@ The result is""",
             history.role[:-1]
         ), f"All roles except the last should match original. Original: {history.role[:-1]}, Parsed: {parsed.role[:-1]}"
 
+    @pytest.mark.skipif(not _has_transformers, reason="requires transformers library")
+    def test_extract_responses_from_full_histories_batch_issue(self):
+        """Test the isolated function for handling different response shapes in batch processing."""
+        from torchrl.modules.llm.policies.common import (
+            _extract_responses_from_full_histories,
+        )
+        from transformers import AutoTokenizer
+
+        # Create a batch of 2 prompt histories
+        prompt_histories = History.from_chats(
+            [
+                [
+                    {"role": "user", "content": "Hello, how are you?"},
+                ],
+                [
+                    {"role": "user", "content": "Tell me a joke."},
+                ],
+            ]
+        )
+
+        # Simulate generated text with different response counts
+        text_full = [
+            # First element: 1 assistant response
+            """<|im_start|>user
+Hello, how are you?<|im_end|>
+<|im_start|>assistant
+I'm doing well, thank you for asking!<|im_end|>""",
+            # Second element: 3 messages (1 assistant + 1 user + 1 assistant)
+            """<|im_start|>user
+Tell me a joke.<|im_end|>
+<|im_start|>assistant
+Why did the chicken cross the road?<|im_end|>
+<|im_start|>user
+I don't know, why?<|im_end|>
+<|im_start|>assistant
+To get to the other side!<|im_end|>""",
+        ]
+
+        # Test the isolated function
+        h_responses = _extract_responses_from_full_histories(
+            text_full, prompt_histories, chat_template_name="qwen"
+        )
+
+        # Verify the responses have the expected shapes and content
+        assert len(h_responses) == 2, f"Expected 2 responses, got {len(h_responses)}"
+
+        # Check first response (should be padded to match second response length)
+        response_0 = h_responses[0]
+        assert response_0.shape == (3,), f"Expected shape (3,), got {response_0.shape}"
+        assert response_0.role == [
+            "assistant",
+            "<none>",
+            "<none>",
+        ], f"Expected roles ['assistant', '<none>', '<none>'], got {response_0.role}"
+        assert response_0.content == [
+            "I'm doing well, thank you for asking!",
+            "",
+            "",
+        ], f"Expected content ['I\\'m doing well, thank you for asking!', '', ''], got {response_0.content}"
+
+        # Check second response (should have 3 messages)
+        response_1 = h_responses[1]
+        assert response_1.shape == (3,), f"Expected shape (3,), got {response_1.shape}"
+        assert response_1.role == [
+            "assistant",
+            "user",
+            "assistant",
+        ], f"Expected roles ['assistant', 'user', 'assistant'], got {response_1.role}"
+        assert response_1.content == [
+            "Why did the chicken cross the road?",
+            "I don't know, why?",
+            "To get to the other side!",
+        ], f"Expected content ['Why did the chicken cross the road?', 'I don\\'t know, why?', 'To get to the other side!'], got {response_1.content}"
+
+        assert isinstance(h_responses, History)
+        h_responses.shape == (
+            2,
+            3,
+        ), f"Expected stacked shape (2, 3), got {h_responses.shape}"
+
+        # Extract individual responses for testing
+        response_0 = h_responses[0]
+        response_1 = h_responses[1]
+
+        # Test chat template application
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+
+        # Test first response (should only show the assistant message, ignore padding)
+        template_0 = response_0.apply_chat_template(
+            tokenizer=tokenizer, add_generation_prompt=False, chat_template_name="qwen"
+        )
+        expected_0 = """<|im_start|>system
+You are a helpful assistant.<|im_end|>
+<|im_start|>assistant
+I'm doing well, thank you for asking!<|im_end|>
+    """
+        assert template_0 == expected_0
+
+        # Test second response (should show all 3 messages)
+        template_1 = response_1.apply_chat_template(
+            tokenizer=tokenizer, add_generation_prompt=False, chat_template_name="qwen"
+        )
+        expected_1 = """<|im_start|>system
+You are a helpful assistant.<|im_end|>
+<|im_start|>assistant
+Why did the chicken cross the road?<|im_end|>
+    <|im_start|>user
+I don't know, why?<|im_end|>
+<|im_start|>assistant
+To get to the other side!<|im_end|>
+    """
+        assert template_1 == expected_1
+
 
 class TestTopK:
     @pytest.mark.parametrize("per_token_reward", [True, False])

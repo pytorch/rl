@@ -854,3 +854,70 @@ class LLMWrapperBase(TensorDictModuleBase):
             data = self(data)
             return data.get((self.log_prob_key, "response"), **get_kwargs)
         raise RuntimeError("log_prob not callable when generate=True.")
+
+
+def _extract_responses_from_full_histories(
+    text_full: list[str],
+    prompt_histories,
+    chat_template_name: str | None = None,
+    tokenizer=None,
+) -> "History":
+    """Extract response histories from full text histories.
+
+    This function parses the full text back to history objects and extracts
+    the response portions (everything after the prompt).
+
+    Args:
+        text_full: List of full text strings to parse
+        prompt_histories: The original prompt histories
+        chat_template_name: Optional chat template name for parsing
+        tokenizer: Optional tokenizer for template detection
+
+    Returns:
+        Stacked History object with response portions
+
+    Raises:
+        RuntimeError: If full history is shorter than prompt history
+        RuntimeError: If parsing produces inconsistent batch shapes
+    """
+    import torch
+    from tensordict.utils import _zip_strict
+    from torchrl.data.llm import History
+
+    # Extract response portions by processing each element individually
+    # This avoids the stacking issue when different batch elements produce
+    # different numbers of responses
+    response_histories = []
+    full_histories = History.from_text(
+        text_full, chat_template_name=chat_template_name, tokenizer=tokenizer
+    )
+    for h_prompt, h_full in _zip_strict(
+        prompt_histories.unbind(0), full_histories.unbind(0)
+    ):
+        if h_full.shape[0] <= h_prompt.shape[0]:
+            raise RuntimeError(
+                f"Full history is shorter than prompt history: {h_full.shape} <= {h_prompt.shape}"
+            )
+        # Note: there can be more than one response, so the response has the same number of dims as prompt
+        response_histories.append(h_full[h_prompt.shape[0] :])
+
+    # Check if all responses have the same shape
+    shapes = [r.shape for r in response_histories]
+    if len(set(shapes)) > 1:
+        # Different shapes detected - pad to the same length
+        max_length = max(r.shape[0] for r in response_histories)
+        padded_responses = []
+        for response in response_histories:
+            if response.shape[0] < max_length:
+                # Pad with empty messages using "<none>" role
+                padding_needed = max_length - response.shape[0]
+                padding_history = History(
+                    role="<none>", content="", batch_size=(padding_needed,)
+                )
+                padded_response = response.extend(padding_history, inplace=False)
+                padded_responses.append(padded_response)
+            else:
+                padded_responses.append(response)
+        return torch.stack(padded_responses)
+
+    return torch.stack(response_histories)

@@ -29,11 +29,11 @@
 
 TorchRL now includes a comprehensive **LLM API** for post-training and fine-tuning of language models! This new framework provides everything you need for RLHF, supervised fine-tuning, and tool-augmented training:
 
-- 🤖 **Unified LLM Wrappers**: Seamless integration with Hugging Face models and vLLM inference engines
-- 💬 **Conversation Management**: Advanced `History` class for multi-turn dialogue with automatic chat template detection
-- 🛠️ **Tool Integration**: Built-in support for Python code execution, function calling, and custom tool transforms
-- 🎯 **Specialized Objectives**: GRPO (Group Relative Policy Optimization) and SFT loss functions optimized for language models
-- ⚡ **High-Performance Collectors**: Async data collection with distributed training support
+- 🤖 **Unified LLM Wrappers**: Seamless integration with Hugging Face models and vLLM inference engines - more to come!
+- 💬 **Conversation Management**: Advanced [`History`](torchrl/data/llm/history.py) class for multi-turn dialogue with automatic chat template detection
+- 🛠️ **Tool Integration**: [Built-in support](torchrl/envs/llm/transforms/) for Python code execution, function calling, and custom tool transforms
+- 🎯 **Specialized Objectives**: [GRPO](torchrl/objectives/llm/grpo.py) (Group Relative Policy Optimization) and [SFT](torchrl/objectives/llm/sft.py) loss functions optimized for language models
+- ⚡ **High-Performance Collectors**: [Async data collection](torchrl/collectors/llm/) with distributed training support
 - 🔄 **Flexible Environments**: Transform-based architecture for reward computation, data loading, and conversation augmentation
 
 The LLM API follows TorchRL's modular design principles, allowing you to mix and match components for your specific use case. Check out the [complete documentation](https://pytorch.org/rl/main/reference/llms.html) and [GRPO implementation example](https://github.com/pytorch/rl/tree/main/sota-implementations/grpo) to get started!
