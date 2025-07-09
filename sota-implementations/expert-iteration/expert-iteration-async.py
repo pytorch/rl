@@ -31,8 +31,6 @@ from ei_utils import (
     compute_device_allocation,
     create_cosine_scheduler_with_warmup,
     get_inference_model,
-    get_ref_model,
-    get_tokenizer,
     get_train_model,
     log_training_metrics,
     make_env,
@@ -60,8 +58,6 @@ from torchrl.data import (
 )
 from torchrl.data.llm.topk import TopKRewardSelector
 from torchrl.data.replay_buffers.ray_buffer import RayReplayBuffer
-from torchrl.envs.llm import GSM8KEnv, RetrieveLogProb
-from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
 from torchrl.objectives.llm.sft import SFTLoss
 
 
@@ -81,9 +77,6 @@ def setup_environment() -> None:
     # Ensure CUDA is using the correct dtype
     if torch.cuda.is_available():
         torch.cuda.set_device("cuda:0")
-
-
-
 
 
 def train(

@@ -66,7 +66,7 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
     # Setup environment
     if cfg.env.dataset == "gsm8k":
         from torchrl.envs.llm import GSM8KEnv
-        
+
         env = GSM8KEnv(
             repeats=cfg.env.repeats,
             tokenizer=train_tokenizer,
