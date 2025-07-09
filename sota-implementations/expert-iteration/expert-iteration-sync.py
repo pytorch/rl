@@ -195,8 +195,8 @@ def train(
 
     # Create local wandb logger for training metrics
     wandb_config = {
-        "project": "ei-async",
-        "exp_name": "-".join(["ei-async"] + experiment_name),
+        "project": "ei-sync",
+        "exp_name": "-".join(["ei-sync"] + experiment_name),
     }
     wandb_logger = WandbLogger(**wandb_config)
 
@@ -327,7 +327,7 @@ def train(
                     while not log_queue.empty():
                         logs = log_queue.get()
                         for k, v in logs.items():
-                            wandb_logger.log_scalar(k, v)
+                            wandb_logger.log_scalar(k, v, step=global_step)
 
                 # Update policy weights
                 if (

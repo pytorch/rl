@@ -395,7 +395,6 @@ def get_hf_model(
         # Configure training settings based on FSDP usage
         if fsdp != "" and fsdp_config is not None:
             torchrl_logger.info("Configurations for FSDP")
-            bnb_config_params = {"bnb_4bit_quant_storage": torch_dtype}
         else:
             pass
 
