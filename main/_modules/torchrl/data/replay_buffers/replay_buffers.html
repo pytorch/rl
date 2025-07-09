@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+4914302) &#x25BC</span></a>
     </div>
     
 
@@ -1124,7 +1124,18 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transform</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_transform</span><span class="p">):</span>
             <span class="k">with</span> <span class="n">_set_dispatch_td_nn_modules</span><span class="p">(</span><span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">data</span><span class="p">)):</span>
-                <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transform</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+                <span class="n">make_none</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="c1"># Transforms usually expect a time batch dimension when called within a RB, so we unsqueeze the data temporarily</span>
+                <span class="n">is_tc</span> <span class="o">=</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+                <span class="k">with</span> <span class="n">data</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">if</span> <span class="n">is_tc</span> <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="k">as</span> <span class="n">data_unsq</span><span class="p">:</span>
+                    <span class="n">data_unsq_r</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transform</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">data_unsq</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">is_tc</span> <span class="ow">and</span> <span class="n">data_unsq_r</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="c1"># this is a no-op whenever the result matches the input</span>
+                        <span class="n">data_unsq</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">data_unsq_r</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">make_none</span> <span class="o">=</span> <span class="n">data_unsq_r</span> <span class="ow">is</span> <span class="kc">None</span>
+                <span class="k">if</span> <span class="n">make_none</span><span class="p">:</span>
+                    <span class="n">data</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">ndim</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add</span><span class="p">(</span><span class="n">data</span><span class="p">)</span></div>
