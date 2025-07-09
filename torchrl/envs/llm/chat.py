@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, TYPE_CHECKING
 
 import torch
 from tensordict import lazy_stack, TensorDictBase
@@ -16,6 +16,9 @@ from torchrl.envs import EnvBase, TransformedEnv
 
 from torchrl.envs.llm.transforms.dataloading import DataLoadingPrimer
 from torchrl.modules.llm.policies.common import ChatHistory, Text, Tokens
+
+if TYPE_CHECKING:
+    import transformers
 
 
 def _default_collate_fn(batch):
