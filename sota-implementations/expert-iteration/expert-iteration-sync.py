@@ -15,7 +15,7 @@ import hydra
 
 from torchrl import torchrl_logger
 from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
-from torchrl.data.llm.chat import History
+from torchrl.data.llm.history import History
 from torchrl.record.loggers.wandb import WandbLogger
 
 try:
@@ -33,9 +33,9 @@ from ei_utils import (
     compute_device_allocation,
     create_cosine_scheduler_with_warmup,
     get_inference_model,
-    get_ref_model,
-    get_tokenizer,
     get_train_model,
+    log_training_metrics,
+    make_env,
     make_weight_updater,
     RemoteDataLogger,
 )
@@ -55,9 +55,9 @@ from torchrl.collectors.llm import RayLLMCollector
 from torchrl.data import LazyStackStorage, ReplayBuffer, SamplerWithoutReplacement
 from torchrl.data.llm.topk import TopKRewardSelector
 from torchrl.data.replay_buffers.ray_buffer import RayReplayBuffer
-from torchrl.envs.llm import GSM8KEnv, RetrieveLogProb
-from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
 from torchrl.objectives.llm.sft import SFTLoss
+
+DEFAULT_DIALOG_TURNS_PER_BATCH = 256
 
 
 def setup_environment() -> None:
@@ -76,58 +76,6 @@ def setup_environment() -> None:
     # Ensure CUDA is using the correct dtype
     if torch.cuda.is_available():
         torch.cuda.set_device("cuda:0")
-
-
-def make_env(cfg: DictConfig, devices: list[int] | None = None):
-    """Create the environment with proper device allocation.
-
-    Args:
-        cfg: The configuration object
-
-    Returns:
-        The configured environment
-    """
-    # Create reference model with proper device allocation
-    # For the collector actor, we want inference_model devices first, then ref_model devices
-    train_tokenizer = get_tokenizer(cfg)
-
-    # Get device information
-    num_inf_devices = cfg.inference_model.num_devices
-    num_ref_devices = cfg.ref_model.num_devices
-    num_inf_devices + num_ref_devices
-
-    # Create a new config with adjusted device assignments
-    ref_cfg = DictConfig(dict(cfg))
-    ref_model = get_ref_model(ref_cfg, train_tokenizer, devices=devices)
-
-    # Setup environment
-    if cfg.env.dataset == "gsm8k":
-        env = GSM8KEnv(
-            repeats=cfg.env.repeats,
-            tokenizer=train_tokenizer,
-            num_envs=cfg.env.num_envs,
-            device="cpu",
-        )
-    else:  # ifeval
-        env = IFEvalEnv(
-            repeats=cfg.env.repeats,
-            tokenizer=train_tokenizer,
-            num_envs=cfg.env.num_envs,
-            device="cpu",
-        )
-
-    # Pass device directly to KLRewardTransform - Since, for Ray, the local device is always 0
-    # we can just use 0 here.
-    device = torch.device("cuda:0")
-    env = env.append_transform(
-        RetrieveLogProb(
-            actor=ref_model,
-            assistant_only=True,
-            tokenizer_kwargs={"chat_template_name": "qwen"},
-            device=device,
-        )
-    )
-    return env
 
 
 def train(
@@ -160,7 +108,9 @@ def train(
         kl_to_ref_coeff=cfg.train.kl_to_ref_coeff,
         tokenizer=train_tokenizer,
         tokenizer_kwargs={"chat_template_name": "qwen"},
-        device=train_device,
+        device=torch.device(f"cuda:{train_device}")
+        if train_device is not None
+        else None,
         loss_function=cfg.train.loss_function,
         beta=cfg.train.minor_sft_beta,
     )
@@ -245,8 +195,8 @@ def train(
 
     # Create local wandb logger for training metrics
     wandb_config = {
-        "project": "ei-async",
-        "exp_name": "-".join(["ei-async"] + experiment_name),
+        "project": "ei-sync",
+        "exp_name": "-".join(["ei-sync"] + experiment_name),
     }
     wandb_logger = WandbLogger(**wandb_config)
 
@@ -257,7 +207,6 @@ def train(
     # Training loop
     torchrl_logger.info("Starting training loop.")
     pbar = tqdm.tqdm(total=cfg.train.total_dialog_turns)
-    metrics = {}  # Initialize metrics dict
     grad_norm = 0.0  # Initialize grad_norm
     data_read_count = 0
 
@@ -287,7 +236,7 @@ def train(
                 )
                 # For logging purposes, we get the last element of the history
                 # and convert it to a string
-                history: History = batch.view(-1)[0]["next", "history"]
+                history: History = batch.view(-1)[0]["next", "history", "prompt"]
                 history_str: list[str] | str = history.apply_chat_template(
                     tokenizer=train_tokenizer
                 )
@@ -355,68 +304,30 @@ def train(
 
                 # Update metrics
                 if (global_step % cfg.train.logging_frequency) == 0:
-                    with torch.no_grad():
-                        rb_content = replay_buffer[:]
-                        batch_policy_version = (
-                            batch["next", "policy_version"].view(-1).min()
-                        )
-                        batch_policy_age = (
-                            collector.policy_version - batch_policy_version
-                        )
-                        metrics = {
-                            "reward from buffer": float(
-                                torch.cat(
-                                    rb_content.get(("next", "reward"), as_list=True)
-                                ).mean()
-                            ),
-                            "reward from batch": float(batch["next", "reward"].mean()),
-                            "seq_length from buffer": float(
-                                torch.tensor(
-                                    [
-                                        t.numel()
-                                        for t in rb_content.get(
-                                            "tokens_response", as_list=True
-                                        )
-                                    ],
-                                    dtype=torch.float,
-                                ).mean()
-                            ),
-                            "loss_sft, from loss": float(loss.loss_sft),
-                            "loss_kl_to_ref, from loss": float(loss.loss_kl_to_ref),
-                            "kl_to_ref, from loss": float(loss.kl_to_ref),
-                            "grad_norm": float(grad_norm)
-                            if global_step % cfg.train.gradient_accumulation_steps == 0
-                            else metrics.get("grad_norm", 0.0),
-                            "write_count, from buffer": int(replay_buffer.write_count),
-                            # how many gradient steps per write
-                            "gradient_step_throughput (gradient step per write)": float(
-                                global_step / replay_buffer.write_count
-                            ),
-                            # how many optim steps per write
-                            "optim_step_throughput (optim step per write)": float(
-                                (global_step // cfg.train.gradient_accumulation_steps)
-                                / replay_buffer.write_count
-                            ),
-                            "data_read_count (total)": data_read_count,
-                            "current_policy_version (collector)": collector.policy_version,
-                            # FIXME: Assume batch is a single trajectory
-                            # FIXME: The addition of the transform after the env instantiation + _shuttle creation
-                            #  is messed up - we need the next data
-                            "batch_policy_version (sampled batch)": batch_policy_version,
-                            "batch_policy_age (sampled batch)": batch_policy_age,
-                            "throughput (steps per second)": float(
-                                global_step / (time.time() - start_time)
-                            ),
-                            "learning_rate": float(optimizer.param_groups[0]["lr"]),
-                            "optim_step": optim_step,
-                        }
-                        for name, value in metrics.items():
-                            wandb_logger.log_scalar(name, value, step=global_step)
-                        wandb_logger.log_str("history", history_str, step=global_step)
-                        while not log_queue.empty():
-                            logs = log_queue.get()
-                            for k, v in logs.items():
-                                wandb_logger.log_scalar(k, v)
+                    log_training_metrics(
+                        wandb_logger=wandb_logger,
+                        replay_buffer=replay_buffer,
+                        batch=batch,
+                        loss=loss,
+                        grad_norm=grad_norm,
+                        global_step=global_step,
+                        data_read_count=data_read_count,
+                        collector=collector,
+                        start_time=start_time,
+                        gradient_accumulation_steps=cfg.train.gradient_accumulation_steps,
+                        history_str=history_str,
+                    )
+                    # Log additional metrics
+                    wandb_logger.log_scalar(
+                        "learning_rate",
+                        float(optimizer.param_groups[0]["lr"]),
+                        step=global_step,
+                    )
+                    wandb_logger.log_scalar("optim_step", optim_step, step=global_step)
+                    while not log_queue.empty():
+                        logs = log_queue.get()
+                        for k, v in logs.items():
+                            wandb_logger.log_scalar(k, v, step=global_step)
 
                 # Update policy weights
                 if (
@@ -456,6 +367,9 @@ def train(
         for key, val in timeit.todict().items():
             wandb_logger.log_scalar(f"timeit/{key}", val)
         timeit.reset()
+
+        if cfg.train.empty_replay_buffer:
+            replay_buffer.empty(empty_write_count=False)
 
     pbar.close()
     collector.shutdown()
@@ -521,11 +435,18 @@ def main(cfg):
     torchrl_logger.info(f"Starting replay buffer with {replay_buffer_config=}")
     rb_size = cfg.train.buffer_size
     if rb_size is None:
-        rb_size = int(
-            math.ceil(
-                cfg.train.dialog_turns_per_batch * cfg.train.topk_size / cfg.env.repeats
+        if cfg.train.empty_replay_buffer:
+            # we can just set a big number, the buffer will be emptied anyway
+            rb_size = 1000000
+        else:
+            dialog_turns_per_batch = cfg.train.dialog_turns_per_batch
+            if dialog_turns_per_batch is None:
+                dialog_turns_per_batch = DEFAULT_DIALOG_TURNS_PER_BATCH
+            rb_size = int(
+                math.ceil(
+                    dialog_turns_per_batch * cfg.train.topk_size / cfg.env.repeats
+                )
             )
-        )
     rb = RayReplayBuffer(
         storage=partial(
             LazyStackStorage,
@@ -553,7 +474,7 @@ def main(cfg):
     dialog_turns_per_batch = cfg.train.dialog_turns_per_batch
     if dialog_turns_per_batch is None:
         # Hardcoded for now
-        dialog_turns_per_batch = 256
+        dialog_turns_per_batch = DEFAULT_DIALOG_TURNS_PER_BATCH
 
     collector = RayLLMCollector(
         env=partial(make_env, cfg, devices=device_config["ref_model_devices"]),
@@ -583,9 +504,7 @@ def main(cfg):
 
     # launch training
     ray.get(
-        train_handler.remote(
-            rb, cfg, collector, devices=device_config["train_model_devices"]
-        )
+        train_handler.remote(rb, cfg, collector, device_config["train_model_devices"])
     )
 
 

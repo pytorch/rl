@@ -11,14 +11,28 @@ from .backends import (
     vLLMWorker,
 )
 
-from .policies import CategoricalSequential, TransformersWrapper, vLLMWrapper
+from .policies import (
+    ChatHistory,
+    LLMWrapperBase,
+    LogProbs,
+    Masks,
+    Text,
+    Tokens,
+    TransformersWrapper,
+    vLLMWrapper,
+)
 
 __all__ = [
-    "CategoricalSequential",
+    "LLMWrapperBase",
     "LLMOnDevice",
     "TransformersWrapper",
     "make_vllm_worker",
+    "ChatHistory",
     "stateless_init_process_group",
     "vLLMWorker",
     "vLLMWrapper",
+    "Text",
+    "LogProbs",
+    "Masks",
+    "Tokens",
 ]

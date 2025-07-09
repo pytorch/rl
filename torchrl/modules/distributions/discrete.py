@@ -823,6 +823,7 @@ class LLMMaskedCategorical(D.Distribution):
             # For token-level masking, we need to check if specific tokens are masked
 
             logits = self._original_logits
+            value = value.masked_fill(~self._mask, self.ignore_index)
         if value.ndim > 1:
             # Reshape for cross_entropy: (batch, seq_len, vocab) -> (batch*seq_len, vocab)
             logits_flat = logits.reshape(-1, logits.size(-1))

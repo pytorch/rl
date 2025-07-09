@@ -8,7 +8,7 @@ import contextlib
 import warnings
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, TYPE_CHECKING
 
 import torch
 from tensordict import NestedKey, TensorClass, TensorDictBase
@@ -17,6 +17,9 @@ from tensordict.utils import _zip_strict
 from torchrl.data import History
 from torchrl.modules.llm.policies.transformers_wrapper import TransformersWrapper
 from torchrl.objectives.common import LossModule
+
+if TYPE_CHECKING:
+    import transformers
 
 
 def sft_loss(summed_log_probs: torch.Tensor, reduction: str) -> torch.Tensor:
@@ -246,9 +249,9 @@ class SFTLoss(LossModule):
                 Defaults to ``"log_probs"``.
         """
 
-        history: NestedKey = ("next", "history")
-        ref_log_prob: NestedKey = ("next", "ref_log_prob")
-        log_probs: NestedKey = "log_probs"
+        history: NestedKey = ("history", "full")
+        ref_log_prob: NestedKey = ("next", "ref_log_probs", "full")
+        log_probs: NestedKey = ("log_probs", "full")
 
     default_keys = _AcceptedKeys
     tensor_keys: _AcceptedKeys
@@ -335,23 +338,28 @@ class SFTLoss(LossModule):
         # Gather history
         history: History = tensordict[self.tensor_keys.history]
 
-        # Apply tokenizer to history and gather mask
-        with torch.device(
-            self.device
-        ) if self.device is not None else contextlib.nullcontext():
-            token_struct = history.apply_chat_template(
-                tokenizer=self.tokenizer, **self.tokenizer_kwargs
+        # Try to get mask from td
+        token_struct = None
+        assistant_masks = tensordict.get(("masks", "all_assistant_mask"), as_list=True)
+        attention_mask = tensordict.get(("masks", "all_attention_mask"), as_list=True)
+        if assistant_masks is None:
+            # Apply tokenizer to history and gather mask
+            with torch.device(
+                self.device
+            ) if self.device is not None else contextlib.nullcontext():
+                token_struct = history.apply_chat_template(
+                    tokenizer=self.tokenizer, **self.tokenizer_kwargs
+                )
+            if "assistant_masks" not in token_struct:
+                raise ValueError(
+                    f"Assistant masks are not present in the token structure: {token_struct=}."
+                )
+            assistant_masks = token_struct.get(
+                "assistant_masks",
+                as_list=True,
             )
-        if "assistant_masks" not in token_struct:
-            raise ValueError(
-                f"Assistant masks are not present in the token structure: {token_struct=}."
-            )
-        assistant_masks = token_struct.get(
-            "assistant_masks",
-            as_list=True,
-        )
+            attention_mask = token_struct.get("attention_mask", as_list=True)
         assistant_masks = [mask.bool() for mask in assistant_masks]
-        attention_mask = token_struct.get("attention_mask", as_list=True)
         attention_mask = [mask.bool() for mask in attention_mask]
         assistant_masks = [
             mask & a_mask for mask, a_mask in zip(assistant_masks, attention_mask)
@@ -359,12 +367,8 @@ class SFTLoss(LossModule):
 
         if not any(mask.any(-1).all() for mask in assistant_masks):
             raise ValueError("Some inputs have no valid assistant masks.")
+
         input_loss = tensordict.select(self.tensor_keys.history)
-        if (
-            isinstance(self.tensor_keys.history, tuple)
-            and self.tensor_keys.history[0] == "next"
-        ):
-            input_loss = input_loss["next"]
 
         with torch.device(
             self.device
@@ -376,13 +380,19 @@ class SFTLoss(LossModule):
             self.tensor_keys.log_probs,
             as_list=True,
         )
+
         # apply mask
         if not all(
             mask.shape == lp.shape
             for mask, lp in _zip_strict(assistant_masks, log_probs)
         ):
+            if token_struct is not None:
+                suffix = f"Tokens from current template: {[inp.shape for inp in token_struct.get('input_ids', as_padded_tensor=True)]}"
+            else:
+                suffix = ""
             raise ValueError(
-                f"Assistant masks and log_probs have different shapes: {[mask.shape for mask in assistant_masks]} vs {[lp.shape for lp in log_probs]}. Tokens from current template: {[inp.shape for inp in token_struct.get('input_ids', as_padded_tensor=True)]}"
+                f"Assistant masks and log_probs have different shapes: {[mask.shape for mask in assistant_masks]} vs "
+                f"{[lp.shape for lp in log_probs]}. {suffix}"
             )
 
         log_probs_masked = [
@@ -413,11 +423,17 @@ class SFTLoss(LossModule):
                 )
                 if ref_log_probs is None:
                     raise ValueError(
-                        "Reference log probs not found in tensordict but kl_to_ref_coeff was set"
+                        f"Reference log probs not found in tensordict at key {self.tensor_keys.ref_log_prob} but kl_to_ref_coeff was set. "
+                        f"Existing keys in tensordict: {set(tensordict.keys(include_nested=True, leaves_only=True))}"
                     )
 
+                log_probs_masked = [
+                    lp.masked_fill(~mask, 0.0)
+                    for lp, mask in _zip_strict(log_probs, assistant_masks)
+                ]
+
                 loss_kl, kl_penalty = self._kl_to_ref(
-                    [lp[mask] for lp, mask in _zip_strict(log_probs, assistant_masks)],
+                    log_probs_masked,
                     ref_log_probs,
                 )
                 output = SFTLossOutput(
@@ -431,7 +447,7 @@ class SFTLoss(LossModule):
             ref_log_probs = tensordict.get(self.tensor_keys.ref_log_prob, as_list=True)
             if ref_log_probs is None:
                 raise ValueError(
-                    f"Reference log probs not found at {self.tensor_keys.ref_log_prob=} in tensordict but loss_function is 'minor_sft'"
+                    f"Reference log probs not found at {self.tensor_keys.ref_log_prob=} in tensordict with keys {tensordict.keys()} but loss_function is 'minor_sft'"
                 )
 
             # we need to re-sum ref_log_probs as they are not summed per-sequence
@@ -445,11 +461,12 @@ class SFTLoss(LossModule):
             )
             if self.kl_to_ref_coeff is not None:
                 with torch.no_grad():
+                    log_probs_masked = [
+                        lp.masked_fill(~mask, 0.0)
+                        for lp, mask in _zip_strict(log_probs, assistant_masks)
+                    ]
                     loss_kl, kl_penalty = self._kl_to_ref(
-                        [
-                            lp[mask]
-                            for lp, mask in _zip_strict(log_probs, assistant_masks)
-                        ],
+                        log_probs_masked,
                         ref_log_probs,
                     )
                 output = SFTLossOutput(

@@ -383,6 +383,17 @@ class ReplayBuffer:
     def dim_extend(self):
         return self._dim_extend
 
+    @property
+    def batch_size(self):
+        """The batch size of the replay buffer.
+
+        The batch size can be overriden by setting the `batch_size` parameter in the :meth:`sample` method.
+
+        It defines both the number of samples returned by :meth:`sample` and the number of samples that are
+        yielded by the :class:`ReplayBuffer` iterator.
+        """
+        return self._batch_size
+
     @dim_extend.setter
     def dim_extend(self, value):
         if (
@@ -783,9 +794,13 @@ class ReplayBuffer:
 
         return data, info
 
-    def empty(self):
-        """Empties the replay buffer and reset cursor to 0."""
-        self._writer._empty()
+    def empty(self, empty_write_count: bool = True):
+        """Empties the replay buffer and reset cursor to 0.
+
+        Args:
+            empty_write_count (bool, optional): Whether to empty the write_count attribute. Defaults to `True`.
+        """
+        self._writer._empty(empty_write_count=empty_write_count)
         self._sampler._empty()
         self._storage._empty()
 

@@ -173,7 +173,7 @@ class LLMCollector(SyncDataCollector):
             # disguise the queue as a replay buffer
             replay_buffer = _QueueAsRB(queue)
         if dialog_turns_per_batch is None and yield_completed_trajectories:
-            dialog_turns_per_batch = 0
+            dialog_turns_per_batch = 1
         super().__init__(
             create_env_fn=env,
             policy=policy,
@@ -189,6 +189,9 @@ class LLMCollector(SyncDataCollector):
             extend_buffer=True,
             postproc=postproc,
         )
+        if hasattr(self.policy, "register_collector"):
+            self.policy.register_collector(self)
+
         if yield_only_last_steps is None:
             yield_only_last_steps = False
 
@@ -322,6 +325,8 @@ class LLMCollector(SyncDataCollector):
             return trajectory.view(-1)
         return trajectory
 
+    _result_numel = 0
+
     def _rollout_yield_trajs(self) -> TensorDictBase:  # A simplified version of rollout
         if self._shuttle is None:
             raise RuntimeError("Data shuttle not found")
@@ -332,8 +337,12 @@ class LLMCollector(SyncDataCollector):
         collected_steps = 0
         dones = torch.zeros(self.env.batch_size, dtype=torch.bool)
         while True:
-            if self._trajectory_queue:
+            if self._result_numel >= self.dialog_turns_per_batch:
                 break
+            elif self.verbose:
+                torchrl_logger.info(
+                    f"LLMCollector: Collected {collected_steps} steps with {self._result_numel} elements in the resulting batch, over {self.dialog_turns_per_batch} requested."
+                )
             env_input = self.policy(next_output)
             cur_output, next_output = self.env.step_and_maybe_reset(env_input)
             # for i in range(cur_output.numel()):
@@ -356,18 +365,24 @@ class LLMCollector(SyncDataCollector):
             if dones.any():
                 for idx in dones.nonzero(as_tuple=True)[0].tolist():
                     if not self.yield_only_last_steps:
-                        self._trajectory_queue.append(
-                            lazy_stack(self._yield_queues[idx], -1)
-                        )
+                        _result = lazy_stack(self._yield_queues[idx], -1)
+                        self._trajectory_queue.append(_result)
                     else:
                         # FIXME: We need to increment the step count here because iterator() won't
                         #  see the extra steps
                         # We use lazy-stack because unsqueeze doesn't nest the strings in lists
-                        self._trajectory_queue.append(
-                            lazy_stack([self._yield_queues[idx][-1]])
-                        )
+                        _result = lazy_stack([self._yield_queues[idx][-1]])
+                        self._trajectory_queue.append(_result)
+                    self._result_numel += _result.numel()
                     self._yield_queues[idx].clear()
-        result = self._trajectory_queue.popleft()
+        result = [self._trajectory_queue.popleft()]
+        elt = result[0].numel()
+        self._result_numel -= result[0].numel()
+        while elt < self.dialog_turns_per_batch:
+            result.append(self._trajectory_queue.popleft())
+            elt += result[-1].numel()
+            self._result_numel -= result[-1].numel()
+        result = torch.cat(result, -1)
         if self.verbose:
             torchrl_logger.info(
                 f"LLMCollector: Yielding completed trajectory with shape {result.shape}."

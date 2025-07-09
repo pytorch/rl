@@ -58,7 +58,7 @@ class Writer(ABC):
         ...
 
     @abstractmethod
-    def _empty(self):
+    def _empty(self, empty_write_count: bool = True) -> None:
         ...
 
     @abstractmethod
@@ -122,7 +122,7 @@ class ImmutableDatasetWriter(Writer):
     def extend(self, data: Sequence) -> torch.Tensor:
         raise RuntimeError(self.WRITING_ERR)
 
-    def _empty(self):
+    def _empty(self, empty_write_count: bool = True) -> None:
         raise RuntimeError(self.WRITING_ERR)
 
     def dumps(self, path):
@@ -189,7 +189,7 @@ class RoundRobinWriter(Writer):
         else:
             batch_size = len(tree_leaves(data)[0])
         if batch_size == 0:
-            raise RuntimeError("Expected at least one element in extend.")
+            raise RuntimeError(f"Expected at least one element in extend. Got {data=}")
         device = data.device if hasattr(data, "device") else None
         max_size_along0 = self._storage._max_size_along_dim0(batched_data=data)
         index = (
@@ -215,9 +215,10 @@ class RoundRobinWriter(Writer):
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         self._cursor = state_dict["_cursor"]
 
-    def _empty(self):
+    def _empty(self, empty_write_count: bool = True) -> None:
         self._cursor = 0
-        self._write_count = 0
+        if empty_write_count:
+            self._write_count = 0
 
     @property
     def _cursor(self):
@@ -572,9 +573,11 @@ class TensorDictMaxValueWriter(Writer):
             ent.mark_update(index)
         return index
 
-    def _empty(self) -> None:
+    def _empty(self, empty_write_count: bool = True) -> None:
         self._cursor = 0
         self._current_top_values = []
+        if empty_write_count:
+            self._write_count = 0
 
     def __getstate__(self):
         if get_spawning_popen() is not None:
@@ -664,7 +667,7 @@ class WriterEnsemble(Writer):
         for writer in self._writers:
             writer._rng = value
 
-    def _empty(self):
+    def _empty(self, empty_write_count: bool = True) -> None:
         raise NotImplementedError
 
     def dumps(self, path: Path):

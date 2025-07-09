@@ -192,7 +192,7 @@ class MultiStepTransform(Transform):
             self._validate()
 
         total_cat = self._append_tensordict(tensordict)
-        if total_cat.shape[-1] >= self.n_steps:
+        if total_cat.shape[-1] > self.n_steps:
             out = _multi_step_func(
                 total_cat,
                 done_key=self.done_key,
