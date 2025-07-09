@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import time
 
-from typing import Any, Callable, Literal
+from typing import Any, Literal
 
 import torch
 from omegaconf import DictConfig
@@ -119,7 +119,10 @@ def get_train_model(
 
 
 def get_inference_model(
-    cfg: DictConfig, devices: list[int] | None = None, make_ray_worker: bool = True
+    cfg: DictConfig,
+    devices: list[int] | None = None,
+    make_ray_worker: bool = True,
+    tokenizer: PreTrainedTokenizer | None = None,
 ) -> vLLMWrapper:
     """Creates the vLLM-based inference model for fast generation.
 
@@ -132,6 +135,7 @@ def get_inference_model(
             Expected to have inference_model section with vLLM-specific parameters
             like gpu_memory_utilization and generation settings.
         make_ray_worker (bool, optional): Whether to make a ray worker. Default: True
+        tokenizer (PreTrainedTokenizer | None, optional): The tokenizer to use. Default: None
 
     Returns:
         vLLMWrapper: The wrapped vLLM model ready for inference.
@@ -152,6 +156,9 @@ def get_inference_model(
 
     model_name = cfg.model.name
 
+    if tokenizer is None:
+        tokenizer = get_tokenizer(cfg)
+
     # vLLM handles device mapping internally
     inference_server = make_vllm_worker(
         model_name=model_name,
@@ -167,7 +174,9 @@ def get_inference_model(
     policy = vLLMWrapper(
         inference_server,
         input_mode="history",
-        return_log_probs=False,
+        chat_template_name="qwen",
+        return_log_probs=True,
+        tokenizer=tokenizer,
         pad_output=False,
         generate_kwargs={
             "max_tokens": cfg.inference_model.max_tokens,
@@ -329,7 +338,7 @@ def get_hf_model(
             torchrl_logger.info("Configurations for FSDP")
             bnb_config_params = {"bnb_4bit_quant_storage": torch_dtype}
         else:
-            bnb_config_params = {}
+            pass
 
         # Enable Quantization
         if quantize:
@@ -604,18 +613,14 @@ def log_training_metrics(
 
         metrics = {
             "reward from buffer": float(
-                torch.cat(
-                    rb_content.get(("next", "reward"), as_list=True)
-                ).mean()
+                torch.cat(rb_content.get(("next", "reward"), as_list=True)).mean()
             ),
             "reward from batch": float(batch["next", "reward"].mean()),
             "seq_length from buffer": float(
                 torch.tensor(
                     [
                         t.numel()
-                        for t in rb_content.get(
-                            "tokens_response", as_list=True
-                        )
+                        for t in rb_content.get("tokens_response", as_list=True)
                     ],
                     dtype=torch.float,
                 ).mean()
@@ -633,8 +638,7 @@ def log_training_metrics(
             ),
             # how many optim steps per write
             "optim_step_throughput (optim step per write)": float(
-                (global_step // gradient_accumulation_steps)
-                / replay_buffer.write_count
+                (global_step // gradient_accumulation_steps) / replay_buffer.write_count
             ),
             "data_read_count (total)": data_read_count,
             "current_policy_version (collector)": collector.policy_version,

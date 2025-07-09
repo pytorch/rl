@@ -161,7 +161,9 @@ def train(
         kl_to_ref_coeff=cfg.train.kl_to_ref_coeff,
         tokenizer=train_tokenizer,
         tokenizer_kwargs={"chat_template_name": "qwen"},
-        device=torch.device(f"cuda:{train_device}") if train_device is not None else None,
+        device=torch.device(f"cuda:{train_device}")
+        if train_device is not None
+        else None,
         loss_function=cfg.train.loss_function,
         beta=cfg.train.minor_sft_beta,
     )
@@ -258,7 +260,6 @@ def train(
     # Training loop
     torchrl_logger.info("Starting training loop.")
     pbar = tqdm.tqdm(total=cfg.train.total_dialog_turns)
-    metrics = {}  # Initialize metrics dict
     grad_norm = 0.0  # Initialize grad_norm
     data_read_count = 0
 
@@ -370,7 +371,11 @@ def train(
                         history_str=history_str,
                     )
                     # Log additional metrics
-                    wandb_logger.log_scalar("learning_rate", float(optimizer.param_groups[0]["lr"]), step=global_step)
+                    wandb_logger.log_scalar(
+                        "learning_rate",
+                        float(optimizer.param_groups[0]["lr"]),
+                        step=global_step,
+                    )
                     wandb_logger.log_scalar("optim_step", optim_step, step=global_step)
                     while not log_queue.empty():
                         logs = log_queue.get()
@@ -542,9 +547,7 @@ def main(cfg):
 
     # launch training
     ray.get(
-        train_handler.remote(
-            rb, cfg, collector, device_config["train_model_devices"]
-        )
+        train_handler.remote(rb, cfg, collector, device_config["train_model_devices"])
     )
 
 
