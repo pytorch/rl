@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+f287bb3) &#x25BC</span></a>
+      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+5a5f63d) &#x25BC</span></a>
     </div>
     
 
@@ -1276,6 +1276,73 @@
             <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">log_prob_key</span><span class="p">,</span> <span class="s2">&quot;response&quot;</span><span class="p">),</span> <span class="o">**</span><span class="n">get_kwargs</span><span class="p">)</span>
         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;log_prob not callable when generate=True.&quot;</span><span class="p">)</span></div>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_extract_responses_from_full_histories</span><span class="p">(</span>
+    <span class="n">text_full</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="n">prompt_histories</span><span class="p">,</span>
+    <span class="n">chat_template_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">tokenizer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">History</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Extract response histories from full text histories.</span>
+
+<span class="sd">    This function parses the full text back to history objects and extracts</span>
+<span class="sd">    the response portions (everything after the prompt).</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        text_full: List of full text strings to parse</span>
+<span class="sd">        prompt_histories: The original prompt histories</span>
+<span class="sd">        chat_template_name: Optional chat template name for parsing</span>
+<span class="sd">        tokenizer: Optional tokenizer for template detection</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Stacked History object with response portions</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        RuntimeError: If full history is shorter than prompt history</span>
+<span class="sd">        RuntimeError: If parsing produces inconsistent batch shapes</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_zip_strict</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span>
+
+    <span class="c1"># Extract response portions by processing each element individually</span>
+    <span class="c1"># This avoids the stacking issue when different batch elements produce</span>
+    <span class="c1"># different numbers of responses</span>
+    <span class="n">response_histories</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">full_histories</span> <span class="o">=</span> <span class="n">History</span><span class="o">.</span><span class="n">from_text</span><span class="p">(</span>
+        <span class="n">text_full</span><span class="p">,</span> <span class="n">chat_template_name</span><span class="o">=</span><span class="n">chat_template_name</span><span class="p">,</span> <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span>
+    <span class="p">)</span>
+    <span class="k">for</span> <span class="n">h_prompt</span><span class="p">,</span> <span class="n">h_full</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span>
+        <span class="n">prompt_histories</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">full_histories</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">h_full</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">h_prompt</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Full history is shorter than prompt history: </span><span class="si">{</span><span class="n">h_full</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> &lt;= </span><span class="si">{</span><span class="n">h_prompt</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="c1"># Note: there can be more than one response, so the response has the same number of dims as prompt</span>
+        <span class="n">response_histories</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">h_full</span><span class="p">[</span><span class="n">h_prompt</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="p">:])</span>
+
+    <span class="c1"># Check if all responses have the same shape</span>
+    <span class="n">shapes</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span><span class="o">.</span><span class="n">shape</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">response_histories</span><span class="p">]</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">shapes</span><span class="p">))</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="c1"># Different shapes detected - pad to the same length</span>
+        <span class="n">max_length</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">r</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">response_histories</span><span class="p">)</span>
+        <span class="n">padded_responses</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">response</span> <span class="ow">in</span> <span class="n">response_histories</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">max_length</span><span class="p">:</span>
+                <span class="c1"># Pad with empty messages using &quot;&lt;none&gt;&quot; role</span>
+                <span class="n">padding_needed</span> <span class="o">=</span> <span class="n">max_length</span> <span class="o">-</span> <span class="n">response</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="n">padding_history</span> <span class="o">=</span> <span class="n">History</span><span class="p">(</span>
+                    <span class="n">role</span><span class="o">=</span><span class="s2">&quot;&lt;none&gt;&quot;</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="n">padding_needed</span><span class="p">,)</span>
+                <span class="p">)</span>
+                <span class="n">padded_response</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">padding_history</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+                <span class="n">padded_responses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">padded_response</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">padded_responses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">padded_responses</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">response_histories</span><span class="p">)</span>
 </pre></div>
 
              </article>

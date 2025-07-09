@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+f287bb3) &#x25BC</span></a>
+      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+5a5f63d) &#x25BC</span></a>
     </div>
     
 
@@ -446,6 +446,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch.nn.utils.rnn</span><span class="w"> </span><span class="kn">import</span> <span class="n">pad_sequence</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm.policies.common</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_extract_responses_from_full_histories</span><span class="p">,</span>
     <span class="n">ChatHistory</span><span class="p">,</span>
     <span class="n">LLMWrapperBase</span><span class="p">,</span>
     <span class="n">LogProbs</span><span class="p">,</span>
@@ -1102,16 +1103,11 @@
             <span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="n">history_chat</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">1</span><span class="p">):</span>
                 <span class="n">h</span><span class="o">.</span><span class="n">prompt</span> <span class="o">=</span> <span class="n">history</span>
         <span class="k">with</span> <span class="n">history_chat</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">as</span> <span class="n">history_chat_flat</span><span class="p">:</span>
-            <span class="n">history_chat_flat</span><span class="o">.</span><span class="n">full</span> <span class="o">=</span> <span class="n">full_histories</span> <span class="o">=</span> <span class="n">History</span><span class="o">.</span><span class="n">from_text</span><span class="p">(</span><span class="n">text_full</span><span class="p">)</span>
             <span class="n">prompt_histories</span> <span class="o">=</span> <span class="n">history_chat_flat</span><span class="o">.</span><span class="n">prompt</span>
-            <span class="c1"># iterate over batch</span>
-            <span class="n">h_responses</span> <span class="o">=</span> <span class="p">[]</span>
-            <span class="k">for</span> <span class="n">h_full</span><span class="p">,</span> <span class="n">h_prompt</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span>
-                <span class="n">full_histories</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">prompt_histories</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-            <span class="p">):</span>
-                <span class="k">if</span> <span class="n">h_full</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">h_prompt</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
-                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Full history is shorter than prompt history&quot;</span><span class="p">)</span>
-                <span class="n">h_responses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">h_full</span><span class="p">[</span><span class="n">h_prompt</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="p">:])</span>
+            <span class="c1"># Extract response histories from full text</span>
+            <span class="n">h_responses</span> <span class="o">=</span> <span class="n">_extract_responses_from_full_histories</span><span class="p">(</span>
+                <span class="n">text_full</span><span class="p">,</span> <span class="n">prompt_histories</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">chat_template_name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span>
+            <span class="p">)</span>
             <span class="n">history_chat_flat</span><span class="o">.</span><span class="n">response</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">h_responses</span><span class="p">)</span>
         <span class="n">result</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">history_key</span><span class="p">,</span> <span class="n">history_chat</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">result</span>
