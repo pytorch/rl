@@ -339,6 +339,10 @@ class LLMCollector(SyncDataCollector):
         while True:
             if self._result_numel >= self.dialog_turns_per_batch:
                 break
+            elif self.verbose:
+                torchrl_logger.info(
+                    f"LLMCollector: Collected {collected_steps} steps with {self._result_numel} elements in the resulting batch, over {self.dialog_turns_per_batch} requested."
+                )
             env_input = self.policy(next_output)
             cur_output, next_output = self.env.step_and_maybe_reset(env_input)
             # for i in range(cur_output.numel()):

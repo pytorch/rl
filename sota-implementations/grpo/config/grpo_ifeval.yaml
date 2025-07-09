@@ -17,10 +17,6 @@ env:
   reasoning: false
   # Maximum number of dialog turns per episode.
   max_steps: 2
-  # Whether to group repeated samples together. Grouping will make all the answers to a single prompt to be written
-  # together, whereas a value of false will group multiple prompts in the buffer at a given time.
-  # Batches are usually bigger with group_repeats=false.
-  group_repeats: false
 
 # Base model configuration
 model:

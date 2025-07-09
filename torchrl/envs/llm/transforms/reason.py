@@ -99,16 +99,18 @@ class AddThinkingPrompt(Transform):
     DEFAULT_PROMPTS_EG = [
         "But wait, let me think about this more carefully...",
         "Actually, let me reconsider this...",
-        "Let me think about it step by step...",
+        "But we can do better. Let me think about it step by step...",
         "Wait, I need to double-check my reasoning...",
         "Actually, let me think about it more carefully...",
+        "It looks like I made a mistake. Let me think about it step by step...",
     ]
     DEFAULT_PROMPTS_COG = [
         "But wait, think about this more carefully...",
         "Actually, reconsider this...",
-        "Let's think about it step by step...",
+        "But we can do better. Let's think about it step by step...",
         "Wait, you need to double-check your reasoning...",
         "Actually, think about it more carefully...",
+        "It looks like you made a mistake. Can you see what went wrong? Let's think about it step by step...",
     ]
 
     def __init__(

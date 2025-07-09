@@ -417,8 +417,8 @@ class RetrieveLogProb(Transform):
         log_probs_full_key (NestedKey): the key where the log-probs are stored.
             If not provided, the key will be retrieved from the model's `log_probs_key` attribute
             (i.e., `(model.log_probs_key, "full")`).
-        assistant_only (bool): whether to only retrieve the log-probs of the assistant tokens (i.e., steps of history
-            where the role is `"assistant"`). Defaults to `True`.
+        assistant_only (bool): whether to zero out the log-probs of the non-assistant tokens (i.e., steps of history
+            where the role is not `"assistant"`). Defaults to `True`.
 
             .. note:: When `assistant_only=True`, the model must have `input_mode='history'` to properly identify
                 assistant tokens. For other input modes (`"text"` or `"tokens"`), set `assistant_only=False`.

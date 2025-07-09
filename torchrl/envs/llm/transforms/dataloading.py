@@ -505,6 +505,7 @@ class DataLoadingPrimer(TensorDictPrimer):
             result = self._queue.popleft()
             if result.device != device:
                 result = result.to(device)
+            print(f"{result=}")
             return result
 
         data = next(self.endless_dataloader)
@@ -531,6 +532,7 @@ class DataLoadingPrimer(TensorDictPrimer):
             [d for d in out.unbind(0) for _ in range(max(1, self.repeats))]
         )
         out = self._queue.popleft()
+        print(f"{out=}")
         return out
 
     def set_container(self, container: Transform | EnvBase) -> None:
