@@ -861,7 +861,7 @@ def _extract_responses_from_full_histories(
     prompt_histories,
     chat_template_name: str | None = None,
     tokenizer=None,
-) -> "History":
+) -> History:
     """Extract response histories from full text histories.
 
     This function parses the full text back to history objects and extracts
