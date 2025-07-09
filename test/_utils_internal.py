@@ -9,6 +9,7 @@ import logging
 import os
 import os.path
 import sys
+import sys.version_info
 import time
 import unittest
 import warnings
@@ -53,6 +54,7 @@ if IS_WIN:
 else:
     mp_ctx = "fork"
 
+PYTHON_3_9 = sys.version_info.major == 3 and sys.version_info.minor <= 9
 
 def CARTPOLE_VERSIONED():
     # load gym
@@ -170,7 +172,7 @@ def _set_gym_environments():  # noqa: F811
     _PENDULUM_VERSIONED = "Pendulum-v1"
     _PONG_VERSIONED = "ALE/Pong-v5"
     _BREAKOUT_VERSIONED = "ALE/Breakout-v5"
-    _CLIFFWALKING_VERSIONED = "CliffWalking-v1"
+    _CLIFFWALKING_VERSIONED = "CliffWalking-v1" if not PYTHON_3_9 else "CliffWalking-v0"
 
 
 if _has_gym:
