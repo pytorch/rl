@@ -3012,12 +3012,24 @@ class NonTensor(TensorSpec):
         *,
         ignore_device: bool = False,
     ) -> torch.Tensor | TensorDictBase:
-        return NonTensorData(
+        if self.batched:
+            # feature dim is None
+            feature_dims = 0
+        else:
+            feature_dims = self.feature_dims
+        total_shape = self._safe_shape
+        batch_shape = total_shape[:-feature_dims]
+        feature_shape = total_shape[-feature_dims:]
+        result = NonTensorData(
             val,
             device=self.device,
-            batch_size=self.shape,
-            feature_dims=self.feature_dims,
+            batch_size=feature_shape,
         )
+        if not batch_shape:
+            return result
+        for i in reversed(batch_shape):
+            result = lazy_stack([result.copy() for _ in range(i)])
+        return result
 
 
 class _UnboundedMeta(abc.ABCMeta):
