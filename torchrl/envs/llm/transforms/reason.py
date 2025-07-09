@@ -41,6 +41,9 @@ class AddThinkingPrompt(Transform):
             is added. If `None`, defaults to the value of `edit_last_turn`. Defaults to the same value as `edit_last_turn`.
         undo_done (bool, optional): Whether to undo the done flag when the thinking prompt
             is added. Defaults to `True`.
+        egocentric (bool, optional): Whether the thinking prompt is written from the perspective of the assistant.
+            Defaults to `None`, which means that the prompt is written from the perspective of the user if `role="user"`
+            and from the perspective of the assistant if `role="assistant"`.
 
     Examples:
         >>> from torchrl.envs.llm.transforms import AddThinkingPrompt
@@ -93,12 +96,19 @@ class AddThinkingPrompt(Transform):
     """
 
     # Predefined thinking prompts
-    DEFAULT_PROMPTS = [
+    DEFAULT_PROMPTS_EG = [
         "But wait, let me think about this more carefully...",
         "Actually, let me reconsider this...",
         "Let me think about it step by step...",
         "Wait, I need to double-check my reasoning...",
         "Actually, let me think about it more carefully...",
+    ]
+    DEFAULT_PROMPTS_COG = [
+        "But wait, think about this more carefully...",
+        "Actually, reconsider this...",
+        "Let's think about it step by step...",
+        "Wait, you need to double-check your reasoning...",
+        "Actually, think about it more carefully...",
     ]
 
     def __init__(
@@ -110,18 +120,23 @@ class AddThinkingPrompt(Transform):
         edit_last_turn: bool = True,
         zero_reward: bool | None = None,
         undo_done: bool = True,
+        egocentric: bool | None = None,
     ) -> None:
         super().__init__()
 
-        # Set the prompt
-        if prompt is None:
-            prompt = self.DEFAULT_PROMPTS[0]
-        self._prompt = prompt
-        self.random_prompt = random_prompt
 
         # Set condition and role
         self.cond = cond
         self.role = role
+        if egocentric is None:
+            egocentric = role == "assistant"
+        self.egocentric = egocentric
+
+        # Set the prompt
+        if prompt is None:
+            prompt = self.DEFAULT_PROMPTS_EG[0] if egocentric else self.DEFAULT_PROMPTS_COG[0]
+        self._prompt = prompt
+        self.random_prompt = random_prompt
 
         # Validate edit_last_turn constraint
         if edit_last_turn and role != "assistant":
@@ -139,7 +154,7 @@ class AddThinkingPrompt(Transform):
         if self.random_prompt:
             import random
 
-            return random.choice(self.DEFAULT_PROMPTS)
+            return random.choice(self.DEFAULT_PROMPTS_EG if self.egocentric else self.DEFAULT_PROMPTS_COG)
         return self._prompt
 
     def _step(

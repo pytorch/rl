@@ -554,7 +554,7 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
                 ]
                 <= reward_threshold
                 and td["step_count"] < max_steps,
-                role="assistant",
+                role="user",
                 edit_last_turn=False,
                 zero_reward=False,
                 undo_done=True,
