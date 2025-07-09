@@ -610,7 +610,8 @@ class RetrieveLogProb(Transform):
             assistant_masks = td.get(("masks", "all_assistant_mask"), as_list=True)
             log_probs = td.get(lp_key, as_list=True)
             log_probs = [
-                lp[mask.bool()] for lp, mask in _zip_strict(log_probs, assistant_masks)
+                torch.masked_fill(lp, ~mask, 0.0)
+                for lp, mask in _zip_strict(log_probs, assistant_masks)
             ]
             if self.model.pad_output:
                 log_probs = pad_sequence(
