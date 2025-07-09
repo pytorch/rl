@@ -702,7 +702,18 @@ class ReplayBuffer:
         """
         if self._transform is not None and len(self._transform):
             with _set_dispatch_td_nn_modules(is_tensor_collection(data)):
-                data = self._transform.inv(data)
+                make_none = False
+                # Transforms usually expect a time batch dimension when called within a RB, so we unsqueeze the data temporarily
+                is_tc = is_tensor_collection(data)
+                with data.unsqueeze(-1) if is_tc else contextlib.nullcontext(data) as data_unsq:
+                    data_unsq_r = self._transform.inv(data_unsq)
+                    if is_tc and data_unsq_r is not None:
+                        # this is a no-op whenever the result matches the input
+                        data_unsq.update(data_unsq_r)
+                    else:
+                        make_none = data_unsq_r is None
+                if make_none:
+                    data = None
         if data is None:
             return torch.zeros((0, self._storage.ndim), dtype=torch.long)
         return self._add(data)

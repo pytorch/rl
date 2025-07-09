@@ -47,6 +47,7 @@ from torchrl.data import (
     Composite,
     LazyTensorStorage,
     NonTensor,
+    RandomSampler,
     ReplayBuffer,
     TensorDictReplayBuffer,
     TensorSpec,
@@ -13270,6 +13271,52 @@ class TestMultiStepTransform:
             assert (rb[:]["steps"] == torch.arange(len(rb))).all()
             assert rb[:]["next", "steps"][-1] == data["steps"][-1]
             assert t._buffer["steps"][-1] == data["steps"][-1]
+
+    @pytest.mark.parametrize("add_or_extend", ["add", "extend"])
+    def test_multisteptransform_single_item(self, add_or_extend):
+        # Configuration
+        buffer_size = 1000
+        n_step = 3
+        gamma = 0.99
+        device = "cpu"
+
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(max_size=buffer_size, device=device, ndim=1),
+            sampler=RandomSampler(),
+            transform=MultiStepTransform(n_steps=n_step, gamma=gamma),
+        )
+        obs_dict = lambda i: {"observation": torch.full((4,), i)}  # 4-dim observation
+        next_obs_dict = lambda i: {"observation": torch.full((4,), i)}
+
+        for i in range(10):
+            # Create transition with batch_size=[] (no batch dimension)
+            transition = TensorDict(
+                {
+                    "obs": TensorDict(obs_dict(i), batch_size=[]),
+                    "action": torch.full((2,), i),  # 2-dim action
+                    "next": TensorDict(
+                        {
+                            "obs": TensorDict(next_obs_dict(i), batch_size=[]),
+                            "done": torch.tensor(False, dtype=torch.bool),
+                            "reward": torch.tensor(float(i), dtype=torch.float32),
+                        },
+                        batch_size=[],
+                    ),
+                },
+                batch_size=[],
+            )
+
+            if add_or_extend == "add":
+                rb.add(transition)
+            else:
+                rb.extend(transition.unsqueeze(0))
+        rbcontent = rb[:]
+        assert (rbcontent["steps_to_next_obs"] == 3).all()
+        assert rbcontent.shape == (7,)
+        assert (rbcontent["next", "original_reward"] == torch.arange(7)).all()
+        assert (
+            rbcontent["next", "reward"] > rbcontent["next", "original_reward"]
+        ).all()
 
 
 class TestBatchSizeTransform(TransformBase):
