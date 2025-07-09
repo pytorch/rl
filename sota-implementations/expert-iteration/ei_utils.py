@@ -103,20 +103,14 @@ def get_train_model(
     for param in train_model.parameters():
         param.data = param.data.to(model_dtype)
 
-    if chat_template_name is not None:
-        from torchrl.data.llm.history import _CHAT_TEMPLATES
-
-        chat_template = _CHAT_TEMPLATES[chat_template_name]
-        train_tokenizer.chat_template = chat_template
-
     policy_training = TransformersWrapper(
         train_model,
         tokenizer=train_tokenizer,
-        from_text=True,
+        input_mode="history",
         generate=False,
         return_log_probs=True,
-        # Should be retrieved and corrected automatically from the tokenizer
-        chat_template_name=chat_template_name,
+        pad_output=False,
+        device=torch.device("cuda:0"),
     )
     # Ensure model stays in eval mode after wrapping
     policy_training.model.eval()
@@ -172,8 +166,9 @@ def get_inference_model(
     assert inference_server is not None
     policy = vLLMWrapper(
         inference_server,
-        from_text=True,
+        input_mode="history",
         return_log_probs=False,
+        pad_output=False,
         generate_kwargs={
             "max_tokens": cfg.inference_model.max_tokens,
             "include_stop_str_in_output": cfg.inference_model.include_stop_str_in_output,
@@ -201,8 +196,6 @@ def get_ref_model(
     Returns:
         TransformersWrapper: The wrapped reference model in eval mode with detached weights.
     """
-    from tensordict import TensorDict
-
     torchrl_logger.info("Creating ref model")
 
     # Get configured devices or default to [2]
@@ -242,10 +235,11 @@ def get_ref_model(
     ref_model = TransformersWrapper(
         ref_model,
         tokenizer=tokenizer,
-        from_text=True,
+        input_mode="history",
         generate=False,
         return_log_probs=True,
-        # Should be retrieved and corrected automatically from the tokenizer
+        pad_output=False,
+        device=torch.device("cuda:0"),
         chat_template_name="qwen",
     )
     return ref_model
@@ -351,7 +345,6 @@ def get_hf_model(
                 bnb_4bit_use_double_quant=True,
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_compute_dtype=torch_dtype,
-                **bnb_config_params,
             )
             model_configs["quantization_config"] = bnb_config
 
@@ -425,7 +418,7 @@ def make_weight_updater(
     master_port=None,
     model_metadata=None,
     vllm_tp_size=None,
-) -> vLLMUpdater | Callable[[], vLLMUpdater]:
+) -> vLLMUpdater:
     """Creates a vLLM weight updater for the policy.
 
     This function can be used in two ways:
@@ -441,7 +434,7 @@ def make_weight_updater(
         vllm_tp_size (Optional[int]): vLLM tensor parallel size. If not provided, will be set to 1.
 
     Returns:
-        vLLMUpdater | partial[vLLMUpdater]: An instance of the weight updater configured to update
+        vLLMUpdater: An instance of the weight updater configured to update
             the vLLM worker's weights.
     """
     if model_metadata is None and policy_training is not None:
@@ -576,10 +569,96 @@ def get_wandb_run_id(wandb_logger):
         return None
 
 
+def log_training_metrics(
+    wandb_logger,
+    replay_buffer,
+    batch,
+    loss,
+    grad_norm,
+    global_step,
+    data_read_count,
+    collector,
+    start_time,
+    gradient_accumulation_steps,
+    history_str=None,
+):
+    """Log training metrics to wandb.
+
+    Args:
+        wandb_logger: The wandb logger instance
+        replay_buffer: The replay buffer containing collected data
+        batch: The current training batch
+        loss: The computed loss object
+        grad_norm: The gradient norm value
+        global_step: Current global training step
+        data_read_count: Total data read count
+        collector: The collector instance
+        start_time: Training start time
+        gradient_accumulation_steps: Number of gradient accumulation steps
+        history_str: Optional history string for logging
+    """
+    with torch.no_grad():
+        rb_content = replay_buffer[:]
+        batch_policy_version = batch["next", "policy_version"].view(-1).min()
+        batch_policy_age = collector.policy_version - batch_policy_version
+
+        metrics = {
+            "reward from buffer": float(
+                torch.cat(
+                    rb_content.get(("next", "reward"), as_list=True)
+                ).mean()
+            ),
+            "reward from batch": float(batch["next", "reward"].mean()),
+            "seq_length from buffer": float(
+                torch.tensor(
+                    [
+                        t.numel()
+                        for t in rb_content.get(
+                            "tokens_response", as_list=True
+                        )
+                    ],
+                    dtype=torch.float,
+                ).mean()
+            ),
+            "loss_sft, from loss": float(loss.loss_sft),
+            "loss_kl_to_ref, from loss": float(loss.loss_kl_to_ref),
+            "kl_to_ref, from loss": float(loss.kl_to_ref),
+            "grad_norm": float(grad_norm)
+            if global_step % gradient_accumulation_steps == 0
+            else 0.0,
+            "write_count, from buffer": int(replay_buffer.write_count),
+            # how many gradient steps per write
+            "gradient_step_throughput (gradient step per write)": float(
+                global_step / replay_buffer.write_count
+            ),
+            # how many optim steps per write
+            "optim_step_throughput (optim step per write)": float(
+                (global_step // gradient_accumulation_steps)
+                / replay_buffer.write_count
+            ),
+            "data_read_count (total)": data_read_count,
+            "current_policy_version (collector)": collector.policy_version,
+            # FIXME: Assume batch is a single trajectory
+            # FIXME: The addition of the transform after the env instantiation + _shuttle creation
+            #  is messed up - we need the next data
+            "batch_policy_version (sampled batch)": batch_policy_version,
+            "batch_policy_age (sampled batch)": batch_policy_age,
+            "throughput (steps per second)": float(
+                global_step / (time.time() - start_time)
+            ),
+        }
+
+        for name, value in metrics.items():
+            wandb_logger.log_scalar(name, value, step=global_step)
+
+        if history_str is not None:
+            wandb_logger.log_str("history", history_str, step=global_step)
+
+
 class RemoteDataLogger:
     """A remote post-processing function that sends logging data to the main process via Ray for centralized logging."""
 
-    def __init__(self, log_queue: ray.util.queue.Queue):
+    def __init__(self, log_queue):
         """Initialize RemoteDataLogger with a Ray actor reference for logging.
 
         Args:

@@ -36,6 +36,7 @@ from ei_utils import (
     get_ref_model,
     get_tokenizer,
     get_train_model,
+    log_training_metrics,
     make_weight_updater,
     RemoteDataLogger,
 )
@@ -106,22 +107,22 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
             repeats=cfg.env.repeats,
             tokenizer=train_tokenizer,
             num_envs=cfg.env.num_envs,
-            device="cpu",
+            device=torch.device("cpu"),
         )
     else:  # ifeval
         env = IFEvalEnv(
             repeats=cfg.env.repeats,
             tokenizer=train_tokenizer,
             num_envs=cfg.env.num_envs,
-            device="cpu",
+            device=torch.device("cpu"),
         )
 
-    # Pass device directly to KLRewardTransform - Since, for Ray, the local device is always 0
+    # Pass device directly to RetrieveLogProb - Since, for Ray, the local device is always 0
     # we can just use 0 here.
     device = torch.device("cuda:0")
     env = env.append_transform(
         RetrieveLogProb(
-            actor=ref_model,
+            model=ref_model,
             assistant_only=True,
             tokenizer_kwargs={"chat_template_name": "qwen"},
             device=device,
@@ -160,7 +161,7 @@ def train(
         kl_to_ref_coeff=cfg.train.kl_to_ref_coeff,
         tokenizer=train_tokenizer,
         tokenizer_kwargs={"chat_template_name": "qwen"},
-        device=train_device,
+        device=torch.device(f"cuda:{train_device}") if train_device is not None else None,
         loss_function=cfg.train.loss_function,
         beta=cfg.train.minor_sft_beta,
     )
@@ -355,68 +356,26 @@ def train(
 
                 # Update metrics
                 if (global_step % cfg.train.logging_frequency) == 0:
-                    with torch.no_grad():
-                        rb_content = replay_buffer[:]
-                        batch_policy_version = (
-                            batch["next", "policy_version"].view(-1).min()
-                        )
-                        batch_policy_age = (
-                            collector.policy_version - batch_policy_version
-                        )
-                        metrics = {
-                            "reward from buffer": float(
-                                torch.cat(
-                                    rb_content.get(("next", "reward"), as_list=True)
-                                ).mean()
-                            ),
-                            "reward from batch": float(batch["next", "reward"].mean()),
-                            "seq_length from buffer": float(
-                                torch.tensor(
-                                    [
-                                        t.numel()
-                                        for t in rb_content.get(
-                                            "tokens_response", as_list=True
-                                        )
-                                    ],
-                                    dtype=torch.float,
-                                ).mean()
-                            ),
-                            "loss_sft, from loss": float(loss.loss_sft),
-                            "loss_kl_to_ref, from loss": float(loss.loss_kl_to_ref),
-                            "kl_to_ref, from loss": float(loss.kl_to_ref),
-                            "grad_norm": float(grad_norm)
-                            if global_step % cfg.train.gradient_accumulation_steps == 0
-                            else metrics.get("grad_norm", 0.0),
-                            "write_count, from buffer": int(replay_buffer.write_count),
-                            # how many gradient steps per write
-                            "gradient_step_throughput (gradient step per write)": float(
-                                global_step / replay_buffer.write_count
-                            ),
-                            # how many optim steps per write
-                            "optim_step_throughput (optim step per write)": float(
-                                (global_step // cfg.train.gradient_accumulation_steps)
-                                / replay_buffer.write_count
-                            ),
-                            "data_read_count (total)": data_read_count,
-                            "current_policy_version (collector)": collector.policy_version,
-                            # FIXME: Assume batch is a single trajectory
-                            # FIXME: The addition of the transform after the env instantiation + _shuttle creation
-                            #  is messed up - we need the next data
-                            "batch_policy_version (sampled batch)": batch_policy_version,
-                            "batch_policy_age (sampled batch)": batch_policy_age,
-                            "throughput (steps per second)": float(
-                                global_step / (time.time() - start_time)
-                            ),
-                            "learning_rate": float(optimizer.param_groups[0]["lr"]),
-                            "optim_step": optim_step,
-                        }
-                        for name, value in metrics.items():
-                            wandb_logger.log_scalar(name, value, step=global_step)
-                        wandb_logger.log_str("history", history_str, step=global_step)
-                        while not log_queue.empty():
-                            logs = log_queue.get()
-                            for k, v in logs.items():
-                                wandb_logger.log_scalar(k, v)
+                    log_training_metrics(
+                        wandb_logger=wandb_logger,
+                        replay_buffer=replay_buffer,
+                        batch=batch,
+                        loss=loss,
+                        grad_norm=grad_norm,
+                        global_step=global_step,
+                        data_read_count=data_read_count,
+                        collector=collector,
+                        start_time=start_time,
+                        gradient_accumulation_steps=cfg.train.gradient_accumulation_steps,
+                        history_str=history_str,
+                    )
+                    # Log additional metrics
+                    wandb_logger.log_scalar("learning_rate", float(optimizer.param_groups[0]["lr"]), step=global_step)
+                    wandb_logger.log_scalar("optim_step", optim_step, step=global_step)
+                    while not log_queue.empty():
+                        logs = log_queue.get()
+                        for k, v in logs.items():
+                            wandb_logger.log_scalar(k, v)
 
                 # Update policy weights
                 if (
@@ -584,7 +543,7 @@ def main(cfg):
     # launch training
     ray.get(
         train_handler.remote(
-            rb, cfg, collector, devices=device_config["train_model_devices"]
+            rb, cfg, collector, device_config["train_model_devices"]
         )
     )
 
