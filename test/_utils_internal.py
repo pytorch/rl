@@ -56,6 +56,7 @@ else:
 
 PYTHON_3_9 = sys.version_info.major == 3 and sys.version_info.minor <= 9
 
+
 def CARTPOLE_VERSIONED():
     # load gym
     if gym_backend() is not None:
