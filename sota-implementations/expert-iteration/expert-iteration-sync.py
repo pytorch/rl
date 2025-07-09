@@ -60,6 +60,7 @@ from torchrl.envs.llm import GSM8KEnv, RetrieveLogProb
 from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
 from torchrl.objectives.llm.sft import SFTLoss
 
+DEFAULT_DIALOG_TURNS_PER_BATCH = 256
 
 def setup_environment() -> None:
     """Setup required environment variables and configurations."""
@@ -421,6 +422,9 @@ def train(
             wandb_logger.log_scalar(f"timeit/{key}", val)
         timeit.reset()
 
+        if cfg.train.empty_replay_buffer:
+            replay_buffer.empty(empty_write_count=False)
+
     pbar.close()
     collector.shutdown()
 
@@ -485,9 +489,16 @@ def main(cfg):
     torchrl_logger.info(f"Starting replay buffer with {replay_buffer_config=}")
     rb_size = cfg.train.buffer_size
     if rb_size is None:
-        rb_size = int(
-            math.ceil(
-                cfg.train.dialog_turns_per_batch * cfg.train.topk_size / cfg.env.repeats
+        if cfg.train.empty_replay_buffer:
+            # we can just set a big number, the buffer will be emptied anyway
+            rb_size = 1000000
+        else:
+            dialog_turns_per_batch = cfg.train.dialog_turns_per_batch
+            if dialog_turns_per_batch is None:
+                dialog_turns_per_batch = DEFAULT_DIALOG_TURNS_PER_BATCH
+            rb_size = int(
+                math.ceil(
+                    dialog_turns_per_batch * cfg.train.topk_size / cfg.env.repeats
             )
         )
     rb = RayReplayBuffer(
@@ -517,7 +528,7 @@ def main(cfg):
     dialog_turns_per_batch = cfg.train.dialog_turns_per_batch
     if dialog_turns_per_batch is None:
         # Hardcoded for now
-        dialog_turns_per_batch = 256
+        dialog_turns_per_batch = DEFAULT_DIALOG_TURNS_PER_BATCH
 
     collector = RayLLMCollector(
         env=partial(make_env, cfg, devices=device_config["ref_model_devices"]),
