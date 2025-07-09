@@ -424,8 +424,13 @@ class SFTLoss(LossModule):
                         f"Existing keys in tensordict: {set(tensordict.keys(include_nested=True, leaves_only=True))}"
                     )
 
+                log_probs_masked = [
+                    lp.masked_fill(~mask, 0.0)
+                    for lp, mask in _zip_strict(log_probs, assistant_masks)
+                ]
+
                 loss_kl, kl_penalty = self._kl_to_ref(
-                    [lp[mask] for lp, mask in _zip_strict(log_probs, assistant_masks)],
+                    log_probs_masked,
                     ref_log_probs,
                 )
                 output = SFTLossOutput(
@@ -453,11 +458,12 @@ class SFTLoss(LossModule):
             )
             if self.kl_to_ref_coeff is not None:
                 with torch.no_grad():
+                    log_probs_masked = [
+                        lp.masked_fill(~mask, 0.0)
+                        for lp, mask in _zip_strict(log_probs, assistant_masks)
+                    ]
                     loss_kl, kl_penalty = self._kl_to_ref(
-                        [
-                            lp[mask]
-                            for lp, mask in _zip_strict(log_probs, assistant_masks)
-                        ],
+                        log_probs_masked,
                         ref_log_probs,
                     )
                 output = SFTLossOutput(
