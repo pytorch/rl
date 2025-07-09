@@ -4507,9 +4507,9 @@ class DeviceCastTransform(Transform):
     """Moves data from one device to another.
 
     Args:
-        device (torch.device or equivalent): the destination device.
-        orig_device (torch.device or equivalent): the origin device. If not specified and
-            a parent environment exists, it it retrieved from it. In all other cases,
+        device (torch.device or equivalent): the destination device (outside the environment or buffer).
+        orig_device (torch.device or equivalent): the origin device (inside the environment or buffer).
+            If not specified and a parent environment exists, it it retrieved from it. In all other cases,
             it remains unspecified.
 
     Keyword Args:
