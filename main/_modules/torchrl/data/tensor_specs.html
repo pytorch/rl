@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -458,6 +458,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">is_tensor_collection</span><span class="p">,</span>
+    <span class="n">lazy_stack</span><span class="p">,</span>
     <span class="n">LazyStackedTensorDict</span><span class="p">,</span>
     <span class="n">NonTensorData</span><span class="p">,</span>
     <span class="n">NonTensorStack</span><span class="p">,</span>
@@ -3169,6 +3170,13 @@
 <span class="sd">        batched (bool, optional): Indicates whether the data is batched. If `True`, the `rand`, `zero`, and `one` methods</span>
 <span class="sd">            will generate data with an additional batch dimension, stacking copies of the `example_data` across this dimension.</span>
 <span class="sd">            Defaults to `False`.</span>
+<span class="sd">            Exclusive with `feature_dims`.</span>
+<span class="sd">        feature_dims (int, optional): The number of dimensions that are features.</span>
+<span class="sd">            The feature dimensions are the trailing dimensions that are not batch dimensions.</span>
+<span class="sd">            Every feature dimension is included in a single NonTensorData object, whereas these</span>
+<span class="sd">            are stacked across the batch dimension.</span>
+<span class="sd">            Exclusive with `batched`.</span>
+<span class="sd">            Defaults to `None` (all if batched=False, none if batched=True).</span>
 <span class="sd">        **kwargs: Additional keyword arguments passed to the parent class.</span>
 
 <span class="sd">    .. seealso:: :class:`~torchrl.data.Choice` which allows to randomly choose among different specs when calling</span>
@@ -3195,7 +3203,8 @@
         <span class="n">device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">example_data</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">batched</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">batched</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">feature_dims</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
@@ -3206,7 +3215,17 @@
             <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span> <span class="n">space</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">domain</span><span class="o">=</span><span class="n">domain</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">example_data</span> <span class="o">=</span> <span class="n">example_data</span>
+        <span class="k">if</span> <span class="n">batched</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">feature_dims</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">batched</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="n">feature_dims</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">batched</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">feature_dims</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">batched</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">elif</span> <span class="n">batched</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">feature_dims</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot specify both batched and feature_dims.&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">feature_dims</span> <span class="o">=</span> <span class="mi">0</span> <span class="k">if</span> <span class="n">batched</span> <span class="k">else</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">batched</span> <span class="o">=</span> <span class="n">batched</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">feature_dims</span> <span class="o">=</span> <span class="n">feature_dims</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">encode</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_encode_eager</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -3257,7 +3276,7 @@
             <span class="n">device</span><span class="o">=</span><span class="n">dest_device</span><span class="p">,</span>
             <span class="n">dtype</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
             <span class="n">example_data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">example_data</span><span class="p">,</span>
-            <span class="n">batched</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batched</span><span class="p">,</span>
+            <span class="n">feature_dims</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">feature_dims</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 <div class="viewcode-block" id="NonTensor.clone"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.NonTensor.html#torchrl.data.NonTensor.clone">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">clone</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NonTensor</span><span class="p">:</span>
@@ -3266,29 +3285,32 @@
             <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
             <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
             <span class="n">example_data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">example_data</span><span class="p">,</span>
-            <span class="n">batched</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batched</span><span class="p">,</span>
+            <span class="n">feature_dims</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">feature_dims</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 <div class="viewcode-block" id="NonTensor.rand"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.NonTensor.html#torchrl.data.NonTensor.rand">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">rand</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">shape</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">shape</span> <span class="o">=</span> <span class="p">()</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">batched</span><span class="p">:</span>
-            <span class="k">with</span> <span class="n">set_capture_non_tensor_stack</span><span class="p">(</span><span class="kc">False</span><span class="p">):</span>
-                <span class="n">val</span> <span class="o">=</span> <span class="n">NonTensorData</span><span class="p">(</span>
-                    <span class="n">data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">example_data</span><span class="p">,</span>
-                    <span class="n">batch_size</span><span class="o">=</span><span class="p">(),</span>
-                    <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="n">shape</span> <span class="o">=</span> <span class="p">(</span><span class="o">*</span><span class="n">shape</span><span class="p">,</span> <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_safe_shape</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">shape</span><span class="p">:</span>
-                    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">shape</span><span class="p">:</span>
-                        <span class="n">val</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">val</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">i</span><span class="p">)],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-                <span class="k">return</span> <span class="n">val</span>
-        <span class="k">return</span> <span class="n">NonTensorData</span><span class="p">(</span>
-            <span class="n">data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">example_data</span><span class="p">,</span>
-            <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="o">*</span><span class="n">shape</span><span class="p">,</span> <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_safe_shape</span><span class="p">),</span>
-            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
-        <span class="p">)</span></div>
+            <span class="c1"># feature dim is None</span>
+            <span class="n">feature_dims</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">feature_dims</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">feature_dims</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="n">shape</span> <span class="o">=</span> <span class="n">_size</span><span class="p">([</span><span class="n">shape</span><span class="p">])</span>
+        <span class="n">total_shape</span> <span class="o">=</span> <span class="p">(</span><span class="o">*</span><span class="n">shape</span><span class="p">,</span> <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_safe_shape</span><span class="p">)</span>
+        <span class="n">batch_shape</span> <span class="o">=</span> <span class="n">total_shape</span><span class="p">[:</span><span class="o">-</span><span class="n">feature_dims</span><span class="p">]</span>
+        <span class="n">feature_shape</span> <span class="o">=</span> <span class="n">total_shape</span><span class="p">[</span><span class="o">-</span><span class="n">feature_dims</span><span class="p">:]</span>
+        <span class="k">with</span> <span class="n">set_capture_non_tensor_stack</span><span class="p">(</span><span class="kc">False</span><span class="p">):</span>
+            <span class="n">val</span> <span class="o">=</span> <span class="n">NonTensorData</span><span class="p">(</span>
+                <span class="n">data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">example_data</span><span class="p">,</span>
+                <span class="n">batch_size</span><span class="o">=</span><span class="n">feature_shape</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">batch_shape</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">reversed</span><span class="p">(</span><span class="n">batch_shape</span><span class="p">):</span>
+                    <span class="n">val</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">([</span><span class="n">val</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">i</span><span class="p">)])</span>
+            <span class="k">return</span> <span class="n">val</span></div>
 
 <div class="viewcode-block" id="NonTensor.zero"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.NonTensor.html#torchrl.data.NonTensor.zero">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">zero</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">)</span></div>
@@ -3299,10 +3321,18 @@
 <div class="viewcode-block" id="NonTensor.is_in"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.NonTensor.html#torchrl.data.NonTensor.is_in">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">is_in</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">val</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">val</span><span class="p">):</span>
             <span class="k">return</span> <span class="kc">True</span>
-        <span class="n">shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">broadcast_shapes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_safe_shape</span><span class="p">,</span> <span class="n">val</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+        <span class="c1"># Since we don&#39;t really share Nontensor across processes, it&#39;s ok to modify the shape</span>
+        <span class="c1"># We do this when the shape has been determined by a single sample gathered</span>
+        <span class="c1"># from a dataloader, but shapes of the non-tensor may actually vary.</span>
+        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">v</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">val</span><span class="o">.</span><span class="n">shape</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">(</span>
+                <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">if</span> <span class="n">s</span> <span class="o">&gt;=</span> <span class="mi">0</span> <span class="k">else</span> <span class="o">-</span><span class="mi">1</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">s</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">val</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
+            <span class="p">)</span>
+        <span class="n">_safe_val_shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">(</span><span class="n">s</span> <span class="k">if</span> <span class="n">s</span> <span class="o">&gt;=</span> <span class="mi">0</span> <span class="k">else</span> <span class="mi">1</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">val</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+        <span class="n">shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">broadcast_shapes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_safe_shape</span><span class="p">,</span> <span class="n">_safe_val_shape</span><span class="p">)</span>
         <span class="k">return</span> <span class="p">(</span>
             <span class="n">is_non_tensor</span><span class="p">(</span><span class="n">val</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="n">val</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">shape</span>
+            <span class="ow">and</span> <span class="n">_safe_val_shape</span> <span class="o">==</span> <span class="n">shape</span>
             <span class="c1"># We relax constrains on device as they&#39;re hard to enforce for non-tensor</span>
             <span class="c1">#  tensordicts and pointless</span>
             <span class="c1"># and val.device == self.device</span>
@@ -3326,18 +3356,20 @@
             <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
             <span class="n">dtype</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
             <span class="n">example_data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">example_data</span><span class="p">,</span>
-            <span class="n">batched</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batched</span><span class="p">,</span>
+            <span class="n">feature_dims</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">feature_dims</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 <div class="viewcode-block" id="NonTensor.unsqueeze"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.NonTensor.html#torchrl.data.NonTensor.unsqueeze">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">unsqueeze</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NonTensor</span><span class="p">:</span>
         <span class="n">unsq</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="n">dim</span><span class="p">)</span>
         <span class="n">unsq</span><span class="o">.</span><span class="n">example_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">example_data</span>
+        <span class="n">unsq</span><span class="o">.</span><span class="n">feature_dims</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">feature_dims</span>
         <span class="n">unsq</span><span class="o">.</span><span class="n">batched</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">batched</span>
         <span class="k">return</span> <span class="n">unsq</span></div>
 
 <div class="viewcode-block" id="NonTensor.squeeze"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.NonTensor.html#torchrl.data.NonTensor.squeeze">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">squeeze</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NonTensor</span><span class="p">:</span>
         <span class="n">sq</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="n">dim</span><span class="p">)</span>
         <span class="n">sq</span><span class="o">.</span><span class="n">example_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">example_data</span>
+        <span class="n">sq</span><span class="o">.</span><span class="n">feature_dims</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">feature_dims</span>
         <span class="n">sq</span><span class="o">.</span><span class="n">batched</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">batched</span>
         <span class="k">return</span> <span class="n">sq</span></div>
 
@@ -3347,7 +3379,7 @@
             <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
             <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
             <span class="n">example_data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">example_data</span><span class="p">,</span>
-            <span class="n">batched</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batched</span><span class="p">,</span>
+            <span class="n">feature_dims</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">feature_dims</span><span class="p">,</span>
         <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_unflatten</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">sizes</span><span class="p">):</span>
@@ -3357,7 +3389,7 @@
             <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
             <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
             <span class="n">example_data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">example_data</span><span class="p">,</span>
-            <span class="n">batched</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batched</span><span class="p">,</span>
+            <span class="n">feature_dims</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">feature_dims</span><span class="p">,</span>
         <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">idx</span><span class="p">:</span> <span class="n">SHAPE_INDEX_TYPING</span><span class="p">):</span>
@@ -3368,7 +3400,7 @@
             <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
             <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
             <span class="n">example_data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">example_data</span><span class="p">,</span>
-            <span class="n">batched</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batched</span><span class="p">,</span>
+            <span class="n">feature_dims</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">feature_dims</span><span class="p">,</span>
         <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">unbind</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">):</span>
@@ -3386,7 +3418,7 @@
                 <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
                 <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
                 <span class="n">example_data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">example_data</span><span class="p">,</span>
-                <span class="n">batched</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batched</span><span class="p">,</span>
+                <span class="n">feature_dims</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">feature_dims</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">dim</span><span class="p">])</span>
         <span class="p">)</span>
@@ -3402,7 +3434,24 @@
         <span class="o">*</span><span class="p">,</span>
         <span class="n">ignore_device</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="n">TensorDictBase</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">NonTensorData</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span></div>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">batched</span><span class="p">:</span>
+            <span class="c1"># feature dim is None</span>
+            <span class="n">feature_dims</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">feature_dims</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">feature_dims</span>
+        <span class="n">total_shape</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_safe_shape</span>
+        <span class="n">batch_shape</span> <span class="o">=</span> <span class="n">total_shape</span><span class="p">[:</span><span class="o">-</span><span class="n">feature_dims</span><span class="p">]</span>
+        <span class="n">feature_shape</span> <span class="o">=</span> <span class="n">total_shape</span><span class="p">[</span><span class="o">-</span><span class="n">feature_dims</span><span class="p">:]</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">NonTensorData</span><span class="p">(</span>
+            <span class="n">val</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="n">feature_shape</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">batch_shape</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">result</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">reversed</span><span class="p">(</span><span class="n">batch_shape</span><span class="p">):</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">([</span><span class="n">result</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">i</span><span class="p">)])</span>
+        <span class="k">return</span> <span class="n">result</span></div>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">_UnboundedMeta</span><span class="p">(</span><span class="n">abc</span><span class="o">.</span><span class="n">ABCMeta</span><span class="p">):</span>
@@ -5391,6 +5440,9 @@
 <span class="sd">            to the batch-size of the corresponding tensordicts.</span>
 <span class="sd">        data_cls (type, optional): the tensordict subclass (TensorDict, TensorClass, tensorclass...) that should be</span>
 <span class="sd">            enforced in the env. Defaults to ``None``.</span>
+<span class="sd">        step_mdp_static (bool, optional): whether the spec is static under step_mdp. Defaults to ``False``.</span>
+<span class="sd">            Defining a `Composite` as a step_mdp_static spec will make it so that the entire related TensorDict/TensorClass</span>
+<span class="sd">            instance is copied during calls to `step_mdp` - and not updated in-place.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; pixels_spec = Bounded(</span>
@@ -5466,6 +5518,7 @@
         <span class="n">shape</span><span class="p">:</span> <span class="nb">tuple</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">data_cls</span><span class="p">:</span> <span class="nb">type</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">step_mdp_static</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="c1"># For compatibility with TensorDict</span>
@@ -5479,6 +5532,7 @@
             <span class="n">shape</span> <span class="o">=</span> <span class="n">_size</span><span class="p">(())</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_shape</span> <span class="o">=</span> <span class="n">_size</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_specs</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">step_mdp_static</span> <span class="o">=</span> <span class="n">step_mdp_static</span>
 
         <span class="n">_device</span> <span class="o">=</span> <span class="p">(</span>
             <span class="n">_make_ordinal_device</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">device</span><span class="p">))</span> <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">device</span>
@@ -5970,6 +6024,7 @@
         <span class="n">leaves_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">is_leaf</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">type</span><span class="p">],</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">step_mdp_static_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_CompositeSpecKeysView</span><span class="p">:</span>  <span class="c1"># noqa: D417</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Keys of the Composite.</span>
 
@@ -5990,6 +6045,8 @@
 <span class="sd">            is_leaf (callable, optional): reads a type and returns a boolean indicating if that type</span>
 <span class="sd">                should be seen as a leaf. By default, all non-Composite nodes are considered as</span>
 <span class="sd">                leaves.</span>
+<span class="sd">            step_mdp_static_only (bool, optional): if ``True``, only keys that are static under step_mdp will be returned.</span>
+<span class="sd">                Default is ``False``.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="n">_CompositeSpecItemsView</span><span class="p">(</span>
@@ -5997,6 +6054,7 @@
             <span class="n">include_nested</span><span class="o">=</span><span class="n">include_nested</span><span class="p">,</span>
             <span class="n">leaves_only</span><span class="o">=</span><span class="n">leaves_only</span><span class="p">,</span>
             <span class="n">is_leaf</span><span class="o">=</span><span class="n">is_leaf</span><span class="p">,</span>
+            <span class="n">step_mdp_static_only</span><span class="o">=</span><span class="n">step_mdp_static_only</span><span class="p">,</span>
         <span class="p">)</span><span class="o">.</span><span class="n">_keys</span><span class="p">()</span></div>
 
 <div class="viewcode-block" id="Composite.items"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.Composite.html#torchrl.data.Composite.items">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">items</span><span class="p">(</span>
@@ -6005,6 +6063,7 @@
         <span class="n">leaves_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">is_leaf</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">type</span><span class="p">],</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">step_mdp_static_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_CompositeSpecItemsView</span><span class="p">:</span>  <span class="c1"># noqa: D417</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Items of the Composite.</span>
 
@@ -6023,12 +6082,15 @@
 <span class="sd">            is_leaf (callable, optional): reads a type and returns a boolean indicating if that type</span>
 <span class="sd">                should be seen as a leaf. By default, all non-Composite nodes are considered as</span>
 <span class="sd">                leaves.</span>
+<span class="sd">            step_mdp_static_only (bool, optional): if ``True``, only keys that are static under step_mdp will be returned.</span>
+<span class="sd">                Default is ``False``.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="n">_CompositeSpecItemsView</span><span class="p">(</span>
             <span class="bp">self</span><span class="p">,</span>
             <span class="n">include_nested</span><span class="o">=</span><span class="n">include_nested</span><span class="p">,</span>
             <span class="n">leaves_only</span><span class="o">=</span><span class="n">leaves_only</span><span class="p">,</span>
             <span class="n">is_leaf</span><span class="o">=</span><span class="n">is_leaf</span><span class="p">,</span>
+            <span class="n">step_mdp_static_only</span><span class="o">=</span><span class="n">step_mdp_static_only</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 <div class="viewcode-block" id="Composite.values"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.Composite.html#torchrl.data.Composite.values">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">values</span><span class="p">(</span>
@@ -6037,6 +6099,7 @@
         <span class="n">leaves_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">is_leaf</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">type</span><span class="p">],</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">step_mdp_static_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_CompositeSpecValuesView</span><span class="p">:</span>  <span class="c1"># noqa: D417</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Values of the Composite.</span>
 
@@ -6055,24 +6118,31 @@
 <span class="sd">            is_leaf (callable, optional): reads a type and returns a boolean indicating if that type</span>
 <span class="sd">                should be seen as a leaf. By default, all non-Composite nodes are considered as</span>
 <span class="sd">                leaves.</span>
+<span class="sd">            step_mdp_static_only (bool, optional): if ``True``, only keys that are static under step_mdp will be returned.</span>
+<span class="sd">                Default is ``False``.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="n">_CompositeSpecItemsView</span><span class="p">(</span>
             <span class="bp">self</span><span class="p">,</span>
             <span class="n">include_nested</span><span class="o">=</span><span class="n">include_nested</span><span class="p">,</span>
             <span class="n">leaves_only</span><span class="o">=</span><span class="n">leaves_only</span><span class="p">,</span>
             <span class="n">is_leaf</span><span class="o">=</span><span class="n">is_leaf</span><span class="p">,</span>
+            <span class="n">step_mdp_static_only</span><span class="o">=</span><span class="n">step_mdp_static_only</span><span class="p">,</span>
         <span class="p">)</span><span class="o">.</span><span class="n">_values</span><span class="p">()</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_reshape</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">shape</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reshape</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">shape</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Composite</span><span class="p">:</span>
         <span class="n">_specs</span> <span class="o">=</span> <span class="p">{</span>
             <span class="n">key</span><span class="p">:</span> <span class="n">val</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">*</span><span class="n">shape</span><span class="p">,</span> <span class="o">*</span><span class="n">val</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">ndimension</span><span class="p">()</span> <span class="p">:]))</span>
             <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_specs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
         <span class="p">}</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="p">(</span>
-            <span class="n">_specs</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">data_cls</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">data_cls</span>
+            <span class="n">_specs</span><span class="p">,</span>
+            <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">data_cls</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">data_cls</span><span class="p">,</span>
+            <span class="n">step_mdp_static</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">step_mdp_static</span><span class="p">,</span>
         <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_unflatten</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">sizes</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_unflatten</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">sizes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Composite</span><span class="p">:</span>
         <span class="n">shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;meta&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">unflatten</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span> <span class="n">sizes</span><span class="p">)</span><span class="o">.</span><span class="n">shape</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reshape</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span>
 
@@ -6091,7 +6161,11 @@
                     <span class="k">continue</span>
                 <span class="n">kwargs</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dest</span><span class="p">)</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="p">(</span>
-                <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">data_cls</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">data_cls</span>
+                <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+                <span class="n">data_cls</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">data_cls</span><span class="p">,</span>
+                <span class="n">step_mdp_static</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">step_mdp_static</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">dest</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">)):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -6109,7 +6183,11 @@
                 <span class="k">continue</span>
             <span class="n">kwargs</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dest</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="p">(</span>
-            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">_device</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">data_cls</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">data_cls</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">_device</span><span class="p">,</span>
+            <span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+            <span class="n">data_cls</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">data_cls</span><span class="p">,</span>
+            <span class="n">step_mdp_static</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">step_mdp_static</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 <div class="viewcode-block" id="Composite.clone"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.Composite.html#torchrl.data.Composite.clone">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">clone</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Composite</span><span class="p">:</span>
@@ -6129,6 +6207,7 @@
             <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
             <span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
             <span class="n">data_cls</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">data_cls</span><span class="p">,</span>
+            <span class="n">step_mdp_static</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">step_mdp_static</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 <div class="viewcode-block" id="Composite.cardinality"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.Composite.html#torchrl.data.Composite.cardinality">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">cardinality</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
@@ -6176,7 +6255,7 @@
             <span class="n">samples</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_dict</span><span class="p">({},</span> <span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">samples</span></div>
 
-<div class="viewcode-block" id="Composite.empty"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.Composite.html#torchrl.data.Composite.empty">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">empty</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="Composite.empty"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.Composite.html#torchrl.data.Composite.empty">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">empty</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Composite</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a spec like self, but with no entries.&quot;&quot;&quot;</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
@@ -6187,6 +6266,7 @@
             <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
             <span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
             <span class="n">data_cls</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">data_cls</span><span class="p">,</span>
+            <span class="n">step_mdp_static</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">step_mdp_static</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 <div class="viewcode-block" id="Composite.to_numpy"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.Composite.html#torchrl.data.Composite.to_numpy">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">to_numpy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">val</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">safe</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
@@ -6215,7 +6295,7 @@
             <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
         <span class="p">)</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
         <span class="k">return</span> <span class="p">(</span>
             <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">==</span> <span class="nb">type</span><span class="p">(</span><span class="n">other</span><span class="p">)</span>
             <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">shape</span>
@@ -6250,7 +6330,7 @@
             <span class="bp">self</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">item</span>
         <span class="k">return</span> <span class="bp">self</span>
 
-<div class="viewcode-block" id="Composite.expand"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.Composite.html#torchrl.data.Composite.expand">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">expand</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">shape</span><span class="p">):</span>
+<div class="viewcode-block" id="Composite.expand"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.Composite.html#torchrl.data.Composite.expand">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">expand</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">shape</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Composite</span><span class="p">:</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="p">(</span><span class="nb">tuple</span><span class="p">,</span> <span class="nb">list</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">)):</span>
             <span class="n">shape</span> <span class="o">=</span> <span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">s1</span> <span class="o">!=</span> <span class="n">s2</span> <span class="ow">and</span> <span class="n">s2</span> <span class="o">!=</span> <span class="mi">1</span> <span class="k">for</span> <span class="n">s1</span><span class="p">,</span> <span class="n">s2</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">ndim</span> <span class="p">:],</span> <span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">)):</span>
@@ -6273,10 +6353,11 @@
             <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span>
             <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
             <span class="n">data_cls</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">data_cls</span><span class="p">,</span>
+            <span class="n">step_mdp_static</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">step_mdp_static</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">out</span></div>
 
-<div class="viewcode-block" id="Composite.squeeze"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.Composite.html#torchrl.data.Composite.squeeze">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">squeeze</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<div class="viewcode-block" id="Composite.squeeze"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.Composite.html#torchrl.data.Composite.squeeze">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">squeeze</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Composite</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">dim</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">dim</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
                 <span class="n">dim</span> <span class="o">+=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
@@ -6295,6 +6376,7 @@
                 <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span>
                 <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
                 <span class="n">data_cls</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">data_cls</span><span class="p">,</span>
+                <span class="n">step_mdp_static</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">step_mdp_static</span><span class="p">,</span>
             <span class="p">)</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
@@ -6306,7 +6388,7 @@
         <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
         <span class="k">return</span> <span class="n">out</span><span class="o">.</span><span class="n">squeeze</span><span class="p">()</span></div>
 
-<div class="viewcode-block" id="Composite.unsqueeze"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.Composite.html#torchrl.data.Composite.unsqueeze">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">unsqueeze</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+<div class="viewcode-block" id="Composite.unsqueeze"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.Composite.html#torchrl.data.Composite.unsqueeze">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">unsqueeze</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Composite</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">dim</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
             <span class="n">dim</span> <span class="o">+=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
 
@@ -6325,9 +6407,10 @@
             <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span>
             <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
             <span class="n">data_cls</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">data_cls</span><span class="p">,</span>
+            <span class="n">step_mdp_static</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">step_mdp_static</span><span class="p">,</span>
         <span class="p">)</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">unbind</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">unbind</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Composite</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
         <span class="n">orig_dim</span> <span class="o">=</span> <span class="n">dim</span>
         <span class="k">if</span> <span class="n">dim</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
             <span class="n">dim</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">+</span> <span class="n">dim</span>
@@ -6343,6 +6426,7 @@
                 <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span>
                 <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
                 <span class="n">data_cls</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">data_cls</span><span class="p">,</span>
+                <span class="n">step_mdp_static</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">step_mdp_static</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">dim</span><span class="p">])</span>
         <span class="p">)</span>
@@ -6359,14 +6443,14 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">unlock_</span><span class="p">()</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
         <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
         <span class="n">__lock_parents_weakrefs</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;__lock_parents_weakrefs&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">__lock_parents_weakrefs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">result</span><span class="p">[</span><span class="s2">&quot;_lock_recurse&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="k">return</span> <span class="n">result</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">_lock_recurse</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;_lock_recurse&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">state</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
@@ -6375,8 +6459,12 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">lock_</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="n">_lock_recurse</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_propagate_lock</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">recurse</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">lock_parents_weakrefs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">is_compiling</span>
-    <span class="p">):</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">recurse</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+        <span class="n">lock_parents_weakrefs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">weakref</span><span class="o">.</span><span class="n">ref</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">is_compiling</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Registers the parent composite that handles the lock.&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_is_locked</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="k">if</span> <span class="n">lock_parents_weakrefs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -6406,7 +6494,7 @@
                     <span class="p">)</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_lock_parents_weakrefs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_lock_parents_weakrefs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">weakref</span><span class="o">.</span><span class="n">ref</span><span class="p">]:</span>
         <span class="n">_lock_parents_weakrefs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;__lock_parents_weakrefs&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">_lock_parents_weakrefs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">&quot;__lock_parents_weakrefs&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
@@ -6414,10 +6502,10 @@
         <span class="k">return</span> <span class="n">_lock_parents_weakrefs</span>
 
     <span class="nd">@_lock_parents_weakrefs</span><span class="o">.</span><span class="n">setter</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_lock_parents_weakrefs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">list</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_lock_parents_weakrefs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">weakref</span><span class="o">.</span><span class="n">ref</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">&quot;__lock_parents_weakrefs&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
 
-<div class="viewcode-block" id="Composite.lock_"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.Composite.html#torchrl.data.Composite.lock_">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">lock_</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">recurse</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">T</span><span class="p">:</span>
+<div class="viewcode-block" id="Composite.lock_"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.Composite.html#torchrl.data.Composite.lock_">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">lock_</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">recurse</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Locks the Composite and prevents modification of its content.</span>
 
 <span class="sd">        The recurse argument control whether the lock will be propagated to sub-specs.</span>
@@ -6467,7 +6555,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_propagate_lock</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="n">recurse</span><span class="p">,</span> <span class="n">is_compiling</span><span class="o">=</span><span class="n">is_comp</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span></div>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_propagate_unlock</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">recurse</span><span class="p">:</span> <span class="nb">bool</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_propagate_unlock</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">recurse</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Composite</span><span class="p">]:</span>
         <span class="c1"># if we end up here, we can clear the graph associated with this td</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_is_locked</span> <span class="o">=</span> <span class="kc">False</span>
 
@@ -6483,7 +6571,7 @@
             <span class="k">return</span> <span class="n">sub_specs</span>
         <span class="k">return</span> <span class="p">[]</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_check_unlock</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">first_attempt</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_unlock</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">first_attempt</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">first_attempt</span><span class="p">:</span>
             <span class="n">gc</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span>
         <span class="n">obj</span> <span class="o">=</span> <span class="kc">None</span>
@@ -6630,12 +6718,14 @@
         <span class="n">leaves_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">is_leaf</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">type</span><span class="p">],</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">step_mdp_static_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_CompositeSpecKeysView</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">_CompositeSpecItemsView</span><span class="p">(</span>
             <span class="bp">self</span><span class="p">,</span>
             <span class="n">include_nested</span><span class="o">=</span><span class="n">include_nested</span><span class="p">,</span>
             <span class="n">leaves_only</span><span class="o">=</span><span class="n">leaves_only</span><span class="p">,</span>
             <span class="n">is_leaf</span><span class="o">=</span><span class="n">is_leaf</span><span class="p">,</span>
+            <span class="n">step_mdp_static_only</span><span class="o">=</span><span class="n">step_mdp_static_only</span><span class="p">,</span>
         <span class="p">)</span><span class="o">.</span><span class="n">_keys</span><span class="p">()</span></div>
 
 <div class="viewcode-block" id="StackedComposite.items"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite.items">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">items</span><span class="p">(</span>
@@ -6644,6 +6734,7 @@
         <span class="n">leaves_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">is_leaf</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">type</span><span class="p">],</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">step_mdp_static_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_CompositeSpecItemsView</span><span class="p">:</span>
         <span class="k">return</span> <span class="nb">list</span><span class="p">(</span>
             <span class="n">_CompositeSpecItemsView</span><span class="p">(</span>
@@ -6651,6 +6742,7 @@
                 <span class="n">include_nested</span><span class="o">=</span><span class="n">include_nested</span><span class="p">,</span>
                 <span class="n">leaves_only</span><span class="o">=</span><span class="n">leaves_only</span><span class="p">,</span>
                 <span class="n">is_leaf</span><span class="o">=</span><span class="n">is_leaf</span><span class="p">,</span>
+                <span class="n">step_mdp_static_only</span><span class="o">=</span><span class="n">step_mdp_static_only</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="p">)</span></div>
 
@@ -6660,12 +6752,14 @@
         <span class="n">leaves_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">is_leaf</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">type</span><span class="p">],</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">step_mdp_static_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_CompositeSpecValuesView</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">_CompositeSpecItemsView</span><span class="p">(</span>
             <span class="bp">self</span><span class="p">,</span>
             <span class="n">include_nested</span><span class="o">=</span><span class="n">include_nested</span><span class="p">,</span>
             <span class="n">leaves_only</span><span class="o">=</span><span class="n">leaves_only</span><span class="p">,</span>
             <span class="n">is_leaf</span><span class="o">=</span><span class="n">is_leaf</span><span class="p">,</span>
+            <span class="n">step_mdp_static_only</span><span class="o">=</span><span class="n">step_mdp_static_only</span><span class="p">,</span>
         <span class="p">)</span><span class="o">.</span><span class="n">_values</span><span class="p">()</span></div>
 
 <div class="viewcode-block" id="StackedComposite.project"><a class="viewcode-back" href="../../../reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite.project">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">project</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">val</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
@@ -7056,15 +7150,17 @@
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">composite</span><span class="p">:</span> <span class="n">Composite</span><span class="p">,</span>
-        <span class="n">include_nested</span><span class="p">,</span>
-        <span class="n">leaves_only</span><span class="p">,</span>
+        <span class="n">include_nested</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+        <span class="n">leaves_only</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">is_leaf</span><span class="p">,</span>
+        <span class="n">is_leaf</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">type</span><span class="p">],</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">step_mdp_static_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">composite</span> <span class="o">=</span> <span class="n">composite</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">leaves_only</span> <span class="o">=</span> <span class="n">leaves_only</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">include_nested</span> <span class="o">=</span> <span class="n">include_nested</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">is_leaf</span> <span class="o">=</span> <span class="n">is_leaf</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">step_mdp_static_only</span> <span class="o">=</span> <span class="n">step_mdp_static_only</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">_NESTED_TENSORS_AS_LISTS</span>
@@ -7084,23 +7180,29 @@
                     <span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
                     <span class="n">leaves_only</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">leaves_only</span><span class="p">,</span>
                     <span class="n">is_leaf</span><span class="o">=</span><span class="n">is_leaf</span><span class="p">,</span>
+                    <span class="n">step_mdp_static_only</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">step_mdp_static_only</span><span class="p">,</span>
                 <span class="p">):</span>
                     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">subkey</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
                         <span class="n">subkey</span> <span class="o">=</span> <span class="p">(</span><span class="n">subkey</span><span class="p">,)</span>
                     <span class="k">yield</span> <span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="o">*</span><span class="n">subkey</span><span class="p">),</span> <span class="n">subitem</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">leaves_only</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">_is_leaf</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">item</span><span class="p">)):</span>
-                <span class="k">yield</span> <span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">leaves_only</span> <span class="ow">or</span> <span class="n">_is_leaf</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">item</span><span class="p">)):</span>
-                <span class="k">yield</span> <span class="n">key</span><span class="p">,</span> <span class="n">item</span>
-
-        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_composite_items</span><span class="p">(</span><span class="n">is_leaf</span><span class="p">):</span>
-            <span class="k">if</span> <span class="n">is_leaf</span> <span class="ow">is</span> <span class="n">_NESTED_TENSORS_AS_LISTS</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span>
-                <span class="n">item</span><span class="p">,</span> <span class="n">_LazyStackedMixin</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">step_mdp_static_only</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="s2">&quot;step_mdp_static&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">))</span>
+                <span class="ow">or</span> <span class="p">(</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">leaves_only</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">_is_leaf</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">item</span><span class="p">)))</span>
+                <span class="ow">or</span> <span class="p">(</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">leaves_only</span> <span class="ow">or</span> <span class="n">_is_leaf</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">item</span><span class="p">)))</span>
             <span class="p">):</span>
-                <span class="k">for</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">spec</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">item</span><span class="o">.</span><span class="n">_specs</span><span class="p">):</span>
-                    <span class="k">yield from</span> <span class="n">_iter_from_item</span><span class="p">(</span><span class="n">unravel_key</span><span class="p">((</span><span class="n">key</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">))),</span> <span class="n">spec</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="k">yield from</span> <span class="n">_iter_from_item</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span>
+                <span class="k">yield</span> <span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">step_mdp_static_only</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">composite</span><span class="p">,</span> <span class="s2">&quot;step_mdp_static&quot;</span><span class="p">,</span> <span class="kc">False</span>
+        <span class="p">):</span>
+            <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_composite_items</span><span class="p">(</span><span class="n">is_leaf</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">is_leaf</span> <span class="ow">is</span> <span class="n">_NESTED_TENSORS_AS_LISTS</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span>
+                    <span class="n">item</span><span class="p">,</span> <span class="n">_LazyStackedMixin</span>
+                <span class="p">):</span>
+                    <span class="k">for</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">spec</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">item</span><span class="o">.</span><span class="n">_specs</span><span class="p">):</span>
+                        <span class="k">yield from</span> <span class="n">_iter_from_item</span><span class="p">(</span><span class="n">unravel_key</span><span class="p">((</span><span class="n">key</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">))),</span> <span class="n">spec</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">yield from</span> <span class="n">_iter_from_item</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_get_composite_items</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">is_leaf</span><span class="p">):</span>
 

@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -388,7 +388,7 @@
         
           <li><a href="../index.html">API Reference</a> &gt;</li>
         
-          <li><a href="../llms.html">LLM interface</a> &gt;</li>
+          <li><a href="../llms.html">LLM Interface</a> &gt;</li>
         
       <li>MCAdvantage</li>
     
@@ -432,7 +432,7 @@
 <h1>MCAdvantage<a class="headerlink" href="#mcadvantage" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.objectives.llm.MCAdvantage">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.objectives.llm.</span></span><span class="sig-name descname"><span class="pre">MCAdvantage</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">grpo_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prompt_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'text'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rewards_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">('next',</span> <span class="pre">'reward')</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">advantage_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'advantage'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">done_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">('next',</span> <span class="pre">'done')</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/objectives/llm/grpo.html#MCAdvantage"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.objectives.llm.MCAdvantage" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.objectives.llm.</span></span><span class="sig-name descname"><span class="pre">MCAdvantage</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">grpo_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prompt_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'query'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rewards_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">('next',</span> <span class="pre">'reward')</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">advantage_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'advantage'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">done_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">('next',</span> <span class="pre">'done')</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/objectives/llm/grpo.html#MCAdvantage"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.objectives.llm.MCAdvantage" title="Permalink to this definition">¶</a></dt>
 <dd><p>Monte-Carlo advantage computation engine.</p>
 <p>When writing on a replay buffer, this transform keeps track of the existing trajectories with a similar
 initial prompt and holds a queue for that particular prompt in memory.
@@ -450,7 +450,7 @@ buffers hosting storages of more than one dimension.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>grpo_size</strong> (<em>int</em>) – Number of trajectories to keep in memory for the advantage computation.</p></li>
-<li><p><strong>prompt_key</strong> (<em>NestedKey</em>) – Key to the prompt in the tensordict. Defaults to “text”.</p></li>
+<li><p><strong>prompt_key</strong> (<em>NestedKey</em>) – Key to the prompt in the tensordict. Defaults to (“text”, “prompt”).</p></li>
 <li><p><strong>rewards_key</strong> (<em>NestedKey</em>) – Key to the rewards in the tensordict. Defaults to (“next”, “reward”).</p></li>
 <li><p><strong>advantage_key</strong> (<em>NestedKey</em>) – Key to the advantage in the tensordict. Defaults to “advantage”.</p></li>
 <li><p><strong>done_key</strong> (<em>NestedKey</em>) – Key to the done state in the tensordict. Defaults to (“next”, “done”).</p></li>
@@ -575,6 +575,16 @@ are direct members of this module.</p>
 <dd><p>Close the transform.</p>
 </dd></dl>
 
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.objectives.llm.MCAdvantage.collector">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">collector</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase" title="torchrl.collectors.DataCollectorBase"><span class="pre">DataCollectorBase</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.objectives.llm.MCAdvantage.collector" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the collector associated with the container, if it exists.</p>
+<p>This can be used whenever the transform needs to be made aware of the collector or the policy associated with it.</p>
+<p>Make sure to call this property only on transforms that are not nested in sub-processes.
+The collector reference will not be passed to the workers of a <a class="reference internal" href="torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a> or
+similar batched environments.</p>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.objectives.llm.MCAdvantage.compile">
 <span class="sig-name descname"><span class="pre">compile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.objectives.llm.MCAdvantage.compile" title="Permalink to this definition">¶</a></dt>
@@ -586,7 +596,7 @@ to <a class="reference external" href="https://docs.pytorch.org/docs/stable/gene
 
 <dl class="py property">
 <dt class="sig sig-object py" id="torchrl.objectives.llm.MCAdvantage.container">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">container</span></span><a class="headerlink" href="#torchrl.objectives.llm.MCAdvantage.container" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">container</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><span class="pre">EnvBase</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.objectives.llm.MCAdvantage.container" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns the env containing the transform.</p>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">TransformedEnv</span><span class="p">,</span> <span class="n">Compose</span><span class="p">,</span> <span class="n">RewardSum</span><span class="p">,</span> <span class="n">StepCounter</span>

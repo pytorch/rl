@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -388,7 +388,7 @@
         
           <li><a href="../index.html">API Reference</a> &gt;</li>
         
-          <li><a href="../llms.html">LLM interface</a> &gt;</li>
+          <li><a href="../llms.html">LLM Interface</a> &gt;</li>
         
       <li>IFEvalEnv</li>
     
@@ -459,6 +459,7 @@ template applied to the chat history is consistent with the format required by t
 <li><p><strong>collate_fn</strong> (<em>Callable</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – A custom collate function for data loading. If <cite>None</cite>, a default
 collate function is used. Defaults to <cite>None</cite>.</p></li>
 <li><p><strong>max_steps</strong> (<em>int</em><em>, </em><em>optional</em>) – The maximum number of steps allowed in an episode. Defaults to <cite>1</cite>.</p></li>
+<li><p><strong>input_mode</strong> (<em>Literal</em><em>[</em><em>&quot;history&quot;</em><em>, </em><em>&quot;text&quot;</em><em>, </em><em>&quot;tokens&quot;</em><em>]</em><em>, </em><em>optional</em>) – The mode of input to use. Defaults to <cite>“history”</cite>.</p></li>
 </ul>
 </dd>
 </dl>
@@ -904,6 +905,12 @@ of an experiment and as such should be kept out of training scripts.</p>
 </dl>
 </dd></dl>
 
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.envs.llm.IFEvalEnv.collector">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">collector</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase" title="torchrl.collectors.DataCollectorBase"><span class="pre">DataCollectorBase</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.envs.llm.IFEvalEnv.collector" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the collector associated with the container, if it exists.</p>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.envs.llm.IFEvalEnv.compile">
 <span class="sig-name descname"><span class="pre">compile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.envs.llm.IFEvalEnv.compile" title="Permalink to this definition">¶</a></dt>
@@ -1146,6 +1153,39 @@ this function, one should call the <code class="xref py py-class docutils litera
 instead of this since the former takes care of running the
 registered hooks while the latter silently ignores them.</p>
 </div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.envs.llm.IFEvalEnv.from_dataloader">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_dataloader</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataloader</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataLoader</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">repeats</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><span class="pre">torch.device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group_repeats</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.7)"><span class="pre">torch.Size</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">primers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.Composite"><span class="pre">Composite</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tokenizer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">transformers.AutoTokenizer</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">template_kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'history'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'text'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'tokens'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'history'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">system_prompt</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.envs.llm.IFEvalEnv.from_dataloader" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create a chat environment from a dataloader.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>dataloader</strong> (<em>DataLoader</em>) – The dataloader to use.</p>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>repeats</strong> (<em>int</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – The number of times to repeat each sample from the dataset (mainly for Monte-Carlo
+based value estimation). If <cite>None</cite>, the dataset is not repeated. Defaults to <cite>None</cite>.</p></li>
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em> | </em><em>None</em><em>, </em><em>optional</em>) – The device to use for computations. Defaults to None.</p></li>
+<li><p><strong>group_repeats</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to group repeated samples together. Defaults to <cite>False</cite>.</p></li>
+<li><p><strong>batch_size</strong> (<em>tuple</em><em> | </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.7)"><em>torch.Size</em></a><em> | </em><em>None</em><em>, </em><em>optional</em>) – The batch size for data loading. Defaults to <cite>1</cite>.</p></li>
+<li><p><strong>primers</strong> (<a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.Composite"><em>Composite</em></a><em> | </em><em>None</em><em>, </em><em>optional</em>) – The primers to use for data loading. Defaults to <cite>None</cite>.</p></li>
+<li><p><strong>tokenizer</strong> (<em>transformers.AutoTokenizer</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – The tokenizer to use for text processing. Defaults to <cite>None</cite>.</p></li>
+<li><p><strong>template_kwargs</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>Any</em><em>] </em><em>| </em><em>None</em><em>, </em><em>optional</em>) – Additional keyword arguments for the template. Defaults to <cite>None</cite>.</p></li>
+<li><p><strong>input_mode</strong> (<em>Literal</em><em>[</em><em>&quot;history&quot;</em><em>, </em><em>&quot;text&quot;</em><em>, </em><em>&quot;tokens&quot;</em><em>]</em><em>, </em><em>optional</em>) – The mode of input to the environment. Defaults to <cite>“history”</cite>.</p></li>
+<li><p><strong>data_key</strong> (<em>str</em><em>, </em><em>optional</em>) – The spec of the data returned by the dataloader (or better, its collate_fn).
+Defaults to <cite>None</cite> (automatically determined based on the input_mode).</p></li>
+<li><p><strong>system_prompt</strong> (<em>str</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – The system prompt to use for the environment. Defaults to <cite>None</cite>.</p></li>
+</ul>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The chat environment.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="torchrl.envs.llm.ChatEnv.html#torchrl.envs.llm.ChatEnv" title="torchrl.envs.llm.ChatEnv">ChatEnv</a></p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py property">
@@ -1881,6 +1921,17 @@ the buffer is <strong>not</strong> included in the module’s <a class="referenc
 <span class="gp">&gt;&gt;&gt; </span><span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s1">&#39;running_mean&#39;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">num_features</span><span class="p">))</span>
 </pre></div>
 </div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.envs.llm.IFEvalEnv.register_collector">
+<span class="sig-name descname"><span class="pre">register_collector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">collector</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase" title="torchrl.collectors.DataCollectorBase"><span class="pre">DataCollectorBase</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.envs.llm.IFEvalEnv.register_collector" title="Permalink to this definition">¶</a></dt>
+<dd><p>Registers a collector with the environment.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>collector</strong> (<a class="reference internal" href="torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase" title="torchrl.collectors.DataCollectorBase"><em>DataCollectorBase</em></a>) – The collector to register.</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">

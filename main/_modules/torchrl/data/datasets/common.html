@@ -9,7 +9,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torchrl.data.llm.common &mdash; torchrl main documentation</title>
+  <title>torchrl.data.datasets.common &mdash; torchrl main documentation</title>
   
 
   
@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -385,7 +385,7 @@
         
           <li><a href="../../../index.html">Module code</a> &gt;</li>
         
-      <li>torchrl.data.llm.common</li>
+      <li>torchrl.data.datasets.common</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
@@ -419,53 +419,288 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <h1>Source code for torchrl.data.llm.common</h1><div class="highlight"><pre>
+  <h1>Source code for torchrl.data.datasets.common</h1><div class="highlight"><pre>
 <span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
 <span class="c1">#</span>
 <span class="c1"># This source code is licensed under the MIT license found in the</span>
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">abc</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">shutil</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
+
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">multiprocessing</span> <span class="k">as</span> <span class="n">mp</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorClass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_can_be_pickled</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.replay_buffers</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictReplayBuffer</span><span class="p">,</span> <span class="n">TensorStorage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">CloudpickleWrapper</span>
 
 
-<div class="viewcode-block" id="LLMData"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.llm.LLMData.html#torchrl.data.llm.LLMData">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">LLMData</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;nocast&quot;</span><span class="p">]):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Represents the input or output of a Large Language Model (LLM).</span>
+<div class="viewcode-block" id="BaseDatasetExperienceReplay"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.datasets.BaseDatasetExperienceReplay.html#torchrl.data.datasets.BaseDatasetExperienceReplay">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">BaseDatasetExperienceReplay</span><span class="p">(</span><span class="n">TensorDictReplayBuffer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parent class for offline datasets.&quot;&quot;&quot;</span>
 
-<span class="sd">    Other algorithm-specific attributes such as `reward`, `advantages` or done states are handled automatically by the</span>
-<span class="sd">    envs and, therefore, are not included in this class.</span>
+    <span class="nd">@property</span>
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">data_path</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Path to the dataset, including split.&quot;&quot;&quot;</span>
+        <span class="o">...</span>
 
-<span class="sd">    Attributes:</span>
-<span class="sd">        tokens (torch.Tensor): The input/output tokens as a tensor.</span>
-<span class="sd">        attention_mask (torch.Tensor, optional): The attention mask for the input tokens. Default to `None`.</span>
-<span class="sd">        tokens_response (torch.Tensor, optional): The response tokens generated by the model. Default to `None`.</span>
+    <span class="nd">@property</span>
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">data_path_root</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Path to the dataset root.&quot;&quot;&quot;</span>
+        <span class="o">...</span>
 
-<span class="sd">            .. note:: the reponse is the sequence of tokens output by a model, excluding the input</span>
-<span class="sd">                tokens.</span>
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_is_downloaded</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Checks if the data has been downloaded.&quot;&quot;&quot;</span>
+        <span class="o">...</span>
 
-<span class="sd">        token_list (list[int] | list[list[int]], optional): The output tokens as a list of integers or a list of lists</span>
-<span class="sd">            of integers. Default to `None`.</span>
-<span class="sd">        tokens_response_list (list[list[int]], optional): The response tokens generated by the model as a list of</span>
-<span class="sd">            lists of integers. Default to `None`.</span>
-<span class="sd">        logits (torch.Tensor, optional): The logits of the output tokens. Default to `None`.</span>
-<span class="sd">        log_probs (torch.Tensor, optional): The log probabilities of the output tokens. Default to `None`.</span>
-<span class="sd">        text (str | list[str], optional): The output text as a string or a list of strings. Default to `None`.</span>
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">root</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_root</span>
 
-<span class="sd">    .. seealso:: :class:`~torchrl.data.LLMInput` and :class:`~torchrl.data.LLMOutput`.</span>
+    <span class="nd">@root</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">root</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_root</span> <span class="o">=</span> <span class="n">value</span>
 
-<span class="sd">    &quot;&quot;&quot;</span>
+<div class="viewcode-block" id="BaseDatasetExperienceReplay.preprocess"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.datasets.BaseDatasetExperienceReplay.html#torchrl.data.datasets.BaseDatasetExperienceReplay.preprocess">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">preprocess</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">TensorDictBase</span><span class="p">],</span>
+        <span class="n">dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">num_workers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">chunksize</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_chunks</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">pool</span><span class="p">:</span> <span class="n">mp</span><span class="o">.</span><span class="n">Pool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">generator</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">max_tasks_per_child</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">worker_threads</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">index_with_generator</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">pbar</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">mp_start_method</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_frames</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">dest</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorStorage</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Preprocesses a dataset and returns a new storage with the formatted data.</span>
 
-    <span class="n">tokens</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">tokens_response</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">attention_mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">token_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">tokens_response_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">logits</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">log_probs</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">text</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">text_response</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
+<span class="sd">        The data transform must be unitary (work on a single sample of the dataset).</span>
+
+<span class="sd">        Args and Keyword Args are forwarded to :meth:`~tensordict.TensorDictBase.map`.</span>
+
+<span class="sd">        The dataset can subsequently be deleted using :meth:`delete`.</span>
+
+<span class="sd">        Keyword Args:</span>
+<span class="sd">            dest (path or equivalent): a path to the location of the new dataset.</span>
+<span class="sd">            num_frames (int, optional): if provided, only the first `num_frames` will be</span>
+<span class="sd">                transformed. This is useful to debug the transform at first.</span>
+
+<span class="sd">        Returns: A new storage to be used within a :class:`~torchrl.data.ReplayBuffer` instance.</span>
+
+<span class="sd">        Examples:</span>
+<span class="sd">            &gt;&gt;&gt; from torchrl.data.datasets import MinariExperienceReplay</span>
+<span class="sd">            &gt;&gt;&gt;</span>
+<span class="sd">            &gt;&gt;&gt; data = MinariExperienceReplay(</span>
+<span class="sd">            ...     list(MinariExperienceReplay.available_datasets)[0],</span>
+<span class="sd">            ...     batch_size=32</span>
+<span class="sd">            ...     )</span>
+<span class="sd">            &gt;&gt;&gt; print(data)</span>
+<span class="sd">            MinariExperienceReplay(</span>
+<span class="sd">                storages=TensorStorage(TensorDict(</span>
+<span class="sd">                    fields={</span>
+<span class="sd">                        action: MemoryMappedTensor(shape=torch.Size([1000000, 8]), device=cpu, dtype=torch.float32, is_shared=True),</span>
+<span class="sd">                        episode: MemoryMappedTensor(shape=torch.Size([1000000]), device=cpu, dtype=torch.int64, is_shared=True),</span>
+<span class="sd">                        info: TensorDict(</span>
+<span class="sd">                            fields={</span>
+<span class="sd">                                distance_from_origin: MemoryMappedTensor(shape=torch.Size([1000000]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                forward_reward: MemoryMappedTensor(shape=torch.Size([1000000]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                goal: MemoryMappedTensor(shape=torch.Size([1000000, 2]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                qpos: MemoryMappedTensor(shape=torch.Size([1000000, 15]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                qvel: MemoryMappedTensor(shape=torch.Size([1000000, 14]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                reward_ctrl: MemoryMappedTensor(shape=torch.Size([1000000]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                reward_forward: MemoryMappedTensor(shape=torch.Size([1000000]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                reward_survive: MemoryMappedTensor(shape=torch.Size([1000000]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                success: MemoryMappedTensor(shape=torch.Size([1000000]), device=cpu, dtype=torch.bool, is_shared=True),</span>
+<span class="sd">                                x_position: MemoryMappedTensor(shape=torch.Size([1000000]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                x_velocity: MemoryMappedTensor(shape=torch.Size([1000000]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                y_position: MemoryMappedTensor(shape=torch.Size([1000000]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                y_velocity: MemoryMappedTensor(shape=torch.Size([1000000]), device=cpu, dtype=torch.float64, is_shared=True)},</span>
+<span class="sd">                            batch_size=torch.Size([1000000]),</span>
+<span class="sd">                            device=cpu,</span>
+<span class="sd">                            is_shared=False),</span>
+<span class="sd">                        next: TensorDict(</span>
+<span class="sd">                            fields={</span>
+<span class="sd">                                done: MemoryMappedTensor(shape=torch.Size([1000000, 1]), device=cpu, dtype=torch.bool, is_shared=True),</span>
+<span class="sd">                                info: TensorDict(</span>
+<span class="sd">                                    fields={</span>
+<span class="sd">                                        distance_from_origin: MemoryMappedTensor(shape=torch.Size([1000000]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                        forward_reward: MemoryMappedTensor(shape=torch.Size([1000000]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                        goal: MemoryMappedTensor(shape=torch.Size([1000000, 2]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                        qpos: MemoryMappedTensor(shape=torch.Size([1000000, 15]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                        qvel: MemoryMappedTensor(shape=torch.Size([1000000, 14]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                        reward_ctrl: MemoryMappedTensor(shape=torch.Size([1000000]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                        reward_forward: MemoryMappedTensor(shape=torch.Size([1000000]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                        reward_survive: MemoryMappedTensor(shape=torch.Size([1000000]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                        success: MemoryMappedTensor(shape=torch.Size([1000000]), device=cpu, dtype=torch.bool, is_shared=True),</span>
+<span class="sd">                                        x_position: MemoryMappedTensor(shape=torch.Size([1000000]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                        x_velocity: MemoryMappedTensor(shape=torch.Size([1000000]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                        y_position: MemoryMappedTensor(shape=torch.Size([1000000]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                        y_velocity: MemoryMappedTensor(shape=torch.Size([1000000]), device=cpu, dtype=torch.float64, is_shared=True)},</span>
+<span class="sd">                                    batch_size=torch.Size([1000000]),</span>
+<span class="sd">                                    device=cpu,</span>
+<span class="sd">                                    is_shared=False),</span>
+<span class="sd">                                observation: TensorDict(</span>
+<span class="sd">                                    fields={</span>
+<span class="sd">                                        achieved_goal: MemoryMappedTensor(shape=torch.Size([1000000, 2]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                        desired_goal: MemoryMappedTensor(shape=torch.Size([1000000, 2]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                        observation: MemoryMappedTensor(shape=torch.Size([1000000, 27]), device=cpu, dtype=torch.float64, is_shared=True)},</span>
+<span class="sd">                                    batch_size=torch.Size([1000000]),</span>
+<span class="sd">                                    device=cpu,</span>
+<span class="sd">                                    is_shared=False),</span>
+<span class="sd">                                reward: MemoryMappedTensor(shape=torch.Size([1000000, 1]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                terminated: MemoryMappedTensor(shape=torch.Size([1000000, 1]), device=cpu, dtype=torch.bool, is_shared=True),</span>
+<span class="sd">                                truncated: MemoryMappedTensor(shape=torch.Size([1000000, 1]), device=cpu, dtype=torch.bool, is_shared=True)},</span>
+<span class="sd">                            batch_size=torch.Size([1000000]),</span>
+<span class="sd">                            device=cpu,</span>
+<span class="sd">                            is_shared=False),</span>
+<span class="sd">                        observation: TensorDict(</span>
+<span class="sd">                            fields={</span>
+<span class="sd">                                achieved_goal: MemoryMappedTensor(shape=torch.Size([1000000, 2]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                desired_goal: MemoryMappedTensor(shape=torch.Size([1000000, 2]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                observation: MemoryMappedTensor(shape=torch.Size([1000000, 27]), device=cpu, dtype=torch.float64, is_shared=True)},</span>
+<span class="sd">                            batch_size=torch.Size([1000000]),</span>
+<span class="sd">                            device=cpu,</span>
+<span class="sd">                            is_shared=False)},</span>
+<span class="sd">                    batch_size=torch.Size([1000000]),</span>
+<span class="sd">                    device=cpu,</span>
+<span class="sd">                    is_shared=False)),</span>
+<span class="sd">                samplers=RandomSampler,</span>
+<span class="sd">                writers=ImmutableDatasetWriter(),</span>
+<span class="sd">            batch_size=32,</span>
+<span class="sd">            transform=Compose(</span>
+<span class="sd">            ),</span>
+<span class="sd">            collate_fn=&lt;function _collate_id at 0x120e21dc0&gt;)</span>
+<span class="sd">            &gt;&gt;&gt; from torchrl.envs import CatTensors, Compose</span>
+<span class="sd">            &gt;&gt;&gt; from tempfile import TemporaryDirectory</span>
+<span class="sd">            &gt;&gt;&gt;</span>
+<span class="sd">            &gt;&gt;&gt; cat_tensors = CatTensors(</span>
+<span class="sd">            ...     in_keys=[(&quot;observation&quot;, &quot;observation&quot;), (&quot;observation&quot;, &quot;achieved_goal&quot;),</span>
+<span class="sd">            ...              (&quot;observation&quot;, &quot;desired_goal&quot;)],</span>
+<span class="sd">            ...     out_key=&quot;obs&quot;</span>
+<span class="sd">            ...     )</span>
+<span class="sd">            &gt;&gt;&gt; cat_next_tensors = CatTensors(</span>
+<span class="sd">            ...     in_keys=[(&quot;next&quot;, &quot;observation&quot;, &quot;observation&quot;),</span>
+<span class="sd">            ...              (&quot;next&quot;, &quot;observation&quot;, &quot;achieved_goal&quot;),</span>
+<span class="sd">            ...              (&quot;next&quot;, &quot;observation&quot;, &quot;desired_goal&quot;)],</span>
+<span class="sd">            ...     out_key=(&quot;next&quot;, &quot;obs&quot;)</span>
+<span class="sd">            ...     )</span>
+<span class="sd">            &gt;&gt;&gt; t = Compose(cat_tensors, cat_next_tensors)</span>
+<span class="sd">            &gt;&gt;&gt;</span>
+<span class="sd">            &gt;&gt;&gt; def func(td):</span>
+<span class="sd">            ...     td = td.select(</span>
+<span class="sd">            ...         &quot;action&quot;,</span>
+<span class="sd">            ...         &quot;episode&quot;,</span>
+<span class="sd">            ...         (&quot;next&quot;, &quot;done&quot;),</span>
+<span class="sd">            ...         (&quot;next&quot;, &quot;observation&quot;),</span>
+<span class="sd">            ...         (&quot;next&quot;, &quot;reward&quot;),</span>
+<span class="sd">            ...         (&quot;next&quot;, &quot;terminated&quot;),</span>
+<span class="sd">            ...         (&quot;next&quot;, &quot;truncated&quot;),</span>
+<span class="sd">            ...         &quot;observation&quot;</span>
+<span class="sd">            ...         )</span>
+<span class="sd">            ...     td = t(td)</span>
+<span class="sd">            ...     return td</span>
+<span class="sd">            &gt;&gt;&gt; with TemporaryDirectory() as tmpdir:</span>
+<span class="sd">            ...     new_storage = data.preprocess(func, num_workers=4, pbar=True, mp_start_method=&quot;fork&quot;, dest=tmpdir)</span>
+<span class="sd">            ...     rb = ReplayBuffer(storage=new_storage)</span>
+<span class="sd">            ...     print(rb)</span>
+<span class="sd">            ReplayBuffer(</span>
+<span class="sd">                storage=TensorStorage(</span>
+<span class="sd">                    data=TensorDict(</span>
+<span class="sd">                        fields={</span>
+<span class="sd">                            action: MemoryMappedTensor(shape=torch.Size([1000000, 8]), device=cpu, dtype=torch.float32, is_shared=True),</span>
+<span class="sd">                            episode: MemoryMappedTensor(shape=torch.Size([1000000]), device=cpu, dtype=torch.int64, is_shared=True),</span>
+<span class="sd">                            next: TensorDict(</span>
+<span class="sd">                                fields={</span>
+<span class="sd">                                    done: MemoryMappedTensor(shape=torch.Size([1000000, 1]), device=cpu, dtype=torch.bool, is_shared=True),</span>
+<span class="sd">                                    obs: MemoryMappedTensor(shape=torch.Size([1000000, 31]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                    observation: TensorDict(</span>
+<span class="sd">                                        fields={</span>
+<span class="sd">                                        },</span>
+<span class="sd">                                        batch_size=torch.Size([1000000]),</span>
+<span class="sd">                                        device=cpu,</span>
+<span class="sd">                                        is_shared=False),</span>
+<span class="sd">                                    reward: MemoryMappedTensor(shape=torch.Size([1000000, 1]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                                    terminated: MemoryMappedTensor(shape=torch.Size([1000000, 1]), device=cpu, dtype=torch.bool, is_shared=True),</span>
+<span class="sd">                                    truncated: MemoryMappedTensor(shape=torch.Size([1000000, 1]), device=cpu, dtype=torch.bool, is_shared=True)},</span>
+<span class="sd">                                batch_size=torch.Size([1000000]),</span>
+<span class="sd">                                device=cpu,</span>
+<span class="sd">                                is_shared=False),</span>
+<span class="sd">                            obs: MemoryMappedTensor(shape=torch.Size([1000000, 31]), device=cpu, dtype=torch.float64, is_shared=True),</span>
+<span class="sd">                            observation: TensorDict(</span>
+<span class="sd">                                fields={</span>
+<span class="sd">                                },</span>
+<span class="sd">                                batch_size=torch.Size([1000000]),</span>
+<span class="sd">                                device=cpu,</span>
+<span class="sd">                                is_shared=False)},</span>
+<span class="sd">                        batch_size=torch.Size([1000000]),</span>
+<span class="sd">                        device=cpu,</span>
+<span class="sd">                        is_shared=False),</span>
+<span class="sd">                    shape=torch.Size([1000000]),</span>
+<span class="sd">                    len=1000000,</span>
+<span class="sd">                    max_size=1000000),</span>
+<span class="sd">                sampler=RandomSampler(),</span>
+<span class="sd">                writer=RoundRobinWriter(cursor=0, full_storage=True),</span>
+<span class="sd">                batch_size=None,</span>
+<span class="sd">                collate_fn=&lt;function _collate_id at 0x168406fc0&gt;)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_can_be_pickled</span><span class="p">(</span><span class="n">fn</span><span class="p">):</span>
+            <span class="n">fn</span> <span class="o">=</span> <span class="n">CloudpickleWrapper</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">,</span> <span class="n">TensorStorage</span><span class="p">):</span>
+            <span class="n">item</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">with</span> <span class="n">item</span><span class="o">.</span><span class="n">unlock_</span><span class="p">():</span>
+                <span class="n">example_data</span> <span class="o">=</span> <span class="n">fn</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">num_frames</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">num_frames</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">mmlike</span> <span class="o">=</span> <span class="n">example_data</span><span class="o">.</span><span class="n">expand</span><span class="p">((</span><span class="n">num_frames</span><span class="p">,</span> <span class="o">*</span><span class="n">example_data</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span><span class="o">.</span><span class="n">memmap_like</span><span class="p">(</span>
+                <span class="n">dest</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">32</span>
+            <span class="p">)</span>
+            <span class="n">storage</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">_storage</span>
+            <span class="k">if</span> <span class="n">num_frames</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+                <span class="n">storage</span> <span class="o">=</span> <span class="n">storage</span><span class="p">[:</span><span class="n">num_frames</span><span class="p">]</span>
+            <span class="k">with</span> <span class="n">storage</span><span class="o">.</span><span class="n">unlock_</span><span class="p">():</span>
+                <span class="n">storage</span><span class="o">.</span><span class="n">map</span><span class="p">(</span>
+                    <span class="n">fn</span><span class="o">=</span><span class="n">fn</span><span class="p">,</span>
+                    <span class="n">dim</span><span class="o">=</span><span class="n">dim</span><span class="p">,</span>
+                    <span class="n">num_workers</span><span class="o">=</span><span class="n">num_workers</span><span class="p">,</span>
+                    <span class="n">chunksize</span><span class="o">=</span><span class="n">chunksize</span><span class="p">,</span>
+                    <span class="n">num_chunks</span><span class="o">=</span><span class="n">num_chunks</span><span class="p">,</span>
+                    <span class="n">pool</span><span class="o">=</span><span class="n">pool</span><span class="p">,</span>
+                    <span class="n">generator</span><span class="o">=</span><span class="n">generator</span><span class="p">,</span>
+                    <span class="n">max_tasks_per_child</span><span class="o">=</span><span class="n">max_tasks_per_child</span><span class="p">,</span>
+                    <span class="n">worker_threads</span><span class="o">=</span><span class="n">worker_threads</span><span class="p">,</span>
+                    <span class="n">index_with_generator</span><span class="o">=</span><span class="n">index_with_generator</span><span class="p">,</span>
+                    <span class="n">pbar</span><span class="o">=</span><span class="n">pbar</span><span class="p">,</span>
+                    <span class="n">mp_start_method</span><span class="o">=</span><span class="n">mp_start_method</span><span class="p">,</span>
+                    <span class="n">out</span><span class="o">=</span><span class="n">mmlike</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">return</span> <span class="n">TensorStorage</span><span class="p">(</span><span class="n">mmlike</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;preprocess is only implemented for storages that subclass TensorStorage. &quot;</span>
+                <span class="s2">&quot;To use this functionality with another type of storage, implement the &quot;</span>
+                <span class="s2">&quot;method directly or raise an issue on TorchRL&#39;s github repository.&quot;</span>
+            <span class="p">)</span></div>
+
+<div class="viewcode-block" id="BaseDatasetExperienceReplay.delete"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.datasets.BaseDatasetExperienceReplay.html#torchrl.data.datasets.BaseDatasetExperienceReplay.delete">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">delete</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Deletes a dataset storage from disk.&quot;&quot;&quot;</span>
+        <span class="n">shutil</span><span class="o">.</span><span class="n">rmtree</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_path</span><span class="p">)</span></div></div>
 </pre></div>
 
              </article>

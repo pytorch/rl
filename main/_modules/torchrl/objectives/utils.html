@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -1018,14 +1018,31 @@
     <span class="k">return</span> <span class="n">new_func</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_reduce</span><span class="p">(</span><span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">reduction</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Reduces a tensor given the reduction method.&quot;&quot;&quot;</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_reduce</span><span class="p">(</span>
+    <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">reduction</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Reduces a tensor given the reduction method.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        tensor (torch.Tensor): The tensor to reduce.</span>
+<span class="sd">        reduction (str): The reduction method.</span>
+<span class="sd">        mask (torch.Tensor, optional): A mask to apply to the tensor before reducing.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        float | torch.Tensor: The reduced tensor.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">reduction</span> <span class="o">==</span> <span class="s2">&quot;none&quot;</span><span class="p">:</span>
         <span class="n">result</span> <span class="o">=</span> <span class="n">tensor</span>
     <span class="k">elif</span> <span class="n">reduction</span> <span class="o">==</span> <span class="s2">&quot;mean&quot;</span><span class="p">:</span>
-        <span class="n">result</span> <span class="o">=</span> <span class="n">tensor</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">tensor</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">tensor</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
     <span class="k">elif</span> <span class="n">reduction</span> <span class="o">==</span> <span class="s2">&quot;sum&quot;</span><span class="p">:</span>
-        <span class="n">result</span> <span class="o">=</span> <span class="n">tensor</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">tensor</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">tensor</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown reduction method </span><span class="si">{</span><span class="n">reduction</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">result</span>
@@ -1090,9 +1107,20 @@
     <span class="k">return</span> <span class="n">data</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="s2">&quot;feature&quot;</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_maybe_get_or_select</span><span class="p">(</span><span class="n">td</span><span class="p">,</span> <span class="n">key_or_keys</span><span class="p">,</span> <span class="n">target_shape</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_maybe_get_or_select</span><span class="p">(</span>
+    <span class="n">td</span><span class="p">,</span>
+    <span class="n">key_or_keys</span><span class="p">,</span>
+    <span class="n">target_shape</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">padding_side</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;left&quot;</span><span class="p">,</span>
+    <span class="n">padding_value</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+<span class="p">):</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">key_or_keys</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)):</span>
-        <span class="k">return</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key_or_keys</span><span class="p">,</span> <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+            <span class="n">key_or_keys</span><span class="p">,</span>
+            <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">padding_side</span><span class="o">=</span><span class="n">padding_side</span><span class="p">,</span>
+            <span class="n">padding_value</span><span class="o">=</span><span class="n">padding_value</span><span class="p">,</span>
+        <span class="p">)</span>
     <span class="n">result</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">key_or_keys</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">target_shape</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">result</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">target_shape</span><span class="p">:</span>
         <span class="n">result</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="n">target_shape</span>

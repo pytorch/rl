@@ -39,8 +39,8 @@
   <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="MCPToolTransform" href="torchrl.envs.llm.transforms.MCPToolTransform.html" />
-    <link rel="prev" title="KLRewardTransform" href="torchrl.envs.llm.transforms.KLRewardTransform.html" />
+    <link rel="next" title="TemplateTransform" href="torchrl.envs.llm.transforms.TemplateTransform.html" />
+    <link rel="prev" title="RetrieveKL" href="torchrl.envs.llm.transforms.RetrieveKL.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -388,7 +388,7 @@
         
           <li><a href="../index.html">API Reference</a> &gt;</li>
         
-          <li><a href="../llms.html">LLM interface</a> &gt;</li>
+          <li><a href="../llms.html">LLM Interface</a> &gt;</li>
         
       <li>RetrieveLogProb</li>
     
@@ -432,42 +432,49 @@
 <h1>RetrieveLogProb<a class="headerlink" href="#retrievelogprob" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.envs.llm.transforms.RetrieveLogProb">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.llm.transforms.</span></span><span class="sig-name descname"><span class="pre">RetrieveLogProb</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">actor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.modules.llm.CategoricalSequential.html#torchrl.modules.llm.CategoricalSequential" title="torchrl.modules.llm.CategoricalSequential"><span class="pre">CategoricalSequential</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">history_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_prob_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'ref_log_prob'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">assistant_only</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tokenizer_kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">detach</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><span class="pre">torch.device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tokenizer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">transformers.AutoTokenizer</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/llm/transforms/kl.html#RetrieveLogProb"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.llm.transforms.RetrieveLogProb" title="Permalink to this definition">¶</a></dt>
-<dd><p>A transform to retrieve the log-probs of a text given a reference model.</p>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.llm.transforms.</span></span><span class="sig-name descname"><span class="pre">RetrieveLogProb</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.modules.llm.LLMWrapperBase.html#torchrl.modules.llm.LLMWrapperBase" title="torchrl.modules.llm.LLMWrapperBase"><span class="pre">LLMWrapperBase</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_probs_full_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">assistant_only</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tokenizer_kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">detach</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><span class="pre">torch.device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tokenizer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">transformers.AutoTokenizer</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">padding_side</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'left'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/llm/transforms/kl.html#RetrieveLogProb"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.llm.transforms.RetrieveLogProb" title="Permalink to this definition">¶</a></dt>
+<dd><p>A transform to retrieve log-probabilities from a model for KL divergence computation.</p>
+<p>This transform computes log-probabilities from a reference model, which can then be used
+to compute KL divergence with another model’s log-probabilities. It’s designed to work
+with the <a class="reference internal" href="torchrl.envs.llm.transforms.RetrieveKL.html#torchrl.envs.llm.transforms.RetrieveKL" title="torchrl.envs.llm.transforms.kl.RetrieveKL"><code class="xref py py-class docutils literal notranslate"><span class="pre">RetrieveKL</span></code></a> and <a class="reference internal" href="torchrl.envs.llm.transforms.KLComputation.html#torchrl.envs.llm.transforms.KLComputation" title="torchrl.envs.llm.transforms.kl.KLComputation"><code class="xref py py-class docutils literal notranslate"><span class="pre">KLComputation</span></code></a> transforms.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>actor</strong> (<a class="reference internal" href="torchrl.modules.llm.CategoricalSequential.html#torchrl.modules.llm.CategoricalSequential" title="torchrl.modules.llm.CategoricalSequential"><em>CategoricalSequential</em></a>) – the reference model.</p>
+<dd class="field-odd"><p><strong>model</strong> (<a class="reference internal" href="torchrl.modules.llm.LLMWrapperBase.html#torchrl.modules.llm.LLMWrapperBase" title="torchrl.modules.llm.LLMWrapperBase"><em>LLMWrapperBase</em></a>) – the model to use to compute the log-probs.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>history_key</strong> (<em>NestedKey</em>) – the key where the history is stored. Defaults to <cite>“history”</cite>.</p></li>
-<li><p><strong>log_prob_key</strong> (<em>NestedKey</em>) – the key where the log-probs are stored. Defaults to <cite>“ref_log_prob”</cite>.</p></li>
-<li><p><strong>assistant_only</strong> (<em>bool</em>) – <p>whether to only retrieve the log-probs of the assistant tokens (i.e., steps of history
-where the role is <cite>“assistant”</cite>). Defaults to <cite>False</cite>.</p>
+<li><p><strong>log_probs_full_key</strong> (<em>NestedKey</em>) – the key where the log-probs are stored.
+If not provided, the key will be retrieved from the model’s <cite>log_probs_key</cite> attribute
+(i.e., <cite>(model.log_probs_key, “full”)</cite>).</p></li>
+<li><p><strong>assistant_only</strong> (<em>bool</em>) – <p>whether to zero out the log-probs of the non-assistant tokens (i.e., steps of history
+where the role is not <cite>“assistant”</cite>). Defaults to <cite>True</cite>.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>The template must accommodate the <cite>return_assistant_tokens_mask</cite> keyword argument.
-This may not be the case for all templates. In this case, you can pass a custom template to the <cite>apply_chat_template</cite> method
-via the <cite>tokenizer_kwargs</cite> argument: <cite>tokenizer_kwargs = {“chat_template_name”: “qwen”}</cite> or <a href="#id1"><span class="problematic" id="id2">`</span></a>tokenizer_kwargs = {“chat_template”: my_template}.</p>
+<p>When <cite>assistant_only=True</cite>, the model must have <cite>input_mode=’history’</cite> to properly identify
+assistant tokens. For other input modes (<cite>“text”</cite> or <cite>“tokens”</cite>), set <cite>assistant_only=False</cite>.
+This ensures users are conscious of the limitation that assistant token identification requires
+structured conversation history.</p>
 </div>
 </p></li>
 <li><p><strong>tokenizer_kwargs</strong> (<em>dict</em>) – the keyword arguments to pass to the tokenizer to be used to apply the chat template to the history when <cite>assistant_only</cite> is <cite>True</cite>.
-To control the tokenization in the actor, pass the tokenizer kwargs to the actor constructor.
-Defaults to <cite>{“return_assistant_tokens_mask”: True, “tokenize”: True, “return_tensors”: “pt”, “padding”: True, “add_generation_prompt”: False}</cite>.</p></li>
-<li><p><strong>tokenizer</strong> (<em>transformers.AutoTokenizer</em>) – the tokenizer to be used to tokenize the input and compute the assitant mask. If not provided, the tokenizer will be inferred from the <cite>actor</cite>.</p></li>
+To control the tokenization in the ref_model, pass the tokenizer kwargs to the ref_model constructor.
+Defaults to <cite>{“return_assistant_tokens_mask”: True, “tokenize”: True, “return_dict”: True, “padding”: False, “add_generation_prompt”: False}</cite>.</p></li>
+<li><p><strong>tokenizer</strong> (<em>transformers.AutoTokenizer</em>) – the tokenizer to be used to tokenize the input and compute the assitant mask. If not provided, the tokenizer will be inferred from the <cite>ref_model</cite>.</p></li>
 <li><p><strong>detach</strong> (<em>bool</em>) – whether to exclude the log-probs from the gradient computation. Defaults to <cite>True</cite>.</p></li>
 <li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a>) – the device to use for tensor creation. Defaults to <cite>None</cite>.</p></li>
+<li><p><strong>padding_side</strong> (<em>str</em>) – the side of the padding when using pad_sequence. Defaults to <cite>“left”</cite>.</p></li>
 </ul>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.llm.chat</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span><span class="p">,</span> <span class="n">_CHAT_TEMPLATES</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">TransformersWrapper</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives.llm.sft</span><span class="w"> </span><span class="kn">import</span> <span class="n">SFTLoss</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm.policies</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChatHistory</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutoTokenizer</span><span class="p">,</span> <span class="n">OPTConfig</span><span class="p">,</span> <span class="n">OPTForCausalLM</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">lazy_stack</span><span class="p">,</span> <span class="n">set_list_to_stack</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">set_list_to_stack</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Set up list to stack for History</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">set_list_to_stack</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create chat data</span>
@@ -490,84 +497,35 @@ Defaults to <cite>{“return_assistant_tokens_mask”: True, “tokenize”: Tru
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># Setup tokenizer and model</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="s2">&quot;facebook/opt-125m&quot;</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">tokenizer</span><span class="o">.</span><span class="n">pad_token</span> <span class="o">=</span> <span class="n">tokenizer</span><span class="o">.</span><span class="n">eos_token</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">tokenizer</span><span class="o">.</span><span class="n">chat_template</span> <span class="o">=</span> <span class="n">_CHAT_TEMPLATES</span><span class="p">[</span><span class="s2">&quot;chatml_format&quot;</span><span class="p">]</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">model</span> <span class="o">=</span> <span class="n">OPTForCausalLM</span><span class="p">(</span><span class="n">OPTConfig</span><span class="p">())</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create training and reference policies</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">policy_train</span> <span class="o">=</span> <span class="n">TransformersWrapper</span><span class="p">(</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create reference model</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ref_model</span> <span class="o">=</span> <span class="n">TransformersWrapper</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">model</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">input_mode</span><span class="o">=</span><span class="s2">&quot;history&quot;</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">generate</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">from_text</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">chat_template_name</span><span class="o">=</span><span class="s2">&quot;qwen&quot;</span><span class="p">,</span>
-<span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">policy_ref</span> <span class="o">=</span> <span class="n">TransformersWrapper</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">model</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">generate</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">from_text</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">return_log_probs</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">chat_template_name</span><span class="o">=</span><span class="s2">&quot;qwen&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">pad_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create the RetrieveLogProb transform</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">transform</span> <span class="o">=</span> <span class="n">RetrieveLogProb</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">policy_ref</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">ref_model</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">assistant_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">tokenizer_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;chat_template_name&quot;</span><span class="p">:</span> <span class="s2">&quot;qwen&quot;</span><span class="p">},</span>
 <span class="gp">... </span>    <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Prepare data</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">text</span> <span class="o">=</span> <span class="n">history</span><span class="p">[:,</span> <span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span> <span class="n">chat_template_name</span><span class="o">=</span><span class="s2">&quot;qwen&quot;</span><span class="p">,</span> <span class="n">add_generation_prompt</span><span class="o">=</span><span class="kc">True</span>
-<span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">text_response</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span> <span class="n">chat_template_name</span><span class="o">=</span><span class="s2">&quot;qwen&quot;</span><span class="p">,</span> <span class="n">add_generation_prompt</span><span class="o">=</span><span class="kc">False</span>
-<span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">text_response</span> <span class="o">=</span> <span class="p">[</span>
-<span class="gp">... </span>    <span class="n">txt</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">txt_start</span><span class="p">):]</span> <span class="k">for</span> <span class="n">txt</span><span class="p">,</span> <span class="n">txt_start</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">text_response</span><span class="p">,</span> <span class="n">text</span><span class="p">)</span>
-<span class="gp">... </span><span class="p">]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">text</span><span class="o">=</span><span class="n">text</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">text_response</span><span class="o">=</span><span class="n">text_response</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">history</span><span class="o">=</span><span class="n">history</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="nb">next</span><span class="o">=</span><span class="n">TensorDict</span><span class="p">(</span>
-<span class="gp">... </span>        <span class="n">reward</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
-<span class="gp">... </span>        <span class="n">done</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
-<span class="gp">... </span>        <span class="n">history</span><span class="o">=</span><span class="n">history</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="p">),</span>
-<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,),</span>
-<span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Prepare data using ChatHistory</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">chat_history</span> <span class="o">=</span> <span class="n">ChatHistory</span><span class="p">(</span><span class="n">full</span><span class="o">=</span><span class="n">history</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">history</span><span class="o">=</span><span class="n">chat_history</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,))</span>
 <span class="gp">&gt;&gt;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># Apply the transform to get reference log probabilities</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">transform</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># You can get a padded tensor for batching:</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">ref_log_probs</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;ref_log_prob&quot;</span><span class="p">),</span> <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Type: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">ref_log_probs</span><span class="p">)</span><span class="si">}</span><span class="s2">, Length: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">ref_log_probs</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-<span class="go">Type: &lt;class &#39;torch.Tensor&#39;&gt;, Length: 2</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Example shapes: </span><span class="si">{</span><span class="p">[</span><span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">ref_log_probs</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-<span class="go">Example shapes: [torch.Size([35]), torch.Size([35])]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">ref_log_probs</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>  <span class="c1"># (batch, max_seq_len)</span>
-<span class="go">torch.Size([2, 35])</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Use with SFTLoss for KL regularization</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">loss</span> <span class="o">=</span> <span class="n">SFTLoss</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">actor_network</span><span class="o">=</span><span class="n">policy_train</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">reduction</span><span class="o">=</span><span class="s2">&quot;mean&quot;</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">normalize_by_seq_length</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">kl_to_ref_coeff</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">tokenizer_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;chat_template_name&quot;</span><span class="p">:</span> <span class="s2">&quot;qwen&quot;</span><span class="p">},</span>
-<span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">loss_vals</span> <span class="o">=</span> <span class="n">loss</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;SFT Loss: </span><span class="si">{</span><span class="n">loss_vals</span><span class="o">.</span><span class="n">loss_sft</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-<span class="go">SFT Loss: 10.7856</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;KL to Reference Loss: </span><span class="si">{</span><span class="n">loss_vals</span><span class="o">.</span><span class="n">loss_kl_to_ref</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-<span class="go">KL to Reference Loss: 0.0000</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Total Loss: </span><span class="si">{</span><span class="n">loss_vals</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">reduce</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-<span class="go">Total Loss: 10.7856</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">transform</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">log_probs_key</span> <span class="o">=</span> <span class="p">(</span><span class="n">ref_model</span><span class="o">.</span><span class="n">log_probs_key</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ref_log_probs</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">log_probs_key</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Log-probs shape: </span><span class="si">{</span><span class="n">ref_log_probs</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="go">Log-probs shape: torch.Size([2, 26])</span>
 </pre></div>
 </div>
 <div class="admonition note">
@@ -575,6 +533,16 @@ Defaults to <cite>{“return_assistant_tokens_mask”: True, “tokenize”: Tru
 <p>By default, the log-probabilities are stored as a list of tensors (one per sample, with variable length).
 Use <cite>as_padded_tensor=True</cite> in <cite>.get()</cite> to obtain a batchable tensor (with padding).
 The reference log probabilities are computed only for assistant tokens when <cite>assistant_only=True</cite>.</p>
+<p><strong>Input Mode Compatibility:</strong>
+- When <cite>assistant_only=True</cite> (default), the model must have <cite>input_mode=’history’</cite> to properly identify assistant tokens.
+- When <cite>assistant_only=False</cite>, the transform works with any input mode (<cite>“history”</cite>, <cite>“text”</cite>, or <cite>“tokens”</cite>).
+- This design ensures users are conscious of the limitation that assistant token identification requires structured conversation history.</p>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="torchrl.envs.llm.transforms.RetrieveKL.html#torchrl.envs.llm.transforms.RetrieveKL" title="torchrl.envs.llm.transforms.kl.RetrieveKL"><code class="xref py py-class docutils literal notranslate"><span class="pre">RetrieveKL</span></code></a>: A higher-level transform that combines two <cite>RetrieveLogProb</cite> instances with <cite>KLComputation</cite>.
+<a class="reference internal" href="torchrl.envs.llm.transforms.KLComputation.html#torchrl.envs.llm.transforms.KLComputation" title="torchrl.envs.llm.transforms.kl.KLComputation"><code class="xref py py-class docutils literal notranslate"><span class="pre">KLComputation</span></code></a>: A transform that computes KL divergence between two log-prob tensors.
+<a class="reference internal" href="torchrl.envs.llm.transforms.KLRewardTransform.html#torchrl.envs.llm.transforms.KLRewardTransform" title="torchrl.envs.llm.transforms.kl.KLRewardTransform"><code class="xref py py-class docutils literal notranslate"><span class="pre">KLRewardTransform</span></code></a>: A legacy transform for KL reward computation (use <cite>RetrieveKL</cite> instead).</p>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.envs.llm.transforms.RetrieveLogProb.add_module">
@@ -693,6 +661,16 @@ are direct members of this module.</p>
 <dd><p>Close the transform.</p>
 </dd></dl>
 
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.envs.llm.transforms.RetrieveLogProb.collector">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">collector</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase" title="torchrl.collectors.DataCollectorBase"><span class="pre">DataCollectorBase</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.envs.llm.transforms.RetrieveLogProb.collector" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the collector associated with the container, if it exists.</p>
+<p>This can be used whenever the transform needs to be made aware of the collector or the policy associated with it.</p>
+<p>Make sure to call this property only on transforms that are not nested in sub-processes.
+The collector reference will not be passed to the workers of a <a class="reference internal" href="torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a> or
+similar batched environments.</p>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.envs.llm.transforms.RetrieveLogProb.compile">
 <span class="sig-name descname"><span class="pre">compile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.envs.llm.transforms.RetrieveLogProb.compile" title="Permalink to this definition">¶</a></dt>
@@ -704,7 +682,7 @@ to <a class="reference external" href="https://docs.pytorch.org/docs/stable/gene
 
 <dl class="py property">
 <dt class="sig sig-object py" id="torchrl.envs.llm.transforms.RetrieveLogProb.container">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">container</span></span><a class="headerlink" href="#torchrl.envs.llm.transforms.RetrieveLogProb.container" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">container</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><span class="pre">EnvBase</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.envs.llm.transforms.RetrieveLogProb.container" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns the env containing the transform.</p>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">TransformedEnv</span><span class="p">,</span> <span class="n">Compose</span><span class="p">,</span> <span class="n">RewardSum</span><span class="p">,</span> <span class="n">StepCounter</span>
@@ -2019,7 +1997,7 @@ mode (<code class="docutils literal notranslate"><span class="pre">False</span><
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.envs.llm.transforms.RetrieveLogProb.transform_observation_spec">
-<span class="sig-name descname"><span class="pre">transform_observation_spec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">observation_spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.tensor_specs.TensorSpec"><span class="pre">TensorSpec</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.tensor_specs.TensorSpec"><span class="pre">TensorSpec</span></a></span></span><a class="headerlink" href="#torchrl.envs.llm.transforms.RetrieveLogProb.transform_observation_spec" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">transform_observation_spec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">observation_spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/llm/transforms/kl.html#RetrieveLogProb.transform_observation_spec"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.llm.transforms.RetrieveLogProb.transform_observation_spec" title="Permalink to this definition">¶</a></dt>
 <dd><p>Transforms the observation spec such that the resulting spec matches transform mapping.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -2145,10 +2123,10 @@ See <a class="reference external" href="https://docs.pytorch.org/docs/stable/gen
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrl.envs.llm.transforms.MCPToolTransform.html" class="btn btn-neutral float-right" title="MCPToolTransform" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrl.envs.llm.transforms.TemplateTransform.html" class="btn btn-neutral float-right" title="TemplateTransform" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.envs.llm.transforms.KLRewardTransform.html" class="btn btn-neutral" title="KLRewardTransform" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="torchrl.envs.llm.transforms.RetrieveKL.html" class="btn btn-neutral" title="RetrieveKL" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   

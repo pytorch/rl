@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -651,6 +651,15 @@ Defaults to <cite>torchrl.collectors.distributed.ray.DEFAULT_REMOTE_CLASS_CONFIG
 </dl>
 </dd></dl>
 
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.data.ReplayBuffer.batch_size">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">batch_size</span></span><a class="headerlink" href="#torchrl.data.ReplayBuffer.batch_size" title="Permalink to this definition">¶</a></dt>
+<dd><p>The batch size of the replay buffer.</p>
+<p>The batch size can be overriden by setting the <cite>batch_size</cite> parameter in the <a class="reference internal" href="#torchrl.data.ReplayBuffer.sample" title="torchrl.data.ReplayBuffer.sample"><code class="xref py py-meth docutils literal notranslate"><span class="pre">sample()</span></code></a> method.</p>
+<p>It defines both the number of samples returned by <a class="reference internal" href="#torchrl.data.ReplayBuffer.sample" title="torchrl.data.ReplayBuffer.sample"><code class="xref py py-meth docutils literal notranslate"><span class="pre">sample()</span></code></a> and the number of samples that are
+yielded by the <a class="reference internal" href="#torchrl.data.ReplayBuffer" title="torchrl.data.ReplayBuffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBuffer</span></code></a> iterator.</p>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.data.ReplayBuffer.dump">
 <span class="sig-name descname"><span class="pre">dump</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.dump"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.ReplayBuffer.dump" title="Permalink to this definition">¶</a></dt>
@@ -701,8 +710,13 @@ Defaults to <cite>torchrl.collectors.distributed.ray.DEFAULT_REMOTE_CLASS_CONFIG
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.data.ReplayBuffer.empty">
-<span class="sig-name descname"><span class="pre">empty</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.empty"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.ReplayBuffer.empty" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">empty</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">empty_write_count</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.empty"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.ReplayBuffer.empty" title="Permalink to this definition">¶</a></dt>
 <dd><p>Empties the replay buffer and reset cursor to 0.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>empty_write_count</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to empty the write_count attribute. Defaults to <cite>True</cite>.</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">

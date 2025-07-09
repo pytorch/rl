@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -426,24 +426,33 @@
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">NestedKey</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_zip_strict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Literal</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">lazy_stack</span><span class="p">,</span> <span class="n">NestedKey</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_zip_strict</span><span class="p">,</span> <span class="n">is_non_tensor</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">Unbounded</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Transform</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span>
 
 
 <div class="viewcode-block" id="GSM8KRewardParser"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.GSM8KRewardParser.html#torchrl.envs.llm.GSM8KRewardParser">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">GSM8KRewardParser</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Reward parser for GSM8KEnv or make_gsm8k_env.</span>
 
+<span class="sd">    This parser automatically detects the input_mode from the parent environment and handles</span>
+<span class="sd">    responses accordingly:</span>
+<span class="sd">    - &quot;history&quot; mode: response is in (&quot;history&quot;, &quot;response&quot;) and is a History object</span>
+<span class="sd">    - &quot;text&quot; mode: response is in (&quot;text&quot;, &quot;response&quot;) and is text</span>
+<span class="sd">    - &quot;tokens&quot; mode: response is in (&quot;tokens&quot;, &quot;response&quot;) and is tokens</span>
+
 <span class="sd">    Args:</span>
-<span class="sd">        tokenizer (AutoTokenizer from transformers): the tokenizer asssociated with the model.</span>
-<span class="sd">        in_keys (list of NestedKey): the input keys. Defaults to `[&quot;text_response&quot;, &quot;answer&quot;]`.</span>
+<span class="sd">        tokenizer (AutoTokenizer from transformers): the tokenizer associated with the model.</span>
+<span class="sd">        in_keys (list of NestedKey): the input keys. If None, will be automatically determined based on parent&#39;s input_mode.</span>
 <span class="sd">        out_keys (list of NestedKey): the output keys. Defaults to `[ &quot;reward_answer&quot;, &quot;reward_think&quot;, &quot;reward_right&quot;, &quot;reward_contained&quot;, &quot;reward&quot;, &quot;success&quot;]`.</span>
 <span class="sd">        eos_token (str): the end of sentence token. Defaults to `tokenizer.eos_token` if not provided.</span>
 <span class="sd">        set_done_if_answer (bool): whether to set the done flag to `True` when an answer is present. Defaults to `True`.</span>
-
+<span class="sd">        input_mode (Literal[&quot;history&quot;, &quot;text&quot;, &quot;tokens&quot;]): the input mode of the parent environment.</span>
+<span class="sd">            Defaults to `None` (will be automatically determined based on parent&#39;s input_mode).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
@@ -453,6 +462,7 @@
         <span class="n">out_keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">eos_token</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">set_done_if_answer</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">input_mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="s2">&quot;tokens&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span> <span class="o">=</span> <span class="n">tokenizer</span>
@@ -464,12 +474,8 @@
             <span class="k">else</span> <span class="kc">None</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">set_done_if_answer</span> <span class="o">=</span> <span class="n">set_done_if_answer</span>
-        <span class="k">if</span> <span class="n">in_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">in_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;text_response&quot;</span><span class="p">,</span> <span class="s2">&quot;answer&quot;</span><span class="p">]</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">in_keys</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">in_keys</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> requires in_keys to be of type list and have 2 elements.&quot;</span>
-            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_input_mode</span> <span class="o">=</span> <span class="n">input_mode</span>
+
         <span class="k">if</span> <span class="n">out_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span>
                 <span class="s2">&quot;reward_answer&quot;</span><span class="p">,</span>
@@ -479,7 +485,42 @@
                 <span class="s2">&quot;reward&quot;</span><span class="p">,</span>
                 <span class="s2">&quot;success&quot;</span><span class="p">,</span>
             <span class="p">]</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">out_keys</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">in_keys</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span> <span class="o">=</span> <span class="n">in_keys</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span> <span class="o">=</span> <span class="n">out_keys</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_maybe_get_in_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">:</span>
+            <span class="n">parent</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;parent&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">parent</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">parent</span><span class="p">,</span> <span class="s2">&quot;base_env&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">parent</span><span class="o">.</span><span class="n">base_env</span><span class="p">,</span> <span class="s2">&quot;input_mode&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;history&quot;</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span> <span class="o">=</span> <span class="p">[(</span><span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">),</span> <span class="s2">&quot;answer&quot;</span><span class="p">]</span>
+                    <span class="k">elif</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">parent</span><span class="o">.</span><span class="n">base_env</span><span class="p">,</span> <span class="s2">&quot;input_mode&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;text&quot;</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span> <span class="o">=</span> <span class="p">[(</span><span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">),</span> <span class="s2">&quot;answer&quot;</span><span class="p">]</span>
+                    <span class="k">elif</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">parent</span><span class="o">.</span><span class="n">base_env</span><span class="p">,</span> <span class="s2">&quot;input_mode&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;tokens&quot;</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span> <span class="o">=</span> <span class="p">[(</span><span class="s2">&quot;tokens&quot;</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">),</span> <span class="s2">&quot;answer&quot;</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No base env found for </span><span class="si">{</span><span class="bp">self</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_container</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">container</span><span class="p">:</span> <span class="n">Transform</span> <span class="o">|</span> <span class="n">EnvBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">set_container</span><span class="p">(</span><span class="n">container</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_get_in_keys</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">result</span>
+
+    <span class="n">_input_mode</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">input_mode</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_input_mode</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">input_mode</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="p">,</span> <span class="s2">&quot;input_mode&quot;</span><span class="p">,</span> <span class="s2">&quot;history&quot;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;parent&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                <span class="k">else</span> <span class="s2">&quot;history&quot;</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_input_mode</span> <span class="o">=</span> <span class="n">input_mode</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_input_mode</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_step</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
@@ -494,26 +535,72 @@
             <span class="c1"># did update in place</span>
             <span class="k">return</span> <span class="n">next_tensordict</span>
 
-        <span class="c1"># Get the completion</span>
+        <span class="c1"># Get the completion based on input_mode</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_get_in_keys</span><span class="p">()</span>
         <span class="n">responses</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>  <span class="c1"># batch_size, grpo_size, L</span>
 
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">responses</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-            <span class="n">responses</span> <span class="o">=</span> <span class="p">[</span><span class="n">responses</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">next_tensordict</span><span class="o">.</span><span class="n">batch_size</span><span class="p">[</span><span class="mi">0</span><span class="p">])]</span>
+        <span class="c1"># Handle different response types based on input_mode</span>
+        <span class="n">input_mode</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_mode</span>
+        <span class="k">if</span> <span class="n">input_mode</span> <span class="o">==</span> <span class="s2">&quot;history&quot;</span><span class="p">:</span>
+            <span class="c1"># responses is a History object, extract the text content</span>
+            <span class="n">responses</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">([</span><span class="n">r</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">responses</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)])</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">responses</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">):</span>
+                <span class="c1"># If it&#39;s a History object with content attribute</span>
+                <span class="n">text_completion</span> <span class="o">=</span> <span class="n">responses</span><span class="o">.</span><span class="n">content</span>
+                <span class="k">if</span> <span class="n">is_non_tensor</span><span class="p">(</span><span class="n">text_completion</span><span class="p">):</span>
+                    <span class="n">text_completion</span> <span class="o">=</span> <span class="n">text_completion</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">text_completion</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+                    <span class="n">text_completion</span> <span class="o">=</span> <span class="p">[</span><span class="n">text_completion</span><span class="p">]</span>
+            <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">responses</span><span class="p">,</span> <span class="s2">&quot;apply_chat_template&quot;</span><span class="p">):</span>
+                <span class="c1"># If it&#39;s a History object, apply chat template to get text</span>
+                <span class="n">text_completion</span> <span class="o">=</span> <span class="n">responses</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
+                    <span class="n">tokenizer</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">,</span> <span class="n">add_generation_prompt</span><span class="o">=</span><span class="kc">False</span>
+                <span class="p">)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">text_completion</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+                    <span class="n">text_completion</span> <span class="o">=</span> <span class="p">[</span><span class="n">text_completion</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Fallback: try to convert to string</span>
+                <span class="n">text_completion</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">responses</span><span class="p">)]</span>
+        <span class="k">elif</span> <span class="n">input_mode</span> <span class="o">==</span> <span class="s2">&quot;text&quot;</span><span class="p">:</span>
+            <span class="c1"># responses is already text</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">responses</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                <span class="n">text_completion</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="n">responses</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">next_tensordict</span><span class="o">.</span><span class="n">batch_size</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+                <span class="p">]</span>
+            <span class="k">elif</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">responses</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+                <span class="n">text_completion</span> <span class="o">=</span> <span class="p">[</span><span class="n">responses</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">text_completion</span> <span class="o">=</span> <span class="n">responses</span>
+        <span class="k">elif</span> <span class="n">input_mode</span> <span class="o">==</span> <span class="s2">&quot;tokens&quot;</span><span class="p">:</span>
+            <span class="c1"># responses is tokens, need to decode</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">responses</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">responses</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+                    <span class="n">batch_size</span><span class="p">,</span> <span class="n">grpo_size</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">responses</span><span class="o">.</span><span class="n">shape</span>
+                <span class="c1"># decode</span>
+                <span class="n">text_completion</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span>
+                    <span class="n">responses</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+                <span class="p">)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">text_completion</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+                    <span class="n">text_completion</span> <span class="o">=</span> <span class="p">[</span>
+                        <span class="n">text_completion</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">next_tensordict</span><span class="o">.</span><span class="n">batch_size</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+                    <span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Assume it&#39;s already a list of token sequences</span>
+                <span class="n">text_completion</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="k">for</span> <span class="n">token_seq</span> <span class="ow">in</span> <span class="n">responses</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">token_seq</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                        <span class="n">text_completion</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="n">token_seq</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span>
+                        <span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">text_completion</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">token_seq</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown input_mode: </span><span class="si">{</span><span class="n">input_mode</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">eos_token</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">responses</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span><span class="o">.</span><span class="n">removesuffix</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">eos_token</span><span class="p">)</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">responses</span><span class="p">]</span>
+            <span class="n">text_completion</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span><span class="o">.</span><span class="n">removesuffix</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">eos_token</span><span class="p">)</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">text_completion</span><span class="p">]</span>
         <span class="n">answers</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span>  <span class="c1"># batch_size, grpo_size</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">responses</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
-            <span class="k">if</span> <span class="n">responses</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
-                <span class="n">batch_size</span><span class="p">,</span> <span class="n">grpo_size</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">responses</span><span class="o">.</span><span class="n">shape</span>
-            <span class="c1"># decode</span>
-            <span class="n">text_completion</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="n">responses</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">text_completion</span> <span class="o">=</span> <span class="n">responses</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">text_completion</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
-            <span class="n">text_completion</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="n">text_completion</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">next_tensordict</span><span class="o">.</span><span class="n">batch_size</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-            <span class="p">]</span>
+
         <span class="c1"># Decomposed reward</span>
         <span class="n">tds</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="c1"># torchrl_logger.info(f&quot;{answers=}&quot;)</span>
@@ -536,10 +623,13 @@
             <span class="c1">#  With tensorclass comparison should be easy</span>
             <span class="n">cot_orig</span><span class="p">,</span> <span class="n">answer</span> <span class="o">=</span> <span class="n">answer</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;#### &quot;</span><span class="p">)</span>
             <span class="n">tds</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_single_shaped_correctness_reward</span><span class="p">(</span><span class="n">answer</span><span class="p">,</span> <span class="n">potential_answer</span><span class="p">,</span> <span class="n">cot</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_single_shaped_correctness_reward</span><span class="p">(</span>
+                    <span class="n">answer</span><span class="p">,</span> <span class="p">[</span><span class="n">potential_answer</span><span class="p">],</span> <span class="p">[</span><span class="n">cot</span><span class="p">]</span>
+                <span class="p">)</span>
             <span class="p">)</span>
         <span class="n">tds</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">tds</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">responses</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="ow">and</span> <span class="n">responses</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="n">batch_size</span><span class="p">,</span> <span class="n">grpo_size</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">responses</span><span class="o">.</span><span class="n">shape</span>
             <span class="n">tds</span> <span class="o">=</span> <span class="n">tds</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">grpo_size</span><span class="p">)</span>
         <span class="c1"># Rewards need to have shape broadcastable to [batch x tokens x 1]</span>
         <span class="n">tds</span> <span class="o">=</span> <span class="n">tds</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">t</span><span class="p">:</span> <span class="n">t</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span>
@@ -642,9 +732,15 @@
         <span class="k">except</span> <span class="n">ET</span><span class="o">.</span><span class="n">ParseError</span><span class="p">:</span>
             <span class="k">return</span> <span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
 
+        <span class="n">think_elem</span> <span class="o">=</span> <span class="n">root</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s2">&quot;think&quot;</span><span class="p">)</span>
+        <span class="n">answer_elem</span> <span class="o">=</span> <span class="n">root</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s2">&quot;answer&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="p">(</span>
-            <span class="n">root</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s2">&quot;think&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">text</span> <span class="k">if</span> <span class="n">root</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s2">&quot;think&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
-            <span class="n">root</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s2">&quot;answer&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">text</span> <span class="k">if</span> <span class="n">root</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s2">&quot;answer&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="n">think_elem</span><span class="o">.</span><span class="n">text</span>
+            <span class="k">if</span> <span class="n">think_elem</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">think_elem</span><span class="o">.</span><span class="n">text</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="n">answer_elem</span><span class="o">.</span><span class="n">text</span>
+            <span class="k">if</span> <span class="n">answer_elem</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">answer_elem</span><span class="o">.</span><span class="n">text</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
         <span class="p">)</span></div></div>
 </pre></div>
 

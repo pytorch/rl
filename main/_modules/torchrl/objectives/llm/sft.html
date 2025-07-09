@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -430,7 +430,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Literal</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">TYPE_CHECKING</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">NestedKey</span><span class="p">,</span> <span class="n">TensorClass</span><span class="p">,</span> <span class="n">TensorDictBase</span>
@@ -439,6 +439,9 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm.policies.transformers_wrapper</span><span class="w"> </span><span class="kn">import</span> <span class="n">TransformersWrapper</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">LossModule</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">transformers</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">sft_loss</span><span class="p">(</span><span class="n">summed_log_probs</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">reduction</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
@@ -668,9 +671,9 @@
 <span class="sd">                Defaults to ``&quot;log_probs&quot;``.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
 
-        <span class="n">history</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;history&quot;</span><span class="p">)</span>
-        <span class="n">ref_log_prob</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;ref_log_prob&quot;</span><span class="p">)</span>
-        <span class="n">log_probs</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;log_probs&quot;</span>
+        <span class="n">history</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">)</span>
+        <span class="n">ref_log_prob</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;ref_log_probs&quot;</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">)</span>
+        <span class="n">log_probs</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;log_probs&quot;</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">)</span>
 
     <span class="n">default_keys</span> <span class="o">=</span> <span class="n">_AcceptedKeys</span>
     <span class="n">tensor_keys</span><span class="p">:</span> <span class="n">_AcceptedKeys</span>
@@ -757,23 +760,28 @@
         <span class="c1"># Gather history</span>
         <span class="n">history</span><span class="p">:</span> <span class="n">History</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">history</span><span class="p">]</span>
 
-        <span class="c1"># Apply tokenizer to history and gather mask</span>
-        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
-        <span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">():</span>
-            <span class="n">token_struct</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
-                <span class="n">tokenizer</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer_kwargs</span>
+        <span class="c1"># Try to get mask from td</span>
+        <span class="n">token_struct</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">assistant_masks</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;masks&quot;</span><span class="p">,</span> <span class="s2">&quot;all_assistant_mask&quot;</span><span class="p">),</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">attention_mask</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;masks&quot;</span><span class="p">,</span> <span class="s2">&quot;all_attention_mask&quot;</span><span class="p">),</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">assistant_masks</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Apply tokenizer to history and gather mask</span>
+            <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">():</span>
+                <span class="n">token_struct</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
+                    <span class="n">tokenizer</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer_kwargs</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="s2">&quot;assistant_masks&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">token_struct</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Assistant masks are not present in the token structure: </span><span class="si">{</span><span class="n">token_struct</span><span class="si">=}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">assistant_masks</span> <span class="o">=</span> <span class="n">token_struct</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="s2">&quot;assistant_masks&quot;</span><span class="p">,</span>
+                <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
             <span class="p">)</span>
-        <span class="k">if</span> <span class="s2">&quot;assistant_masks&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">token_struct</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Assistant masks are not present in the token structure: </span><span class="si">{</span><span class="n">token_struct</span><span class="si">=}</span><span class="s2">.&quot;</span>
-            <span class="p">)</span>
-        <span class="n">assistant_masks</span> <span class="o">=</span> <span class="n">token_struct</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-            <span class="s2">&quot;assistant_masks&quot;</span><span class="p">,</span>
-            <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="p">)</span>
+            <span class="n">attention_mask</span> <span class="o">=</span> <span class="n">token_struct</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;attention_mask&quot;</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="n">assistant_masks</span> <span class="o">=</span> <span class="p">[</span><span class="n">mask</span><span class="o">.</span><span class="n">bool</span><span class="p">()</span> <span class="k">for</span> <span class="n">mask</span> <span class="ow">in</span> <span class="n">assistant_masks</span><span class="p">]</span>
-        <span class="n">attention_mask</span> <span class="o">=</span> <span class="n">token_struct</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;attention_mask&quot;</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="n">attention_mask</span> <span class="o">=</span> <span class="p">[</span><span class="n">mask</span><span class="o">.</span><span class="n">bool</span><span class="p">()</span> <span class="k">for</span> <span class="n">mask</span> <span class="ow">in</span> <span class="n">attention_mask</span><span class="p">]</span>
         <span class="n">assistant_masks</span> <span class="o">=</span> <span class="p">[</span>
             <span class="n">mask</span> <span class="o">&amp;</span> <span class="n">a_mask</span> <span class="k">for</span> <span class="n">mask</span><span class="p">,</span> <span class="n">a_mask</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">assistant_masks</span><span class="p">,</span> <span class="n">attention_mask</span><span class="p">)</span>
@@ -781,12 +789,8 @@
 
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span> <span class="k">for</span> <span class="n">mask</span> <span class="ow">in</span> <span class="n">assistant_masks</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Some inputs have no valid assistant masks.&quot;</span><span class="p">)</span>
+
         <span class="n">input_loss</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">history</span><span class="p">)</span>
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">history</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">history</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;next&quot;</span>
-        <span class="p">):</span>
-            <span class="n">input_loss</span> <span class="o">=</span> <span class="n">input_loss</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">]</span>
 
         <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
@@ -798,13 +802,19 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">log_probs</span><span class="p">,</span>
             <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="p">)</span>
+
         <span class="c1"># apply mask</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span>
             <span class="n">mask</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">lp</span><span class="o">.</span><span class="n">shape</span>
             <span class="k">for</span> <span class="n">mask</span><span class="p">,</span> <span class="n">lp</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="n">assistant_masks</span><span class="p">,</span> <span class="n">log_probs</span><span class="p">)</span>
         <span class="p">):</span>
+            <span class="k">if</span> <span class="n">token_struct</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">suffix</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Tokens from current template: </span><span class="si">{</span><span class="p">[</span><span class="n">inp</span><span class="o">.</span><span class="n">shape</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">inp</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">token_struct</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;input_ids&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">)]</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">suffix</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Assistant masks and log_probs have different shapes: </span><span class="si">{</span><span class="p">[</span><span class="n">mask</span><span class="o">.</span><span class="n">shape</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">mask</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">assistant_masks</span><span class="p">]</span><span class="si">}</span><span class="s2"> vs </span><span class="si">{</span><span class="p">[</span><span class="n">lp</span><span class="o">.</span><span class="n">shape</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">lp</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">log_probs</span><span class="p">]</span><span class="si">}</span><span class="s2">. Tokens from current template: </span><span class="si">{</span><span class="p">[</span><span class="n">inp</span><span class="o">.</span><span class="n">shape</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">inp</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">token_struct</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;input_ids&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">)]</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Assistant masks and log_probs have different shapes: </span><span class="si">{</span><span class="p">[</span><span class="n">mask</span><span class="o">.</span><span class="n">shape</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">mask</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">assistant_masks</span><span class="p">]</span><span class="si">}</span><span class="s2"> vs &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="p">[</span><span class="n">lp</span><span class="o">.</span><span class="n">shape</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">lp</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">log_probs</span><span class="p">]</span><span class="si">}</span><span class="s2">. </span><span class="si">{</span><span class="n">suffix</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
 
         <span class="n">log_probs_masked</span> <span class="o">=</span> <span class="p">[</span>
@@ -835,11 +845,17 @@
                 <span class="p">)</span>
                 <span class="k">if</span> <span class="n">ref_log_probs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                        <span class="s2">&quot;Reference log probs not found in tensordict but kl_to_ref_coeff was set&quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;Reference log probs not found in tensordict at key </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">ref_log_prob</span><span class="si">}</span><span class="s2"> but kl_to_ref_coeff was set. &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;Existing keys in tensordict: </span><span class="si">{</span><span class="nb">set</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span><span class="w"> </span><span class="n">leaves_only</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span><span class="si">}</span><span class="s2">&quot;</span>
                     <span class="p">)</span>
 
+                <span class="n">log_probs_masked</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="n">lp</span><span class="o">.</span><span class="n">masked_fill</span><span class="p">(</span><span class="o">~</span><span class="n">mask</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">lp</span><span class="p">,</span> <span class="n">mask</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="n">log_probs</span><span class="p">,</span> <span class="n">assistant_masks</span><span class="p">)</span>
+                <span class="p">]</span>
+
                 <span class="n">loss_kl</span><span class="p">,</span> <span class="n">kl_penalty</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_kl_to_ref</span><span class="p">(</span>
-                    <span class="p">[</span><span class="n">lp</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="k">for</span> <span class="n">lp</span><span class="p">,</span> <span class="n">mask</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="n">log_probs</span><span class="p">,</span> <span class="n">assistant_masks</span><span class="p">)],</span>
+                    <span class="n">log_probs_masked</span><span class="p">,</span>
                     <span class="n">ref_log_probs</span><span class="p">,</span>
                 <span class="p">)</span>
                 <span class="n">output</span> <span class="o">=</span> <span class="n">SFTLossOutput</span><span class="p">(</span>
@@ -853,7 +869,7 @@
             <span class="n">ref_log_probs</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">ref_log_prob</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">ref_log_probs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Reference log probs not found at </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">ref_log_prob</span><span class="si">=}</span><span class="s2"> in tensordict but loss_function is &#39;minor_sft&#39;&quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;Reference log probs not found at </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">ref_log_prob</span><span class="si">=}</span><span class="s2"> in tensordict with keys </span><span class="si">{</span><span class="n">tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span><span class="si">}</span><span class="s2"> but loss_function is &#39;minor_sft&#39;&quot;</span>
                 <span class="p">)</span>
 
             <span class="c1"># we need to re-sum ref_log_probs as they are not summed per-sequence</span>
@@ -867,11 +883,12 @@
             <span class="p">)</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">kl_to_ref_coeff</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+                    <span class="n">log_probs_masked</span> <span class="o">=</span> <span class="p">[</span>
+                        <span class="n">lp</span><span class="o">.</span><span class="n">masked_fill</span><span class="p">(</span><span class="o">~</span><span class="n">mask</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+                        <span class="k">for</span> <span class="n">lp</span><span class="p">,</span> <span class="n">mask</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="n">log_probs</span><span class="p">,</span> <span class="n">assistant_masks</span><span class="p">)</span>
+                    <span class="p">]</span>
                     <span class="n">loss_kl</span><span class="p">,</span> <span class="n">kl_penalty</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_kl_to_ref</span><span class="p">(</span>
-                        <span class="p">[</span>
-                            <span class="n">lp</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
-                            <span class="k">for</span> <span class="n">lp</span><span class="p">,</span> <span class="n">mask</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="n">log_probs</span><span class="p">,</span> <span class="n">assistant_masks</span><span class="p">)</span>
-                        <span class="p">],</span>
+                        <span class="n">log_probs_masked</span><span class="p">,</span>
                         <span class="n">ref_log_probs</span><span class="p">,</span>
                     <span class="p">)</span>
                 <span class="n">output</span> <span class="o">=</span> <span class="n">SFTLossOutput</span><span class="p">(</span>

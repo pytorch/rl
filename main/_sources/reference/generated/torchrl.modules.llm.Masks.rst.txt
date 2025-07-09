@@ -1,9 +1,9 @@
 ﻿.. currentmodule:: torchrl.modules.llm
 
 
-CategoricalSequential
-=====================
+Masks
+=====
 
-.. autoclass:: CategoricalSequential
+.. autoclass:: Masks
     :members:
     :inherited-members:

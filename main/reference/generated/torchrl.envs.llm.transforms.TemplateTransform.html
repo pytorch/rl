@@ -40,7 +40,7 @@
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="Tokenizer" href="torchrl.envs.llm.transforms.Tokenizer.html" />
-    <link rel="prev" title="PolicyVersion" href="torchrl.envs.llm.transforms.PolicyVersion.html" />
+    <link rel="prev" title="RetrieveLogProb" href="torchrl.envs.llm.transforms.RetrieveLogProb.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -388,7 +388,7 @@
         
           <li><a href="../index.html">API Reference</a> &gt;</li>
         
-          <li><a href="../llms.html">LLM interface</a> &gt;</li>
+          <li><a href="../llms.html">LLM Interface</a> &gt;</li>
         
       <li>TemplateTransform</li>
     
@@ -551,6 +551,16 @@ are direct members of this module.</p>
 <dd><p>Close the transform.</p>
 </dd></dl>
 
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.envs.llm.transforms.TemplateTransform.collector">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">collector</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase" title="torchrl.collectors.DataCollectorBase"><span class="pre">DataCollectorBase</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.envs.llm.transforms.TemplateTransform.collector" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the collector associated with the container, if it exists.</p>
+<p>This can be used whenever the transform needs to be made aware of the collector or the policy associated with it.</p>
+<p>Make sure to call this property only on transforms that are not nested in sub-processes.
+The collector reference will not be passed to the workers of a <a class="reference internal" href="torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a> or
+similar batched environments.</p>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.envs.llm.transforms.TemplateTransform.compile">
 <span class="sig-name descname"><span class="pre">compile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.envs.llm.transforms.TemplateTransform.compile" title="Permalink to this definition">¶</a></dt>
@@ -562,7 +572,7 @@ to <a class="reference external" href="https://docs.pytorch.org/docs/stable/gene
 
 <dl class="py property">
 <dt class="sig sig-object py" id="torchrl.envs.llm.transforms.TemplateTransform.container">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">container</span></span><a class="headerlink" href="#torchrl.envs.llm.transforms.TemplateTransform.container" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">container</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><span class="pre">EnvBase</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.envs.llm.transforms.TemplateTransform.container" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns the env containing the transform.</p>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">TransformedEnv</span><span class="p">,</span> <span class="n">Compose</span><span class="p">,</span> <span class="n">RewardSum</span><span class="p">,</span> <span class="n">StepCounter</span>
@@ -2006,7 +2016,7 @@ See <a class="reference external" href="https://docs.pytorch.org/docs/stable/gen
         <a href="torchrl.envs.llm.transforms.Tokenizer.html" class="btn btn-neutral float-right" title="Tokenizer" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.envs.llm.transforms.PolicyVersion.html" class="btn btn-neutral" title="PolicyVersion" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="torchrl.envs.llm.transforms.RetrieveLogProb.html" class="btn btn-neutral" title="RetrieveLogProb" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   

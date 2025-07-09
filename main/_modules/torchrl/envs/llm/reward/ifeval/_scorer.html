@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -442,7 +442,14 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">NestedKey</span><span class="p">,</span> <span class="n">NonTensorData</span><span class="p">,</span> <span class="n">TensorClass</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">lazy_stack</span><span class="p">,</span>
+    <span class="n">NestedKey</span><span class="p">,</span>
+    <span class="n">NonTensorData</span><span class="p">,</span>
+    <span class="n">TensorClass</span><span class="p">,</span>
+    <span class="n">TensorDict</span><span class="p">,</span>
+    <span class="n">TensorDictBase</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.tensorclass</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_non_tensor</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
 
@@ -461,6 +468,27 @@
     <span class="n">inst_level_strict_acc</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span>
     <span class="n">prompt_level_loose_acc</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span>
     <span class="n">inst_level_loose_acc</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">default_spec</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span> <span class="n">shape</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Composite</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">Composite</span><span class="p">(</span>
+            <span class="n">prompt_level_strict_acc</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span>
+                <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+            <span class="p">),</span>
+            <span class="n">inst_level_strict_acc</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span>
+                <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+            <span class="p">),</span>
+            <span class="n">prompt_level_loose_acc</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span>
+                <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+            <span class="p">),</span>
+            <span class="n">inst_level_loose_acc</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span>
+                <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+            <span class="p">),</span>
+            <span class="n">data_cls</span><span class="o">=</span><span class="bp">cls</span><span class="p">,</span>
+            <span class="n">step_mdp_static</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">prompt_level_loose_acc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
@@ -494,7 +522,10 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_process_results</span><span class="p">(</span>
-    <span class="n">data</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">response</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">NonTensorData</span><span class="p">,</span> <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">data</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">,</span>
+    <span class="n">response</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">NonTensorData</span><span class="p">,</span>
+    <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">prompt</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">IFEvalScoreData</span><span class="p">:</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_langdetect</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="s2">&quot;langdetect must be installed to user IFEvalScorer.&quot;</span><span class="p">)</span>
@@ -507,10 +538,13 @@
         <span class="n">_test_instruction_following_strict</span><span class="p">,</span>
     <span class="p">)</span>
 
+    <span class="k">if</span> <span class="n">prompt</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">prompt</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">]</span>
+
     <span class="n">inp</span> <span class="o">=</span> <span class="n">_InputExample</span><span class="p">(</span>
         <span class="n">key</span><span class="o">=</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;key&quot;</span><span class="p">],</span>
         <span class="n">instruction_id_list</span><span class="o">=</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;instruction_id_list&quot;</span><span class="p">],</span>
-        <span class="n">prompt</span><span class="o">=</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">],</span>
+        <span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span> <span class="k">if</span> <span class="n">prompt</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
         <span class="n">kwargs</span><span class="o">=</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;kwargs&quot;</span><span class="p">],</span>
     <span class="p">)</span>
 
@@ -558,6 +592,7 @@
 <span class="sd">            `prompt_level_loose_acc`, `inst_level_loose_acc`, in that order). Defaults to `[0.4, 0.3, 0.2, 0.1]`.</span>
 <span class="sd">            This is only used if `aggregate_reward` is `True` and the default aggregator is used.</span>
 <span class="sd">        verbose (bool, optional): Whether to print verbose information. Defaults to `False`.</span>
+<span class="sd">        set_done_if_answer (bool): whether to set the done flag to `True` when an answer is present. Defaults to `True`.</span>
 
 <span class="sd">    .. note:: `IFEvalScorer` requires the following libraries to be installed: `langdetect`, `nltk` and `immutabledict`.</span>
 
@@ -578,9 +613,11 @@
         <span class="p">]</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">format_weights</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">set_done_if_answer</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">aggregate_reward</span> <span class="o">=</span> <span class="n">aggregate_reward</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">score_key</span> <span class="o">=</span> <span class="n">score_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">set_done_if_answer</span> <span class="o">=</span> <span class="n">set_done_if_answer</span>
         <span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">score_key</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">aggregate_reward</span><span class="p">:</span>
             <span class="n">out_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;reward&quot;</span><span class="p">)</span>
@@ -615,7 +652,7 @@
         <span class="n">answer_blocks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">complete</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
-<span class="w">        </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Default reward aggregation function that provides a more nuanced scoring system.</span>
+<span class="w">        </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Improved reward aggregation function with tiered multiplicative scoring.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            score (IFEvalScoreData): The score data.</span>
@@ -623,45 +660,56 @@
 <span class="sd">            answer_blocks (list[str], optional): The list of answer blocks.</span>
 <span class="sd">            complete (bool, optional): Whether the response is complete (ends with a eos token).</span>
 
-<span class="sd">        The reward is composed of three main components:</span>
-<span class="sd">        1. Format score (max 1.0):</span>
-<span class="sd">           - prompt_level_strict_acc: 0.4 (highest weight for strict adherence to all instructions)</span>
-<span class="sd">           - inst_level_strict_acc: 0.3 (high weight for strict adherence to individual instructions)</span>
-<span class="sd">           - prompt_level_loose_acc: 0.2 (medium weight for loose adherence to all instructions)</span>
-<span class="sd">           - inst_level_loose_acc: 0.1 (lowest weight for loose adherence to individual instructions)</span>
-<span class="sd">           All instruction-level metrics are averaged to ensure balanced contribution.</span>
+<span class="sd">        The reward uses a tiered multiplicative system:</span>
 
-<span class="sd">        2. Structure score (max 1.0):</span>
-<span class="sd">           - think_block: 0.5 (presence of exactly one think block)</span>
-<span class="sd">           - answer_block: 0.5 (presence of exactly one answer block)</span>
+<span class="sd">        1. Critical failure check: No answer blocks = 0 reward</span>
+<span class="sd">        2. Base format score (0-1): Weighted average of format metrics</span>
+<span class="sd">        3. Structure multiplier (0.1-1.0): Penalties for missing/multiple blocks</span>
+<span class="sd">        4. Quality bonus (0-0.5): Rewards for high quality and completion</span>
+<span class="sd">        5. Task complexity scaling: More requirements = higher potential rewards</span>
 
-<span class="sd">        3. Completion bonus (max 0.2):</span>
-<span class="sd">           - complete: 0.2 (response ends with eos token)</span>
+<span class="sd">        The final formula is:</span>
+<span class="sd">            reward = (format_score + quality_bonus) * structure_multiplier * complexity_scale</span>
 
-<span class="sd">        The overall formula for the reward is:</span>
+<span class="sd">        This provides better learning signals by:</span>
+<span class="sd">        - Requiring critical elements (answer tags) for meaningful rewards</span>
+<span class="sd">        - Using multiplicative scaling to reward doing everything well</span>
+<span class="sd">        - Scaling rewards based on task complexity</span>
+<span class="sd">        - Providing clear failure modes and success incentives</span>
 
-<span class="sd">          .. math::</span>
-
-<span class="sd">            reward = format\_score + structure\_score + completion\_bonus</span>
-
-<span class="sd">        Therefore, the maximum value the reward can take is 2.2, with:</span>
-<span class="sd">        - 1.0 from format adherence</span>
-<span class="sd">        - 1.0 from structural elements (think/answer blocks)</span>
-<span class="sd">        - 0.2 from completion bonus</span>
+<span class="sd">        Reward range: 0.0 to ~1.5-2.7 depending on task complexity (more instructions = higher max reward).</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">default_dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">get_default_dtype</span><span class="p">()</span>
         <span class="n">score</span> <span class="o">=</span> <span class="n">score</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">default_dtype</span><span class="p">)</span>
 
-        <span class="c1"># Format score calculation - using mean for instruction-level metrics</span>
+        <span class="c1"># Critical failure check - no answer = no reward</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">answer_blocks</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                <span class="n">score</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">device</span><span class="o">=</span><span class="n">score</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">default_dtype</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Base format score calculation (0-1)</span>
         <span class="n">format_components</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
             <span class="p">[</span>
-                <span class="n">score</span><span class="o">.</span><span class="n">prompt_level_strict_acc</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>  <span class="c1"># Single value</span>
-                <span class="n">score</span><span class="o">.</span><span class="n">inst_level_strict_acc</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span>
-                    <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span>
+                <span class="n">score</span><span class="o">.</span><span class="n">prompt_level_strict_acc</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">score</span><span class="o">.</span><span class="n">prompt_level_strict_acc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                    <span class="n">score</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">device</span><span class="o">=</span><span class="n">score</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">default_dtype</span>
+                <span class="p">),</span>  <span class="c1"># Single value</span>
+                <span class="n">score</span><span class="o">.</span><span class="n">inst_level_strict_acc</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">score</span><span class="o">.</span><span class="n">inst_level_strict_acc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                    <span class="n">score</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">device</span><span class="o">=</span><span class="n">score</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">default_dtype</span>
                 <span class="p">),</span>  <span class="c1"># Average across instructions</span>
-                <span class="n">score</span><span class="o">.</span><span class="n">prompt_level_loose_acc</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>  <span class="c1"># Single value</span>
-                <span class="n">score</span><span class="o">.</span><span class="n">inst_level_loose_acc</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span>
-                    <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span>
+                <span class="n">score</span><span class="o">.</span><span class="n">prompt_level_loose_acc</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">score</span><span class="o">.</span><span class="n">prompt_level_loose_acc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                    <span class="n">score</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">device</span><span class="o">=</span><span class="n">score</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">default_dtype</span>
+                <span class="p">),</span>  <span class="c1"># Single value</span>
+                <span class="n">score</span><span class="o">.</span><span class="n">inst_level_loose_acc</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">score</span><span class="o">.</span><span class="n">inst_level_loose_acc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                    <span class="n">score</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">device</span><span class="o">=</span><span class="n">score</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">default_dtype</span>
                 <span class="p">),</span>  <span class="c1"># Average across instructions</span>
             <span class="p">],</span>
             <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
@@ -669,33 +717,55 @@
         <span class="n">weights</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">format_weights</span><span class="p">,</span>
             <span class="n">device</span><span class="o">=</span><span class="n">format_components</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
-            <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">get_default_dtype</span><span class="p">(),</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">default_dtype</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">format_score</span> <span class="o">=</span> <span class="p">(</span><span class="n">format_components</span> <span class="o">*</span> <span class="n">weights</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
-        <span class="c1"># Structure score calculation</span>
-        <span class="k">if</span> <span class="n">think_blocks</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">think_score</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">think_blocks</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.5</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">think_score</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="c1"># Structure multiplier (0.1-1.0)</span>
+        <span class="n">structure_multiplier</span> <span class="o">=</span> <span class="mf">1.0</span>
 
-        <span class="k">if</span> <span class="n">answer_blocks</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">answer_score</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">answer_blocks</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.5</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">answer_score</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="c1"># Heavy penalty for missing think blocks (but not zero)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">think_blocks</span><span class="p">:</span>
+            <span class="n">structure_multiplier</span> <span class="o">*=</span> <span class="mf">0.3</span>
+        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">think_blocks</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">structure_multiplier</span> <span class="o">*=</span> <span class="mf">0.7</span>  <span class="c1"># Penalty for multiple think blocks</span>
 
-        <span class="n">structure_score</span> <span class="o">=</span> <span class="n">think_score</span> <span class="o">+</span> <span class="n">answer_score</span>
+        <span class="c1"># Penalty for multiple answer blocks</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">answer_blocks</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">structure_multiplier</span> <span class="o">*=</span> <span class="mf">0.7</span>
+
+        <span class="c1"># Quality bonus (0-0.5)</span>
+        <span class="n">quality_bonus</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">format_score</span><span class="p">)</span>
+
+        <span class="c1"># Bonus for high quality responses</span>
+        <span class="k">if</span> <span class="n">format_score</span> <span class="o">&gt;</span> <span class="mf">0.8</span><span class="p">:</span>
+            <span class="n">quality_bonus</span> <span class="o">+=</span> <span class="mf">0.3</span>
 
         <span class="c1"># Completion bonus</span>
-        <span class="k">if</span> <span class="n">complete</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">completion_bonus</span> <span class="o">=</span> <span class="mf">0.0</span>
-        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">complete</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
-            <span class="n">completion_bonus</span> <span class="o">=</span> <span class="n">complete</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">default_dtype</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.2</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">completion_bonus</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">complete</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.2</span>
+        <span class="k">if</span> <span class="n">complete</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">complete</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                <span class="n">completion_bonus</span> <span class="o">=</span> <span class="n">complete</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">default_dtype</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.2</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">completion_bonus</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">complete</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.2</span>
+            <span class="n">quality_bonus</span> <span class="o">+=</span> <span class="n">completion_bonus</span>
 
-        <span class="c1"># Combine all components</span>
-        <span class="n">final_reward</span> <span class="o">=</span> <span class="n">format_score</span> <span class="o">+</span> <span class="n">structure_score</span> <span class="o">+</span> <span class="n">completion_bonus</span>
+        <span class="c1"># Task complexity scaling based on number of instructions</span>
+        <span class="c1"># More instructions = higher potential rewards</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">score</span><span class="o">.</span><span class="n">inst_level_strict_acc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="n">score</span><span class="o">.</span><span class="n">inst_level_strict_acc</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">0</span>
+        <span class="p">):</span>
+            <span class="n">num_instructions</span> <span class="o">=</span> <span class="n">score</span><span class="o">.</span><span class="n">inst_level_strict_acc</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">num_instructions</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">complexity_scale</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="mf">1.0</span> <span class="o">+</span> <span class="p">(</span><span class="n">num_instructions</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.2</span>
+        <span class="p">)</span>  <span class="c1"># 1.0 for 1 instruction, 1.2 for 2, etc.</span>
+
+        <span class="c1"># Final reward: (format + quality) * structure_multiplier * complexity_scale</span>
+        <span class="n">final_reward</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="p">(</span><span class="n">format_score</span> <span class="o">+</span> <span class="n">quality_bonus</span><span class="p">)</span> <span class="o">*</span> <span class="n">structure_multiplier</span> <span class="o">*</span> <span class="n">complexity_scale</span>
+        <span class="p">)</span>
         <span class="n">final_reward</span> <span class="o">=</span> <span class="n">final_reward</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">default_dtype</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">final_reward</span></div>
@@ -703,8 +773,11 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_step</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">base_env</span><span class="p">,</span> <span class="s2">&quot;input_mode&quot;</span><span class="p">,</span> <span class="s2">&quot;history&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;history&quot;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;IFEvalScorer only supports history input mode&quot;</span><span class="p">)</span>
+
         <span class="k">if</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+            <span class="k">return</span> <span class="n">lazy_stack</span><span class="p">(</span>
                 <span class="p">[</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_step</span><span class="p">(</span><span class="n">td</span><span class="p">,</span> <span class="n">next_td</span><span class="p">)</span>
                     <span class="k">for</span> <span class="n">td</span><span class="p">,</span> <span class="n">next_td</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
@@ -712,7 +785,8 @@
                     <span class="p">)</span>
                 <span class="p">]</span>
             <span class="p">)</span>
-        <span class="n">h</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">][</span><span class="o">...</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">h</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">][</span><span class="o">...</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">prompt</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="s2">&quot;prompt&quot;</span><span class="p">][</span><span class="o">...</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">content</span>
         <span class="n">response</span> <span class="o">=</span> <span class="n">h</span><span class="o">.</span><span class="n">content</span>
         <span class="n">complete</span> <span class="o">=</span> <span class="n">h</span><span class="o">.</span><span class="n">is_complete</span>
         <span class="c1"># response = tensordict.get(self.response_key)</span>
@@ -733,6 +807,7 @@
             <span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span><span class="o">.</span><span class="n">auto_device_</span><span class="p">(),</span>
             <span class="n">answer_blocks</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">answer_blocks</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
             <span class="n">verbose</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">,</span>
+            <span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">score_key</span><span class="p">,</span>
@@ -749,8 +824,31 @@
                 <span class="n">answer_blocks</span><span class="o">=</span><span class="n">answer_blocks</span><span class="p">,</span>
                 <span class="n">complete</span><span class="o">=</span><span class="n">complete</span><span class="p">,</span>
             <span class="p">)</span>
+            <span class="n">reward</span> <span class="o">=</span> <span class="n">reward</span><span class="o">.</span><span class="n">view</span><span class="p">(</span>
+                <span class="n">next_tensordict</span><span class="o">.</span><span class="n">batch_size</span>
+                <span class="o">+</span> <span class="p">(</span>
+                    <span class="mi">1</span><span class="p">,</span>
+                    <span class="mi">1</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
             <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;reward&quot;</span><span class="p">,</span> <span class="n">reward</span><span class="p">)</span>
-
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">set_done_if_answer</span> <span class="ow">and</span> <span class="nb">bool</span><span class="p">(</span><span class="n">answer_blocks</span><span class="p">):</span>
+            <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                <span class="s2">&quot;done&quot;</span><span class="p">,</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span>
+                    <span class="n">next_tensordict</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,),</span>
+                    <span class="n">device</span><span class="o">=</span><span class="n">next_tensordict</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                    <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+            <span class="n">next_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                <span class="s2">&quot;terminated&quot;</span><span class="p">,</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span>
+                    <span class="n">next_tensordict</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,),</span>
+                    <span class="n">device</span><span class="o">=</span><span class="n">next_tensordict</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                    <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
         <span class="k">return</span> <span class="n">next_tensordict</span>
 
     <span class="nd">@property</span>
@@ -765,24 +863,15 @@
 
 <div class="viewcode-block" id="IfEvalScorer.transform_reward_spec"><a class="viewcode-back" href="../../../../../../reference/generated/torchrl.envs.llm.IfEvalScorer.html#torchrl.envs.llm.IfEvalScorer.transform_reward_spec">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">transform_reward_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reward_spec</span><span class="p">:</span> <span class="n">Composite</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Composite</span><span class="p">:</span>
         <span class="n">reward_spec</span><span class="p">[</span><span class="s2">&quot;reward&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Unbounded</span><span class="p">(</span>
-            <span class="n">reward_spec</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">get_default_dtype</span><span class="p">()</span>
+            <span class="n">reward_spec</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">get_default_dtype</span><span class="p">(),</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">reward_spec</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">reward_spec</span></div>
 
 <div class="viewcode-block" id="IfEvalScorer.transform_observation_spec"><a class="viewcode-back" href="../../../../../../reference/generated/torchrl.envs.llm.IfEvalScorer.html#torchrl.envs.llm.IfEvalScorer.transform_observation_spec">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">transform_observation_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation_spec</span><span class="p">:</span> <span class="n">Composite</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Composite</span><span class="p">:</span>
-        <span class="n">observation_spec</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">score_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
-            <span class="n">prompt_level_strict_acc</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span>
-                <span class="n">shape</span><span class="o">=</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span>
-            <span class="p">),</span>
-            <span class="n">inst_level_strict_acc</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span>
-                <span class="n">shape</span><span class="o">=</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span>
-            <span class="p">),</span>
-            <span class="n">prompt_level_loose_acc</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span>
-                <span class="n">shape</span><span class="o">=</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span>
-            <span class="p">),</span>
-            <span class="n">inst_level_loose_acc</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span>
-                <span class="n">shape</span><span class="o">=</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span>
-            <span class="p">),</span>
+        <span class="n">observation_spec</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">score_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">IFEvalScoreData</span><span class="o">.</span><span class="n">default_spec</span><span class="p">(</span>
+            <span class="n">observation_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">device</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">observation_spec</span></div></div>
 </pre></div>

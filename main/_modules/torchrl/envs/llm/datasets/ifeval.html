@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -426,24 +426,27 @@
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">TYPE_CHECKING</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorClass</span><span class="p">,</span> <span class="n">TensorDict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">NonTensorData</span><span class="p">,</span> <span class="n">NonTensorStack</span><span class="p">,</span> <span class="n">TensorClass</span><span class="p">,</span> <span class="n">TensorDict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">NonTensor</span><span class="p">,</span> <span class="n">Unbounded</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">StepCounter</span>
-
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.llm.chat</span><span class="w"> </span><span class="kn">import</span> <span class="n">DatasetChatEnv</span>
-
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.llm.reward.ifeval</span><span class="w"> </span><span class="kn">import</span> <span class="n">IfEvalScorer</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">transformers</span>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">IFEvalData</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;nocast&quot;</span><span class="p">]):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A tensorclass for IFEval dta.&quot;&quot;&quot;</span>
 
     <span class="n">key</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
-    <span class="n">instruction_id_list</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">instruction_id_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
     <span class="n">kwargs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span>
-    <span class="n">text</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">query</span><span class="p">:</span> <span class="nb">str</span>
+
     <span class="c1"># Reponses and additional fields</span>
     <span class="n">response</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">tokens</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
@@ -451,11 +454,63 @@
     <span class="n">logits</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">reward</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">default_spec</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span> <span class="n">shape</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Composite</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">Composite</span><span class="p">(</span>
+            <span class="n">key</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">),</span>
+            <span class="n">instruction_id_list</span><span class="o">=</span><span class="n">NonTensor</span><span class="p">(</span>
+                <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">feature_dims</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                <span class="n">example_data</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;punctuation:no_comma&quot;</span><span class="p">],</span>
+            <span class="p">),</span>
+            <span class="n">kwargs</span><span class="o">=</span><span class="n">NonTensor</span><span class="p">(</span>
+                <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">feature_dims</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                <span class="n">example_data</span><span class="o">=</span><span class="p">{</span>
+                    <span class="s2">&quot;num_highlights&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+                    <span class="s2">&quot;relation&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+                    <span class="s2">&quot;num_placeholders&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+                <span class="p">},</span>
+            <span class="p">),</span>
+            <span class="n">query</span><span class="o">=</span><span class="n">NonTensor</span><span class="p">(</span>
+                <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">example_data</span><span class="o">=</span><span class="s2">&quot;Plan a 2 week Europe trip and visit London, Paris, and Rome. Answer in all caps. The response must contain at least 8 placeholders (i.e., [restaurant]).&quot;</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span>
+            <span class="n">step_mdp_static</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">data_cls</span><span class="o">=</span><span class="bp">cls</span><span class="p">,</span>
+        <span class="p">)</span>
+
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_collate_fn</span><span class="p">(</span><span class="n">batch</span><span class="p">):</span>
     <span class="n">batch</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">TensorDict</span><span class="o">.</span><span class="n">from_any</span><span class="p">(</span><span class="n">_batch</span><span class="p">)</span> <span class="k">for</span> <span class="n">_batch</span> <span class="ow">in</span> <span class="n">batch</span><span class="p">])</span>
-    <span class="n">batch</span><span class="o">.</span><span class="n">rename_key_</span><span class="p">(</span><span class="s2">&quot;prompt&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">IFEvalData</span><span class="o">.</span><span class="n">from_tensordict</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+    <span class="n">batch</span><span class="o">.</span><span class="n">rename_key_</span><span class="p">(</span><span class="s2">&quot;prompt&quot;</span><span class="p">,</span> <span class="s2">&quot;query&quot;</span><span class="p">)</span>
+    <span class="c1"># we want instruction_id_list and kwargs to be lists, but not NonTensorStacks</span>
+    <span class="n">instruction_id_list</span> <span class="o">=</span> <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;instruction_id_list&quot;</span><span class="p">]</span>
+    <span class="c1"># instruction_id_list should be a list of lists</span>
+    <span class="n">instruction_id_list</span> <span class="o">=</span> <span class="n">NonTensorStack</span><span class="p">(</span>
+        <span class="o">*</span><span class="p">[</span>
+            <span class="n">NonTensorData</span><span class="p">([</span><span class="n">item</span><span class="p">]</span> <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="k">else</span> <span class="n">item</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">instruction_id_list</span>
+        <span class="p">]</span>
+    <span class="p">)</span>
+    <span class="n">kwargs</span> <span class="o">=</span> <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;kwargs&quot;</span><span class="p">]</span>
+    <span class="n">kwargs</span> <span class="o">=</span> <span class="n">NonTensorStack</span><span class="p">(</span>
+        <span class="o">*</span><span class="p">[</span>
+            <span class="n">NonTensorData</span><span class="p">([</span><span class="n">item</span><span class="p">]</span> <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="k">else</span> <span class="n">item</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">kwargs</span>
+        <span class="p">]</span>
+    <span class="p">)</span>
+    <span class="n">batch</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;instruction_id_list&quot;</span><span class="p">,</span> <span class="n">instruction_id_list</span><span class="p">)</span>
+    <span class="n">batch</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;kwargs&quot;</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
+    <span class="c1"># we don&#39;t need a tensorclass here</span>
+    <span class="k">return</span> <span class="n">batch</span>
+    <span class="c1"># return IFEvalData.from_tensordict(batch)</span>
 
 
 <div class="viewcode-block" id="IFEvalEnv"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.llm.IFEvalEnv.html#torchrl.envs.llm.IFEvalEnv">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">IFEvalEnv</span><span class="p">(</span><span class="n">DatasetChatEnv</span><span class="p">):</span>
@@ -482,6 +537,7 @@
 <span class="sd">        collate_fn (Callable | None, optional): A custom collate function for data loading. If `None`, a default</span>
 <span class="sd">            collate function is used. Defaults to `None`.</span>
 <span class="sd">        max_steps (int, optional): The maximum number of steps allowed in an episode. Defaults to `1`.</span>
+<span class="sd">        input_mode (Literal[&quot;history&quot;, &quot;text&quot;, &quot;tokens&quot;], optional): The mode of input to use. Defaults to `&quot;history&quot;`.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; import transformers</span>
@@ -559,11 +615,29 @@
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="n">SYSTEM_PROMPT</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;A conversation between User and Assistant.</span>
-<span class="s2">You are tasked with responding to user queries in a very specific format.</span>
-<span class="s2">When given a task or question, first think through the problem and provide your thought process between &lt;think&gt; and &lt;/think&gt; tags.</span>
-<span class="s2">Then, give your final answer or response between &lt;answer&gt; and &lt;/answer&gt; tags.</span>
-<span class="s2">You will be assessed by the content of the answer block only, so make sure it contains all the required information, and only that.&quot;&quot;&quot;</span>
+    <span class="n">SYSTEM_PROMPT</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;You are a helpful AI assistant that follows instructions extremely well.</span>
+
+<span class="s2">IMPORTANT: You must respond in a specific format for every task:</span>
+
+<span class="s2">1. First, think through the problem step by step and write your reasoning between &lt;think&gt; and &lt;/think&gt; tags</span>
+<span class="s2">2. Then, provide your final answer between &lt;answer&gt; and &lt;/answer&gt; tags</span>
+
+<span class="s2">CRITICAL RULES:</span>
+<span class="s2">- ALWAYS use &lt;think&gt;...&lt;/think&gt; and &lt;answer&gt;...&lt;/answer&gt; tags exactly as shown</span>
+<span class="s2">- Do NOT use &lt;thought&gt;, &lt;reasoning&gt;, or any other tag variations</span>
+<span class="s2">- Your &lt;answer&gt; section will be evaluated, so make it complete and accurate</span>
+<span class="s2">- Follow ALL specific requirements in the user&#39;s request (formatting, content, etc.)</span>
+<span class="s2">- If the user asks for placeholders like [restaurant], include them exactly as requested</span>
+<span class="s2">- Pay attention to capitalization, punctuation, and other formatting requirements</span>
+
+<span class="s2">Example format:</span>
+<span class="s2">&lt;think&gt;</span>
+<span class="s2">I need to analyze what the user is asking for...</span>
+<span class="s2">[Your reasoning here]</span>
+<span class="s2">&lt;/think&gt;</span>
+<span class="s2">&lt;answer&gt;</span>
+<span class="s2">[Your final answer here, following all user requirements]</span>
+<span class="s2">&lt;/answer&gt;&quot;&quot;&quot;</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -582,6 +656,7 @@
         <span class="n">compute_reward</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">collate_fn</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">max_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">input_mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="s2">&quot;tokens&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;history&quot;</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="k">if</span> <span class="n">collate_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">collate_fn</span> <span class="o">=</span> <span class="n">_collate_fn</span>
@@ -598,6 +673,9 @@
             <span class="n">template_kwargs</span><span class="o">=</span><span class="n">template_kwargs</span><span class="p">,</span>
             <span class="n">apply_template</span><span class="o">=</span><span class="n">apply_template</span><span class="p">,</span>
             <span class="n">collate_fn</span><span class="o">=</span><span class="n">collate_fn</span><span class="p">,</span>
+            <span class="n">input_mode</span><span class="o">=</span><span class="n">input_mode</span><span class="p">,</span>
+            <span class="n">data_key</span><span class="o">=</span><span class="s2">&quot;query&quot;</span><span class="p">,</span>
+            <span class="n">primers</span><span class="o">=</span><span class="n">IFEvalData</span><span class="o">.</span><span class="n">default_spec</span><span class="p">((</span><span class="n">num_envs</span><span class="p">,),</span> <span class="n">device</span><span class="p">),</span>
         <span class="p">)</span>
         <span class="k">if</span> <span class="n">max_steps</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">StepCounter</span><span class="p">(</span><span class="n">max_steps</span><span class="o">=</span><span class="n">max_steps</span><span class="p">))</span>

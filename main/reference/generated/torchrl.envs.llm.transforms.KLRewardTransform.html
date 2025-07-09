@@ -39,8 +39,8 @@
   <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="RetrieveLogProb" href="torchrl.envs.llm.transforms.RetrieveLogProb.html" />
-    <link rel="prev" title="DataLoadingPrimer" href="torchrl.envs.llm.transforms.DataLoadingPrimer.html" />
+    <link rel="next" title="MCPToolTransform" href="torchrl.envs.llm.transforms.MCPToolTransform.html" />
+    <link rel="prev" title="KLComputation" href="torchrl.envs.llm.transforms.KLComputation.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -388,7 +388,7 @@
         
           <li><a href="../index.html">API Reference</a> &gt;</li>
         
-          <li><a href="../llms.html">LLM interface</a> &gt;</li>
+          <li><a href="../llms.html">LLM Interface</a> &gt;</li>
         
       <li>KLRewardTransform</li>
     
@@ -432,41 +432,57 @@
 <h1>KLRewardTransform<a class="headerlink" href="#klrewardtransform" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.envs.llm.transforms.KLRewardTransform">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.llm.transforms.</span></span><span class="sig-name descname"><span class="pre">KLRewardTransform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">actor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProbabilisticTensorDictModule</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coef</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">in_keys</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_keys</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_prob_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'log_probs'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><span class="pre">torch.device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">add_to_reward</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/llm/transforms/kl.html#KLRewardTransform"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.llm.transforms.KLRewardTransform" title="Permalink to this definition">¶</a></dt>
-<dd><p>A transform to add a KL[pi_current||pi_0] correction term to the reward.</p>
-<p>This transform is used to constrain the policy to remain close to its original
-configuration which limits overfitting when fine-tuning using RLHF.</p>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.llm.transforms.</span></span><span class="sig-name descname"><span class="pre">KLRewardTransform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ref_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.modules.llm.LLMWrapperBase.html#torchrl.modules.llm.LLMWrapperBase" title="torchrl.modules.llm.LLMWrapperBase"><span class="pre">LLMWrapperBase</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coef</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">in_keys</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_keys</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_prob_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">('log_probs',</span> <span class="pre">'full')</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><span class="pre">torch.device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">add_to_reward</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tokenizer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">transformers.AutoTokenizer</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">assistant_only</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">padding_side</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'left'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/llm/transforms/kl.html#KLRewardTransform"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.llm.transforms.KLRewardTransform" title="Permalink to this definition">¶</a></dt>
+<dd><p>A legacy transform for computing KL divergence-based rewards.</p>
+<p><strong>Deprecated</strong>: This transform is maintained for backward compatibility but is no longer
+the recommended approach. Use <a class="reference internal" href="torchrl.envs.llm.transforms.RetrieveKL.html#torchrl.envs.llm.transforms.RetrieveKL" title="torchrl.envs.llm.transforms.kl.RetrieveKL"><code class="xref py py-class docutils literal notranslate"><span class="pre">RetrieveKL</span></code></a> instead,
+which provides better modularity and integration with the new wrapper design.</p>
+<p><strong>Recent Changes:</strong>
+- <strong>Legacy Status</strong>: This transform is now considered legacy and may not work optimally</p>
+<blockquote>
+<div><p>with the new modular wrapper design.</p>
+</div></blockquote>
+<ul class="simple">
+<li><p><strong>ChatHistory Integration</strong>: Limited support for the new <code class="xref py py-class docutils literal notranslate"><span class="pre">ChatHistory</span></code> objects.</p></li>
+<li><p><strong>Input Mode Support</strong>: May not handle all input modes (<cite>“history”</cite>, <cite>“text”</cite>, <cite>“tokens”</cite>) consistently.</p></li>
+</ul>
+<p><strong>Recommendation</strong>:
+Use <a class="reference internal" href="torchrl.envs.llm.transforms.RetrieveKL.html#torchrl.envs.llm.transforms.RetrieveKL" title="torchrl.envs.llm.transforms.kl.RetrieveKL"><code class="xref py py-class docutils literal notranslate"><span class="pre">RetrieveKL</span></code></a> for new code, which provides:
+- Better integration with the new wrapper design
+- Consistent support for all input modes
+- Proper handling of ChatHistory objects
+- More modular and composable architecture</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>actor</strong> (<em>ProbabilisticTensorDictModule</em>) – a frozen probabilistic actor. It must
-have the following features: it must have a set of input (<code class="docutils literal notranslate"><span class="pre">in_keys</span></code>)
-and output keys (<code class="docutils literal notranslate"><span class="pre">out_keys</span></code>). It must have a <code class="docutils literal notranslate"><span class="pre">get_dist</span></code> method
-that outputs the distribution of the action.</p></li>
-<li><p><strong>coef</strong> (<a class="reference internal" href="#torchrl.envs.llm.transforms.KLRewardTransform.float" title="torchrl.envs.llm.transforms.KLRewardTransform.float"><code class="xref py py-obj docutils literal notranslate"><span class="pre">float</span></code></a>) – the coefficient of the KL term. Defaults to <code class="docutils literal notranslate"><span class="pre">1.0</span></code>.</p></li>
-<li><p><strong>in_keys</strong> (<em>str</em><em> or </em><em>list of str/tuples of str</em>) – the input key where the
-reward should be fetched. Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;reward&quot;</span></code>.</p></li>
-<li><p><strong>out_keys</strong> (<em>str</em><em> or </em><em>list of str/tuples of str</em>) – the output key where the
-reward should be written. Defaults to <code class="docutils literal notranslate"><span class="pre">[&quot;reward&quot;,</span> <span class="pre">&quot;kl_penalty&quot;,</span> <span class="pre">&quot;ref_log_prob&quot;]</span></code>.</p></li>
-<li><p><strong>add_to_reward</strong> (<em>bool</em>) – whether to add the reward term to the reward.
-Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
+<li><p><strong>gen_model</strong> (<a class="reference internal" href="torchrl.modules.llm.LLMWrapperBase.html#torchrl.modules.llm.LLMWrapperBase" title="torchrl.modules.llm.LLMWrapperBase"><em>LLMWrapperBase</em></a>) – the generation model.</p></li>
+<li><p><strong>ref_model</strong> (<a class="reference internal" href="torchrl.modules.llm.LLMWrapperBase.html#torchrl.modules.llm.LLMWrapperBase" title="torchrl.modules.llm.LLMWrapperBase"><em>LLMWrapperBase</em></a>) – the reference model.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>assistant_only</strong> (<em>bool</em>) – whether to only compute KL on assistant tokens. Defaults to <cite>True</cite>.</p></li>
+<li><p><strong>tokenizer</strong> (<em>transformers.AutoTokenizer</em>) – the tokenizer to use. Defaults to <cite>None</cite>.</p></li>
+<li><p><strong>detach</strong> (<em>bool</em>) – whether to detach the KL from the computation graph. Defaults to <cite>True</cite>.</p></li>
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a>) – the device to use. Defaults to <cite>None</cite>.</p></li>
+<li><p><strong>padding_side</strong> (<em>str</em>) – the side of the padding when using pad_sequence. Defaults to <cite>“left”</cite>.</p></li>
 </ul>
 </dd>
 </dl>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>If the parameters are not differentiable (default), they will <em>not</em>
-follow the module when dtype or device casting operations will be called
-(such as <a class="reference internal" href="#torchrl.envs.llm.transforms.KLRewardTransform.cuda" title="torchrl.envs.llm.transforms.KLRewardTransform.cuda"><code class="xref py py-meth docutils literal notranslate"><span class="pre">cuda()</span></code></a>, <a class="reference internal" href="#torchrl.envs.llm.transforms.KLRewardTransform.to" title="torchrl.envs.llm.transforms.KLRewardTransform.to"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to()</span></code></a> etc.). When <code class="docutils literal notranslate"><span class="pre">requires_grad=True</span></code>,
-casting operations will work as expected.</p>
-</div>
 <p class="rubric">Examples</p>
-<p>TODO</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Because the KL formula is not always available and the parameters of the
-original distribution may not have been recorded, we use a stochastic estimate
-of the KL divergence.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Legacy usage (not recommended for new code)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">transform</span> <span class="o">=</span> <span class="n">KLRewardTransform</span><span class="p">(</span><span class="n">gen_model</span><span class="p">,</span> <span class="n">ref_model</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Recommended approach using RetrieveKL</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.llm.transforms.kl</span><span class="w"> </span><span class="kn">import</span> <span class="n">RetrieveKL</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">transform</span> <span class="o">=</span> <span class="n">RetrieveKL</span><span class="p">(</span><span class="n">gen_model</span><span class="p">,</span> <span class="n">ref_model</span><span class="p">,</span> <span class="n">assistant_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="torchrl.envs.llm.transforms.RetrieveKL.html#torchrl.envs.llm.transforms.RetrieveKL" title="torchrl.envs.llm.transforms.kl.RetrieveKL"><code class="xref py py-class docutils literal notranslate"><span class="pre">RetrieveKL</span></code></a>: The recommended transform for KL divergence computation.
+<a class="reference internal" href="torchrl.envs.llm.transforms.RetrieveLogProb.html#torchrl.envs.llm.transforms.RetrieveLogProb" title="torchrl.envs.llm.transforms.kl.RetrieveLogProb"><code class="xref py py-class docutils literal notranslate"><span class="pre">RetrieveLogProb</span></code></a>: Base transform for retrieving log-probabilities.
+<a class="reference internal" href="torchrl.envs.llm.transforms.KLComputation.html#torchrl.envs.llm.transforms.KLComputation" title="torchrl.envs.llm.transforms.kl.KLComputation"><code class="xref py py-class docutils literal notranslate"><span class="pre">KLComputation</span></code></a>: Transform for computing KL divergence between log-prob tensors.</p>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.envs.llm.transforms.KLRewardTransform.add_module">
@@ -585,6 +601,16 @@ are direct members of this module.</p>
 <dd><p>Close the transform.</p>
 </dd></dl>
 
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.envs.llm.transforms.KLRewardTransform.collector">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">collector</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase" title="torchrl.collectors.DataCollectorBase"><span class="pre">DataCollectorBase</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.envs.llm.transforms.KLRewardTransform.collector" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the collector associated with the container, if it exists.</p>
+<p>This can be used whenever the transform needs to be made aware of the collector or the policy associated with it.</p>
+<p>Make sure to call this property only on transforms that are not nested in sub-processes.
+The collector reference will not be passed to the workers of a <a class="reference internal" href="torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a> or
+similar batched environments.</p>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.envs.llm.transforms.KLRewardTransform.compile">
 <span class="sig-name descname"><span class="pre">compile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.envs.llm.transforms.KLRewardTransform.compile" title="Permalink to this definition">¶</a></dt>
@@ -596,7 +622,7 @@ to <a class="reference external" href="https://docs.pytorch.org/docs/stable/gene
 
 <dl class="py property">
 <dt class="sig sig-object py" id="torchrl.envs.llm.transforms.KLRewardTransform.container">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">container</span></span><a class="headerlink" href="#torchrl.envs.llm.transforms.KLRewardTransform.container" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">container</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><span class="pre">EnvBase</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.envs.llm.transforms.KLRewardTransform.container" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns the env containing the transform.</p>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">TransformedEnv</span><span class="p">,</span> <span class="n">Compose</span><span class="p">,</span> <span class="n">RewardSum</span><span class="p">,</span> <span class="n">StepCounter</span>
@@ -2037,10 +2063,10 @@ See <a class="reference external" href="https://docs.pytorch.org/docs/stable/gen
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrl.envs.llm.transforms.RetrieveLogProb.html" class="btn btn-neutral float-right" title="RetrieveLogProb" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrl.envs.llm.transforms.MCPToolTransform.html" class="btn btn-neutral float-right" title="MCPToolTransform" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.envs.llm.transforms.DataLoadingPrimer.html" class="btn btn-neutral" title="DataLoadingPrimer" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="torchrl.envs.llm.transforms.KLComputation.html" class="btn btn-neutral" title="KLComputation" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   

@@ -1,9 +1,0 @@
-﻿.. currentmodule:: torchrl.data.llm
-
-
-LLMData
-=======
-
-.. autoclass:: LLMData
-    :members:
-    :inherited-members:

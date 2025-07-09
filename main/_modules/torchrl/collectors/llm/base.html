@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -595,7 +595,7 @@
             <span class="c1"># disguise the queue as a replay buffer</span>
             <span class="n">replay_buffer</span> <span class="o">=</span> <span class="n">_QueueAsRB</span><span class="p">(</span><span class="n">queue</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">dialog_turns_per_batch</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">yield_completed_trajectories</span><span class="p">:</span>
-            <span class="n">dialog_turns_per_batch</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="n">dialog_turns_per_batch</span> <span class="o">=</span> <span class="mi">1</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
             <span class="n">create_env_fn</span><span class="o">=</span><span class="n">env</span><span class="p">,</span>
             <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
@@ -611,6 +611,9 @@
             <span class="n">extend_buffer</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
             <span class="n">postproc</span><span class="o">=</span><span class="n">postproc</span><span class="p">,</span>
         <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="s2">&quot;register_collector&quot;</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="o">.</span><span class="n">register_collector</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+
         <span class="k">if</span> <span class="n">yield_only_last_steps</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">yield_only_last_steps</span> <span class="o">=</span> <span class="kc">False</span>
 
@@ -744,6 +747,8 @@
             <span class="k">return</span> <span class="n">trajectory</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">trajectory</span>
 
+    <span class="n">_result_numel</span> <span class="o">=</span> <span class="mi">0</span>
+
     <span class="k">def</span><span class="w"> </span><span class="nf">_rollout_yield_trajs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>  <span class="c1"># A simplified version of rollout</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Data shuttle not found&quot;</span><span class="p">)</span>
@@ -754,8 +759,12 @@
         <span class="n">collected_steps</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="n">dones</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
         <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_trajectory_queue</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_result_numel</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dialog_turns_per_batch</span><span class="p">:</span>
                 <span class="k">break</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;LLMCollector: Collected </span><span class="si">{</span><span class="n">collected_steps</span><span class="si">}</span><span class="s2"> steps with </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_result_numel</span><span class="si">}</span><span class="s2"> elements in the resulting batch, over </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">dialog_turns_per_batch</span><span class="si">}</span><span class="s2"> requested.&quot;</span>
+                <span class="p">)</span>
             <span class="n">env_input</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">(</span><span class="n">next_output</span><span class="p">)</span>
             <span class="n">cur_output</span><span class="p">,</span> <span class="n">next_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">step_and_maybe_reset</span><span class="p">(</span><span class="n">env_input</span><span class="p">)</span>
             <span class="c1"># for i in range(cur_output.numel()):</span>
@@ -778,18 +787,24 @@
             <span class="k">if</span> <span class="n">dones</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
                 <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">dones</span><span class="o">.</span><span class="n">nonzero</span><span class="p">(</span><span class="n">as_tuple</span><span class="o">=</span><span class="kc">True</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">():</span>
                     <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">yield_only_last_steps</span><span class="p">:</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">_trajectory_queue</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                            <span class="n">lazy_stack</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_yield_queues</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-                        <span class="p">)</span>
+                        <span class="n">_result</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_yield_queues</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_trajectory_queue</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_result</span><span class="p">)</span>
                     <span class="k">else</span><span class="p">:</span>
                         <span class="c1"># FIXME: We need to increment the step count here because iterator() won&#39;t</span>
                         <span class="c1">#  see the extra steps</span>
                         <span class="c1"># We use lazy-stack because unsqueeze doesn&#39;t nest the strings in lists</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">_trajectory_queue</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                            <span class="n">lazy_stack</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">_yield_queues</span><span class="p">[</span><span class="n">idx</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]])</span>
-                        <span class="p">)</span>
+                        <span class="n">_result</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">_yield_queues</span><span class="p">[</span><span class="n">idx</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]])</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_trajectory_queue</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_result</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_result_numel</span> <span class="o">+=</span> <span class="n">_result</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_yield_queues</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
-        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_trajectory_queue</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_trajectory_queue</span><span class="o">.</span><span class="n">popleft</span><span class="p">()]</span>
+        <span class="n">elt</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_result_numel</span> <span class="o">-=</span> <span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+        <span class="k">while</span> <span class="n">elt</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">dialog_turns_per_batch</span><span class="p">:</span>
+            <span class="n">result</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_trajectory_queue</span><span class="o">.</span><span class="n">popleft</span><span class="p">())</span>
+            <span class="n">elt</span> <span class="o">+=</span> <span class="n">result</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_result_numel</span> <span class="o">-=</span> <span class="n">result</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
             <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;LLMCollector: Yielding completed trajectory with shape </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">.&quot;</span>

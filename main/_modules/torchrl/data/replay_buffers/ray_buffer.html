@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -585,6 +585,10 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">()</span>
 
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">batch_size</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rb</span><span class="o">.</span><span class="n">_getattr</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="s2">&quot;_batch_size&quot;</span><span class="p">))</span>
+
 <div class="viewcode-block" id="RayReplayBuffer.sample"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer.sample">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="n">pending_task</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rb</span><span class="o">.</span><span class="n">sample</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">pending_task</span><span class="p">)</span></div>
@@ -618,8 +622,8 @@
 <div class="viewcode-block" id="RayReplayBuffer.load"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer.load">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">load</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rb</span><span class="o">.</span><span class="n">load</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span></div>
 
-<div class="viewcode-block" id="RayReplayBuffer.empty"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer.empty">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">empty</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rb</span><span class="o">.</span><span class="n">empty</span><span class="o">.</span><span class="n">remote</span><span class="p">())</span></div>
+<div class="viewcode-block" id="RayReplayBuffer.empty"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer.empty">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">empty</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">empty_write_count</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rb</span><span class="o">.</span><span class="n">empty</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">empty_write_count</span><span class="o">=</span><span class="n">empty_write_count</span><span class="p">))</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rb</span><span class="o">.</span><span class="fm">__getitem__</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">index</span><span class="p">))</span>

@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -1031,7 +1031,6 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span>
             <span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">functional</span> <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">():</span>
                 <span class="n">dist</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">get_dist</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
-
             <span class="n">is_composite</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">dist</span><span class="p">,</span> <span class="n">CompositeDistribution</span><span class="p">)</span>
 
             <span class="k">if</span> <span class="n">is_composite</span><span class="p">:</span>

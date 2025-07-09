@@ -270,6 +270,23 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="This tutorial demonstrates how to use TorchRL&#x27;s LLM wrappers for integrating Large Language Models into reinforcement learning workflows. TorchRL provides two main wrappers:">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_llm_wrappers_thumb.png
+    :alt:
+
+  :ref:`sphx_glr_tutorials_llm_wrappers.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">LLM Wrappers in TorchRL</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="TorchRL trainer: A DQN example">
 
 .. only:: html
@@ -378,6 +395,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
    /tutorials/torchrl_envs
    /tutorials/coding_ppo
    /tutorials/rb_tutorial
+   /tutorials/llm_wrappers
    /tutorials/coding_dqn
    /tutorials/pendulum
    /tutorials/torchrl_demo

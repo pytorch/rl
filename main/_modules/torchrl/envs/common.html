@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -429,6 +429,7 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">abc</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">weakref</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">deepcopy</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">partial</span><span class="p">,</span> <span class="n">wraps</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterator</span>
@@ -960,6 +961,25 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">is_closed</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_run_type_checks</span> <span class="o">=</span> <span class="n">run_type_checks</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_allow_done_after_reset</span> <span class="o">=</span> <span class="n">allow_done_after_reset</span>
+
+    <span class="n">_collector</span><span class="p">:</span> <span class="n">weakref</span><span class="o">.</span><span class="n">ReferenceType</span><span class="p">[</span>
+        <span class="n">LLMCollector</span>  <span class="c1"># noqa: F821 # type: ignore</span>
+    <span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="EnvBase.register_collector"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.register_collector">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">register_collector</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">collector</span><span class="p">:</span> <span class="n">DataCollectorBase</span>  <span class="c1"># noqa: F821 # type: ignore</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Registers a collector with the environment.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            collector (DataCollectorBase): The collector to register.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_collector</span> <span class="o">=</span> <span class="n">weakref</span><span class="o">.</span><span class="n">ref</span><span class="p">(</span><span class="n">collector</span><span class="p">)</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">collector</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DataCollectorBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F821 # type: ignore</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the collector associated with the container, if it exists.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collector</span><span class="p">()</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
 
 <div class="viewcode-block" id="EnvBase.set_spec_lock_"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.set_spec_lock_">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">set_spec_lock_</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mode</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EnvBase</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Locks or unlocks the environment&#39;s specs.</span>
@@ -1643,6 +1663,56 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span> <span class="n">key</span><span class="o">=</span><span class="n">_repr_by_depth</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">observation_keys</span>
+
+    <span class="nd">@property</span>
+    <span class="nd">@_cache_value</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_observation_keys_step_mdp</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The observation keys of an environment that are static under step_mdp (i.e. to be copied as-is during step_mdp).&quot;&quot;&quot;</span>
+        <span class="n">observation_keys_leaves</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="n">step_mdp_static_only</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+            <span class="n">key</span><span class="o">=</span><span class="n">_repr_by_depth</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">observation_keys_leaves</span>
+
+    <span class="nd">@property</span>
+    <span class="nd">@_cache_value</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_state_keys_step_mdp</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The state keys of an environment that are static under step_mdp (i.e. to be copied as-is during step_mdp).&quot;&quot;&quot;</span>
+        <span class="n">state_keys_leaves</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">full_state_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="n">step_mdp_static_only</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+            <span class="n">key</span><span class="o">=</span><span class="n">_repr_by_depth</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">state_keys_leaves</span>
+
+    <span class="nd">@property</span>
+    <span class="nd">@_cache_value</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_action_keys_step_mdp</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The action keys of an environment that are static under step_mdp (i.e. to be copied as-is during step_mdp).&quot;&quot;&quot;</span>
+        <span class="n">action_keys_leaves</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">full_action_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="n">step_mdp_static_only</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+            <span class="n">key</span><span class="o">=</span><span class="n">_repr_by_depth</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">action_keys_leaves</span>
+
+    <span class="nd">@property</span>
+    <span class="nd">@_cache_value</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_done_keys_step_mdp</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The done keys of an environment that are static under step_mdp (i.e. to be copied as-is during step_mdp).&quot;&quot;&quot;</span>
+        <span class="n">done_keys_leaves</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">full_done_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="n">step_mdp_static_only</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+            <span class="n">key</span><span class="o">=</span><span class="n">_repr_by_depth</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">done_keys_leaves</span>
+
+    <span class="nd">@property</span>
+    <span class="nd">@_cache_value</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reward_keys_step_mdp</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The reward keys of an environment that are static under step_mdp (i.e. to be copied as-is during step_mdp).&quot;&quot;&quot;</span>
+        <span class="n">reward_keys_leaves</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">full_reward_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="n">step_mdp_static_only</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+            <span class="n">key</span><span class="o">=</span><span class="n">_repr_by_depth</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">reward_keys_leaves</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">reward_key</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -3831,7 +3901,7 @@
 
     <span class="nd">@property</span>
     <span class="nd">@_cache_value</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_step_mdp</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_step_mdp</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">TensorDictBase</span><span class="p">]:</span>
         <span class="k">return</span> <span class="n">_StepMDP</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exclude_action</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_rollout_stop_early</span><span class="p">(</span>
@@ -4008,8 +4078,12 @@
         <span class="c1"># done and truncated are in done_keys</span>
         <span class="c1"># We read if any key is done.</span>
         <span class="n">tensordict_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step_mdp</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+        <span class="c1"># if self._post_step_mdp_hooks is not None:</span>
+        <span class="c1"># tensordict_ = self._post_step_mdp_hooks(tensordict_)</span>
         <span class="n">tensordict_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">maybe_reset</span><span class="p">(</span><span class="n">tensordict_</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">tensordict</span><span class="p">,</span> <span class="n">tensordict_</span></div>
+
+    <span class="c1"># _post_step_mdp_hooks: Callable[[TensorDictBase], TensorDictBase] | None = None</span>
 
     <span class="nd">@property</span>
     <span class="nd">@_cache_value</span>

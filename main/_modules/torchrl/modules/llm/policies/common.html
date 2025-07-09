@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -426,62 +426,834 @@
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">weakref</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">overload</span>
+
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">NestedKey</span><span class="p">,</span> <span class="n">TensorDictBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModuleBase</span><span class="p">,</span> <span class="n">TensorDictSequential</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.tensorclass</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorClass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_zip_strict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">distributions</span> <span class="k">as</span> <span class="n">D</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch.distributions</span><span class="w"> </span><span class="kn">import</span> <span class="n">Categorical</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules</span><span class="w"> </span><span class="kn">import</span> <span class="n">MaskedCategorical</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.nn.utils.rnn</span><span class="w"> </span><span class="kn">import</span> <span class="n">pad_sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Unbounded</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.distributions.discrete</span><span class="w"> </span><span class="kn">import</span> <span class="n">LLMMaskedCategorical</span>
+
+<span class="c1"># TODOs:</span>
+<span class="c1"># - [ ] Remove the useless view(-1) calls when num_samples is not &gt; 1</span>
+<span class="c1"># - [ ] Remove as_list=True and use a context manager to handle that</span>
+<span class="c1"># - [ ] Make sure tensordict can handle nested lazy tds that have a get(key, as_list=True) - I think it breaks atm</span>
+<span class="c1"># - [ ] Handle packing</span>
 
 
-<div class="viewcode-block" id="CategoricalSequential"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.CategoricalSequential.html#torchrl.modules.llm.CategoricalSequential">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">CategoricalSequential</span><span class="p">(</span><span class="n">TensorDictModuleBase</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A ProbabilisticTensorDictSequential subclass meant to work with LLMs.</span>
+<div class="viewcode-block" id="Tokens"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.Tokens.html#torchrl.modules.llm.Tokens">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">Tokens</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;nocast&quot;</span><span class="p">]):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A Tokens container.</span>
 
-<span class="sd">    .. seealso:: :class:`~tensordict.nn.ProbabilisticTensorDictSequential` class.</span>
+<span class="sd">    Args:</span>
+<span class="sd">        prompt (torch.Tensor | None): The prompt tokens.</span>
+<span class="sd">        response (torch.Tensor | None): The response tokens.</span>
+<span class="sd">        assistant (torch.Tensor | None): The assistant tokens.</span>
+<span class="sd">        full (torch.Tensor | None): The tokens across prompt and response.</span>
+<span class="sd">        padded (bool | None): Whether the tokens are padded.</span>
+
+<span class="sd">    Shapes:</span>
+<span class="sd">        - prompt: (batch_size, prompt_length). If padded, padded on the left.</span>
+<span class="sd">        - response: (batch_size, response_length). If padded, padded on the right.</span>
+<span class="sd">        - full: (batch_size, prompt_length + response_length). If padded, padded on the left and/or right.</span>
+<span class="sd">        - padded: bool.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="n">generate</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">prompt</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">response</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">full</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">padded</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">get_dist</span><span class="p">(</span>
+<div class="viewcode-block" id="Tokens.default_spec"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.Tokens.html#torchrl.modules.llm.Tokens.default_spec">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">default_spec</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,),</span>
+        <span class="n">keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;prompt&quot;</span><span class="p">,</span> <span class="s2">&quot;response&quot;</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;A default spec to use in transforms / envs that return Tokens objects.&quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">NonTensor</span>
+
+        <span class="k">if</span> <span class="n">keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;prompt&quot;</span><span class="p">,</span> <span class="s2">&quot;response&quot;</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">]</span>
+
+        <span class="n">defaults</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="n">shape</span> <span class="o">+</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,))</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">}</span>
+        <span class="n">defaults</span><span class="p">[</span><span class="s2">&quot;padded&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">NonTensor</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span> <span class="n">example_data</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">Composite</span><span class="p">(</span><span class="n">defaults</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">data_cls</span><span class="o">=</span><span class="bp">cls</span><span class="p">,</span> <span class="n">step_mdp_static</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="Masks"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.Masks.html#torchrl.modules.llm.Masks">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">Masks</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;nocast&quot;</span><span class="p">]):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A Masks container.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        all_attention_mask (torch.Tensor | None): The attention mask across all tokens. The attention mask represents</span>
+<span class="sd">            the tokens that are not masked. and that the model can attend to.</span>
+<span class="sd">        all_assistant_mask (torch.Tensor | None): The assistant mask across all tokens, i.e. the tokens that</span>
+<span class="sd">            are produced by the assistant.</span>
+<span class="sd">            This is recovered from the the `assistant_masks` output of :meth:`~torchrl.data.llm.History.apply_chat_template`,</span>
+<span class="sd">            if the chat template supports it.</span>
+<span class="sd">        padded (bool | None): Whether the masks are padded.</span>
+
+<span class="sd">    The masks always have the same shape as the `full` tensor in :class:`~torchrl.modules.llm.policies.common.Tokens`,</span>
+<span class="sd">    and :class:`~torchrl.modules.llm.policies.common.LogProbs`.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">all_attention_mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">all_assistant_mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">padded</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="Masks.default_spec"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.Masks.html#torchrl.modules.llm.Masks.default_spec">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">default_spec</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,),</span>
+        <span class="n">keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;all_attention_mask&quot;</span><span class="p">,</span> <span class="s2">&quot;all_assistant_mask&quot;</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;A default spec to use in transforms / envs that return Masks objects.&quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">NonTensor</span>
+
+        <span class="k">if</span> <span class="n">keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;all_attention_mask&quot;</span><span class="p">,</span> <span class="s2">&quot;all_assistant_mask&quot;</span><span class="p">]</span>
+
+        <span class="n">defaults</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="n">shape</span> <span class="o">+</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,))</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">}</span>
+        <span class="n">defaults</span><span class="p">[</span><span class="s2">&quot;padded&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">NonTensor</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span> <span class="n">example_data</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">Composite</span><span class="p">(</span><span class="n">defaults</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">data_cls</span><span class="o">=</span><span class="bp">cls</span><span class="p">,</span> <span class="n">step_mdp_static</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="ChatHistory"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.ChatHistory.html#torchrl.modules.llm.ChatHistory">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">ChatHistory</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;nocast&quot;</span><span class="p">]):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A chat history container for managing conversation data in LLM environments.</span>
+
+<span class="sd">    This class serves as a structured container for chat history data, similar to how</span>
+<span class="sd">    :class:`~torchrl.modules.llm.policies.Text` and :class:`~torchrl.modules.llm.policies.Tokens`</span>
+<span class="sd">    are used for text and token data respectively.</span>
+
+<span class="sd">    **Recent Changes:**</span>
+<span class="sd">    - **Modular Design**: ChatHistory is now used consistently across LLM wrappers and environments</span>
+<span class="sd">      to represent conversation state in a structured way.</span>
+<span class="sd">    - **Integration with Wrappers**: Both vLLMWrapper and TransformersWrapper now use ChatHistory</span>
+<span class="sd">      objects when `input_mode=&quot;history&quot;` is specified.</span>
+<span class="sd">    - **Environment Support**: ChatEnv and related environments use ChatHistory for state management.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        prompt (History | None): The prompt history stack containing the conversation up to the current point.</span>
+<span class="sd">        response (History | None): The response history items (typically generated by the LLM).</span>
+<span class="sd">        full (History | None): The complete history across prompt and response.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data.llm import History</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.modules.llm.policies import ChatHistory</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Create a conversation history</span>
+<span class="sd">        &gt;&gt;&gt; history = History.from_chats([[</span>
+<span class="sd">        ...     {&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;Hello&quot;},</span>
+<span class="sd">        ...     {&quot;role&quot;: &quot;assistant&quot;, &quot;content&quot;: &quot;Hi there!&quot;}</span>
+<span class="sd">        ... ]])</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Create ChatHistory object for LLM wrapper input</span>
+<span class="sd">        &gt;&gt;&gt; chat_history = ChatHistory(prompt=history)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Use with LLM wrapper</span>
+<span class="sd">        &gt;&gt;&gt; result = wrapper(TensorDict(history=chat_history, batch_size=(1,)))</span>
+<span class="sd">        &gt;&gt;&gt; print(result[&quot;history&quot;].response)  # New response from LLM</span>
+<span class="sd">        &gt;&gt;&gt; print(result[&quot;history&quot;].full)      # Complete conversation</span>
+
+<span class="sd">    .. seealso::</span>
+<span class="sd">        :class:`~torchrl.modules.llm.policies.Text`: Container for text data.</span>
+<span class="sd">        :class:`~torchrl.modules.llm.policies.Tokens`: Container for token data.</span>
+<span class="sd">        :class:`~torchrl.data.llm.History`: The underlying History class for conversation data.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">prompt</span><span class="p">:</span> <span class="n">History</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">response</span><span class="p">:</span> <span class="n">History</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">full</span><span class="p">:</span> <span class="n">History</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="ChatHistory.default_spec"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.ChatHistory.html#torchrl.modules.llm.ChatHistory.default_spec">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">default_spec</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,),</span>
+        <span class="n">keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;prompt&quot;</span><span class="p">,</span> <span class="s2">&quot;response&quot;</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;A default spec to use in transforms / envs that return ChatHistory objects.&quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span>
+
+        <span class="k">if</span> <span class="n">keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;prompt&quot;</span><span class="p">,</span> <span class="s2">&quot;response&quot;</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">Composite</span><span class="p">(</span>
+            <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">History</span><span class="o">.</span><span class="n">default_spec</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="n">shape</span> <span class="o">+</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,))</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">},</span>
+            <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
+            <span class="n">data_cls</span><span class="o">=</span><span class="bp">cls</span><span class="p">,</span>
+            <span class="n">step_mdp_static</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="LogProbs"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.LogProbs.html#torchrl.modules.llm.LogProbs">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">LogProbs</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;nocast&quot;</span><span class="p">]):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A log-probability container.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        prompt (torch.Tensor | None): The prompt log-probabilities.</span>
+<span class="sd">        response (torch.Tensor | None): The response log-probabilities.</span>
+<span class="sd">        assistant (torch.Tensor | None): The assistant log-probabilities.</span>
+<span class="sd">        full (torch.Tensor | None): The log-probabilities across prompt and response.</span>
+<span class="sd">        padded (bool | None): Whether the log-probabilities are padded.</span>
+
+<span class="sd">    Shapes:</span>
+<span class="sd">        - prompt: (batch_size, prompt_length). If padded, padded on the left.</span>
+<span class="sd">        - response: (batch_size, response_length). If padded, padded on the right.</span>
+<span class="sd">        - full: (batch_size, prompt_length + response_length). If padded, padded on the left and/or right.</span>
+<span class="sd">        - padded: bool.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">prompt</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">response</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">full</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">padded</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="LogProbs.default_spec"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.LogProbs.html#torchrl.modules.llm.LogProbs.default_spec">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">default_spec</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,),</span>
+        <span class="n">keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;prompt&quot;</span><span class="p">,</span> <span class="s2">&quot;response&quot;</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;A default spec to use in transforms / envs that return LogProbs objects.&quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">NonTensor</span>
+
+        <span class="k">if</span> <span class="n">keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;prompt&quot;</span><span class="p">,</span> <span class="s2">&quot;response&quot;</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">]</span>
+
+        <span class="n">defaults</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="n">shape</span> <span class="o">+</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,))</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">}</span>
+        <span class="n">defaults</span><span class="p">[</span><span class="s2">&quot;padded&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">NonTensor</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span> <span class="n">example_data</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">Composite</span><span class="p">(</span><span class="n">defaults</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">data_cls</span><span class="o">=</span><span class="bp">cls</span><span class="p">,</span> <span class="n">step_mdp_static</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="Text"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.Text.html#torchrl.modules.llm.Text">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">Text</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;nocast&quot;</span><span class="p">]):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A text container.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        prompt (str | None): The prompt text.</span>
+<span class="sd">        response (str | None): The response text.</span>
+<span class="sd">        full (str | None): The text across prompt and response.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">prompt</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">response</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">full</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="Text.default_spec"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.Text.html#torchrl.modules.llm.Text.default_spec">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">default_spec</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,),</span>
+        <span class="n">keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;prompt&quot;</span><span class="p">,</span> <span class="s2">&quot;response&quot;</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;A default spec to use in transforms / envs that return Text objects.&quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">NonTensor</span>
+
+        <span class="k">if</span> <span class="n">keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;prompt&quot;</span><span class="p">,</span> <span class="s2">&quot;response&quot;</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">]</span>
+
+        <span class="n">defaults</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">NonTensor</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span> <span class="n">example_data</span><span class="o">=</span><span class="s2">&quot;a string&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">}</span>
+
+        <span class="k">return</span> <span class="n">Composite</span><span class="p">(</span><span class="n">defaults</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">data_cls</span><span class="o">=</span><span class="bp">cls</span><span class="p">,</span> <span class="n">step_mdp_static</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div></div>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">LogProbDistribution</span><span class="p">(</span><span class="n">D</span><span class="o">.</span><span class="n">Distribution</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A distribution that works directly with log-probabilities.</span>
+
+<span class="sd">    This is useful when we have pre-computed log-probabilities (e.g., from vLLM)</span>
+<span class="sd">    and want to compute log_prob() without having access to the original logits.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">log_probs</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize with log-probabilities.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            log_probs: Tensor of shape [batch, seq_len] containing log-probabilities</span>
+<span class="sd">            mask: Optional mask of shape [batch, seq_len] indicating valid positions</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_probs</span> <span class="o">=</span> <span class="n">log_probs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mask</span> <span class="o">=</span> <span class="n">mask</span>
+        <span class="n">batch_shape</span> <span class="o">=</span> <span class="n">log_probs</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="n">log_probs</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">log_probs</span><span class="o">.</span><span class="n">shape</span>
+        <span class="n">event_shape</span> <span class="o">=</span> <span class="n">log_probs</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">:]</span> <span class="k">if</span> <span class="n">log_probs</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([])</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">batch_shape</span><span class="o">=</span><span class="n">batch_shape</span><span class="p">,</span> <span class="n">event_shape</span><span class="o">=</span><span class="n">event_shape</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute log-probability for the given tokens.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            value: Tensor of shape [batch, seq_len] containing token indices</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Tensor of shape [batch, seq_len] containing log-probabilities</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># For log-prob distributions, we just return the pre-computed log-probs</span>
+        <span class="c1"># at the positions specified by the value tensor</span>
+        <span class="k">if</span> <span class="n">value</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_probs</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Value shape </span><span class="si">{</span><span class="n">value</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> must match log_probs shape </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">log_probs</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_probs</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+
+        <span class="c1"># Apply mask if provided</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">mask</span><span class="p">,</span>
+                <span class="n">result</span><span class="p">,</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">result</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">result</span><span class="o">.</span><span class="n">dtype</span><span class="p">),</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">result</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sample_shape</span><span class="p">:</span> <span class="nb">tuple</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Sample from the distribution.</span>
+
+<span class="sd">        Note: This is not implemented for log-prob distributions since we don&#39;t have</span>
+<span class="sd">        the full probability distribution, only the log-probs for specific tokens.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Sampling not supported for LogProbDistribution&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">entropy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute entropy.</span>
+
+<span class="sd">        Note: This is not implemented for log-prob distributions since we don&#39;t have</span>
+<span class="sd">        the full probability distribution.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Entropy not supported for LogProbDistribution&quot;</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="LLMWrapperBase"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.LLMWrapperBase.html#torchrl.modules.llm.LLMWrapperBase">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">LLMWrapperBase</span><span class="p">(</span><span class="n">TensorDictModuleBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;A LLM wrapper base class.</span>
+
+<span class="sd">    This class provides a consistent interface for LLM wrappers with the following features:</span>
+<span class="sd">    - Support for different input modalities (history, text, tokens)</span>
+<span class="sd">    - Consistent output structure using TensorClass objects (Text, Tokens, Masks, LogProbs)</span>
+<span class="sd">    - Configurable generation and log-probability computation</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        model: The underlying model to wrap.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        tokenizer: The tokenizer to use for encoding and decoding text.</span>
+<span class="sd">        input_mode: The input modality to use. Must be one of &quot;history&quot;, &quot;text&quot;, or &quot;tokens&quot;.</span>
+<span class="sd">        input_key: The key for the input data. If None, defaults to the input_mode name.</span>
+<span class="sd">        attention_mask_key: The key for attention masks (used in &quot;tokens&quot; mode).</span>
+<span class="sd">        generate: Whether to enable text generation.</span>
+<span class="sd">        generate_kwargs: Additional arguments to pass to the model&#39;s generate method.</span>
+<span class="sd">        tokenizer_kwargs: Additional arguments to pass to the tokenizer.</span>
+<span class="sd">        pad_output: Whether to pad the output sequences to a uniform length.</span>
+<span class="sd">        inplace: Determines how the module should handle in-place operations.</span>
+<span class="sd">        device: The device to use for computation.</span>
+<span class="sd">        layout: The layout to use for the output tensors when pad_output=False.</span>
+<span class="sd">        num_samples: The number of samples to generate.</span>
+<span class="sd">        log_probs_key (NestedKey | None, optional): The key for the log probabilities :class:`~torchrl.modules.llm.policies.LogProbs` object. Defaults to `&quot;log_probs&quot;`.</span>
+<span class="sd">        text_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Text` object. Defaults to `&quot;text&quot;`.</span>
+<span class="sd">        tokens_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Tokens` object. Defaults to `&quot;tokens&quot;`.</span>
+<span class="sd">        masks_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Masks` object. Defaults to `&quot;masks&quot;`.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        collector: The collector associated with the module, if it exists.</span>
+
+<span class="sd">    .. seealso::</span>
+<span class="sd">        - :class:`~torchrl.modules.llm.policies.TransformersWrapper` (see :ref:`ref_transformers_wrapper`)</span>
+<span class="sd">        - :class:`~torchrl.modules.llm.policies.vLLMWrapper` (see :ref:`ref_vllm_wrapper`)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">generate</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">pad_output</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">text_key</span><span class="p">:</span> <span class="n">NestedKey</span>
+    <span class="n">tokens_key</span><span class="p">:</span> <span class="n">NestedKey</span>
+    <span class="n">masks_key</span><span class="p">:</span> <span class="n">NestedKey</span>
+    <span class="n">log_probs_key</span><span class="p">:</span> <span class="n">NestedKey</span>
+    <span class="n">in_keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span>
+    <span class="n">out_keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span>
+    <span class="n">inplace</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">layout</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">layout</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">num_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span>
+
+    <span class="nd">@overload</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">tokenizer</span><span class="p">:</span> <span class="nb">callable</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># type: ignore</span>
+        <span class="n">input_mode</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;history&quot;</span><span class="p">,</span>
+        <span class="n">input_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">attention_mask_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;attention_mask&quot;</span><span class="p">,</span>
+        <span class="n">generate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">generate_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">tokenizer_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">pad_output</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">inplace</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;empty&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">layout</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">layout</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">chat_template_name</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;chatml_format&quot;</span><span class="p">,</span> <span class="s2">&quot;qwen&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">chat_template</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">return_log_probs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">history_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;history&quot;</span><span class="p">,</span>
+        <span class="n">text_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;text&quot;</span><span class="p">,</span>
+        <span class="n">tokens_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;tokens&quot;</span><span class="p">,</span>
+        <span class="n">masks_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;masks&quot;</span><span class="p">,</span>
+        <span class="n">log_probs_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;log_probs&quot;</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="o">...</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+<div class="viewcode-block" id="LLMWrapperBase.get_new_version"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.LLMWrapperBase.html#torchrl.modules.llm.LLMWrapperBase.get_new_version">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_new_version</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns a new version of the module with altered parameters.</span>
+
+<span class="sd">        For instance, the generate parameter can be altered to enable text generation or log-probabilities computation.</span>
+<span class="sd">        This is especially useful when one wants to avoid re-initializing the module with a new set of parameters, when the</span>
+<span class="sd">        same parameters could be used to gather log-probs.</span>
+
+<span class="sd">        Positional arguments are not supported.</span>
+
+<span class="sd">        See the class constructor for more details about the parameters.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+
+    <span class="n">_collector</span><span class="p">:</span> <span class="n">weakref</span><span class="o">.</span><span class="n">ReferenceType</span><span class="p">[</span>
+        <span class="n">LLMCollector</span>  <span class="c1"># noqa: F821 # type: ignore</span>
+    <span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="LLMWrapperBase.register_collector"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.LLMWrapperBase.html#torchrl.modules.llm.LLMWrapperBase.register_collector">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">register_collector</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">collector</span><span class="p">:</span> <span class="n">LLMCollector</span><span class="p">):</span>  <span class="c1"># noqa: F821 # type: ignore</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Registers a weak reference to the container collector.</span>
+
+<span class="sd">        This is automatically called by the :class:`~torchrl.collectors.llm.LLMCollector` class.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_collector</span> <span class="o">=</span> <span class="n">weakref</span><span class="o">.</span><span class="n">ref</span><span class="p">(</span><span class="n">collector</span><span class="p">)</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">collector</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LLMCollector</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F821 # type: ignore</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the collector associated with the module, if it exists.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collector</span><span class="p">()</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="LLMWrapperBase.get_dist"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.LLMWrapperBase.html#torchrl.modules.llm.LLMWrapperBase.get_dist">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_dist</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
         <span class="n">tensordict_out</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">logits_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;logits&quot;</span><span class="p">,</span>
+        <span class="n">mask_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">as_padded_tensor</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">as_nested_tensor</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">padding_value</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">padding_side</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;right&quot;</span><span class="p">,</span>
+        <span class="n">padding_side</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;left&quot;</span><span class="p">,</span>
         <span class="n">layout</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">layout</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">D</span><span class="o">.</span><span class="n">Distribution</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get distribution from logits/log-probs with optional masking.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tensordict: Input tensordict</span>
+<span class="sd">            tensordict_out: Output tensordict (optional)</span>
+<span class="sd">            logits_key: Key for logits/log-probs</span>
+<span class="sd">            mask_key: Key for mask (optional).</span>
+<span class="sd">            as_padded_tensor: Whether to return padded tensor. Default is False.</span>
+<span class="sd">            as_nested_tensor: Whether to return nested tensor. Default is False.</span>
+<span class="sd">            padding_value: Value for padding. Default is 0.0 for logits and False for masks.</span>
+<span class="sd">            padding_side: Side for padding. Default is left by convention.</span>
+<span class="sd">            layout: Tensor layout</span>
+<span class="sd">            **kwargs: Additional arguments</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Distribution (Categorical or LLMMaskedCategorical)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">generate</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;get_dist is not implemented for generate=True. &quot;</span>
+                <span class="s2">&quot;You can create a new version of this wrapper using the `get_new_version` method.&quot;</span>
+            <span class="p">)</span>
+
         <span class="n">td_out</span> <span class="o">=</span> <span class="bp">self</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
-        <span class="c1"># By default, pad and use masked categorical</span>
+
+        <span class="c1"># Get logits/log-probs</span>
         <span class="k">if</span> <span class="n">as_padded_tensor</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">as_padded_tensor</span> <span class="o">=</span> <span class="n">as_nested_tensor</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">True</span>
             <span class="k">if</span> <span class="n">padding_value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">padding_value</span> <span class="o">=</span> <span class="mf">0.0</span>
         <span class="k">if</span> <span class="n">as_nested_tensor</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">as_nested_tensor</span> <span class="o">=</span> <span class="kc">False</span>
+
         <span class="n">logits</span> <span class="o">=</span> <span class="n">td_out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-            <span class="s2">&quot;logits&quot;</span><span class="p">,</span>
+            <span class="n">logits_key</span><span class="p">,</span>
             <span class="n">as_padded_tensor</span><span class="o">=</span><span class="n">as_padded_tensor</span><span class="p">,</span>
             <span class="n">as_nested_tensor</span><span class="o">=</span><span class="n">as_nested_tensor</span><span class="p">,</span>
             <span class="n">padding_value</span><span class="o">=</span><span class="n">padding_value</span><span class="p">,</span>
             <span class="n">padding_side</span><span class="o">=</span><span class="n">padding_side</span><span class="p">,</span>
             <span class="n">layout</span><span class="o">=</span><span class="n">layout</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="k">if</span> <span class="n">as_padded_tensor</span><span class="p">:</span>
-            <span class="c1"># We can use MaskedCategorical</span>
-            <span class="n">dist</span> <span class="o">=</span> <span class="n">MaskedCategorical</span><span class="p">(</span>
-                <span class="n">logits</span><span class="o">=</span><span class="n">logits</span><span class="p">,</span>
-                <span class="n">mask</span><span class="o">=</span><span class="n">logits</span> <span class="o">!=</span> <span class="n">padding_value</span><span class="p">,</span>
-                <span class="n">use_cross_entropy</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+
+        <span class="c1"># Get mask if provided</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">mask_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="n">td_out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="n">mask_key</span><span class="p">,</span>
+                <span class="n">as_padded_tensor</span><span class="o">=</span><span class="n">as_padded_tensor</span><span class="p">,</span>
+                <span class="n">as_nested_tensor</span><span class="o">=</span><span class="n">as_nested_tensor</span><span class="p">,</span>
+                <span class="n">padding_value</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">padding_side</span><span class="o">=</span><span class="n">padding_side</span><span class="p">,</span>
+                <span class="n">layout</span><span class="o">=</span><span class="n">layout</span><span class="p">,</span>
             <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">as_padded_tensor</span><span class="p">:</span>
+            <span class="c1"># Default mask for padded tensors</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="n">logits</span> <span class="o">!=</span> <span class="n">padding_value</span>
+
+        <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">dist</span> <span class="o">=</span> <span class="n">LLMMaskedCategorical</span><span class="p">(</span>
+                <span class="n">logits</span><span class="o">=</span><span class="n">logits</span><span class="p">,</span>
+                <span class="n">mask</span><span class="o">=</span><span class="n">mask</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">dist</span><span class="o">.</span><span class="n">_position_level_masking</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Mask is not a position-level mask. &quot;</span>
+                    <span class="s2">&quot;This is likely because the mask is not a position-level mask.&quot;</span>
+                <span class="p">)</span>
             <span class="k">return</span> <span class="n">dist</span>
-        <span class="k">return</span> <span class="n">Categorical</span><span class="p">(</span><span class="n">logits</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">Categorical</span><span class="p">(</span><span class="n">logits</span><span class="p">)</span></div>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_dist_with_prompt_mask</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+        <span class="n">tokens_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;tokens&quot;</span><span class="p">,</span> <span class="s2">&quot;prompt&quot;</span><span class="p">),</span>
+        <span class="n">logits_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;logits&quot;</span><span class="p">,</span>
+        <span class="c1"># TODO: add a prompt_mask and response_mask in Masks</span>
+        <span class="n">assistant_mask_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;masks&quot;</span><span class="p">,</span> <span class="s2">&quot;all_assistant_mask&quot;</span><span class="p">),</span>
+        <span class="n">attention_mask_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;masks&quot;</span><span class="p">,</span> <span class="s2">&quot;all_attention_mask&quot;</span><span class="p">),</span>
+        <span class="n">padding_side</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;left&quot;</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">D</span><span class="o">.</span><span class="n">Distribution</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get distribution masked to only include response tokens (exclude prompt).</span>
+
+<span class="sd">        This is suitable for single-turn scenarios where we want to compute loss</span>
+<span class="sd">        only on the generated response, not the input prompt.</span>
+
+<span class="sd">        Note: If prompt tokens are not available (e.g., when using history input),</span>
+<span class="sd">        this method falls back to using the assistant mask.</span>
+
+<span class="sd">        Padding side is left by convention.</span>
+
+<span class="sd">        This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">generate</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;get_dist_with_prompt_mask is not implemented for generate=True. &quot;</span>
+                <span class="s2">&quot;You can create a new version of this wrapper using the `get_new_version` method.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">td_out</span> <span class="o">=</span> <span class="bp">self</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+
+        <span class="c1"># Try to get prompt tokens first</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">:</span>
+            <span class="n">prompt_tokens</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="n">tokens_key</span><span class="p">,</span>
+                <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">padding_value</span><span class="o">=-</span><span class="mi">100</span><span class="p">,</span>
+                <span class="n">padding_side</span><span class="o">=</span><span class="n">padding_side</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">logits</span> <span class="o">=</span> <span class="n">td_out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="n">logits_key</span><span class="p">,</span>
+                <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">padding_value</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+                <span class="n">padding_side</span><span class="o">=</span><span class="n">padding_side</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">attention_mask</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="n">attention_mask_key</span><span class="p">,</span>
+                <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">padding_value</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">padding_side</span><span class="o">=</span><span class="n">padding_side</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">assistant_mask</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="n">assistant_mask_key</span><span class="p">,</span>
+                <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">padding_value</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">padding_side</span><span class="o">=</span><span class="n">padding_side</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">prompt_tokens</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">tokens_key</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">logits</span> <span class="o">=</span> <span class="n">td_out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">logits_key</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">attention_mask</span> <span class="o">=</span> <span class="n">td_out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">attention_mask_key</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">assistant_mask</span> <span class="o">=</span> <span class="n">td_out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">assistant_mask_key</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">prompt_tokens</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">assistant_mask</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Assistant mask not found in tensordict at key </span><span class="si">{</span><span class="n">assistant_mask_key</span><span class="si">}</span><span class="s2"> (keys: </span><span class="si">{</span><span class="n">td_out</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span><span class="si">}</span><span class="s2">)&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">:</span>
+                <span class="n">response_mask</span> <span class="o">=</span> <span class="n">assistant_mask</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">response_mask</span> <span class="o">=</span> <span class="p">[</span><span class="n">am</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span> <span class="k">for</span> <span class="n">am</span> <span class="ow">in</span> <span class="n">assistant_mask</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">:</span>
+                <span class="n">response_mask</span> <span class="o">=</span> <span class="n">attention_mask</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+                <span class="n">response_mask</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span> <span class="n">prompt_tokens</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">response_mask</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="k">for</span> <span class="n">am</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="n">attention_mask</span><span class="p">,</span> <span class="n">prompt_tokens</span><span class="p">):</span>
+                    <span class="n">am</span> <span class="o">=</span> <span class="n">am</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+                    <span class="n">am</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span> <span class="n">p</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)]</span> <span class="o">=</span> <span class="kc">False</span>
+                    <span class="n">response_mask</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">am</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">logits</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Logits not found in tensordict at key </span><span class="si">{</span><span class="n">logits_key</span><span class="si">}</span><span class="s2"> (keys: </span><span class="si">{</span><span class="n">td_out</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span><span class="si">}</span><span class="s2">)&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Make the response mask using prompt tokens</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">:</span>
+            <span class="c1"># Check that the lengths of the mask is the same as the logits</span>
+            <span class="k">for</span> <span class="n">m</span><span class="p">,</span> <span class="n">lg</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="n">response_mask</span><span class="p">,</span> <span class="n">logits</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">m</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="n">lg</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">]:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Mask and logits have different lengths: </span><span class="si">{</span><span class="n">m</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2"> != </span><span class="si">{</span><span class="n">lg</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span><span class="si">}</span><span class="s2">.</span><span class="se">\n</span><span class="s2">&quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;All the logits shapes: </span><span class="si">{</span><span class="p">[</span><span class="n">lg</span><span class="o">.</span><span class="n">shape</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">lg</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">logits</span><span class="p">]</span><span class="si">}</span><span class="s2">, all the mask shapes: </span><span class="si">{</span><span class="p">[</span><span class="n">m</span><span class="o">.</span><span class="n">shape</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">response_mask</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+            <span class="n">logits</span> <span class="o">=</span> <span class="n">pad_sequence</span><span class="p">(</span>
+                <span class="n">logits</span><span class="p">,</span> <span class="n">batch_first</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">padding_value</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">padding_side</span><span class="o">=</span><span class="n">padding_side</span>
+            <span class="p">)</span>
+            <span class="n">response_mask</span> <span class="o">=</span> <span class="n">pad_sequence</span><span class="p">(</span>
+                <span class="n">response_mask</span><span class="p">,</span>
+                <span class="n">batch_first</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">padding_value</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">padding_side</span><span class="o">=</span><span class="n">padding_side</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="n">dist</span> <span class="o">=</span> <span class="n">LLMMaskedCategorical</span><span class="p">(</span>
+            <span class="n">logits</span><span class="o">=</span><span class="n">logits</span><span class="p">,</span>
+            <span class="n">mask</span><span class="o">=</span><span class="n">response_mask</span><span class="o">.</span><span class="n">bool</span><span class="p">(),</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">dist</span><span class="o">.</span><span class="n">_position_level_masking</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Mask is not a position-level mask. &quot;</span>
+                <span class="s2">&quot;This is likely because the mask is not a position-level mask.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">dist</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_dist_with_assistant_mask</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+        <span class="n">assistant_mask_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;masks&quot;</span><span class="p">,</span> <span class="s2">&quot;all_assistant_mask&quot;</span><span class="p">),</span>
+        <span class="n">logits_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;logits&quot;</span><span class="p">,</span>
+        <span class="n">padding_side</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;left&quot;</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">D</span><span class="o">.</span><span class="n">Distribution</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get distribution masked to only include assistant tokens.</span>
+
+<span class="sd">        This is suitable for multi-turn scenarios where we want to compute loss</span>
+<span class="sd">        only on assistant-generated tokens across the entire conversation.</span>
+
+<span class="sd">        Padding side is left by convention.</span>
+
+<span class="sd">        This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">generate</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;get_dist_with_assistant_mask is not implemented for generate=True. &quot;</span>
+                <span class="s2">&quot;You can create a new version of this wrapper using the `get_new_version` method.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">td_out</span> <span class="o">=</span> <span class="bp">self</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+        <span class="c1"># Update the tokens key to reflect the tokenized history when querying the log-probs</span>
+        <span class="n">tensordict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+            <span class="n">td_out</span><span class="p">,</span>
+            <span class="n">keys_to_update</span><span class="o">=</span><span class="p">[</span>
+                <span class="p">(</span><span class="s2">&quot;tokens&quot;</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">),</span>
+            <span class="p">],</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">:</span>
+            <span class="n">logits</span> <span class="o">=</span> <span class="n">td_out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">logits_key</span><span class="p">)</span>
+            <span class="n">assistant_mask</span> <span class="o">=</span> <span class="n">td_out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">assistant_mask_key</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">logits</span> <span class="o">=</span> <span class="n">td_out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="n">logits_key</span><span class="p">,</span>
+                <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">padding_value</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+                <span class="n">padding_side</span><span class="o">=</span><span class="n">padding_side</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">assistant_mask</span> <span class="o">=</span> <span class="n">td_out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="n">assistant_mask_key</span><span class="p">,</span>
+                <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">padding_value</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">padding_side</span><span class="o">=</span><span class="n">padding_side</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">logits</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Logits not found in tensordict at key </span><span class="si">{</span><span class="n">logits_key</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">assistant_mask</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_mode</span> <span class="o">!=</span> <span class="s2">&quot;history&quot;</span><span class="p">:</span>
+                <span class="n">post_msg</span> <span class="o">=</span> <span class="s2">&quot;This is likely because the input_mode is not &#39;history&#39;.&quot;</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">post_msg</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Assistant mask not found in tensordict at key </span><span class="si">{</span><span class="n">assistant_mask_key</span><span class="si">}</span><span class="s2">. </span><span class="si">{</span><span class="n">post_msg</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">dist</span> <span class="o">=</span> <span class="n">LLMMaskedCategorical</span><span class="p">(</span>
+            <span class="n">logits</span><span class="o">=</span><span class="n">logits</span><span class="p">,</span>
+            <span class="n">mask</span><span class="o">=</span><span class="n">assistant_mask</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">dist</span><span class="o">.</span><span class="n">_position_level_masking</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Assistant mask is not a position-level mask. &quot;</span>
+                <span class="s2">&quot;This is likely because the assistant mask is not a position-level mask.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">dist</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_dist_with_attention_mask</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+        <span class="n">attention_mask_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;masks&quot;</span><span class="p">,</span> <span class="s2">&quot;all_attention_mask&quot;</span><span class="p">),</span>
+        <span class="n">logits_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;logits&quot;</span><span class="p">,</span>
+        <span class="n">padding_side</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;left&quot;</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">D</span><span class="o">.</span><span class="n">Distribution</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get distribution masked using attention mask.</span>
+
+<span class="sd">        This is suitable for generic scenarios where we want to compute loss</span>
+<span class="sd">        on all valid tokens (non-padding tokens).</span>
+
+<span class="sd">        Padding side is left by convention.</span>
+
+<span class="sd">        This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">generate</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;get_dist_with_attention_mask is not implemented for generate=True. &quot;</span>
+                <span class="s2">&quot;You can create a new version of this wrapper using the `get_new_version` method.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">td_out</span> <span class="o">=</span> <span class="bp">self</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">:</span>
+            <span class="n">logits</span> <span class="o">=</span> <span class="n">td_out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">logits_key</span><span class="p">)</span>
+            <span class="n">attention_mask</span> <span class="o">=</span> <span class="n">td_out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">attention_mask_key</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">logits</span> <span class="o">=</span> <span class="n">td_out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="n">logits_key</span><span class="p">,</span>
+                <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">padding_value</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+                <span class="n">padding_side</span><span class="o">=</span><span class="n">padding_side</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">attention_mask</span> <span class="o">=</span> <span class="n">td_out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="n">attention_mask_key</span><span class="p">,</span>
+                <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">padding_value</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">padding_side</span><span class="o">=</span><span class="n">padding_side</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">logits</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Logits not found in tensordict at key </span><span class="si">{</span><span class="n">logits_key</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">attention_mask</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Attention mask not found in tensordict at key </span><span class="si">{</span><span class="n">attention_mask_key</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">dist</span> <span class="o">=</span> <span class="n">LLMMaskedCategorical</span><span class="p">(</span>
+            <span class="n">logits</span><span class="o">=</span><span class="n">logits</span><span class="p">,</span>
+            <span class="n">mask</span><span class="o">=</span><span class="n">attention_mask</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">dist</span><span class="o">.</span><span class="n">_position_level_masking</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Attention mask is not a position-level mask. &quot;</span>
+                <span class="s2">&quot;This is likely because the attention mask is not a position-level mask.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">dist</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_dist_with_custom_mask</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+        <span class="n">mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">logits_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;logits&quot;</span><span class="p">,</span>
+        <span class="n">padding_side</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;left&quot;</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">D</span><span class="o">.</span><span class="n">Distribution</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get distribution with custom mask.</span>
+
+<span class="sd">        This allows for completely custom masking logic.</span>
+
+<span class="sd">        Padding side is left by convention.</span>
+
+<span class="sd">        This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">generate</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;get_dist_with_custom_mask is not implemented for generate=True. &quot;</span>
+                <span class="s2">&quot;You can create a new version of this wrapper using the `get_new_version` method.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">td_out</span> <span class="o">=</span> <span class="bp">self</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">:</span>
+            <span class="n">logits</span> <span class="o">=</span> <span class="n">td_out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">logits_key</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">logits</span> <span class="o">=</span> <span class="n">td_out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="n">logits_key</span><span class="p">,</span>
+                <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">padding_value</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+                <span class="n">padding_side</span><span class="o">=</span><span class="n">padding_side</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">logits</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Logits not found in tensordict at key </span><span class="si">{</span><span class="n">logits_key</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="n">dist</span> <span class="o">=</span> <span class="n">LLMMaskedCategorical</span><span class="p">(</span>
+            <span class="n">logits</span><span class="o">=</span><span class="n">logits</span><span class="p">,</span>
+            <span class="n">mask</span><span class="o">=</span><span class="n">mask</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">dist</span><span class="o">.</span><span class="n">_position_level_masking</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Custom mask is not a position-level mask. &quot;</span>
+                <span class="s2">&quot;This is likely because the custom mask is not a position-level mask.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">dist</span>
+
+    <span class="c1"># Convenience methods for common LLM training scenarios</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_sft_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">D</span><span class="o">.</span><span class="n">Distribution</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get distribution suitable for SFT loss (response tokens only).</span>
+
+<span class="sd">        This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_dist_with_prompt_mask</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_rlhf_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">D</span><span class="o">.</span><span class="n">Distribution</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get distribution suitable for RLHF loss (assistant tokens only).</span>
+
+<span class="sd">        This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_dist_with_assistant_mask</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_generic_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">D</span><span class="o">.</span><span class="n">Distribution</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get distribution suitable for generic losses (all tokens).</span>
+
+<span class="sd">        This is a provisional method that will be replaced by the `get_dist` method once we have a better masking strategy.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_dist_with_attention_mask</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
     <span class="c1"># Sampling is taken care of by the sub-modules</span>
     <span class="n">forward</span> <span class="o">=</span> <span class="n">TensorDictSequential</span><span class="o">.</span><span class="n">forward</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_padded</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">val</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check that a value is a padded tensor.&quot;&quot;&quot;</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span>
+            <span class="n">val</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+        <span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;val must be torch.Tensor, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">val</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Not a padded tensor&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">val</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_not_padded</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">val</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check that a value is not a padded tensor (i.e., a list of tensors).&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Expected a list of tensors - not padded, got a tensor&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">val</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">log_prob_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]:</span>
@@ -490,14 +1262,6 @@
     <span class="nd">@log_prob_keys</span><span class="o">.</span><span class="n">setter</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">log_prob_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_log_prob_keys</span> <span class="o">=</span> <span class="n">value</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">log_prob_key</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NestedKey</span><span class="p">:</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_prob_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-
-    <span class="nd">@log_prob_key</span><span class="o">.</span><span class="n">setter</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">log_prob_key</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">NestedKey</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">log_prob_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">dist_params_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]:</span>
@@ -510,7 +1274,7 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="o">**</span><span class="n">get_kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">generate</span><span class="p">:</span>
             <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">log_prob_key</span><span class="p">,</span> <span class="o">**</span><span class="n">get_kwargs</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">log_prob_key</span><span class="p">,</span> <span class="s2">&quot;response&quot;</span><span class="p">),</span> <span class="o">**</span><span class="n">get_kwargs</span><span class="p">)</span>
         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;log_prob not callable when generate=True.&quot;</span><span class="p">)</span></div>
 </pre></div>
 

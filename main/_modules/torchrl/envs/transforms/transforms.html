@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -440,7 +440,16 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">IntEnum</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">wraps</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">textwrap</span><span class="w"> </span><span class="kn">import</span> <span class="n">indent</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">OrderedDict</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">TypeVar</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Any</span><span class="p">,</span>
+    <span class="n">Callable</span><span class="p">,</span>
+    <span class="n">Mapping</span><span class="p">,</span>
+    <span class="n">OrderedDict</span><span class="p">,</span>
+    <span class="n">Sequence</span><span class="p">,</span>
+    <span class="n">TYPE_CHECKING</span><span class="p">,</span>
+    <span class="n">TypeVar</span><span class="p">,</span>
+    <span class="n">Union</span><span class="p">,</span>
+<span class="p">)</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
@@ -512,6 +521,10 @@
     <span class="n">make_composite_from_td</span><span class="p">,</span>
     <span class="n">step_mdp</span><span class="p">,</span>
 <span class="p">)</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">transformers</span>
+
 
 <span class="n">_has_tv</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;torchvision&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
 
@@ -729,6 +742,19 @@
                 <span class="n">value</span> <span class="o">=</span> <span class="p">[</span><span class="n">value</span><span class="p">]</span>
             <span class="n">value</span> <span class="o">=</span> <span class="p">[</span><span class="n">unravel_key</span><span class="p">(</span><span class="n">val</span><span class="p">)</span> <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">value</span><span class="p">]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_out_keys_inv</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">collector</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DataCollectorBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F821 # type: ignore</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the collector associated with the container, if it exists.</span>
+
+<span class="sd">        This can be used whenever the transform needs to be made aware of the collector or the policy associated with it.</span>
+
+<span class="sd">        Make sure to call this property only on transforms that are not nested in sub-processes.</span>
+<span class="sd">        The collector reference will not be passed to the workers of a :class:`~torchrl.envs.ParallelEnv` or</span>
+<span class="sd">        similar batched environments.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">container</span><span class="o">.</span><span class="n">collector</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_reset</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">:</span> <span class="n">TensorDictBase</span>
@@ -1109,7 +1135,7 @@
         <span class="k">return</span> <span class="n">self_copy</span></div>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">container</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">container</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EnvBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the env containing the transform.</span>
 
 <span class="sd">        Examples:</span>
@@ -1374,6 +1400,13 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">empty_cache</span><span class="p">()</span>
         <span class="k">return</span> <span class="bp">self</span></div>
 
+    <span class="c1"># def _post_step_mdp_hooks(self, tensordict: TensorDictBase) -&gt; TensorDictBase:</span>
+    <span class="c1"># &quot;&quot;&quot;Allows modification of the tensordict after the step_mdp.&quot;&quot;&quot;</span>
+    <span class="c1"># if type(self.base_env)._post_step_mdp_hooks is not None:</span>
+    <span class="c1"># If the base env has a _post_step_mdp_hooks, we call it</span>
+    <span class="c1"># tensordict = self.base_env._post_step_mdp_hooks(tensordict)</span>
+    <span class="c1"># return tensordict</span>
+
     <span class="k">def</span><span class="w"> </span><span class="nf">_set_env</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">:</span> <span class="n">EnvBase</span><span class="p">,</span> <span class="n">device</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">device</span> <span class="o">!=</span> <span class="n">env</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
             <span class="n">env</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
@@ -1600,6 +1633,7 @@
         <span class="k">if</span> <span class="n">tensordict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># We must avoid modifying the original tensordict so a shallow copy is necessary.</span>
             <span class="c1"># We just select the input data and reset signal, which is all we need.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">transform</span><span class="o">.</span><span class="n">transform_input_spec</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">base_env</span><span class="o">.</span><span class="n">input_spec</span><span class="o">.</span><span class="n">unlock_</span><span class="p">())</span>
             <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
                 <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">reset_keys</span><span class="p">,</span> <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">state_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span>
             <span class="p">)</span>
@@ -6924,13 +6958,16 @@
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">single_default_value</span> <span class="ow">and</span> <span class="nb">callable</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">default_value</span><span class="p">):</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="n">_reset</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
                     <span class="c1"># FIXME: use masked op</span>
-                    <span class="n">tensordict_reset</span> <span class="o">=</span> <span class="n">tensordict_reset</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+                    <span class="c1"># tensordict_reset = tensordict_reset.clone()</span>
                     <span class="n">reset_val</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">default_value</span><span class="p">(</span><span class="n">reset</span><span class="o">=</span><span class="n">_reset</span><span class="p">)</span>
-                    <span class="c1"># This is safe because env.reset calls _update_during_reset which will discard the new data</span>
-                    <span class="n">tensordict_reset</span> <span class="o">=</span> <span class="p">(</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">container</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="o">.</span><span class="n">zero</span><span class="p">()</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
-                            <span class="o">*</span><span class="n">reset_val</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
-                        <span class="p">)</span>
+                    <span class="c1"># This is safE because env.reset calls _update_during_reset which will discard the new data</span>
+                    <span class="c1"># tensordict_reset = (</span>
+                    <span class="c1">#     self.container.full_observation_spec.zero().select(</span>
+                    <span class="c1">#         *reset_val.keys(True)</span>
+                    <span class="c1">#     )</span>
+                    <span class="c1"># )</span>
+                    <span class="n">tensordict_reset</span> <span class="o">=</span> <span class="n">reset_val</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span>
+                        <span class="n">_reset</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">empty_lazy</span><span class="o">=</span><span class="kc">True</span>
                     <span class="p">)</span>
                     <span class="n">tensordict_reset</span><span class="p">[</span><span class="n">_reset</span><span class="p">]</span> <span class="o">=</span> <span class="n">reset_val</span>
                 <span class="k">else</span><span class="p">:</span>

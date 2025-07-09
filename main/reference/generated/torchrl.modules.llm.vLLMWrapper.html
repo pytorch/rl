@@ -39,7 +39,7 @@
   <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="CategoricalSequential" href="torchrl.modules.llm.CategoricalSequential.html" />
+    <link rel="next" title="ChatHistory" href="torchrl.modules.llm.ChatHistory.html" />
     <link rel="prev" title="TransformersWrapper" href="torchrl.modules.llm.TransformersWrapper.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -388,7 +388,7 @@
         
           <li><a href="../index.html">API Reference</a> &gt;</li>
         
-          <li><a href="../llms.html">LLM interface</a> &gt;</li>
+          <li><a href="../llms.html">LLM Interface</a> &gt;</li>
         
       <li>vLLMWrapper</li>
     
@@ -433,118 +433,119 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.modules.llm.vLLMWrapper">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.modules.llm.</span></span><span class="sig-name descname"><span class="pre">vLLMWrapper</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/llm/policies/vllm_wrapper.html#vLLMWrapper"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.llm.vLLMWrapper" title="Permalink to this definition">¶</a></dt>
-<dd><p>A wrapper class for vLLM models, providing a consistent interface for text generation and log probability computation, similar to the Hugging Face Transformers interface.</p>
-<p>This class allows for handling both text and token inputs, enabling text generation and log probability
-computation based on the specified configuration.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>The default arguments of the <cite>vLLMWrapper</cite> class are set to make it easy to run this backend with
-the <code class="xref py py-class docutils literal notranslate"><span class="pre">LLMEnv</span></code> class.</p>
-</div>
+<dd><p>A wrapper class for vLLM models, providing a consistent interface for text generation and log probability computation.</p>
+<p>This class is a subclass of <code class="xref py py-class docutils literal notranslate"><span class="pre">LLMWrapperBase</span></code> and provides a unified API for handling different input
+modalities (history, text, tokens) with consistent output structure using <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code> objects.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>model</strong> (<em>vllm.LLM</em>) – The vLLM model to wrap.</p>
+<dd class="field-odd"><p><strong>model</strong> (<em>vllm.LLM</em><em> | </em><em>str</em>) – The vLLM model to wrap. If a string, it will be passed to <cite>vllm.LLM</cite>.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>return_log_probs</strong> (<em>bool</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – Whether to return log probabilities of the generated tokens.
+<li><p><strong>tokenizer</strong> (<em>transformers.tokenization_utils.PreTrainedTokenizer</em><em> | </em><em>str</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – The tokenizer to use for encoding and decoding text.
+If <cite>None</cite>, the tokenizer associated with the model will be used. If a string, it will be passed to <cite>transformers.AutoTokenizer.from_pretrained</cite>.
 Defaults to <cite>None</cite>.</p></li>
-<li><p><strong>tokenizer</strong> (<em>transformers.tokenization_utils.PreTrainedTokenizer</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – The tokenizer to use for
-encoding and decoding text. If <cite>None</cite>, the tokenizer associated with the model will be used. Defaults to
-<cite>None</cite>.</p></li>
-<li><p><strong>from_text</strong> (<em>bool</em><em>, </em><em>optional</em>) – <p>Indicates whether the input is in text format. If <cite>True</cite>, the input is expected to
-be text that will be tokenized. If <cite>False</cite>, the input is expected to be token sequences. Defaults to <cite>True</cite>.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>If <cite>from_text</cite> is <cite>True</cite>, the input text can be provided in the <cite>“text”</cite> key or in the <cite>“history”</cite> key.
-If using the <cite>“history”</cite> key, the history will be parsed from a <a class="reference internal" href="torchrl.data.llm.History.html#torchrl.data.llm.History" title="torchrl.data.llm.History"><code class="xref py py-class docutils literal notranslate"><span class="pre">History</span></code></a> object to a
-text string using the tokenizer.</p>
-</div>
-</p></li>
-<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em> | </em><em>None</em><em>, </em><em>optional</em>) – The device to use for computation. If <cite>None</cite>, the default device will
-be used. Defaults to <cite>None</cite>.</p></li>
-<li><p><strong>generate</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to enable text generation. If <cite>True</cite>, the model will generate text based on
-the input. If <cite>False</cite>, only log probabilities will be computed for the response tokens/text. Defaults to <cite>True</cite>.</p></li>
-<li><p><strong>generate_kwargs</strong> (<em>dict</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – <p>Additional arguments to pass to the model’s generate method. These
-arguments can control aspects of the generation process, such as temperature and top-k sampling. Defaults
-to <cite>None</cite>.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Sampling params can be overwritten at runtime using the kwargs of the forward method.</p>
-</div>
-</p></li>
-<li><p><strong>tokenizer_kwargs</strong> (<em>dict</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – Additional arguments to pass to the tokenizer. These arguments can
-control aspects of the tokenization process, such as padding and truncation. Defaults to <cite>None</cite>.</p></li>
-<li><p><strong>pad_output</strong> (<em>bool</em><em>, </em><em>optional</em>) – <p>Whether to pad the output sequences to a uniform length. If <cite>True</cite>, the output
-sequences will be padded and represented as tensors. If <cite>False</cite>, lists of tokens will be used without
-padding. Defaults to <cite>False</cite>.</p>
+<li><p><strong>input_mode</strong> (<em>str</em><em>, </em><em>optional</em>) – The input modality to use. Must be one of <cite>“history”</cite>, <cite>“text”</cite>, or <cite>“tokens”</cite>. Defaults to <cite>“history”</cite>.</p></li>
+<li><p><strong>input_key</strong> (<em>str</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – The key for the input data. If <cite>None</cite>, defaults to
+- <cite>(“history”, “prompt”)</cite> for <cite>“history”</cite> when <cite>generate=True</cite>, <cite>(“history”, “full”)</cite> for <cite>“history”</cite> when <cite>generate=False</cite>
+- <cite>(“text”, “prompt”)</cite> for <cite>“text”</cite> when <cite>generate=True</cite>, <cite>(“text”, “full”)</cite> for <cite>“text”</cite> when <cite>generate=False</cite>
+- <cite>(“tokens”, “prompt”)</cite> for <cite>“tokens”</cite> when <cite>generate=True</cite>, <cite>(“tokens”, “full”)</cite> for <cite>“tokens”</cite> when <cite>generate=False</cite></p></li>
+<li><p><strong>attention_mask_key</strong> (<em>str</em><em>, </em><em>optional</em>) – <p>The key for attention masks (used in <cite>“tokens”</cite> mode). Defaults to <cite>“attention_mask”</cite>.</p>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
-<p>The default value of <cite>pad_output</cite> differs from <code class="xref py py-func docutils literal notranslate"><span class="pre">TransformersWrapper()</span></code>
-which does not handle non-padded inputs.</p>
+<p>This argument is under development and may change in the future.</p>
 </div>
 </p></li>
-<li><p><strong>inplace</strong> (<em>Literal</em><em>[</em><em>True</em><em>, </em><em>False</em><em>, </em><em>&quot;empty&quot;</em><em>] </em><em>| </em><em>None</em><em>, </em><em>optional</em>) – Determines how the module should handle in-place
-operations. If <cite>True</cite>, operations will be performed in-place. If <cite>False</cite>, a new TensorDict instance will be
-created. If <cite>“empty”</cite>, the output data structure will be initialized with <cite>input.empty()</cite> (i.e., it will
-conserve type, batch-size, and device). Defaults to <cite>True</cite> when generating a single sample, <cite>False</cite>
-otherwise.</p></li>
-<li><p><strong>chat_template_name</strong> (<em>str</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – The name of the chat template to use for the history. Defaults to <cite>None</cite>.</p></li>
-<li><p><strong>chat_template</strong> (<em>str</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – The chat template to use for the history. Defaults to <cite>None</cite>.</p></li>
+<li><p><strong>generate</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to enable text generation. If <cite>True</cite>, the model will generate text based on the input.
+If <cite>False</cite>, only log probabilities will be computed. Defaults to <cite>True</cite>.</p></li>
+<li><p><strong>return_log_probs</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to return log probabilities. Defaults to <cite>True</cite>.</p></li>
+<li><p><strong>generate_kwargs</strong> (<em>dict</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – Additional arguments to pass to the model’s generate method. Defaults to <cite>None</cite>.</p></li>
+<li><p><strong>tokenizer_kwargs</strong> (<em>dict</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – Additional arguments to pass to the tokenizer. Defaults to <cite>None</cite>.</p></li>
+<li><p><strong>pad_output</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to pad the output sequences to a uniform length. Defaults to <cite>False</cite>.</p></li>
+<li><p><strong>inplace</strong> (<em>Literal</em><em>[</em><em>True</em><em>, </em><em>False</em><em>, </em><em>&quot;empty&quot;</em><em>] </em><em>| </em><em>None</em><em>, </em><em>optional</em>) – Determines how the module should handle in-place operations. Defaults to <cite>True</cite>.</p></li>
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em> | </em><em>None</em><em>, </em><em>optional</em>) – The device to use for computation. Defaults to <cite>None</cite>.</p></li>
+<li><p><strong>layout</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout" title="(in PyTorch v2.7)"><em>torch.layout</em></a><em> | </em><em>None</em><em>, </em><em>optional</em>) – The layout to use for the output tensors when <cite>pad_output=False</cite>. Defaults to <cite>torch.strided</cite>.</p></li>
+<li><p><strong>chat_template_name</strong> (<em>Literal</em><em>[</em><em>&quot;chatml_format&quot;</em><em>, </em><em>&quot;qwen&quot;</em><em>] </em><em>| </em><em>None</em><em>, </em><em>optional</em>) – The name of the chat template to use when applying the chat template to the history.
+Defaults to <cite>None</cite>. For <cite>input_mode=”history”</cite> only.</p></li>
+<li><p><strong>chat_template</strong> (<em>str</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – The chat template to use when applying the chat template to the history. Defaults to <cite>None</cite>.
+For <cite>input_mode=”history”</cite> only.</p></li>
+<li><p><strong>num_samples</strong> (<em>int</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – The number of samples to generate. Defaults to <cite>None</cite> (one sample, and no batch-dimension for it).
+Can also be set via the <cite>generate_kwargs[“n”] = value</cite> argument.</p></li>
+<li><p><strong>log_probs_key</strong> (<em>NestedKey</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – The key for the log probabilities <code class="xref py py-class docutils literal notranslate"><span class="pre">LogProbs</span></code> object. Defaults to <cite>“log_probs”</cite>.</p></li>
+<li><p><strong>text_key</strong> (<em>NestedKey</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – The key for the action <code class="xref py py-class docutils literal notranslate"><span class="pre">Text</span></code> object. Defaults to <cite>“text”</cite>.</p></li>
+<li><p><strong>tokens_key</strong> (<em>NestedKey</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – The key for the action <code class="xref py py-class docutils literal notranslate"><span class="pre">Tokens</span></code> object. Defaults to <cite>“tokens”</cite>.</p></li>
+<li><p><strong>masks_key</strong> (<em>NestedKey</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – The key for the action <code class="xref py py-class docutils literal notranslate"><span class="pre">Masks</span></code> object. Defaults to <cite>“masks”</cite>.</p></li>
+<li><p><strong>history_key</strong> (<em>NestedKey</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – The key for the action <code class="xref py py-class docutils literal notranslate"><span class="pre">ChatHistory</span></code> object. Defaults to <cite>“history”</cite>.</p></li>
 </ul>
 </dd>
 </dl>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>The tokenizer is used when <cite>from_text</cite> is <cite>True</cite> to convert input text into token sequences. It is also
-required (or retrieved) when <cite>pad_output</cite> is <cite>True</cite> or when using text inputs with <cite>generate=False</cite> to ensure proper
-tokenization and padding.</p>
-</div>
-<p>Input Keys:</p>
-<ul>
-<li><p>If <cite>from_text</cite> is <cite>True</cite>:</p>
+<dl>
+<dt>Input Keys:</dt><dd><p>The input key depends on both <cite>input_mode</cite> and <cite>generate</cite>:
+- If <cite>input_mode=”history”</cite> and <cite>generate=True</cite>: <cite>input_key</cite> (defaults to <cite>(“history”, “prompt”)</cite>)
+- If <cite>input_mode=”history”</cite> and <cite>generate=False</cite>: <cite>input_key</cite> (defaults to <cite>(“history”, “full”)</cite>)
+- If <cite>input_mode=”text”</cite> and <cite>generate=True</cite>: <cite>input_key</cite> (defaults to <cite>(“text”, “prompt”)</cite>)
+- If <cite>input_mode=”text”</cite> and <cite>generate=False</cite>: <cite>input_key</cite> (defaults to <cite>(“text”, “full”)</cite>)
+- If <cite>input_mode=”tokens”</cite> and <cite>generate=True</cite>: <cite>input_key</cite> (defaults to <cite>(“tokens”, “prompt”)</cite>)
+- If <cite>input_mode=”tokens”</cite> and <cite>generate=False</cite>: <cite>input_key</cite> (defaults to <cite>(“tokens”, “full”)</cite>)</p>
+</dd>
+<dt>Output Keys:</dt><dd><p>The output keys are automatically determined based on the input_mode:
+- <strong>Tokens</strong>: Always returned (<cite>tokens_key</cite>, defaults to <cite>“tokens”</cite>)
+- <strong>Text</strong>: Returned for <cite>“text”</cite> and <cite>“history”</cite> modes (<cite>text_key</cite>, defaults to <cite>“text”</cite>)
+- <strong>History</strong>: Returned only for <cite>“history”</cite> mode (<cite>history_key</cite>, defaults to <cite>“history”</cite>)
+- <strong>Masks</strong>: Always returned (<cite>masks_key</cite>, defaults to <cite>“masks”</cite>)
+- <strong>Log Probs</strong>: Returned when <cite>return_log_probs=True</cite> (<cite>log_probs_key</cite>, defaults to <cite>“log_probs”</cite>)</p>
+<p>Example output structure for <cite>input_mode=”history”</cite>:
+<a href="#id1"><span class="problematic" id="id2">``</span></a>`
+TensorDict(</p>
 <blockquote>
-<div><ul class="simple">
-<li><p><cite>“text”</cite>: The input text to be tokenized.</p></li>
-<li><p><cite>“text_response”</cite>: the response text (if <cite>generate=False</cite> as the log probabilities are computed for the response.)</p></li>
-</ul>
+<div><p>text=Text(prompt=…, response=…, full=…),
+masks=Masks(all_attention_mask=…, all_assistant_mask=…),
+tokens=Tokens(prompt=…, response=…, full=…),
+log_probs=LogProbs(prompt=…, response=…, full=…),
+history=ChatHistory(prompt=…, response=…, full=…)</p>
 </div></blockquote>
-</li>
-<li><p>If <cite>from_text</cite> is <cite>False</cite>:</p>
-<blockquote>
-<div><ul class="simple">
-<li><p>“tokens”: The input token sequences.</p></li>
-<li><p>“attention_mask”: The attention mask for the tokens.</p></li>
-<li><p>“tokens_response”: The response token sequences (if <cite>generate=False</cite> as the log probabilities are
-computed for the response.)</p></li>
-</ul>
-</div></blockquote>
-</li>
-</ul>
-<p>Output Keys:</p>
-<ul class="simple">
-<li><p><cite>“tokens_response”</cite>: The generated token sequences.</p></li>
-<li><p><cite>“log_probs”</cite>: The log probabilities of the generated tokens (if <cite>return_log_probs</cite> is <cite>True</cite>).</p></li>
-<li><p><cite>“text_response”</cite>: The generated text (if <cite>from_text</cite> is <cite>True</cite> and <cite>generate</cite> is <cite>True</cite>).</p></li>
-</ul>
+</dd>
+</dl>
 <p class="rubric">Example</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">vllm</span><span class="w"> </span><span class="kn">import</span> <span class="n">LLM</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutoTokenizer</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm.policies</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChatHistory</span>
+<span class="gp">&gt;&gt;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">model</span> <span class="o">=</span> <span class="n">LLM</span><span class="p">(</span><span class="s2">&quot;gpt2&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="s2">&quot;gpt2&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># History input (recommended for RL environments)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">wrapper</span> <span class="o">=</span> <span class="n">vLLMWrapper</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">model</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">from_text</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">generate</span><span class="o">=</span><span class="kc">True</span>
+<span class="gp">... </span>    <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">input_mode</span><span class="o">=</span><span class="s2">&quot;history&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">generate</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">return_log_probs</span><span class="o">=</span><span class="kc">True</span>
 <span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">input_data</span> <span class="o">=</span> <span class="n">LLMData</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="n">NonTensorStack</span><span class="p">(</span><span class="s2">&quot;Hello, world!&quot;</span><span class="p">,</span> <span class="s2">&quot;This is another text&quot;</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">output_data</span> <span class="o">=</span> <span class="n">wrapper</span><span class="p">(</span><span class="n">input_data</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">output_data</span><span class="o">.</span><span class="n">text_response</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">history</span> <span class="o">=</span> <span class="n">History</span><span class="o">.</span><span class="n">from_chats</span><span class="p">([[</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="s2">&quot;Hello&quot;</span><span class="p">},</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;assistant&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="s2">&quot;Hi there!&quot;</span><span class="p">}</span>
+<span class="gp">... </span><span class="p">]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">chat_history</span> <span class="o">=</span> <span class="n">ChatHistory</span><span class="p">(</span><span class="n">prompt</span><span class="o">=</span><span class="n">history</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">result</span> <span class="o">=</span> <span class="n">wrapper</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">history</span><span class="o">=</span><span class="n">chat_history</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,)))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">response</span><span class="p">)</span>  <span class="c1"># Generated text</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;log_probs&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">response</span><span class="p">)</span>  <span class="c1"># Log probabilities</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">response</span><span class="p">)</span>  <span class="c1"># History with response</span>
 </pre></div>
 </div>
+<dl class="field-list simple">
+<dt class="field-odd">Variables<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>collector</strong> – The collector associated with the module, if it exists.</p>
+</dd>
+</dl>
 <div class="admonition seealso">
 <p class="admonition-title">See also</p>
-<p><code class="xref py py-func docutils literal notranslate"><span class="pre">TransformersWrapper()</span></code> for a similar interface using the Hugging Face
-Transformers library.</p>
+<ul class="simple">
+<li><p><code class="xref py py-class docutils literal notranslate"><span class="pre">LLMWrapperBase</span></code> (see <span class="xref std std-ref">ref_categorical_sequential</span>)</p></li>
+<li><p><code class="xref py py-class docutils literal notranslate"><span class="pre">TransformersWrapper</span></code> (see <span class="xref std std-ref">ref_transformers_wrapper</span>)</p></li>
+</ul>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.modules.llm.vLLMWrapper.add_module">
@@ -655,6 +656,12 @@ are direct members of this module.</p>
 <dd class="field-odd"><p><em>Module</em> – a child module</p>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.modules.llm.vLLMWrapper.collector">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">collector</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector" title="torchrl.collectors.llm.LLMCollector"><span class="pre">LLMCollector</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.modules.llm.vLLMWrapper.collector" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the collector associated with the module, if it exists.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -817,6 +824,21 @@ fully-qualified string.)</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrl.modules.llm.vLLMWrapper.get_dist">
+<span class="sig-name descname"><span class="pre">get_dist</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tensordict_out</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logits_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'logits'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">as_padded_tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">as_nested_tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">padding_value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">padding_side</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'right'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">layout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout" title="(in PyTorch v2.7)"><span class="pre">torch.layout</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">D.Distribution</span></span></span><a class="reference internal" href="../../_modules/torchrl/modules/llm/policies/vllm_wrapper.html#vLLMWrapper.get_dist"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.llm.vLLMWrapper.get_dist" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get distribution from logits/log-probs with optional masking.</p>
+<p>vLLM does not return logits, so this method is not supported.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.modules.llm.vLLMWrapper.get_dist_with_prompt_mask">
+<span class="sig-name descname"><span class="pre">get_dist_with_prompt_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tokens_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">('tokens',</span> <span class="pre">'full')</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logits_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'logits'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">assistant_mask_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">('masks',</span> <span class="pre">'all_assistant_mask')</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">attention_mask_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">('masks',</span> <span class="pre">'all_attention_mask')</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/distributions.html#torch.distributions.distribution.Distribution" title="(in PyTorch v2.7)"><span class="pre">Distribution</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/modules/llm/policies/vllm_wrapper.html#vLLMWrapper.get_dist_with_prompt_mask"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.llm.vLLMWrapper.get_dist_with_prompt_mask" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get distribution masked to only include response tokens (exclude prompt).</p>
+<p>vLLM does not return logits, so this method is not supported.</p>
+<p>This is a provisional method that will be replaced by the <cite>get_dist</cite> method once we have a better masking strategy.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrl.modules.llm.vLLMWrapper.get_extra_state">
 <span class="sig-name descname"><span class="pre">get_extra_state</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#torchrl.modules.llm.vLLMWrapper.get_extra_state" title="Permalink to this definition">¶</a></dt>
 <dd><p>Return any extra state to include in the module’s state_dict.</p>
@@ -835,6 +857,17 @@ their serialized pickled form changes.</p>
 <dd class="field-even"><p>object</p>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.modules.llm.vLLMWrapper.get_new_version">
+<span class="sig-name descname"><span class="pre">get_new_version</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/llm/policies/vllm_wrapper.html#vLLMWrapper.get_new_version"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.llm.vLLMWrapper.get_new_version" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a new version of the module with altered parameters.</p>
+<p>For instance, the generate parameter can be altered to enable text generation or log-probabilities computation.
+This is especially useful when one wants to avoid re-initializing the module with a new set of parameters, when the
+same parameters could be used to gather log-probs.</p>
+<p>Positional arguments are not supported.</p>
+<p>See the class constructor for more details about the parameters.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -1254,6 +1287,13 @@ the buffer is <strong>not</strong> included in the module’s <a class="referenc
 <span class="gp">&gt;&gt;&gt; </span><span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s1">&#39;running_mean&#39;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">num_features</span><span class="p">))</span>
 </pre></div>
 </div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.modules.llm.vLLMWrapper.register_collector">
+<span class="sig-name descname"><span class="pre">register_collector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">collector</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector" title="torchrl.collectors.llm.LLMCollector"><span class="pre">LLMCollector</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.modules.llm.vLLMWrapper.register_collector" title="Permalink to this definition">¶</a></dt>
+<dd><p>Registers a weak reference to the container collector.</p>
+<p>This is automatically called by the <a class="reference internal" href="torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector" title="torchrl.collectors.llm.LLMCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">LLMCollector</span></code></a> class.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -2102,7 +2142,7 @@ See <a class="reference external" href="https://docs.pytorch.org/docs/stable/gen
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrl.modules.llm.CategoricalSequential.html" class="btn btn-neutral float-right" title="CategoricalSequential" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrl.modules.llm.ChatHistory.html" class="btn btn-neutral float-right" title="ChatHistory" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
         <a href="torchrl.modules.llm.TransformersWrapper.html" class="btn btn-neutral" title="TransformersWrapper" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>

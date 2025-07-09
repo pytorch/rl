@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -426,134 +426,155 @@
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
-
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Literal</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">TYPE_CHECKING</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">lazy_stack</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">lazy_stack</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_zip_strict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch.utils.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataLoader</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">NonTensor</span>
-
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.llm.chat</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.llm.history</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvBase</span><span class="p">,</span> <span class="n">TransformedEnv</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.llm.transforms.dataloading</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataLoadingPrimer</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.modules.llm.policies.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChatHistory</span><span class="p">,</span> <span class="n">Text</span><span class="p">,</span> <span class="n">Tokens</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">transformers</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_default_collate_fn</span><span class="p">(</span><span class="n">batch</span><span class="p">):</span>
+    <span class="c1"># We want to rename the &quot;text&quot; key to &quot;query&quot;</span>
+    <span class="c1">#  otherwise it will conflict with the &quot;text&quot; key in the tensordict returned by TorchRL components</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="s2">&quot;text&quot;</span> <span class="ow">in</span> <span class="n">batch</span><span class="p">:</span>
+        <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;query&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;text&quot;</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">batch</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s2">&quot;text&quot;</span> <span class="ow">in</span> <span class="n">item</span><span class="p">:</span>
+                <span class="n">item</span><span class="p">[</span><span class="s2">&quot;query&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">item</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;text&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">batch</span>
 
 
 <div class="viewcode-block" id="ChatEnv"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.llm.ChatEnv.html#torchrl.envs.llm.ChatEnv">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">ChatEnv</span><span class="p">(</span><span class="n">EnvBase</span><span class="p">):</span>
-<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;A chat-based environment.</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;A chat-based environment for LLMs, designed as a blank canvas for conversation and RL.</span>
 
-<span class="sd">    ChatEnv relies on the :class:`~torchrl.data.llm.History` format to output observations framed as a chat between</span>
-<span class="sd">    various entities (typically with roles such as `&quot;system&quot;`, `&quot;user&quot;`, `&quot;assistant&quot;` etc.)</span>
+<span class="sd">    This environment is designed to work seamlessly with both :class:`~torchrl.modules.llm.policies.TransformersWrapper` and</span>
+<span class="sd">    :class:`~torchrl.modules.llm.policies.vLLMWrapper`. It provides the fundamental structure for managing conversation state</span>
+<span class="sd">    using the :class:`~torchrl.data.llm.History` format (or, alternatively, tokens or text), but is intentionally minimal to allow</span>
+<span class="sd">    maximum flexibility through transforms.</span>
 
-<span class="sd">    The step function will execute the following operations:</span>
+<span class="sd">    Core Functionality</span>
+<span class="sd">        The environment operates in three main modes:</span>
 
-<span class="sd">    - Given a prompt (key `&quot;text&quot;`) and an answer string (key `&quot;text_response&quot;`, which is our action), the environment</span>
-<span class="sd">      will generate a single string that is the concatenation of the two.</span>
-<span class="sd">    - The text is fed to :meth:`torchrl.data.llm.History.from_text` to produce a full history of the chat so far. This</span>
-<span class="sd">      should hopefully match the state of the history in the previous step, plus an extra step generated by the new</span>
-<span class="sd">      action.</span>
-<span class="sd">    - The last item of that history is then appended to the previous history (we don&#39;t replace the history in case</span>
-<span class="sd">      it contains metadata that cannot be inferred directly from the prompt and response).</span>
-<span class="sd">    - Optionally, the history is mapped back to a `&quot;text&quot;` entry that can be used to query the LLM in the next round</span>
-<span class="sd">      of the policy.</span>
+<span class="sd">            - **History mode**: Uses :class:`~torchrl.data.llm.History` objects for conversation management</span>
+<span class="sd">            - **Text mode**: Uses simple text strings for input/output</span>
+<span class="sd">            - **Tokens mode**: Uses tokenized data for input/output</span>
 
-<span class="sd">    Args:</span>
+<span class="sd">    Reset Operation</span>
+<span class="sd">        During reset, the environment:</span>
+
+<span class="sd">            1. Takes input text from the `data_key` (default: `&quot;query&quot;`) in the tensordict</span>
+<span class="sd">            2. Creates a :class:`~torchrl.data.llm.History` object with the user&#39;s message</span>
+<span class="sd">            3. Optionally prepends a system prompt if provided</span>
+<span class="sd">            4. Formats the conversation according to the selected input mode (history, text, or tokens)</span>
+<span class="sd">            5. Returns the formatted prompt ready for the LLM</span>
+
+<span class="sd">    Step Operation</span>
+<span class="sd">        During step, the environment:</span>
+
+<span class="sd">            1. Takes the LLM&#39;s response (containing both prompt and generated text)</span>
+<span class="sd">            2. Extracts the full conversation history</span>
+<span class="sd">            3. Prepares the next prompt by setting the full history as the new prompt</span>
+<span class="sd">            4. Returns the updated conversation state</span>
+
+<span class="sd">    This design enables natural multi-turn conversations where each step extends the conversation</span>
+<span class="sd">    history, making it ideal for dialogue systems and reinforcement learning applications.</span>
+
+<span class="sd">    Integration with Transforms</span>
+<span class="sd">        ChatEnv is designed to be extended with transforms that add specific capabilities:</span>
+
+<span class="sd">            - **Reward computation**: :class:`~torchrl.envs.llm.transforms.KLRewardTransform` for KL divergence rewards</span>
+<span class="sd">            - **Tool execution**: :class:`~torchrl.envs.llm.transforms.PythonInterpreter` for Python code execution</span>
+<span class="sd">            - **Data loading**: :class:`~torchrl.envs.llm.transforms.DataLoadingPrimer` for loading prompts from datasets</span>
+<span class="sd">            - **Thinking prompts**: :class:`~torchrl.envs.llm.transforms.AddThinkingPrompt` for chain-of-thought reasoning</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        input_mode (Literal[&quot;history&quot;, &quot;text&quot;, &quot;tokens&quot;]): The mode of input to the environment.</span>
+<span class="sd">            Defaults to `&quot;history&quot;`.</span>
 <span class="sd">        batch_size (torch.Size): Expected batch size of the input. Defaults to `(1,)` (null batch sizes such as `()`</span>
 <span class="sd">            are not recommended as they don&#39;t play well with generators).</span>
-<span class="sd">        system_prompt (str, optional): an optional `&quot;system&quot;` prompt string to use during reset calls.</span>
+<span class="sd">        system_prompt (str, optional): An optional `&quot;system&quot;` prompt string to use during reset calls.</span>
 <span class="sd">            Defaults to `None`.</span>
-<span class="sd">        apply_template (bool, optional): if `True` (and a tokenizer is passed), the history will be parsed to a string</span>
-<span class="sd">            in the `&quot;text&quot;` entry of the output tensordict at reset time. Defaults to `False`.</span>
-
-<span class="sd">            .. note:: If transforms are appended to the environment, the template will be applied to the history before the transform is applied.</span>
-<span class="sd">                As transforms can encode tools, this means that the text returned by the environment may be incomplete.</span>
-<span class="sd">                The :class:`~torchrl.modules.llm.vLLMWrapper` and :class:`~torchrl.modules.llm.TransformersWrapper`</span>
-<span class="sd">                will apply the template to the history when queried if no `&quot;text&quot;` input is provided.</span>
-
-<span class="sd">        tokenizer (transformers.PreTrainedTokenizer, *optional*): A tokenizer that will be used to tokenize the text.</span>
+<span class="sd">        tokenizer (transformers.PreTrainedTokenizer, optional): A tokenizer that will be used to tokenize the text.</span>
 <span class="sd">            Defaults to `None`.</span>
-<span class="sd">        template_kwargs (dict[str, any], optional): keyword arguments passed to :meth:`~torchrl.data.llm.History.apply_chat_template`.</span>
+<span class="sd">        template_kwargs (dict[str, any], optional): Keyword arguments passed to :meth:`~torchrl.data.llm.History.apply_chat_template`.</span>
 <span class="sd">            Defaults to `None`.</span>
-<span class="sd">        system_role (str, optional): the role of the system (at reset time). Defaults to `&quot;system&quot;`.</span>
-<span class="sd">        user_role (str, optional): the role of the user (at reset time). Defaults to `&quot;user&quot;`.</span>
-<span class="sd">        make_lazy (bool, optional): if `True`, the environment will return a lazy stack of tensordicts. This is the recommended setting</span>
-<span class="sd">            for training, since it allows for efficient batching of environment outputs that may have different shapes or contents.</span>
-<span class="sd">            Defaults to `True`.</span>
+<span class="sd">        system_role (str, optional): The role of the system (at reset time). Defaults to `&quot;system&quot;`.</span>
+<span class="sd">        user_role (str, optional): The role of the user (at reset time). Defaults to `&quot;user&quot;`.</span>
+<span class="sd">        policy_role (str, optional): The role of the policy/assistant. Defaults to `&quot;assistant&quot;`.</span>
+<span class="sd">        data_key (str, optional): The key of the data input to the env at reset time (from dataloader). Defaults to `&quot;query&quot;`.</span>
+<span class="sd">        device (torch.device, optional): The device to use for computations. Defaults to `None`.</span>
 
 <span class="sd">    Methods:</span>
-<span class="sd">        reset (TensorDict): Resets the state of the environment. A tensordict or equivalent with a `&quot;text&quot;` entry must be passed.</span>
-<span class="sd">        step (TensorDict): Makes a step in the environment (see above for a description of what `step` does).</span>
-<span class="sd">            A tensordict or equivalent with a `&quot;text&quot;` entry must be passed.</span>
+<span class="sd">        reset (TensorDict): Resets the state of the environment. A tensordict or equivalent with a `&quot;query&quot;` entry</span>
+<span class="sd">            (originating from the dataloader) must be passed. This key name is defined as a class attribute `data_key`.</span>
+<span class="sd">        step (TensorDict): Makes a step in the environment. A tensordict or equivalent with the LLM&#39;s response must be passed.</span>
+<span class="sd">            The response key is defined as a class attribute `response_key`.</span>
 
 <span class="sd">    .. seealso:: To see examples of a `ChatEnv` in action, see :class:`~torchrl.envs.llm.chat.DatasetChatEnv`,</span>
 <span class="sd">        :class:`~torchrl.envs.llm.GSM8KEnv` and :class:`~torchrl.envs.llm.IFEvalEnv`.</span>
 
 <span class="sd">    Examples:</span>
-<span class="sd">        &gt;&gt;&gt; import pprint</span>
-<span class="sd">        &gt;&gt;&gt;</span>
-<span class="sd">        &gt;&gt;&gt; import transformers</span>
-<span class="sd">        &gt;&gt;&gt; from tensordict import TensorDict, set_list_to_stack</span>
 <span class="sd">        &gt;&gt;&gt; from torchrl.envs.llm import ChatEnv</span>
-<span class="sd">        &gt;&gt;&gt; set_list_to_stack(True).set()</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data.llm import History</span>
+<span class="sd">        &gt;&gt;&gt; from tensordict import TensorDict</span>
 <span class="sd">        &gt;&gt;&gt;</span>
-<span class="sd">        &gt;&gt;&gt; tokenizer = transformers.AutoTokenizer.from_pretrained(&quot;Qwen/Qwen2.5-3B&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; # Create a basic chat environment</span>
+<span class="sd">        &gt;&gt;&gt; env = ChatEnv(</span>
+<span class="sd">        ...     system_prompt=&quot;You are a helpful assistant.&quot;,</span>
+<span class="sd">        ...     input_mode=&quot;history&quot;</span>
+<span class="sd">        ... )</span>
 <span class="sd">        &gt;&gt;&gt;</span>
-<span class="sd">        &gt;&gt;&gt; env = ChatEnv(batch_size=(1,), tokenizer=tokenizer, apply_template=True, system_prompt=&quot;I&#39;m system, do what I want.&quot;)</span>
-<span class="sd">        &gt;&gt;&gt; td_reset = env.reset(TensorDict(text=[&quot;I&#39;m the user. I&#39;m going to tell you a little about something.&quot;], batch_size=(1,)))</span>
-<span class="sd">        &gt;&gt;&gt; pprint.pprint(f&#39;{td_reset[&quot;history&quot;]=}&#39;)</span>
-<span class="sd">        (&#39;td_reset[&quot;history&quot;]=History(\n&#39;</span>
-<span class="sd">         &#39;    content=NonTensorStack(\n&#39;</span>
-<span class="sd">         &#39;        [[&quot;I\&#39;m system, do what I want.&quot;, &quot;I\&#39;m the user. I\&#39;...,\n&#39;</span>
-<span class="sd">         &#39;        batch_size=torch.Size([1, 2]),\n&#39;</span>
-<span class="sd">         &#39;        device=None),\n&#39;</span>
-<span class="sd">         &#39;    role=NonTensorStack(\n&#39;</span>
-<span class="sd">         &quot;        [[&#39;system&#39;, &#39;user&#39;]],\n&quot;</span>
-<span class="sd">         &#39;        batch_size=torch.Size([1, 2]),\n&#39;</span>
-<span class="sd">         &#39;        device=None),\n&#39;</span>
-<span class="sd">         &#39;    batch_size=torch.Size([1, 2]),\n&#39;</span>
-<span class="sd">         &#39;    device=None,\n&#39;</span>
-<span class="sd">         &#39;    is_shared=False)&#39;)</span>
-<span class="sd">        &gt;&gt;&gt; pprint.pprint(f&#39;{td_reset[&quot;text&quot;]=}&#39;)</span>
-<span class="sd">        (&#39;td_reset[&quot;text&quot;]=[&quot;&lt;|im_start|&gt;system\\nI\&#39;m system, do what I &#39;</span>
-<span class="sd">         &quot;want.&lt;|im_end|&gt;\\n&lt;|im_start|&gt;user\\nI&#39;m the user. I&#39;m going to tell you a &quot;</span>
-<span class="sd">         &#39;little about something.&lt;|im_end|&gt;\\n&lt;|im_start|&gt;assistant\\n&quot;]&#39;)</span>
-<span class="sd">        &gt;&gt;&gt; td_action = td_reset.set(&quot;text_response&quot;, [&quot;This is the action from the assistant!&lt;|im_end|&gt;&quot;])</span>
-<span class="sd">        &gt;&gt;&gt; td_next = env.step(td_action)</span>
-<span class="sd">        &gt;&gt;&gt; pprint.pprint(f&#39;{td_next[&quot;next&quot;, &quot;history&quot;]=}&#39;)</span>
-<span class="sd">        (&#39;td_next[&quot;next&quot;, &quot;history&quot;]=History(\n&#39;</span>
-<span class="sd">         &#39;    content=NonTensorStack(\n&#39;</span>
-<span class="sd">         &#39;        [[&quot;I\&#39;m system, do what I want.&quot;, &quot;I\&#39;m the user. I\&#39;...,\n&#39;</span>
-<span class="sd">         &#39;        batch_size=torch.Size([1, 3]),\n&#39;</span>
-<span class="sd">         &#39;        device=None),\n&#39;</span>
-<span class="sd">         &#39;    role=NonTensorStack(\n&#39;</span>
-<span class="sd">         &quot;        [[&#39;system&#39;, &#39;user&#39;, &#39;assistant&#39;]],\n&quot;</span>
-<span class="sd">         &#39;        batch_size=torch.Size([1, 3]),\n&#39;</span>
-<span class="sd">         &#39;        device=None),\n&#39;</span>
-<span class="sd">         &#39;    batch_size=torch.Size([1, 3]),\n&#39;</span>
-<span class="sd">         &#39;    device=None,\n&#39;</span>
-<span class="sd">         &#39;    is_shared=False)&#39;)</span>
-<span class="sd">        &gt;&gt;&gt; pprint.pprint(f&#39;{td_next[&quot;next&quot;, &quot;text&quot;]=}&#39;)</span>
-<span class="sd">        (&#39;td_next[&quot;next&quot;, &quot;text&quot;]=[&quot;&lt;|im_start|&gt;system\\nI\&#39;m system, do what I &#39;</span>
-<span class="sd">         &quot;want.&lt;|im_end|&gt;\\n&lt;|im_start|&gt;user\\nI&#39;m the user. I&#39;m going to tell you a &quot;</span>
-<span class="sd">         &#39;little about something.&lt;|im_end|&gt;\\n&lt;|im_start|&gt;assistant\\nThis is the &#39;</span>
-<span class="sd">         &#39;action from the assistant!&lt;|im_end|&gt;\\n&lt;|im_start|&gt;assistant\\n&quot;]&#39;)</span>
+<span class="sd">        &gt;&gt;&gt; # Reset with a user query</span>
+<span class="sd">        &gt;&gt;&gt; reset_data = TensorDict({&quot;query&quot;: &quot;Hello, how are you?&quot;}, batch_size=(1,))</span>
+<span class="sd">        &gt;&gt;&gt; obs = env.reset(reset_data)</span>
+<span class="sd">        &gt;&gt;&gt; print(obs[&quot;history&quot;].prompt)  # History with system prompt + user message</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Simulate LLM response and step</span>
+<span class="sd">        &gt;&gt;&gt; response_data = TensorDict({</span>
+<span class="sd">        ...     &quot;history&quot;: History.from_chats([[</span>
+<span class="sd">        ...         {&quot;role&quot;: &quot;system&quot;, &quot;content&quot;: &quot;You are a helpful assistant.&quot;},</span>
+<span class="sd">        ...         {&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;Hello, how are you?&quot;},</span>
+<span class="sd">        ...         {&quot;role&quot;: &quot;assistant&quot;, &quot;content&quot;: &quot;I&#39;m doing well, thank you!&quot;}</span>
+<span class="sd">        ...     ]])</span>
+<span class="sd">        ... }, batch_size=(1,))</span>
+<span class="sd">        &gt;&gt;&gt; next_obs = env.step(response_data)</span>
+<span class="sd">        &gt;&gt;&gt; print(next_obs[&quot;history&quot;].prompt)  # Full conversation history</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
+    <span class="c1"># Nested key corresponding to the text input to the LLM</span>
+    <span class="n">text_key</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="s2">&quot;prompt&quot;</span><span class="p">)</span>
+    <span class="c1"># Nested key corresponding to the response from the LLM</span>
+    <span class="n">response_key</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="s2">&quot;response&quot;</span><span class="p">)</span>
+    <span class="c1"># Nested key corresponding to the data input to the env at reset time (from dataloader)</span>
+    <span class="n">data_key</span> <span class="o">=</span> <span class="s2">&quot;query&quot;</span>
+
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">input_mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;history&quot;</span><span class="p">,</span>
         <span class="n">batch_size</span><span class="p">:</span> <span class="nb">tuple</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">system_prompt</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">apply_template</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">tokenizer</span><span class="p">:</span> <span class="n">transformers</span><span class="o">.</span><span class="n">AutoTokenizer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
         <span class="n">template_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">system_role</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;system&quot;</span><span class="p">,</span>
         <span class="n">user_role</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span>
         <span class="n">policy_role</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;assistant&quot;</span><span class="p">,</span>
-        <span class="n">make_lazy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">data_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">input_mode</span> <span class="o">=</span> <span class="n">input_mode</span>
         <span class="k">if</span> <span class="n">batch_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">batch_size</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,)</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
@@ -562,100 +583,235 @@
             <span class="n">batch_size</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">(</span><span class="n">batch_size</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">batch_size</span> <span class="o">==</span> <span class="p">():</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> must have at least one dimension&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">data_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data_key</span> <span class="o">=</span> <span class="n">data_key</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="n">batch_size</span>
 
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
-            <span class="n">history</span><span class="o">=</span><span class="n">History</span><span class="o">.</span><span class="n">default_spec</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="n">batch_size</span> <span class="o">+</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,)),</span>
-            <span class="n">shape</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">full_state_spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">full_state_spec</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">NonTensor</span><span class="p">(</span>
-            <span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">example_data</span><span class="o">=</span><span class="s2">&quot;a string&quot;</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
-        <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">system_prompt</span> <span class="o">=</span> <span class="n">system_prompt</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">apply_template</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">apply_template</span> <span class="ow">or</span> <span class="p">(</span><span class="n">template_kwargs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="n">tokenizer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span> <span class="o">=</span> <span class="n">tokenizer</span>
+
         <span class="k">if</span> <span class="n">template_kwargs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">template_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="c1"># FIXME: what to do if True?</span>
-        <span class="n">template_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;tokenize&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">template_kwargs</span> <span class="o">=</span> <span class="n">template_kwargs</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">apply_template</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">NonTensor</span><span class="p">(</span>
-                <span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">example_data</span><span class="o">=</span><span class="s2">&quot;a string&quot;</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
-            <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">full_action_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
-            <span class="n">text_response</span><span class="o">=</span><span class="n">NonTensor</span><span class="p">(</span>
-                <span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">example_data</span><span class="o">=</span><span class="s2">&quot;a string&quot;</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
-            <span class="p">),</span>
-            <span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
-        <span class="p">)</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">system_role</span> <span class="o">=</span> <span class="n">system_role</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">user_role</span> <span class="o">=</span> <span class="n">user_role</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">policy_role</span> <span class="o">=</span> <span class="n">policy_role</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">make_lazy</span> <span class="o">=</span> <span class="n">make_lazy</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span> <span class="o">=</span> <span class="n">tokenizer</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_make_specs</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_make_specs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_mode</span> <span class="o">==</span> <span class="s2">&quot;history&quot;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_make_specs_history</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_mode</span> <span class="o">==</span> <span class="s2">&quot;text&quot;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_make_specs_text</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_mode</span> <span class="o">==</span> <span class="s2">&quot;tokens&quot;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_make_specs_tokens</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid input mode: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">input_mode</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_make_specs_history</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># we output prompt</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+            <span class="n">history</span><span class="o">=</span><span class="n">ChatHistory</span><span class="o">.</span><span class="n">default_spec</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;prompt&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">),</span>
+            <span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="c1"># We receive prompt, response and full</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">full_action_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+            <span class="n">history</span><span class="o">=</span><span class="n">ChatHistory</span><span class="o">.</span><span class="n">default_spec</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;full&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">),</span>
+            <span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">full_state_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">data_key</span><span class="p">:</span> <span class="n">NonTensor</span><span class="p">(</span>
+                    <span class="n">example_data</span><span class="o">=</span><span class="s2">&quot;a string&quot;</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+                <span class="p">)</span>
+            <span class="p">},</span>
+            <span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_make_specs_text</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># we output prompt</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+            <span class="n">text</span><span class="o">=</span><span class="n">Text</span><span class="o">.</span><span class="n">default_spec</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;prompt&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">),</span>
+            <span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="c1"># We receive prompt, response and full</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">full_action_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+            <span class="n">text</span><span class="o">=</span><span class="n">Text</span><span class="o">.</span><span class="n">default_spec</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;full&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">),</span>
+            <span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">full_state_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">data_key</span><span class="p">:</span> <span class="n">NonTensor</span><span class="p">(</span>
+                    <span class="n">example_data</span><span class="o">=</span><span class="s2">&quot;a string&quot;</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+                <span class="p">)</span>
+            <span class="p">},</span>
+            <span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_make_specs_tokens</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># we output prompt</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">full_observation_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+            <span class="n">tokens</span><span class="o">=</span><span class="n">Tokens</span><span class="o">.</span><span class="n">default_spec</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;prompt&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">),</span>
+            <span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="c1"># We receive prompt, response and full</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">full_action_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+            <span class="n">tokens</span><span class="o">=</span><span class="n">Tokens</span><span class="o">.</span><span class="n">default_spec</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;full&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">),</span>
+            <span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">full_state_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">data_key</span><span class="p">:</span> <span class="n">NonTensor</span><span class="p">(</span>
+                    <span class="n">example_data</span><span class="o">=</span><span class="s2">&quot;a string&quot;</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+                <span class="p">)</span>
+            <span class="p">},</span>
+            <span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="ChatEnv.from_dataloader"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.llm.ChatEnv.html#torchrl.envs.llm.ChatEnv.from_dataloader">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_dataloader</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">dataloader</span><span class="p">:</span> <span class="n">DataLoader</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">repeats</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">group_repeats</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">batch_size</span><span class="p">:</span> <span class="nb">tuple</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">primers</span><span class="p">:</span> <span class="n">Composite</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">tokenizer</span><span class="p">:</span> <span class="n">transformers</span><span class="o">.</span><span class="n">AutoTokenizer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
+        <span class="n">template_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">input_mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="s2">&quot;tokens&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;history&quot;</span><span class="p">,</span>
+        <span class="n">data_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">system_prompt</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a chat environment from a dataloader.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            dataloader (DataLoader): The dataloader to use.</span>
+
+<span class="sd">        Keyword Args:</span>
+<span class="sd">            repeats (int | None, optional): The number of times to repeat each sample from the dataset (mainly for Monte-Carlo</span>
+<span class="sd">                based value estimation). If `None`, the dataset is not repeated. Defaults to `None`.</span>
+<span class="sd">            device (torch.device | None, optional): The device to use for computations. Defaults to None.</span>
+<span class="sd">            group_repeats (bool, optional): Whether to group repeated samples together. Defaults to `False`.</span>
+<span class="sd">            batch_size (tuple | torch.Size | None, optional): The batch size for data loading. Defaults to `1`.</span>
+<span class="sd">            primers (Composite | None, optional): The primers to use for data loading. Defaults to `None`.</span>
+<span class="sd">            tokenizer (transformers.AutoTokenizer | None, optional): The tokenizer to use for text processing. Defaults to `None`.</span>
+<span class="sd">            template_kwargs (dict[str, Any] | None, optional): Additional keyword arguments for the template. Defaults to `None`.</span>
+<span class="sd">            input_mode (Literal[&quot;history&quot;, &quot;text&quot;, &quot;tokens&quot;], optional): The mode of input to the environment. Defaults to `&quot;history&quot;`.</span>
+<span class="sd">            data_key (str, optional): The spec of the data returned by the dataloader (or better, its collate_fn).</span>
+<span class="sd">                Defaults to `None` (automatically determined based on the input_mode).</span>
+<span class="sd">            system_prompt (str | None, optional): The system prompt to use for the environment. Defaults to `None`.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            DatasetChatEnv: The chat environment.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">DatasetChatEnv</span><span class="o">.</span><span class="n">from_dataloader</span><span class="p">(</span>
+            <span class="n">dataloader</span><span class="o">=</span><span class="n">dataloader</span><span class="p">,</span>
+            <span class="n">repeats</span><span class="o">=</span><span class="n">repeats</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">group_repeats</span><span class="o">=</span><span class="n">group_repeats</span><span class="p">,</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">primers</span><span class="o">=</span><span class="n">primers</span><span class="p">,</span>
+            <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
+            <span class="n">template_kwargs</span><span class="o">=</span><span class="n">template_kwargs</span><span class="p">,</span>
+            <span class="n">input_mode</span><span class="o">=</span><span class="n">input_mode</span><span class="p">,</span>
+            <span class="n">data_key</span><span class="o">=</span><span class="n">data_key</span><span class="p">,</span>
+            <span class="n">system_prompt</span><span class="o">=</span><span class="n">system_prompt</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+    <span class="c1"># def _post_step_mdp_hooks(self, tensordict: TensorDictBase) -&gt; TensorDictBase:</span>
+    <span class="c1">#     &quot;&quot;&quot;Allows modification of the tensordict after the step_mdp.&quot;&quot;&quot;</span>
+    <span class="c1"># if self.input_mode == &quot;history&quot;:</span>
+    <span class="c1">#     tensordict.exclude(</span>
+    <span class="c1">#         (&quot;history&quot;, &quot;response&quot;), (&quot;history&quot;, &quot;full&quot;), inplace=True</span>
+    <span class="c1">#     )</span>
+    <span class="c1"># if self.input_mode in (&quot;text&quot;, &quot;history&quot;):</span>
+    <span class="c1">#     tensordict.exclude((&quot;text&quot;, &quot;response&quot;), (&quot;text&quot;, &quot;full&quot;), inplace=True)</span>
+    <span class="c1"># if self.input_mode in (&quot;tokens&quot;, &quot;history&quot;, &quot;text&quot;):</span>
+    <span class="c1">#     tensordict.exclude((&quot;tokens&quot;, &quot;response&quot;), (&quot;tokens&quot;, &quot;full&quot;), inplace=True)</span>
+    <span class="c1"># if &quot;log_probs&quot; in tensordict.keys():</span>
+    <span class="c1">#     tensordict.exclude(</span>
+    <span class="c1">#             (&quot;log_probs&quot;, &quot;response&quot;), (&quot;log_probs&quot;, &quot;full&quot;), inplace=True</span>
+    <span class="c1">#         )</span>
+    <span class="c1">#     return tensordict</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
-        <span class="c1"># Expect action to be a &quot;text_response&quot; string</span>
-        <span class="n">action</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;text_response&quot;</span><span class="p">]</span>
-        <span class="c1"># Find the total text</span>
-        <span class="n">text</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">]</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-            <span class="n">text</span> <span class="o">=</span> <span class="p">[</span><span class="n">text</span><span class="p">]</span>
-            <span class="n">action</span> <span class="o">=</span> <span class="p">[</span><span class="n">action</span><span class="p">]</span>
-        <span class="n">text</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span> <span class="o">+</span> <span class="n">a</span> <span class="k">for</span> <span class="n">t</span><span class="p">,</span> <span class="n">a</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">action</span><span class="p">)]</span>
-        <span class="c1"># Convert text to a history</span>
-        <span class="n">chat_template_name</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">name_or_path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">name_or_path</span>
-            <span class="k">if</span> <span class="s2">&quot;qwen&quot;</span> <span class="ow">in</span> <span class="n">name_or_path</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span>
-                <span class="n">chat_template_name</span> <span class="o">=</span> <span class="s2">&quot;qwen&quot;</span>
-        <span class="n">parsed_history</span> <span class="o">=</span> <span class="n">History</span><span class="o">.</span><span class="n">from_text</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">chat_template_name</span><span class="o">=</span><span class="n">chat_template_name</span><span class="p">)</span>
-        <span class="c1"># Isolate last element, which should be our action</span>
-        <span class="n">local_history</span> <span class="o">=</span> <span class="n">parsed_history</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span>
-        <span class="c1"># Get previous history</span>
-        <span class="n">history</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">]</span>
-        <span class="c1"># Check that history has one more item than before</span>
-        <span class="k">if</span> <span class="n">history</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">parsed_history</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="s2">&quot;The parsed history has fewer or the same number than the last element in history.&quot;</span>
-            <span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_role</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="c1"># Iterate over batch and check policy role</span>
-            <span class="k">for</span> <span class="n">lh</span> <span class="ow">in</span> <span class="n">local_history</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">):</span>
-                <span class="k">if</span> <span class="n">lh</span><span class="o">.</span><span class="n">role</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_role</span><span class="p">:</span>
-                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                        <span class="s2">&quot;The role received in the last block parsed from the policy &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;output does not match the expected policy role: received </span><span class="si">{</span><span class="n">lh</span><span class="o">.</span><span class="n">role</span><span class="si">}</span><span class="s2"> but expected </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_role</span><span class="si">}</span><span class="s2">.</span><span class="se">\n</span><span class="s2">&quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;Parsed input: </span><span class="si">{</span><span class="n">text</span><span class="si">=}</span><span class="se">\n</span><span class="s2">&quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;Parsed history: </span><span class="si">{</span><span class="n">parsed_history</span><span class="si">=}</span><span class="se">\n</span><span class="s2">&quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;Final element: </span><span class="si">{</span><span class="n">local_history</span><span class="si">=}</span><span class="s2">&quot;</span>
-                    <span class="p">)</span>
-        <span class="c1"># Append history item</span>
-        <span class="n">history</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">local_history</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-        <span class="c1"># FIXME: consider done to be always False</span>
-        <span class="n">td_out</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">(</span>
-            <span class="nb">list</span><span class="p">(</span>
-                <span class="n">TensorDict</span><span class="p">(</span>
-                    <span class="n">history</span><span class="o">=</span><span class="n">history</span><span class="p">,</span>
-                    <span class="n">done</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
-                    <span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
-                <span class="p">)</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-            <span class="p">)</span>
-        <span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">apply_template</span><span class="p">:</span>
-            <span class="n">td_out</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
-                <span class="n">tokenizer</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">template_kwargs</span>
-            <span class="p">)</span>
-        <span class="k">return</span> <span class="n">td_out</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_mode</span> <span class="o">==</span> <span class="s2">&quot;history&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step_history</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_mode</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="s2">&quot;history&quot;</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step_text</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_mode</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;tokens&quot;</span><span class="p">,</span> <span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step_tokens</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid input mode: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">input_mode</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_step_history</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Step the environment in history mode.&quot;&quot;&quot;</span>
+        <span class="c1"># get history from tensordict</span>
+        <span class="n">chat_history</span><span class="p">:</span> <span class="n">ChatHistory</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">]</span>
+        <span class="c1"># prompt = chat_history.prompt</span>
+        <span class="n">full</span> <span class="o">=</span> <span class="n">chat_history</span><span class="o">.</span><span class="n">full</span>
+        <span class="c1"># response = chat_history.response</span>
+        <span class="n">empty_td</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="c1"># Old full will be new prompt - can be modified at will</span>
+        <span class="n">new_history</span> <span class="o">=</span> <span class="n">ChatHistory</span><span class="p">(</span><span class="n">prompt</span><span class="o">=</span><span class="n">full</span><span class="p">)</span>
+        <span class="n">empty_td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="n">new_history</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">empty_td</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_step_text</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Step the environment in text mode.&quot;&quot;&quot;</span>
+        <span class="c1"># get text from tensordict</span>
+        <span class="n">text</span><span class="p">:</span> <span class="n">Text</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">]</span>
+        <span class="n">full</span> <span class="o">=</span> <span class="n">text</span><span class="o">.</span><span class="n">full</span>
+        <span class="n">empty_td</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">new_history</span> <span class="o">=</span> <span class="n">Text</span><span class="p">(</span><span class="n">prompt</span><span class="o">=</span><span class="n">full</span><span class="p">)</span>
+        <span class="n">empty_td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="n">new_history</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">empty_td</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_step_tokens</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Step the environment in tokens mode.&quot;&quot;&quot;</span>
+        <span class="c1"># get tokens from tensordict</span>
+        <span class="n">tokens</span><span class="p">:</span> <span class="n">Tokens</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;tokens&quot;</span><span class="p">]</span>
+        <span class="n">full</span> <span class="o">=</span> <span class="n">tokens</span><span class="o">.</span><span class="n">full</span>
+        <span class="n">empty_td</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">new_history</span> <span class="o">=</span> <span class="n">Tokens</span><span class="p">(</span><span class="n">prompt</span><span class="o">=</span><span class="n">full</span><span class="p">)</span>
+        <span class="n">empty_td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;tokens&quot;</span><span class="p">,</span> <span class="n">new_history</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">empty_td</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">tensordict</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> expects a tensordict as input&quot;</span><span class="p">)</span>
         <span class="c1"># Find the total text</span>
-        <span class="n">content</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;text&quot;</span><span class="p">)</span>
+        <span class="n">content</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">content</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> expects a tensordict with a </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">data_key</span><span class="si">}</span><span class="s2"> key, got </span><span class="si">{</span><span class="n">tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
         <span class="k">if</span> <span class="n">content</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">:</span>
             <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="nb">reversed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">):</span>
                 <span class="n">content</span> <span class="o">=</span> <span class="p">[</span><span class="n">content</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">s</span><span class="p">)]</span>
@@ -676,23 +832,58 @@
             <span class="n">history</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">([</span><span class="n">history_system</span><span class="p">,</span> <span class="n">history</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">history</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-        <span class="n">result</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
-            <span class="n">history</span><span class="o">=</span><span class="n">history</span><span class="p">,</span>
-            <span class="n">done</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
-            <span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_lazy</span><span class="p">:</span>
-            <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-            <span class="n">result</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">result</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-        <span class="k">elif</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">_lazy</span><span class="p">:</span>
-            <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">stack_dim</span><span class="p">)</span>
-            <span class="n">result</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">result</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="n">tensordict</span><span class="o">.</span><span class="n">stack_dim</span><span class="p">)</span>
-        <span class="n">result</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="o">*</span><span class="n">result</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">)))</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">apply_template</span><span class="p">:</span>
-            <span class="n">template</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
-                <span class="n">tokenizer</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">template_kwargs</span>
+
+        <span class="c1"># Now that we have the history, call the specific reset method</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_mode</span> <span class="o">==</span> <span class="s2">&quot;history&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_reset_history</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">history</span><span class="p">)</span>
+                <span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+                <span class="o">.</span><span class="n">to_lazystack</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
             <span class="p">)</span>
-            <span class="n">result</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">template</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_mode</span> <span class="o">==</span> <span class="s2">&quot;text&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_reset_text</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">history</span><span class="p">)</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span><span class="o">.</span><span class="n">to_lazystack</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_mode</span> <span class="o">==</span> <span class="s2">&quot;tokens&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_reset_tokens</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">history</span><span class="p">)</span>
+                <span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+                <span class="o">.</span><span class="n">to_lazystack</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid input mode: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">input_mode</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reset_history</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">history</span><span class="p">:</span> <span class="n">History</span><span class="p">):</span>
+        <span class="c1"># Simplest case: history is the prompt</span>
+        <span class="n">chat_history</span> <span class="o">=</span> <span class="n">ChatHistory</span><span class="o">.</span><span class="n">_from_tensordict</span><span class="p">(</span>
+            <span class="n">tensordict</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">chat_history</span><span class="o">.</span><span class="n">prompt</span> <span class="o">=</span> <span class="n">history</span>
+        <span class="k">return</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="n">chat_history</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reset_text</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">history</span><span class="p">:</span> <span class="n">History</span><span class="p">):</span>
+        <span class="c1"># We need to parse the history to a text</span>
+        <span class="n">text</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
+            <span class="n">tokenizer</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">,</span> <span class="n">add_generation_prompt</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">template_kwargs</span>
+        <span class="p">)</span>
+        <span class="n">txt</span> <span class="o">=</span> <span class="n">Text</span><span class="o">.</span><span class="n">_from_tensordict</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">empty</span><span class="p">())</span>
+        <span class="n">txt</span><span class="o">.</span><span class="n">prompt</span> <span class="o">=</span> <span class="n">text</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="n">txt</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reset_tokens</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">history</span><span class="p">:</span> <span class="n">History</span><span class="p">):</span>
+        <span class="c1"># We need to parse the history to a tokens</span>
+        <span class="n">tokens</span> <span class="o">=</span> <span class="n">history</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
+            <span class="n">tokenizer</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">,</span>
+            <span class="n">add_generation_prompt</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">return_tensors</span><span class="o">=</span><span class="s2">&quot;pt&quot;</span><span class="p">,</span>
+            <span class="n">return_dict</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">template_kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">tokens_obj</span> <span class="o">=</span> <span class="n">Tokens</span><span class="o">.</span><span class="n">_from_tensordict</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span><span class="o">.</span><span class="n">to_lazystack</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">to</span><span class="p">,</span> <span class="n">tok</span> <span class="ow">in</span> <span class="n">_zip_strict</span><span class="p">(</span><span class="n">tokens_obj</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;input_ids&quot;</span><span class="p">]):</span>
+            <span class="n">to</span><span class="o">.</span><span class="n">prompt</span> <span class="o">=</span> <span class="n">tok</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;tokens&quot;</span><span class="p">,</span> <span class="n">tokens_obj</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">result</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">):</span>
@@ -724,7 +915,12 @@
 <span class="sd">        template_kwargs (dict[str, Any] | None, optional): Additional keyword arguments for the template. Defaults to `None`.</span>
 <span class="sd">        apply_template (bool | None, optional): Whether to apply the template to the text. Defaults to `False`.</span>
 <span class="sd">        collate_fn (Callable | None, optional): A custom collate function for data loading. If `None`, a default</span>
-<span class="sd">            collate function is used. Defaults to `None`.</span>
+<span class="sd">            collate function is used that renames the `&quot;text&quot;` key to `&quot;query&quot;` to avoid conflicts with the `&quot;text&quot;` key</span>
+<span class="sd">            in the tensordict returned by TorchRL components. Defaults to `None`.</span>
+<span class="sd">        input_mode (Literal[&quot;history&quot;, &quot;text&quot;, &quot;tokens&quot;], optional): The mode of input to the environment. Defaults to `&quot;history&quot;`.</span>
+<span class="sd">        data_key (str, optional): The spec of the data returned by the dataloader (or better, its collate_fn).</span>
+<span class="sd">            Defaults to `None` (automatically determined based on the input_mode).</span>
+<span class="sd">        system_prompt (str | None, optional): The system prompt to use for the environment. Defaults to `None`.</span>
 
 <span class="sd">    .. seealso:: `DatasetChatEnv` is a thin wrapper around :class:`~torchrl.envs.llm.ChatEnv` bucketed with a</span>
 <span class="sd">        :class:`~torchrl.envs.llm.DataLoadingPrimer` transform. See these two classes for more insight on data format</span>
@@ -753,6 +949,10 @@
         <span class="n">template_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">apply_template</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">collate_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">input_mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="s2">&quot;tokens&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;history&quot;</span><span class="p">,</span>
+        <span class="n">data_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">primers</span><span class="p">:</span> <span class="n">Composite</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">system_prompt</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_dataset</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">list_to_stack</span>
@@ -765,11 +965,11 @@
 
         <span class="n">batch_size</span> <span class="o">=</span> <span class="p">(</span><span class="n">num_envs</span><span class="p">,)</span>
 
-        <span class="n">dataset</span> <span class="o">=</span> <span class="n">load_dataset</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">split</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s2">&quot;train&quot;</span> <span class="ow">in</span> <span class="n">dataset</span><span class="p">:</span>
+        <span class="n">dataset_obj</span> <span class="o">=</span> <span class="n">load_dataset</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">split</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s2">&quot;train&quot;</span> <span class="ow">in</span> <span class="n">dataset_obj</span><span class="p">:</span>
             <span class="n">split</span> <span class="o">=</span> <span class="s2">&quot;train&quot;</span>
         <span class="k">if</span> <span class="n">split</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">dataset</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="n">split</span><span class="p">]</span>
+            <span class="n">dataset_obj</span> <span class="o">=</span> <span class="n">dataset_obj</span><span class="p">[</span><span class="n">split</span><span class="p">]</span>
         <span class="c1"># Env</span>
         <span class="k">if</span> <span class="n">seed</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">seed</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">((),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span><span class="o">.</span><span class="n">random_</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
@@ -777,28 +977,117 @@
         <span class="n">generator</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
 
         <span class="n">dataloader</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">(</span>  <span class="c1"># noqa: TOR401</span>
-            <span class="n">dataset</span><span class="p">,</span>
+            <span class="n">dataset_obj</span><span class="p">,</span>
             <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size_dl</span><span class="p">,</span>
             <span class="n">shuffle</span><span class="o">=</span><span class="n">shuffle</span><span class="p">,</span>
-            <span class="n">collate_fn</span><span class="o">=</span><span class="n">collate_fn</span><span class="p">,</span>
+            <span class="n">collate_fn</span><span class="o">=</span><span class="n">collate_fn</span> <span class="k">if</span> <span class="n">collate_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_default_collate_fn</span><span class="p">,</span>
             <span class="n">generator</span><span class="o">=</span><span class="n">generator</span><span class="p">,</span>
         <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_from_dataloader</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">dataloader</span><span class="o">=</span><span class="n">dataloader</span><span class="p">,</span>
+            <span class="n">repeats</span><span class="o">=</span><span class="n">repeats</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">group_repeats</span><span class="o">=</span><span class="n">group_repeats</span><span class="p">,</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">primers</span><span class="o">=</span><span class="n">primers</span><span class="p">,</span>
+            <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
+            <span class="n">template_kwargs</span><span class="o">=</span><span class="n">template_kwargs</span><span class="p">,</span>
+            <span class="n">input_mode</span><span class="o">=</span><span class="n">input_mode</span><span class="p">,</span>
+            <span class="n">data_key</span><span class="o">=</span><span class="n">data_key</span><span class="p">,</span>
+            <span class="n">system_prompt</span><span class="o">=</span><span class="n">system_prompt</span><span class="p">,</span>
+        <span class="p">)</span>
 
+<div class="viewcode-block" id="DatasetChatEnv.from_dataloader"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.llm.DatasetChatEnv.html#torchrl.envs.llm.DatasetChatEnv.from_dataloader">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_dataloader</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">dataloader</span><span class="p">:</span> <span class="n">DataLoader</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">repeats</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">group_repeats</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">batch_size</span><span class="p">:</span> <span class="nb">tuple</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">primers</span><span class="p">:</span> <span class="n">Composite</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">tokenizer</span><span class="p">:</span> <span class="n">transformers</span><span class="o">.</span><span class="n">AutoTokenizer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
+        <span class="n">template_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">input_mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="s2">&quot;tokens&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;history&quot;</span><span class="p">,</span>
+        <span class="n">data_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">system_prompt</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a chat environment from a dataloader.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            dataloader (DataLoader): The dataloader to use.</span>
+
+<span class="sd">        Keyword Args:</span>
+<span class="sd">            repeats (int | None, optional): The number of times to repeat each sample from the dataset (mainly for Monte-Carlo</span>
+<span class="sd">                based value estimation). If `None`, the dataset is not repeated. Defaults to `None`.</span>
+<span class="sd">            device (torch.device | None, optional): The device to use for computations. Defaults to None.</span>
+<span class="sd">            group_repeats (bool, optional): Whether to group repeated samples together. Defaults to `False`.</span>
+<span class="sd">            batch_size (tuple | torch.Size | None, optional): The batch size for data loading. Defaults to `1`.</span>
+<span class="sd">            primers (Composite | None, optional): The primers to use for data loading. Defaults to `None`.</span>
+<span class="sd">            tokenizer (transformers.AutoTokenizer | None, optional): The tokenizer to use for text processing. Defaults to `None`.</span>
+<span class="sd">            template_kwargs (dict[str, Any] | None, optional): Additional keyword arguments for the template. Defaults to `None`.</span>
+<span class="sd">            input_mode (Literal[&quot;history&quot;, &quot;text&quot;, &quot;tokens&quot;], optional): The mode of input to the environment. Defaults to `&quot;history&quot;`.</span>
+<span class="sd">            data_key (str, optional): The spec of the data returned by the dataloader (or better, its collate_fn).</span>
+<span class="sd">                Defaults to `None` (automatically determined based on the input_mode).</span>
+<span class="sd">            system_prompt (str | None, optional): The system prompt to use for the environment. Defaults to `None`.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            ChatEnv: The chat environment.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="fm">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_from_dataloader</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">dataloader</span><span class="p">,</span>
+            <span class="n">repeats</span><span class="o">=</span><span class="n">repeats</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">group_repeats</span><span class="o">=</span><span class="n">group_repeats</span><span class="p">,</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">primers</span><span class="o">=</span><span class="n">primers</span><span class="p">,</span>
+            <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
+            <span class="n">template_kwargs</span><span class="o">=</span><span class="n">template_kwargs</span><span class="p">,</span>
+            <span class="n">input_mode</span><span class="o">=</span><span class="n">input_mode</span><span class="p">,</span>
+            <span class="n">data_key</span><span class="o">=</span><span class="n">data_key</span><span class="p">,</span>
+            <span class="n">system_prompt</span><span class="o">=</span><span class="n">system_prompt</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_from_dataloader</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">dataloader</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">repeats</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">group_repeats</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">batch_size</span><span class="p">:</span> <span class="nb">tuple</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">primers</span><span class="p">:</span> <span class="n">Composite</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">tokenizer</span><span class="p">:</span> <span class="n">transformers</span><span class="o">.</span><span class="n">AutoTokenizer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
+        <span class="n">template_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">input_mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="s2">&quot;tokens&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;history&quot;</span><span class="p">,</span>
+        <span class="n">data_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">system_prompt</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
         <span class="n">primer</span> <span class="o">=</span> <span class="n">DataLoadingPrimer</span><span class="p">(</span>
             <span class="n">dataloader</span><span class="o">=</span><span class="n">dataloader</span><span class="p">,</span>
             <span class="n">repeats</span><span class="o">=</span><span class="n">repeats</span><span class="p">,</span>
             <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
             <span class="n">group_repeats</span><span class="o">=</span><span class="n">group_repeats</span><span class="p">,</span>
             <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">primers</span><span class="o">=</span><span class="n">primers</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">env_base</span> <span class="o">=</span> <span class="n">ChatEnv</span><span class="p">(</span>
             <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
-            <span class="n">system_prompt</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">SYSTEM_PROMPT</span><span class="p">,</span>
+            <span class="n">system_prompt</span><span class="o">=</span><span class="bp">cls</span><span class="o">.</span><span class="n">SYSTEM_PROMPT</span> <span class="k">if</span> <span class="n">system_prompt</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">system_prompt</span><span class="p">,</span>
             <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
             <span class="n">template_kwargs</span><span class="o">=</span><span class="n">template_kwargs</span><span class="p">,</span>
-            <span class="n">apply_template</span><span class="o">=</span><span class="n">apply_template</span><span class="p">,</span>
+            <span class="n">input_mode</span><span class="o">=</span><span class="n">input_mode</span><span class="p">,</span>
+            <span class="n">data_key</span><span class="o">=</span><span class="n">data_key</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">env_base</span><span class="p">,</span> <span class="n">primer</span><span class="p">)</span>
+        <span class="n">TransformedEnv</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env_base</span><span class="p">,</span> <span class="n">primer</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span>
 
 <div class="viewcode-block" id="DatasetChatEnv.reset_dataloader"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.llm.DatasetChatEnv.html#torchrl.envs.llm.DatasetChatEnv.reset_dataloader">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">reset_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Reset the dataloader.</span>
@@ -808,7 +1097,8 @@
 <span class="sd">        Returns:</span>
 <span class="sd">            self: The environment itself.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">transform</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">reset_dataloader</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">transform</span><span class="p">,</span> <span class="s2">&quot;__getitem__&quot;</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">transform</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">reset_dataloader</span><span class="p">()</span>
         <span class="k">return</span> <span class="bp">self</span></div></div>
 </pre></div>
 

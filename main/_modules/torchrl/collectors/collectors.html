@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -478,7 +478,6 @@
     <span class="n">WeightUpdaterBase</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReplayBuffer</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.tensor_specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorSpec</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">CloudpickleWrapper</span><span class="p">,</span> <span class="n">DEVICE_TYPING</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">_do_nothing</span><span class="p">,</span> <span class="n">EnvBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.env_creator</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnvCreator</span>
@@ -598,7 +597,6 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_get_policy_and_device</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">policy</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">observation_spec</span><span class="p">:</span> <span class="n">TensorSpec</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">policy_device</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">NO_DEFAULT</span><span class="p">,</span>
         <span class="n">env_maker</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">env_maker_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -609,7 +607,6 @@
 
 <span class="sd">        Args:</span>
 <span class="sd">            policy (TensorDictModule, optional): a policy to be used</span>
-<span class="sd">            observation_spec (TensorSpec, optional): spec of the observations</span>
 <span class="sd">            policy_device (torch.device, optional): the device where the policy should be placed.</span>
 <span class="sd">                Defaults to self.policy_device</span>
 <span class="sd">            env_maker (a callable or a batched env, optional): the env_maker function for this device/policy pair.</span>
@@ -623,7 +620,7 @@
             <span class="n">env</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;env&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
             <span class="n">policy</span> <span class="o">=</span> <span class="n">_make_compatible_policy</span><span class="p">(</span>
                 <span class="n">policy</span><span class="p">,</span>
-                <span class="n">observation_spec</span><span class="p">,</span>
+                <span class="nb">getattr</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="s2">&quot;observation_spec&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
                 <span class="n">env</span><span class="o">=</span><span class="n">env</span><span class="p">,</span>
                 <span class="n">env_maker</span><span class="o">=</span><span class="n">env_maker</span><span class="p">,</span>
                 <span class="n">env_maker_kwargs</span><span class="o">=</span><span class="n">env_maker_kwargs</span><span class="p">,</span>
@@ -1060,10 +1057,10 @@
         <span class="n">policy_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Callable</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">frames_per_batch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">total_frames</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
-        <span class="n">device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">storing_device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">policy_device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">env_device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">storing_device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">policy_device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">env_device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">create_env_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">max_frames_per_traj</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">init_random_frames</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -1222,9 +1219,13 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">reset_when_done</span> <span class="o">=</span> <span class="n">reset_when_done</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">n_env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">batch_size</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
 
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="s2">&quot;register_collector&quot;</span><span class="p">):</span>
+            <span class="n">policy</span><span class="o">.</span><span class="n">register_collector</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="p">,</span> <span class="s2">&quot;register_collector&quot;</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">register_collector</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+
         <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_weights_fn</span><span class="p">,)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_policy_and_device</span><span class="p">(</span>
             <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
-            <span class="n">observation_spec</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">observation_spec</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">policy_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span>
@@ -1693,7 +1694,8 @@
                     <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">tensordict_out</span><span class="p">)</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
                         <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-                            <span class="sa">f</span><span class="s2">&quot;Collector: Added </span><span class="si">{</span><span class="n">tensordict_out</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span><span class="si">}</span><span class="s2"> frames to replay buffer. Yielding.&quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;Collector: Added </span><span class="si">{</span><span class="n">tensordict_out</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span><span class="si">}</span><span class="s2"> frames to replay buffer. &quot;</span>
+                            <span class="s2">&quot;Buffer write count: </span><span class="si">{self.replay_buffer.write_count}</span><span class="s2">. Yielding.&quot;</span>
                         <span class="p">)</span>
                     <span class="k">yield</span>
                 <span class="k">else</span><span class="p">:</span>
@@ -1778,7 +1780,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Replay buffer must be defined for execution.&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_thread&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_running</span><span class="p">():</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_stop</span> <span class="o">=</span> <span class="kc">False</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_run_iterator</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="o">.</span><span class="n">daemon</span> <span class="o">=</span> <span class="p">(</span>
@@ -1790,6 +1792,9 @@
         <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">:</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stop</span><span class="p">:</span>
                 <span class="k">return</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_running</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_thread&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="o">.</span><span class="n">is_alive</span><span class="p">()</span>
 
 <div class="viewcode-block" id="SyncDataCollector.async_shutdown"><a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.SyncDataCollector.html#torchrl.collectors.SyncDataCollector.async_shutdown">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">async_shutdown</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">close_env</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>

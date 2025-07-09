@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:00.000** total execution time for 20 files **from all galleries**:
+**00:00.000** total execution time for 21 files **from all galleries**:
 
 .. container::
 
@@ -66,6 +66,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_tutorials_llm_browser.py` (``reference/generated/tutorials/llm_browser.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_tutorials_llm_wrappers.py` (``reference/generated/tutorials/llm_wrappers.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_tutorials_multi_task.py` (``reference/generated/tutorials/multi_task.py``)

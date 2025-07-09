@@ -9,7 +9,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torchrl.data.llm.chat &mdash; torchrl main documentation</title>
+  <title>torchrl.data.llm.history &mdash; torchrl main documentation</title>
   
 
   
@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -385,7 +385,7 @@
         
           <li><a href="../../../index.html">Module code</a> &gt;</li>
         
-      <li>torchrl.data.llm.chat</li>
+      <li>torchrl.data.llm.history</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
@@ -419,7 +419,7 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <h1>Source code for torchrl.data.llm.chat</h1><div class="highlight"><pre>
+  <h1>Source code for torchrl.data.llm.history</h1><div class="highlight"><pre>
 <span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
 <span class="c1">#</span>
 <span class="c1"># This source code is licensed under the MIT license found in the</span>
@@ -429,7 +429,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Literal</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">TYPE_CHECKING</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 
@@ -443,7 +443,11 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_maybe_correct_neg_dim</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
 
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">transformers</span>
 
+
+<span class="c1"># Global storage for custom templates and their metadata</span>
 <span class="n">_CHAT_TEMPLATES</span> <span class="o">=</span> <span class="p">{</span>
     <span class="s2">&quot;chatml_format&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;&quot;{</span><span class="si">% f</span><span class="s2">or message in messages %}</span>
 <span class="s2">    {</span><span class="si">%- i</span><span class="s2">f message[&#39;role&#39;] == &#39;assistant&#39; %}</span>
@@ -462,7 +466,7 @@
 <span class="s2">    {</span><span class="si">%- i</span><span class="s2">f messages[0][&#39;role&#39;] == &#39;system&#39; %}</span>
 <span class="s2">        {{- messages[0][&#39;content&#39;] }}</span>
 <span class="s2">    {</span><span class="si">%- e</span><span class="s2">lse %}</span>
-<span class="s2">        {{- &#39;You are Qwen, created by Alibaba Cloud. You are a helpful assistant.&#39; }}</span>
+<span class="s2">        {{- &#39;You are a helpful assistant.&#39; }}</span>
 <span class="s2">    {</span><span class="si">%- e</span><span class="s2">ndif %}</span>
 <span class="s2">    {{- &quot;</span><span class="se">\\</span><span class="s2">n</span><span class="se">\\</span><span class="s2">n# Tools</span><span class="se">\\</span><span class="s2">n</span><span class="se">\\</span><span class="s2">nYou may call one or more functions to assist with the user query.</span><span class="se">\\</span><span class="s2">n</span><span class="se">\\</span><span class="s2">nYou are provided with function signatures within &lt;tools&gt;&lt;/tools&gt; XML tags:</span><span class="se">\\</span><span class="s2">n&lt;tools&gt;&quot; }}</span>
 <span class="s2">    {</span><span class="si">%- f</span><span class="s2">or tool in tools %}</span>
@@ -474,7 +478,7 @@
 <span class="s2">    {</span><span class="si">%- i</span><span class="s2">f messages[0][&#39;role&#39;] == &#39;system&#39; %}</span>
 <span class="s2">        {{- &#39;&lt;|im_start|&gt;system</span><span class="se">\\</span><span class="s2">n&#39; + messages[0][&#39;content&#39;] + &#39;&lt;|im_end|&gt;</span><span class="se">\\</span><span class="s2">n&#39; }}</span>
 <span class="s2">    {</span><span class="si">%- e</span><span class="s2">lse %}</span>
-<span class="s2">        {{- &#39;&lt;|im_start|&gt;system</span><span class="se">\\</span><span class="s2">nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.&lt;|im_end|&gt;</span><span class="se">\\</span><span class="s2">n&#39; }}</span>
+<span class="s2">        {{- &#39;&lt;|im_start|&gt;system</span><span class="se">\\</span><span class="s2">nYou are a helpful assistant.&lt;|im_end|&gt;</span><span class="se">\\</span><span class="s2">n&#39; }}</span>
 <span class="s2">    {</span><span class="si">%- e</span><span class="s2">ndif %}</span>
 <span class="s2">{</span><span class="si">%- e</span><span class="s2">ndif %}</span>
 <span class="s2">{</span><span class="si">%- f</span><span class="s2">or message in messages %}</span>
@@ -514,7 +518,175 @@
 <span class="s2">    {</span><span class="si">% g</span><span class="s2">eneration %}{{- &#39;&lt;|im_start|&gt;assistant</span><span class="se">\\</span><span class="s2">n&#39; }}{</span><span class="si">% e</span><span class="s2">ndgeneration %}</span>
 <span class="s2">{</span><span class="si">%- e</span><span class="s2">ndif %}</span>
 <span class="s2">&quot;&quot;&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;dialogpt&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;&quot;{</span><span class="si">% f</span><span class="s2">or message in messages %}{</span><span class="si">% i</span><span class="s2">f message[&#39;role&#39;] == &#39;assistant&#39; %}{</span><span class="si">% g</span><span class="s2">eneration %}{{ message[&#39;content&#39;] }}{</span><span class="si">% e</span><span class="s2">ndgeneration %}{{ eos_token }}{</span><span class="si">% e</span><span class="s2">lif message[&#39;role&#39;] == &#39;user&#39; %}{{ message[&#39;content&#39;] }}{{ eos_token }}{</span><span class="si">% e</span><span class="s2">ndif %}{</span><span class="si">% e</span><span class="s2">ndfor %}{</span><span class="si">% i</span><span class="s2">f add_generation_prompt %}{</span><span class="si">% g</span><span class="s2">eneration %}{{ &#39; &#39; }}{</span><span class="si">% e</span><span class="s2">ndgeneration %}{</span><span class="si">% e</span><span class="s2">ndif %}&quot;&quot;&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;falcon&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;&quot;{</span><span class="si">% f</span><span class="s2">or message in messages %}{</span><span class="si">% i</span><span class="s2">f message[&#39;role&#39;] == &#39;assistant&#39; %}{</span><span class="si">% g</span><span class="s2">eneration %}{{ &#39;Assistant: &#39; + message[&#39;content&#39;] }}{</span><span class="si">% e</span><span class="s2">ndgeneration %}</span><span class="se">\n\n</span><span class="s2">{</span><span class="si">% e</span><span class="s2">lif message[&#39;role&#39;] == &#39;user&#39; %}{{ &#39;User: &#39; + message[&#39;content&#39;] }}</span><span class="se">\n\n</span><span class="s2">{</span><span class="si">% e</span><span class="s2">lif message[&#39;role&#39;] == &#39;system&#39; %}{{ message[&#39;content&#39;] }}</span><span class="se">\n\n</span><span class="s2">{</span><span class="si">% e</span><span class="s2">ndif %}{</span><span class="si">% e</span><span class="s2">ndfor %}{</span><span class="si">% i</span><span class="s2">f add_generation_prompt %}{</span><span class="si">% g</span><span class="s2">eneration %}{{ &#39;Assistant: &#39; }}{</span><span class="si">% e</span><span class="s2">ndgeneration %}{</span><span class="si">% e</span><span class="s2">ndif %}&quot;&quot;&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;deepseek&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;&quot;{</span><span class="si">% i</span><span class="s2">f not add_generation_prompt is defined %}{</span><span class="si">% s</span><span class="s2">et add_generation_prompt = false %}{</span><span class="si">% e</span><span class="s2">ndif %}{{ bos_token }}{</span><span class="si">% f</span><span class="s2">or message in messages %}{</span><span class="si">% i</span><span class="s2">f message[&#39;role&#39;] == &#39;user&#39; %}{{ &#39;User: &#39; + message[&#39;content&#39;] + &#39;</span><span class="se">\n\n</span><span class="s2">&#39; }}{</span><span class="si">% e</span><span class="s2">lif message[&#39;role&#39;] == &#39;assistant&#39; %}{</span><span class="si">% g</span><span class="s2">eneration %}{{ &#39;Assistant: &#39; + message[&#39;content&#39;] + eos_token }}{</span><span class="si">% e</span><span class="s2">ndgeneration %}{</span><span class="si">% e</span><span class="s2">lif message[&#39;role&#39;] == &#39;system&#39; %}{{ message[&#39;content&#39;] + &#39;</span><span class="se">\n\n</span><span class="s2">&#39; }}{</span><span class="si">% e</span><span class="s2">ndif %}{</span><span class="si">% e</span><span class="s2">ndfor %}{</span><span class="si">% i</span><span class="s2">f add_generation_prompt %}{</span><span class="si">% g</span><span class="s2">eneration %}{{ &#39;Assistant:&#39; }}{</span><span class="si">% e</span><span class="s2">ndgeneration %}{</span><span class="si">% e</span><span class="s2">ndif %}&quot;&quot;&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;llama&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;&quot;{{- bos_token }}</span>
+<span class="s2">{</span><span class="si">%- i</span><span class="s2">f messages[0][&#39;role&#39;] == &#39;system&#39; %}</span>
+<span class="s2">    {</span><span class="si">%- s</span><span class="s2">et system_message = messages[0][&#39;content&#39;]|trim %}</span>
+<span class="s2">    {</span><span class="si">%- s</span><span class="s2">et messages = messages[1:] %}</span>
+<span class="s2">{</span><span class="si">%- e</span><span class="s2">lse %}</span>
+<span class="s2">    {</span><span class="si">%- s</span><span class="s2">et system_message = &quot;&quot; %}</span>
+<span class="s2">{</span><span class="si">%- e</span><span class="s2">ndif %}</span>
+<span class="s2">{</span><span class="si">%- i</span><span class="s2">f system_message %}</span>
+<span class="s2">    {{- &quot;&lt;|header_start|&gt;system&lt;|header_end|&gt;</span><span class="se">\n\n</span><span class="s2">&quot; }}</span>
+<span class="s2">    {{- system_message }}</span>
+<span class="s2">    {{- &quot;&lt;|eot|&gt;&quot; }}</span>
+<span class="s2">{</span><span class="si">%- e</span><span class="s2">ndif %}</span>
+<span class="s2">{</span><span class="si">%- f</span><span class="s2">or message in messages %}</span>
+<span class="s2">    {</span><span class="si">%- i</span><span class="s2">f message[&#39;role&#39;] == &#39;assistant&#39; %}</span>
+<span class="s2">    {</span><span class="si">% g</span><span class="s2">eneration %}{{- &#39;&lt;|header_start|&gt;&#39; + message[&#39;role&#39;] + &#39;&lt;|header_end|&gt;</span><span class="se">\n\n</span><span class="s2">&#39; }}</span>
+<span class="s2">        {</span><span class="si">%- i</span><span class="s2">f message[&#39;content&#39;] is string %}</span>
+<span class="s2">            {{- message[&#39;content&#39;] }}</span>
+<span class="s2">        {</span><span class="si">%- e</span><span class="s2">lse %}</span>
+<span class="s2">            {</span><span class="si">%- f</span><span class="s2">or content in message[&#39;content&#39;] %}</span>
+<span class="s2">                {</span><span class="si">%- i</span><span class="s2">f content[&#39;type&#39;] == &#39;text&#39; %}</span>
+<span class="s2">                    {{- content[&#39;text&#39;] | trim }}</span>
+<span class="s2">                {</span><span class="si">%- e</span><span class="s2">ndif %}</span>
+<span class="s2">            {</span><span class="si">%- e</span><span class="s2">ndfor %}</span>
+<span class="s2">        {</span><span class="si">%- e</span><span class="s2">ndif %}</span>
+<span class="s2">    {{- &quot;&lt;|eot|&gt;&quot; }}{</span><span class="si">% e</span><span class="s2">ndgeneration %}</span>
+<span class="s2">    {</span><span class="si">%- e</span><span class="s2">lse %}</span>
+<span class="s2">    {{- &#39;&lt;|header_start|&gt;&#39; + message[&#39;role&#39;] + &#39;&lt;|header_end|&gt;</span><span class="se">\n\n</span><span class="s2">&#39; }}</span>
+<span class="s2">        {</span><span class="si">%- i</span><span class="s2">f message[&#39;content&#39;] is string %}</span>
+<span class="s2">            {{- message[&#39;content&#39;] }}</span>
+<span class="s2">        {</span><span class="si">%- e</span><span class="s2">lse %}</span>
+<span class="s2">            {</span><span class="si">%- f</span><span class="s2">or content in message[&#39;content&#39;] %}</span>
+<span class="s2">                {</span><span class="si">%- i</span><span class="s2">f content[&#39;type&#39;] == &#39;text&#39; %}</span>
+<span class="s2">                    {{- content[&#39;text&#39;] | trim }}</span>
+<span class="s2">                {</span><span class="si">%- e</span><span class="s2">ndif %}</span>
+<span class="s2">            {</span><span class="si">%- e</span><span class="s2">ndfor %}</span>
+<span class="s2">        {</span><span class="si">%- e</span><span class="s2">ndif %}</span>
+<span class="s2">    {{- &quot;&lt;|eot|&gt;&quot; }}</span>
+<span class="s2">    {</span><span class="si">%- e</span><span class="s2">ndif %}</span>
+<span class="s2">{</span><span class="si">%- e</span><span class="s2">ndfor %}</span>
+<span class="s2">{</span><span class="si">%- i</span><span class="s2">f add_generation_prompt %}</span>
+<span class="s2">    {</span><span class="si">% g</span><span class="s2">eneration %}{{- &#39;&lt;|header_start|&gt;assistant&lt;|header_end|&gt;</span><span class="se">\n\n</span><span class="s2">&#39; }}{</span><span class="si">% e</span><span class="s2">ndgeneration %}</span>
+<span class="s2">{</span><span class="si">%- e</span><span class="s2">ndif %}&quot;&quot;&quot;</span><span class="p">,</span>
 <span class="p">}</span>
+
+<span class="c1"># Global storage for custom template metadata</span>
+<span class="n">_CUSTOM_INVERSE_PARSERS</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="n">_CUSTOM_MODEL_FAMILY_KEYWORDS</span> <span class="o">=</span> <span class="p">{}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">add_chat_template</span><span class="p">(</span>
+    <span class="n">template_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">template</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">inverse_parser</span><span class="p">:</span> <span class="nb">callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">model_family_keywords</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Add a custom chat template to the global template dictionary.</span>
+
+<span class="sd">    This function allows you to add custom chat templates for new model families</span>
+<span class="sd">    that support assistant token masking via the `{% generation %}` keyword.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        template_name (str): The name of the template (e.g., &quot;llama&quot;, &quot;mistral&quot;).</span>
+<span class="sd">            This name will be used in the `chat_template_name` parameter of</span>
+<span class="sd">            `History.apply_chat_template()` and `History.from_text()`.</span>
+<span class="sd">        template (str): The Jinja2 template string. Must include `{% generation %}`</span>
+<span class="sd">            blocks around assistant message content to enable token masking.</span>
+<span class="sd">        inverse_parser (callable, optional): A function that parses formatted text back</span>
+<span class="sd">            into a History object. Should have signature `(text: str) -&gt; History`.</span>
+<span class="sd">            If None, a basic parser will be used.</span>
+<span class="sd">        model_family_keywords (list[str], optional): Keywords to detect this model family</span>
+<span class="sd">            in the auto-detection logic. For example, [&quot;llama&quot;, &quot;meta-llama&quot;] for Llama models.</span>
+<span class="sd">            If provided, the template will be automatically selected for models containing</span>
+<span class="sd">            these keywords in their name.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data.llm.chat import add_chat_template, History</span>
+<span class="sd">        &gt;&gt;&gt; from transformers import AutoTokenizer</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Add a custom template for Llama models</span>
+<span class="sd">        &gt;&gt;&gt; llama_template = &#39;&#39;&#39;</span>
+<span class="sd">        ... {% for message in messages %}</span>
+<span class="sd">        ... {%- if message[&#39;role&#39;] == &#39;user&#39; %}</span>
+<span class="sd">        ... {{ &#39;&lt;s&gt;[INST] &#39; + message[&#39;content&#39;] + &#39; [/INST]&#39; }}</span>
+<span class="sd">        ... {%- elif message[&#39;role&#39;] == &#39;assistant&#39; %}</span>
+<span class="sd">        ... {% generation %}{{ message[&#39;content&#39;] + &#39;&lt;/s&gt;&#39; }}{% endgeneration %}</span>
+<span class="sd">        ... {%- endif %}</span>
+<span class="sd">        ... {% endfor %}</span>
+<span class="sd">        ... {%- if add_generation_prompt %}</span>
+<span class="sd">        ... {% generation %}{{ &#39; &#39; }}{% endgeneration %}</span>
+<span class="sd">        ... {%- endif %}</span>
+<span class="sd">        ... &#39;&#39;&#39;</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; def parse_llama_text(text: str) -&gt; History:</span>
+<span class="sd">        ...     # Custom parser for Llama format</span>
+<span class="sd">        ...     import re</span>
+<span class="sd">        ...     pattern = r&#39;&lt;s&gt;\[INST\]\s*(.*?)\s*\[/INST\]\s*(.*?)&lt;/s&gt;&#39;</span>
+<span class="sd">        ...     matches = re.findall(pattern, text, re.DOTALL)</span>
+<span class="sd">        ...     messages = []</span>
+<span class="sd">        ...     for user_content, assistant_content in matches:</span>
+<span class="sd">        ...         messages.append(History(role=&quot;user&quot;, content=user_content.strip()))</span>
+<span class="sd">        ...         messages.append(History(role=&quot;assistant&quot;, content=assistant_content.strip()))</span>
+<span class="sd">        ...     return lazy_stack(messages)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Add the template with auto-detection</span>
+<span class="sd">        &gt;&gt;&gt; add_chat_template(</span>
+<span class="sd">        ...     template_name=&quot;llama&quot;,</span>
+<span class="sd">        ...     template=llama_template,</span>
+<span class="sd">        ...     inverse_parser=parse_llama_text,</span>
+<span class="sd">        ...     model_family_keywords=[&quot;llama&quot;, &quot;meta-llama&quot;]</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Now you can use it with auto-detection</span>
+<span class="sd">        &gt;&gt;&gt; tokenizer = AutoTokenizer.from_pretrained(&quot;meta-llama/Llama-2-7b-chat-hf&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; history = History.from_chats([[</span>
+<span class="sd">        ...     {&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;Hello&quot;},</span>
+<span class="sd">        ...     {&quot;role&quot;: &quot;assistant&quot;, &quot;content&quot;: &quot;Hi there!&quot;}</span>
+<span class="sd">        ... ]])</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Auto-detection will use the llama template</span>
+<span class="sd">        &gt;&gt;&gt; result = history.apply_chat_template(</span>
+<span class="sd">        ...     tokenizer=tokenizer,</span>
+<span class="sd">        ...     add_generation_prompt=False,</span>
+<span class="sd">        ...     return_dict=True,</span>
+<span class="sd">        ...     return_assistant_tokens_mask=True,</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Or use it explicitly</span>
+<span class="sd">        &gt;&gt;&gt; result = history.apply_chat_template(</span>
+<span class="sd">        ...     tokenizer=tokenizer,</span>
+<span class="sd">        ...     chat_template_name=&quot;llama&quot;,</span>
+<span class="sd">        ...     add_generation_prompt=False,</span>
+<span class="sd">        ...     return_dict=True,</span>
+<span class="sd">        ...     return_assistant_tokens_mask=True,</span>
+<span class="sd">        ... )</span>
+
+<span class="sd">    .. note:</span>
+<span class="sd">        - The template must include `{% generation %}` blocks around assistant message</span>
+<span class="sd">          content to enable assistant token masking.</span>
+<span class="sd">        - The inverse parser should handle the specific format of your template.</span>
+<span class="sd">        - Model family keywords are case-insensitive and matched against the tokenizer&#39;s</span>
+<span class="sd">          `name_or_path` attribute.</span>
+<span class="sd">        - Templates are stored globally and persist for the duration of the Python session.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">global</span> <span class="n">_CHAT_TEMPLATES</span><span class="p">,</span> <span class="n">_CUSTOM_INVERSE_PARSERS</span><span class="p">,</span> <span class="n">_CUSTOM_MODEL_FAMILY_KEYWORDS</span>
+
+    <span class="c1"># Validate template contains generation blocks</span>
+    <span class="k">if</span> <span class="s2">&quot;{</span><span class="si">% g</span><span class="s2">eneration %}&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">template</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Template &#39;</span><span class="si">{</span><span class="n">template_name</span><span class="si">}</span><span class="s2">&#39; must include &#39;</span><span class="se">{{</span><span class="s2">% generation %</span><span class="se">}}</span><span class="s2">&#39; blocks &quot;</span>
+            <span class="s2">&quot;around assistant message content to enable token masking.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Add template to dictionary</span>
+    <span class="n">_CHAT_TEMPLATES</span><span class="p">[</span><span class="n">template_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">template</span>
+
+    <span class="c1"># Store inverse parser if provided</span>
+    <span class="k">if</span> <span class="n">inverse_parser</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">_CUSTOM_INVERSE_PARSERS</span><span class="p">[</span><span class="n">template_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">inverse_parser</span>
+
+    <span class="c1"># Store model family keywords if provided</span>
+    <span class="k">if</span> <span class="n">model_family_keywords</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">_CUSTOM_MODEL_FAMILY_KEYWORDS</span><span class="p">[</span><span class="n">template_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">model_family_keywords</span>
+
+    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;Added custom chat template &#39;</span><span class="si">{</span><span class="n">template_name</span><span class="si">}</span><span class="s2">&#39; with assistant token masking support&quot;</span>
+    <span class="p">)</span>
 
 
 <span class="c1"># We need the &#39;shadow&#39; flag to avoid having tensordict complaining about &#39;type&#39;/&#39;size&#39; etc. fields</span>
@@ -619,11 +791,92 @@
 <span class="sd">    - Efficient methods to append, extend, and reshape history elements, enabling dynamic construction of conversation</span>
 <span class="sd">      trajectories, especially useful in reinforcement learning environments.</span>
 <span class="sd">    - Interoperability with the `transformers` API, allowing for easy tokenization and preparation of input data.</span>
+<span class="sd">    - **Assistant token masking support** across multiple model families for reinforcement learning applications.</span>
+
+<span class="sd">    **Recent Changes:**</span>
+<span class="sd">    - **ChatHistory Integration**: History objects are now used within :class:`~torchrl.modules.llm.policies.ChatHistory`</span>
+<span class="sd">      containers for structured conversation management in LLM environments.</span>
+<span class="sd">    - **Modular Wrapper Support**: Both vLLMWrapper and TransformersWrapper now use History objects when `input_mode=&quot;history&quot;`</span>
+<span class="sd">      is specified, providing consistent conversation state management.</span>
+<span class="sd">    - **Environment Integration**: ChatEnv and related environments use History objects for state management and conversation tracking.</span>
 
 <span class="sd">    .. note:: The `&quot;&lt;none&gt;&quot;` role is used to indicate that the element is a placeholder,</span>
 <span class="sd">        for example when the tool call was not executed but a stack requires a certain number of elements</span>
 <span class="sd">        per batch to have congruent shapes. The :meth:`~torchrl.data.llm.chat.History.apply_chat_template`</span>
 <span class="sd">        method will remove the `&lt;none&gt;` role from the history.</span>
+
+<span class="sd">    **Assistant Token Masking Support:**</span>
+
+<span class="sd">    The class supports assistant token masking across multiple model families, allowing you to identify which tokens</span>
+<span class="sd">    in a conversation were generated by the assistant. This is crucial for reinforcement learning applications.</span>
+
+<span class="sd">    **Supported Model Families:**</span>
+
+<span class="sd">    - **Qwen family** (e.g., `Qwen/Qwen2.5-0.5B`): Custom template with full tool calling support</span>
+<span class="sd">    - **DialoGPT family** (e.g., `microsoft/DialoGPT-medium`): Custom template for conversation format</span>
+<span class="sd">    - **Falcon family** (e.g., `tiiuae/falcon-7b-instruct`): Custom template for instruction format</span>
+<span class="sd">    - **DeepSeek family** (e.g., `deepseek-ai/deepseek-coder-6.7b-base`): Custom template with native format</span>
+<span class="sd">    - **Other models** (OPT, GPT, MPT, BLOOM, Pythia, Phi, etc.): Default `chatml_format` template</span>
+
+<span class="sd">    **Example with Assistant Token Masking:**</span>
+
+<span class="sd">    .. code-block:: python</span>
+
+<span class="sd">        &gt;&gt;&gt; from torchrl.data.llm.chat import History</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.modules.llm.policies import ChatHistory</span>
+<span class="sd">        &gt;&gt;&gt; from transformers import AutoTokenizer</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Create a conversation history</span>
+<span class="sd">        &gt;&gt;&gt; history = History.from_chats([[</span>
+<span class="sd">        ...     {&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;Hello&quot;},</span>
+<span class="sd">        ...     {&quot;role&quot;: &quot;assistant&quot;, &quot;content&quot;: &quot;Hi there!&quot;},</span>
+<span class="sd">        ...     {&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;How are you?&quot;},</span>
+<span class="sd">        ...     {&quot;role&quot;: &quot;assistant&quot;, &quot;content&quot;: &quot;I&#39;m doing well, thanks!&quot;}</span>
+<span class="sd">        ... ]])</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Create ChatHistory container for LLM wrapper</span>
+<span class="sd">        &gt;&gt;&gt; chat_history = ChatHistory(prompt=history)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Load any supported tokenizer</span>
+<span class="sd">        &gt;&gt;&gt; tokenizer = AutoTokenizer.from_pretrained(&quot;Qwen/Qwen2.5-0.5B&quot;)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Apply chat template with assistant token masking</span>
+<span class="sd">        &gt;&gt;&gt; result = history.apply_chat_template(</span>
+<span class="sd">        ...     tokenizer=tokenizer,</span>
+<span class="sd">        ...     add_generation_prompt=False,</span>
+<span class="sd">        ...     return_dict=True,</span>
+<span class="sd">        ...     return_assistant_tokens_mask=True,</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # The result contains an assistant_masks tensor</span>
+<span class="sd">        &gt;&gt;&gt; assistant_masks = result[&quot;assistant_masks&quot;]</span>
+<span class="sd">        &gt;&gt;&gt; print(f&quot;Assistant tokens: {assistant_masks.sum().item()}&quot;)</span>
+
+<span class="sd">    **Integration with LLM Wrappers:**</span>
+
+<span class="sd">    History objects work seamlessly with the new modular wrapper design:</span>
+
+<span class="sd">    .. code-block:: python</span>
+
+<span class="sd">        &gt;&gt;&gt; from torchrl.modules.llm import TransformersWrapper</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.modules.llm.policies import ChatHistory</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Create wrapper with history input mode</span>
+<span class="sd">        &gt;&gt;&gt; wrapper = TransformersWrapper(</span>
+<span class="sd">        ...     model, tokenizer=tokenizer,</span>
+<span class="sd">        ...     input_mode=&quot;history&quot;,</span>
+<span class="sd">        ...     generate=True,</span>
+<span class="sd">        ...     return_log_probs=True</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Use History with ChatHistory container</span>
+<span class="sd">        &gt;&gt;&gt; history = History.from_chats([[</span>
+<span class="sd">        ...     {&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;Hello&quot;},</span>
+<span class="sd">        ...     {&quot;role&quot;: &quot;assistant&quot;, &quot;content&quot;: &quot;Hi there!&quot;}</span>
+<span class="sd">        ... ]])</span>
+<span class="sd">        &gt;&gt;&gt; chat_history = ChatHistory(prompt=history)</span>
+<span class="sd">        &gt;&gt;&gt; result = wrapper(TensorDict(history=chat_history, batch_size=(1,)))</span>
+<span class="sd">        &gt;&gt;&gt; print(result[&quot;history&quot;].response)  # New response from LLM</span>
 
 <span class="sd">    Attributes:</span>
 <span class="sd">        role (str): The role of the message sender.</span>
@@ -678,6 +931,10 @@
 
 <span class="sd">        &lt;|im_start|&gt;assistant</span>
 
+<span class="sd">    .. seealso::</span>
+<span class="sd">        :class:`~torchrl.modules.llm.policies.ChatHistory`: Container for managing conversation data in LLM environments.</span>
+<span class="sd">        :class:`~torchrl.modules.llm.policies.Text`: Container for text data.</span>
+<span class="sd">        :class:`~torchrl.modules.llm.policies.Tokens`: Container for token data.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">role</span><span class="p">:</span> <span class="nb">str</span>
@@ -699,7 +956,7 @@
         <span class="n">tokenizer</span><span class="p">:</span> <span class="n">transformers</span><span class="o">.</span><span class="n">AutoTokenizer</span> <span class="o">|</span> <span class="n">transformers</span><span class="o">.</span><span class="n">AutoProcessor</span><span class="p">,</span>  <span class="c1"># noqa</span>
         <span class="n">add_generation_prompt</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">chat_template</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">chat_template_name</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;chatml_format&quot;</span><span class="p">,</span> <span class="s2">&quot;qwen&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">chat_template_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">continue_final_message</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">tokenize</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">padding</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
@@ -708,15 +965,16 @@
         <span class="n">return_dict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">return_assistant_tokens_mask</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-    <span class="p">):</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="n">TensorDict</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Applies a chat template to the history.</span>
 
 <span class="sd">        Keyword Args:</span>
 <span class="sd">            tokenizer (transformers.PreTrainedTokenizer | transformers.AutoProcessor): The tokenizer to use.</span>
 <span class="sd">            add_generation_prompt (bool, optional): Whether to add a generation prompt (e.g. `&quot;&lt;|im_start|&gt;assistant&quot;`). Defaults to `True`.</span>
 <span class="sd">            chat_template (str, optional): The chat template to use. Defaults to the tokenizer&#39;s default template.</span>
-<span class="sd">            chat_template_name (Literal[&quot;chatml_format&quot;, &quot;qwen&quot;], optional): The name of the chat template to use.</span>
-<span class="sd">                Prevalent over `tokenizer.chat_template`. Defaults to `None`.</span>
+<span class="sd">            chat_template_name (str, optional): The name of the chat template to use.</span>
+<span class="sd">                Prevalent over `tokenizer.chat_template`. If `None`, the method will automatically detect the model family and use the appropriate template.</span>
+<span class="sd">                Defaults to `None`.</span>
 <span class="sd">            continue_final_message (bool, optional): Whether to continue the final message. Defaults to `False`.</span>
 <span class="sd">            tokenize (bool, optional): Whether to tokenize the output. Defaults to `False`.</span>
 <span class="sd">            padding (bool | str, optional): The padding strategy to use. Defaults to `False`.</span>
@@ -730,9 +988,14 @@
 <span class="sd">                This functionality is only available for chat templates that support it via the `{% generation %}` keyword.</span>
 <span class="sd">                Defaults to `False`.</span>
 
-<span class="sd">                .. note:: By default, the `&quot;qwen&quot;` chat template does not support this functionality. A modified version of the template</span>
-<span class="sd">                    can be used by setting `chat_template_name=&quot;qwen&quot;`, which will override the default template from the tokenizer.</span>
-<span class="sd">                    For other tokenizers, similar edits can be made to the template and passed to the method via the `chat_template` argument.</span>
+<span class="sd">                .. note:: Assistant token masking is supported across multiple model families:</span>
+<span class="sd">                    - **Qwen family**: Uses custom template with full tool calling support</span>
+<span class="sd">                    - **DialoGPT family**: Uses custom template for conversation format</span>
+<span class="sd">                    - **Falcon family**: Uses custom template for instruction format</span>
+<span class="sd">                    - **DeepSeek family**: Uses custom template with native format</span>
+<span class="sd">                    - **Other models**: Use the default `chatml_format` template</span>
+
+<span class="sd">                    The method automatically detects the model family and selects the appropriate template.</span>
 
 <span class="sd">            **kwargs: Additional keyword arguments to pass to the tokenizer `apply_chat_template` method.</span>
 
@@ -747,13 +1010,54 @@
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                     <span class="s2">&quot;You must specify a tokenizer to use when chat_template is not specified.&quot;</span>
                 <span class="p">)</span>
-            <span class="k">elif</span> <span class="s2">&quot;qwen&quot;</span> <span class="ow">in</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">tokenizer</span><span class="p">,</span> <span class="s2">&quot;name_or_path&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span>
-                <span class="c1"># We prefer our implementation of the Qwen template,</span>
-                <span class="c1">#  since it accounts for the assistant&#39;s masking.</span>
-                <span class="n">chat_template</span> <span class="o">=</span> <span class="n">_CHAT_TEMPLATES</span><span class="p">[</span><span class="s2">&quot;qwen&quot;</span><span class="p">]</span>
-                <span class="n">chat_template_name</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">chat_template</span> <span class="o">=</span> <span class="n">tokenizer</span><span class="o">.</span><span class="n">chat_template</span>
+                <span class="c1"># Auto-detect model family and use appropriate template</span>
+                <span class="n">model_name</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">tokenizer</span><span class="p">,</span> <span class="s2">&quot;name_or_path&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+
+                <span class="c1"># First check for custom model family keywords</span>
+                <span class="n">custom_template_found</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="k">for</span> <span class="n">template_name</span><span class="p">,</span> <span class="n">keywords</span> <span class="ow">in</span> <span class="n">_CUSTOM_MODEL_FAMILY_KEYWORDS</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">keyword</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span> <span class="n">model_name</span> <span class="k">for</span> <span class="n">keyword</span> <span class="ow">in</span> <span class="n">keywords</span><span class="p">):</span>
+                        <span class="n">chat_template</span> <span class="o">=</span> <span class="n">_CHAT_TEMPLATES</span><span class="p">[</span><span class="n">template_name</span><span class="p">]</span>
+                        <span class="n">chat_template_name</span> <span class="o">=</span> <span class="kc">None</span>
+                        <span class="n">custom_template_found</span> <span class="o">=</span> <span class="kc">True</span>
+                        <span class="k">break</span>
+
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">custom_template_found</span><span class="p">:</span>
+                    <span class="c1"># Fall back to built-in model family detection</span>
+                    <span class="k">if</span> <span class="s2">&quot;qwen&quot;</span> <span class="ow">in</span> <span class="n">model_name</span><span class="p">:</span>
+                        <span class="c1"># We prefer our implementation of the Qwen template,</span>
+                        <span class="c1">#  since it accounts for the assistant&#39;s masking.</span>
+                        <span class="n">chat_template</span> <span class="o">=</span> <span class="n">_CHAT_TEMPLATES</span><span class="p">[</span><span class="s2">&quot;qwen&quot;</span><span class="p">]</span>
+                        <span class="n">chat_template_name</span> <span class="o">=</span> <span class="kc">None</span>
+                    <span class="k">elif</span> <span class="s2">&quot;dialogpt&quot;</span> <span class="ow">in</span> <span class="n">model_name</span> <span class="ow">or</span> <span class="s2">&quot;microsoft/dialo&quot;</span> <span class="ow">in</span> <span class="n">model_name</span><span class="p">:</span>
+                        <span class="c1"># DialoGPT family - use our custom template</span>
+                        <span class="n">chat_template</span> <span class="o">=</span> <span class="n">_CHAT_TEMPLATES</span><span class="p">[</span><span class="s2">&quot;dialogpt&quot;</span><span class="p">]</span>
+                        <span class="n">chat_template_name</span> <span class="o">=</span> <span class="kc">None</span>
+                    <span class="k">elif</span> <span class="s2">&quot;falcon&quot;</span> <span class="ow">in</span> <span class="n">model_name</span> <span class="ow">or</span> <span class="s2">&quot;tiiuae/falcon&quot;</span> <span class="ow">in</span> <span class="n">model_name</span><span class="p">:</span>
+                        <span class="c1"># Falcon family - use our custom template</span>
+                        <span class="n">chat_template</span> <span class="o">=</span> <span class="n">_CHAT_TEMPLATES</span><span class="p">[</span><span class="s2">&quot;falcon&quot;</span><span class="p">]</span>
+                        <span class="n">chat_template_name</span> <span class="o">=</span> <span class="kc">None</span>
+                    <span class="k">elif</span> <span class="s2">&quot;deepseek&quot;</span> <span class="ow">in</span> <span class="n">model_name</span><span class="p">:</span>
+                        <span class="c1"># DeepSeek family - use our custom template with generation keyword</span>
+                        <span class="n">chat_template</span> <span class="o">=</span> <span class="n">_CHAT_TEMPLATES</span><span class="p">[</span><span class="s2">&quot;deepseek&quot;</span><span class="p">]</span>
+                        <span class="n">chat_template_name</span> <span class="o">=</span> <span class="kc">None</span>
+                    <span class="k">elif</span> <span class="s2">&quot;llama&quot;</span> <span class="ow">in</span> <span class="n">model_name</span><span class="p">:</span>
+                        <span class="c1"># Llama family - use our custom template</span>
+                        <span class="n">chat_template</span> <span class="o">=</span> <span class="n">_CHAT_TEMPLATES</span><span class="p">[</span><span class="s2">&quot;llama&quot;</span><span class="p">]</span>
+                        <span class="n">chat_template_name</span> <span class="o">=</span> <span class="kc">None</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="c1"># For other models, check if their default template supports generation</span>
+                        <span class="k">if</span> <span class="p">(</span>
+                            <span class="nb">hasattr</span><span class="p">(</span><span class="n">tokenizer</span><span class="p">,</span> <span class="s2">&quot;chat_template&quot;</span><span class="p">)</span>
+                            <span class="ow">and</span> <span class="n">tokenizer</span><span class="o">.</span><span class="n">chat_template</span>
+                            <span class="ow">and</span> <span class="s2">&quot;{</span><span class="si">% g</span><span class="s2">eneration %}&quot;</span> <span class="ow">in</span> <span class="n">tokenizer</span><span class="o">.</span><span class="n">chat_template</span>
+                        <span class="p">):</span>
+                            <span class="c1"># Use the model&#39;s own template if it supports generation</span>
+                            <span class="n">chat_template</span> <span class="o">=</span> <span class="n">tokenizer</span><span class="o">.</span><span class="n">chat_template</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="c1"># Use our default chatml_format template</span>
+                            <span class="n">chat_template</span> <span class="o">=</span> <span class="n">_CHAT_TEMPLATES</span><span class="p">[</span><span class="s2">&quot;chatml_format&quot;</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">chat_template</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">chat_template</span> <span class="o">=</span> <span class="n">_CHAT_TEMPLATES</span><span class="p">[</span><span class="s2">&quot;chatml_format&quot;</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">tokenize</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -824,26 +1128,65 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">from_text</span><span class="p">(</span>
         <span class="bp">cls</span><span class="p">,</span>
         <span class="n">text</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
-        <span class="n">chat_template_name</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;chatml_format&quot;</span><span class="p">,</span> <span class="s2">&quot;qwen&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">chat_template_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="c1"># currently without effect</span>
         <span class="n">chat_template</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">tokenizer</span><span class="p">:</span> <span class="n">transformers</span><span class="o">.</span><span class="n">AutoTokenizer</span>  <span class="c1"># noqa: F821</span>
         <span class="o">|</span> <span class="n">transformers</span><span class="o">.</span><span class="n">AutoProcessor</span>  <span class="c1"># noqa: F821</span>
         <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">History</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">chat_template_name</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">chat_template</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">if</span> <span class="s2">&quot;qwen&quot;</span> <span class="ow">in</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">tokenizer</span><span class="p">,</span> <span class="s2">&quot;name_or_path&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span>
-                <span class="c1"># We can automatically detect the template name from the tokenizer</span>
-                <span class="c1">#  and use the precoded parser.</span>
-                <span class="n">chat_template_name</span> <span class="o">=</span> <span class="s2">&quot;qwen&quot;</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">chat_template_name</span> <span class="o">=</span> <span class="s2">&quot;chatml_format&quot;</span>
-        <span class="k">elif</span> <span class="n">chat_template_name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;chatml_format&quot;</span><span class="p">,):</span>
+        <span class="k">if</span> <span class="n">chat_template_name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">chat_template</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># TODO: find best match given template</span>
+                <span class="k">pass</span>
+
+            <span class="n">model_name</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">tokenizer</span><span class="p">,</span> <span class="s2">&quot;name_or_path&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+            <span class="c1"># First check for custom model family keywords</span>
+            <span class="n">custom_template_found</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">for</span> <span class="n">template_name</span><span class="p">,</span> <span class="n">keywords</span> <span class="ow">in</span> <span class="n">_CUSTOM_MODEL_FAMILY_KEYWORDS</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">keyword</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span> <span class="n">model_name</span> <span class="k">for</span> <span class="n">keyword</span> <span class="ow">in</span> <span class="n">keywords</span><span class="p">):</span>
+                    <span class="n">chat_template_name</span> <span class="o">=</span> <span class="n">template_name</span>
+                    <span class="n">custom_template_found</span> <span class="o">=</span> <span class="kc">True</span>
+                    <span class="k">break</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">custom_template_found</span><span class="p">:</span>
+                <span class="c1"># Fall back to built-in model family detection</span>
+                <span class="k">if</span> <span class="s2">&quot;qwen&quot;</span> <span class="ow">in</span> <span class="n">model_name</span><span class="p">:</span>
+                    <span class="c1"># We can automatically detect the template name from the tokenizer</span>
+                    <span class="c1">#  and use the precoded parser.</span>
+                    <span class="n">chat_template_name</span> <span class="o">=</span> <span class="s2">&quot;qwen&quot;</span>
+                <span class="k">elif</span> <span class="s2">&quot;dialogpt&quot;</span> <span class="ow">in</span> <span class="n">model_name</span> <span class="ow">or</span> <span class="s2">&quot;microsoft/dialo&quot;</span> <span class="ow">in</span> <span class="n">model_name</span><span class="p">:</span>
+                    <span class="n">chat_template_name</span> <span class="o">=</span> <span class="s2">&quot;dialogpt&quot;</span>
+                <span class="k">elif</span> <span class="s2">&quot;falcon&quot;</span> <span class="ow">in</span> <span class="n">model_name</span> <span class="ow">or</span> <span class="s2">&quot;tiiuae/falcon&quot;</span> <span class="ow">in</span> <span class="n">model_name</span><span class="p">:</span>
+                    <span class="n">chat_template_name</span> <span class="o">=</span> <span class="s2">&quot;falcon&quot;</span>
+                <span class="k">elif</span> <span class="s2">&quot;deepseek&quot;</span> <span class="ow">in</span> <span class="n">model_name</span><span class="p">:</span>
+                    <span class="n">chat_template_name</span> <span class="o">=</span> <span class="s2">&quot;deepseek&quot;</span>
+                <span class="k">elif</span> <span class="s2">&quot;llama&quot;</span> <span class="ow">in</span> <span class="n">model_name</span><span class="p">:</span>
+                    <span class="n">chat_template_name</span> <span class="o">=</span> <span class="s2">&quot;llama&quot;</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">chat_template_name</span> <span class="o">=</span> <span class="s2">&quot;chatml_format&quot;</span>
+
+        <span class="c1"># Get the appropriate inverse parser function</span>
+        <span class="k">if</span> <span class="n">chat_template_name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;chatml_format&quot;</span><span class="p">,):</span>
             <span class="n">func</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_inv_chatml</span>
         <span class="k">elif</span> <span class="n">chat_template_name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;qwen&quot;</span><span class="p">,):</span>
             <span class="n">func</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_inv_qwen</span>
+        <span class="k">elif</span> <span class="n">chat_template_name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;dialogpt&quot;</span><span class="p">,):</span>
+            <span class="n">func</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_inv_dialogpt</span>
+        <span class="k">elif</span> <span class="n">chat_template_name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;falcon&quot;</span><span class="p">,):</span>
+            <span class="n">func</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_inv_falcon</span>
+        <span class="k">elif</span> <span class="n">chat_template_name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;deepseek&quot;</span><span class="p">,):</span>
+            <span class="n">func</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_inv_deepseek</span>
+        <span class="k">elif</span> <span class="n">chat_template_name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;llama&quot;</span><span class="p">,):</span>
+            <span class="n">func</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_inv_llama</span>
+        <span class="k">elif</span> <span class="n">chat_template_name</span> <span class="ow">in</span> <span class="n">_CUSTOM_INVERSE_PARSERS</span><span class="p">:</span>
+            <span class="c1"># Use custom inverse parser</span>
+            <span class="n">func</span> <span class="o">=</span> <span class="n">_CUSTOM_INVERSE_PARSERS</span><span class="p">[</span><span class="n">chat_template_name</span><span class="p">]</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
-                <span class="s2">&quot;chat_template_name must be one of (&#39;chatml_format&#39;, &#39;qwen&#39;)&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;chat_template_name &#39;</span><span class="si">{</span><span class="n">chat_template_name</span><span class="si">}</span><span class="s2">&#39; is not supported. &quot;</span>
+                <span class="s2">&quot;Supported templates: &#39;chatml_format&#39;, &#39;qwen&#39;, &#39;dialogpt&#39;, &#39;falcon&#39;, &#39;deepseek&#39;. &quot;</span>
+                <span class="s2">&quot;Use add_chat_template() to add custom templates.&quot;</span>
             <span class="p">)</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
             <span class="n">list_of_histories</span> <span class="o">=</span> <span class="p">[</span><span class="n">func</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">text</span><span class="p">]</span>
@@ -1019,6 +1362,218 @@
             <span class="p">)</span>
 
         <span class="k">return</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="n">parsed_messages</span><span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_inv_dialogpt</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">History</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Inverts a DialogPT string into a History object.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            text (str): The DialogPT string to invert.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            History: The inverted History object.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Inverting DialogPT:</span><span class="se">\n</span><span class="si">{</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># DialogPT format is simple: alternating user/assistant messages</span>
+        <span class="c1"># Split by lines and parse</span>
+        <span class="n">lines</span> <span class="o">=</span> <span class="n">text</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">parsed_messages</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">lines</span><span class="p">:</span>
+            <span class="n">line</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">line</span><span class="p">:</span>
+                <span class="k">continue</span>
+
+            <span class="c1"># Determine role based on content</span>
+            <span class="k">if</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;Assistant:&quot;</span><span class="p">):</span>
+                <span class="n">role</span> <span class="o">=</span> <span class="s2">&quot;assistant&quot;</span>
+                <span class="n">content</span> <span class="o">=</span> <span class="n">line</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="s2">&quot;Assistant:&quot;</span><span class="p">)</span> <span class="p">:]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+            <span class="k">elif</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;User:&quot;</span><span class="p">):</span>
+                <span class="n">role</span> <span class="o">=</span> <span class="s2">&quot;user&quot;</span>
+                <span class="n">content</span> <span class="o">=</span> <span class="n">line</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="s2">&quot;User:&quot;</span><span class="p">)</span> <span class="p">:]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Default to user if no prefix</span>
+                <span class="n">role</span> <span class="o">=</span> <span class="s2">&quot;user&quot;</span>
+                <span class="n">content</span> <span class="o">=</span> <span class="n">line</span>
+
+            <span class="n">message_dict</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="n">role</span><span class="p">,</span>
+                <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">content</span><span class="p">,</span>
+                <span class="s2">&quot;is_complete&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>  <span class="c1"># DialogPT doesn&#39;t have explicit end tokens</span>
+                <span class="s2">&quot;tool_calls&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+                <span class="s2">&quot;tool_responses&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="p">}</span>
+
+            <span class="n">parsed_messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">cls</span><span class="p">(</span><span class="o">**</span><span class="n">message_dict</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">parsed_messages</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Couldn&#39;t get a single item out of text </span><span class="si">{</span><span class="n">text</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="n">parsed_messages</span><span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_inv_falcon</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">History</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Inverts a Falcon string into a History object.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            text (str): The Falcon string to invert.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            History: The inverted History object.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Inverting Falcon:</span><span class="se">\n</span><span class="si">{</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Falcon format: &quot;User: ... Assistant: ...&quot;</span>
+        <span class="c1"># Split by &quot;User:&quot; and &quot;Assistant:&quot; prefixes</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
+
+        <span class="c1"># Pattern to match User: and Assistant: messages</span>
+        <span class="n">pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;(User:|Assistant:)\s*(.*?)(?=(User:|Assistant:)|$)&quot;</span>
+        <span class="n">matches</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="n">pattern</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">DOTALL</span><span class="p">)</span>
+
+        <span class="n">parsed_messages</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">match</span> <span class="ow">in</span> <span class="n">matches</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">match</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">prefix</span><span class="p">,</span> <span class="n">content</span> <span class="o">=</span> <span class="n">match</span>
+            <span class="n">content</span> <span class="o">=</span> <span class="n">content</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">content</span><span class="p">:</span>
+                <span class="k">continue</span>
+
+            <span class="k">if</span> <span class="n">prefix</span> <span class="o">==</span> <span class="s2">&quot;User:&quot;</span><span class="p">:</span>
+                <span class="n">role</span> <span class="o">=</span> <span class="s2">&quot;user&quot;</span>
+            <span class="k">elif</span> <span class="n">prefix</span> <span class="o">==</span> <span class="s2">&quot;Assistant:&quot;</span><span class="p">:</span>
+                <span class="n">role</span> <span class="o">=</span> <span class="s2">&quot;assistant&quot;</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">continue</span>
+
+            <span class="n">message_dict</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="n">role</span><span class="p">,</span>
+                <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">content</span><span class="p">,</span>
+                <span class="s2">&quot;is_complete&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>  <span class="c1"># Falcon doesn&#39;t have explicit end tokens</span>
+                <span class="s2">&quot;tool_calls&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+                <span class="s2">&quot;tool_responses&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="p">}</span>
+
+            <span class="n">parsed_messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">cls</span><span class="p">(</span><span class="o">**</span><span class="n">message_dict</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">parsed_messages</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Couldn&#39;t get a single item out of text </span><span class="si">{</span><span class="n">text</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="n">parsed_messages</span><span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_inv_deepseek</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">History</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Inverts a DeepSeek string into a History object.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            text (str): The DeepSeek string to invert.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            History: The inverted History object.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Inverting DeepSeek:</span><span class="se">\n</span><span class="si">{</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
+
+        <span class="c1"># Remove leading/trailing special tokens (e.g.</span>
+        <span class="n">text</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;^&lt;[^&gt;]+&gt;&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">text</span><span class="p">)</span>  <span class="c1"># Remove leading &lt;...&gt;</span>
+        <span class="n">text</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;&lt;[^&gt;]+&gt;$&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">text</span><span class="p">)</span>  <span class="c1"># Remove trailing &lt;...&gt;</span>
+        <span class="c1"># Remove any REDACTED_SPECIAL_TOKEN if present</span>
+        <span class="n">text</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;REDACTED_SPECIAL_TOKEN&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">text</span><span class="p">)</span>
+        <span class="c1"># Pattern to match User: and Assistant: messages</span>
+        <span class="n">pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;(User:|Assistant:)\s*(.*?)(?=(User:|Assistant:)|$)&quot;</span>
+        <span class="n">matches</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="n">pattern</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">DOTALL</span><span class="p">)</span>
+        <span class="n">parsed_messages</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">match</span> <span class="ow">in</span> <span class="n">matches</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">match</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">prefix</span><span class="p">,</span> <span class="n">content</span> <span class="o">=</span> <span class="n">match</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">match</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">content</span> <span class="o">=</span> <span class="n">content</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">content</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">if</span> <span class="n">prefix</span> <span class="o">==</span> <span class="s2">&quot;User:&quot;</span><span class="p">:</span>
+                <span class="n">role</span> <span class="o">=</span> <span class="s2">&quot;user&quot;</span>
+            <span class="k">elif</span> <span class="n">prefix</span> <span class="o">==</span> <span class="s2">&quot;Assistant:&quot;</span><span class="p">:</span>
+                <span class="n">role</span> <span class="o">=</span> <span class="s2">&quot;assistant&quot;</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">message_dict</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="n">role</span><span class="p">,</span>
+                <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">content</span><span class="p">,</span>
+                <span class="s2">&quot;is_complete&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>  <span class="c1"># DeepSeek doesn&#39;t have explicit end tokens</span>
+                <span class="s2">&quot;tool_calls&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+                <span class="s2">&quot;tool_responses&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="p">}</span>
+            <span class="n">parsed_messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">cls</span><span class="p">(</span><span class="o">**</span><span class="n">message_dict</span><span class="p">))</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">parsed_messages</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Couldn&#39;t get a single item out of text </span><span class="si">{</span><span class="n">text</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="n">parsed_messages</span><span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_inv_llama</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">History</span><span class="p">:</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
+
+        <span class="n">messages</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="c1"># Remove BOS token if present</span>
+        <span class="k">if</span> <span class="n">text</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;&lt;|begin_of_text|&gt;&quot;</span><span class="p">):</span>
+            <span class="n">text</span> <span class="o">=</span> <span class="n">text</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="s2">&quot;&lt;|begin_of_text|&gt;&quot;</span><span class="p">)</span> <span class="p">:]</span>
+
+        <span class="c1"># Pattern to match complete message blocks: &lt;|header_start|&gt;role&lt;|header_end|&gt;\n\ncontent&lt;|eot|&gt;</span>
+        <span class="n">complete_pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;&lt;\|header_start\|&gt;(\w+)&lt;\|header_end\|&gt;\n\n(.*?)&lt;\|eot\|&gt;&quot;</span>
+        <span class="n">complete_matches</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="n">complete_pattern</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">DOTALL</span><span class="p">)</span>
+
+        <span class="c1"># Pattern to match incomplete message blocks: &lt;|header_start|&gt;role&lt;|header_end|&gt;\n\ncontent (without &lt;|eot|&gt;)</span>
+        <span class="n">incomplete_pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;&lt;\|header_start\|&gt;(\w+)&lt;\|header_end\|&gt;\n\n(.*?)$&quot;</span>
+
+        <span class="c1"># Find any incomplete message at the end</span>
+        <span class="n">incomplete_matches</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="n">complete_matches</span><span class="p">:</span>
+            <span class="c1"># Look for incomplete message after the last complete one</span>
+            <span class="n">last_complete_end</span> <span class="o">=</span> <span class="n">text</span><span class="o">.</span><span class="n">rfind</span><span class="p">(</span><span class="s2">&quot;&lt;|eot|&gt;&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">last_complete_end</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+                <span class="n">remaining_text</span> <span class="o">=</span> <span class="n">text</span><span class="p">[</span><span class="n">last_complete_end</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="s2">&quot;&lt;|eot|&gt;&quot;</span><span class="p">)</span> <span class="p">:]</span>
+                <span class="k">if</span> <span class="n">remaining_text</span><span class="o">.</span><span class="n">strip</span><span class="p">():</span>
+                    <span class="n">incomplete_match</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span>
+                        <span class="n">incomplete_pattern</span><span class="p">,</span> <span class="n">remaining_text</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">DOTALL</span>
+                    <span class="p">)</span>
+                    <span class="k">if</span> <span class="n">incomplete_match</span><span class="p">:</span>
+                        <span class="n">incomplete_matches</span> <span class="o">=</span> <span class="p">[</span>
+                            <span class="p">(</span>
+                                <span class="n">incomplete_match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span>
+                                <span class="n">incomplete_match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span>
+                                <span class="kc">False</span><span class="p">,</span>
+                            <span class="p">)</span>
+                        <span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># No complete messages, check entire text for incomplete message</span>
+            <span class="n">incomplete_match</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">incomplete_pattern</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">DOTALL</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">incomplete_match</span><span class="p">:</span>
+                <span class="n">incomplete_matches</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="p">(</span><span class="n">incomplete_match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="n">incomplete_match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="kc">False</span><span class="p">)</span>
+                <span class="p">]</span>
+
+        <span class="c1"># Process complete messages</span>
+        <span class="k">for</span> <span class="n">role</span><span class="p">,</span> <span class="n">content</span> <span class="ow">in</span> <span class="n">complete_matches</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">content</span><span class="o">.</span><span class="n">strip</span><span class="p">():</span>
+                <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="bp">cls</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="n">role</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="o">.</span><span class="n">strip</span><span class="p">(),</span> <span class="n">is_complete</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="p">)</span>
+
+        <span class="c1"># Process incomplete messages</span>
+        <span class="k">for</span> <span class="n">role</span><span class="p">,</span> <span class="n">content</span><span class="p">,</span> <span class="n">is_complete</span> <span class="ow">in</span> <span class="n">incomplete_matches</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">content</span><span class="o">.</span><span class="n">strip</span><span class="p">():</span>
+                <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="bp">cls</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="n">role</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="o">.</span><span class="n">strip</span><span class="p">(),</span> <span class="n">is_complete</span><span class="o">=</span><span class="n">is_complete</span><span class="p">)</span>
+                <span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">messages</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Couldn&#39;t parse Llama format from text: </span><span class="si">{</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">lazy_stack</span>
+
+        <span class="k">return</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
 
 <div class="viewcode-block" id="History.append"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.append">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">append</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">history</span><span class="p">:</span> <span class="n">History</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">inplace</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="n">dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>

@@ -40,7 +40,7 @@
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="SamplerEnsemble" href="torchrl.data.replay_buffers.SamplerEnsemble.html" />
-    <link rel="prev" title="Writer" href="torchrl.data.replay_buffers.Writer.html" />
+    <link rel="prev" title="MinariExperienceReplay" href="torchrl.data.datasets.MinariExperienceReplay.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -628,6 +628,15 @@ Defaults to <cite>torchrl.collectors.distributed.ray.DEFAULT_REMOTE_CLASS_CONFIG
 </dl>
 </dd></dl>
 
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.data.replay_buffers.ReplayBufferEnsemble.batch_size">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">batch_size</span></span><a class="headerlink" href="#torchrl.data.replay_buffers.ReplayBufferEnsemble.batch_size" title="Permalink to this definition">¶</a></dt>
+<dd><p>The batch size of the replay buffer.</p>
+<p>The batch size can be overriden by setting the <cite>batch_size</cite> parameter in the <a class="reference internal" href="#torchrl.data.replay_buffers.ReplayBufferEnsemble.sample" title="torchrl.data.replay_buffers.ReplayBufferEnsemble.sample"><code class="xref py py-meth docutils literal notranslate"><span class="pre">sample()</span></code></a> method.</p>
+<p>It defines both the number of samples returned by <a class="reference internal" href="#torchrl.data.replay_buffers.ReplayBufferEnsemble.sample" title="torchrl.data.replay_buffers.ReplayBufferEnsemble.sample"><code class="xref py py-meth docutils literal notranslate"><span class="pre">sample()</span></code></a> and the number of samples that are
+yielded by the <code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBuffer</span></code> iterator.</p>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.data.replay_buffers.ReplayBufferEnsemble.dump">
 <span class="sig-name descname"><span class="pre">dump</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.replay_buffers.ReplayBufferEnsemble.dump" title="Permalink to this definition">¶</a></dt>
@@ -678,8 +687,13 @@ Defaults to <cite>torchrl.collectors.distributed.ray.DEFAULT_REMOTE_CLASS_CONFIG
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.data.replay_buffers.ReplayBufferEnsemble.empty">
-<span class="sig-name descname"><span class="pre">empty</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.replay_buffers.ReplayBufferEnsemble.empty" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">empty</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">empty_write_count</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.replay_buffers.ReplayBufferEnsemble.empty" title="Permalink to this definition">¶</a></dt>
 <dd><p>Empties the replay buffer and reset cursor to 0.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>empty_write_count</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to empty the write_count attribute. Defaults to <cite>True</cite>.</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
@@ -879,7 +893,7 @@ value. Otherwise it is reset to a default value.</p></li>
         <a href="torchrl.data.replay_buffers.SamplerEnsemble.html" class="btn btn-neutral float-right" title="SamplerEnsemble" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.data.replay_buffers.Writer.html" class="btn btn-neutral" title="Writer" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="torchrl.data.datasets.MinariExperienceReplay.html" class="btn btn-neutral" title="MinariExperienceReplay" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   

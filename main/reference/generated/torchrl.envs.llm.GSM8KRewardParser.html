@@ -39,7 +39,7 @@
   <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="DataLoadingPrimer" href="torchrl.envs.llm.transforms.DataLoadingPrimer.html" />
+    <link rel="next" title="AddThinkingPrompt" href="torchrl.envs.llm.transforms.AddThinkingPrompt.html" />
     <link rel="prev" title="MLGymWrapper" href="torchrl.envs.llm.MLGymWrapper.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -388,7 +388,7 @@
         
           <li><a href="../index.html">API Reference</a> &gt;</li>
         
-          <li><a href="../llms.html">LLM interface</a> &gt;</li>
+          <li><a href="../llms.html">LLM Interface</a> &gt;</li>
         
       <li>GSM8KRewardParser</li>
     
@@ -432,16 +432,23 @@
 <h1>GSM8KRewardParser<a class="headerlink" href="#gsm8krewardparser" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.envs.llm.GSM8KRewardParser">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.llm.</span></span><span class="sig-name descname"><span class="pre">GSM8KRewardParser</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tokenizer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">in_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eos_token</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">set_done_if_answer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/llm/reward/gsm8k.html#GSM8KRewardParser"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.llm.GSM8KRewardParser" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.llm.</span></span><span class="sig-name descname"><span class="pre">GSM8KRewardParser</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tokenizer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">in_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">NestedKey</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eos_token</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">set_done_if_answer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'history'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'text'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'tokens'</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/llm/reward/gsm8k.html#GSM8KRewardParser"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.llm.GSM8KRewardParser" title="Permalink to this definition">¶</a></dt>
 <dd><p>Reward parser for GSM8KEnv or make_gsm8k_env.</p>
+<p>This parser automatically detects the input_mode from the parent environment and handles
+responses accordingly:
+- “history” mode: response is in (“history”, “response”) and is a History object
+- “text” mode: response is in (“text”, “response”) and is text
+- “tokens” mode: response is in (“tokens”, “response”) and is tokens</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>tokenizer</strong> (<em>AutoTokenizer from transformers</em>) – the tokenizer asssociated with the model.</p></li>
-<li><p><strong>in_keys</strong> (<em>list of NestedKey</em>) – the input keys. Defaults to <cite>[“text_response”, “answer”]</cite>.</p></li>
+<li><p><strong>tokenizer</strong> (<em>AutoTokenizer from transformers</em>) – the tokenizer associated with the model.</p></li>
+<li><p><strong>in_keys</strong> (<em>list of NestedKey</em>) – the input keys. If None, will be automatically determined based on parent’s input_mode.</p></li>
 <li><p><strong>out_keys</strong> (<em>list of NestedKey</em>) – the output keys. Defaults to <cite>[ “reward_answer”, “reward_think”, “reward_right”, “reward_contained”, “reward”, “success”]</cite>.</p></li>
 <li><p><strong>eos_token</strong> (<em>str</em>) – the end of sentence token. Defaults to <cite>tokenizer.eos_token</cite> if not provided.</p></li>
 <li><p><strong>set_done_if_answer</strong> (<em>bool</em>) – whether to set the done flag to <cite>True</cite> when an answer is present. Defaults to <cite>True</cite>.</p></li>
+<li><p><strong>input_mode</strong> (<em>Literal</em><em>[</em><em>&quot;history&quot;</em><em>, </em><em>&quot;text&quot;</em><em>, </em><em>&quot;tokens&quot;</em><em>]</em>) – the input mode of the parent environment.
+Defaults to <cite>None</cite> (will be automatically determined based on parent’s input_mode).</p></li>
 </ul>
 </dd>
 </dl>
@@ -562,6 +569,16 @@ are direct members of this module.</p>
 <dd><p>Close the transform.</p>
 </dd></dl>
 
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.envs.llm.GSM8KRewardParser.collector">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">collector</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase" title="torchrl.collectors.DataCollectorBase"><span class="pre">DataCollectorBase</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.envs.llm.GSM8KRewardParser.collector" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the collector associated with the container, if it exists.</p>
+<p>This can be used whenever the transform needs to be made aware of the collector or the policy associated with it.</p>
+<p>Make sure to call this property only on transforms that are not nested in sub-processes.
+The collector reference will not be passed to the workers of a <a class="reference internal" href="torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a> or
+similar batched environments.</p>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.envs.llm.GSM8KRewardParser.compile">
 <span class="sig-name descname"><span class="pre">compile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.envs.llm.GSM8KRewardParser.compile" title="Permalink to this definition">¶</a></dt>
@@ -573,7 +590,7 @@ to <a class="reference external" href="https://docs.pytorch.org/docs/stable/gene
 
 <dl class="py property">
 <dt class="sig sig-object py" id="torchrl.envs.llm.GSM8KRewardParser.container">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">container</span></span><a class="headerlink" href="#torchrl.envs.llm.GSM8KRewardParser.container" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">container</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><span class="pre">EnvBase</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.envs.llm.GSM8KRewardParser.container" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns the env containing the transform.</p>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">TransformedEnv</span><span class="p">,</span> <span class="n">Compose</span><span class="p">,</span> <span class="n">RewardSum</span><span class="p">,</span> <span class="n">StepCounter</span>
@@ -2024,7 +2041,7 @@ See <a class="reference external" href="https://docs.pytorch.org/docs/stable/gen
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrl.envs.llm.transforms.DataLoadingPrimer.html" class="btn btn-neutral float-right" title="DataLoadingPrimer" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrl.envs.llm.transforms.AddThinkingPrompt.html" class="btn btn-neutral float-right" title="AddThinkingPrompt" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
         <a href="torchrl.envs.llm.MLGymWrapper.html" class="btn btn-neutral" title="MLGymWrapper" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>

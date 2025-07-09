@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -805,6 +805,17 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">dim_extend</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dim_extend</span>
 
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">batch_size</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The batch size of the replay buffer.</span>
+
+<span class="sd">        The batch size can be overriden by setting the `batch_size` parameter in the :meth:`sample` method.</span>
+
+<span class="sd">        It defines both the number of samples returned by :meth:`sample` and the number of samples that are</span>
+<span class="sd">        yielded by the :class:`ReplayBuffer` iterator.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_batch_size</span>
+
     <span class="nd">@dim_extend</span><span class="o">.</span><span class="n">setter</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">dim_extend</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
         <span class="k">if</span> <span class="p">(</span>
@@ -1205,9 +1216,13 @@
 
         <span class="k">return</span> <span class="n">data</span><span class="p">,</span> <span class="n">info</span>
 
-<div class="viewcode-block" id="ReplayBuffer.empty"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.empty">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">empty</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Empties the replay buffer and reset cursor to 0.&quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span><span class="o">.</span><span class="n">_empty</span><span class="p">()</span>
+<div class="viewcode-block" id="ReplayBuffer.empty"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.empty">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">empty</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">empty_write_count</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Empties the replay buffer and reset cursor to 0.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            empty_write_count (bool, optional): Whether to empty the write_count attribute. Defaults to `True`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span><span class="o">.</span><span class="n">_empty</span><span class="p">(</span><span class="n">empty_write_count</span><span class="o">=</span><span class="n">empty_write_count</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">_empty</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">_empty</span><span class="p">()</span></div>
 

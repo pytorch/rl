@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -388,7 +388,7 @@
         
           <li><a href="../index.html">API Reference</a> &gt;</li>
         
-          <li><a href="../llms.html">LLM interface</a> &gt;</li>
+          <li><a href="../llms.html">LLM Interface</a> &gt;</li>
         
       <li>IfEvalScorer</li>
     
@@ -432,7 +432,7 @@
 <h1>IfEvalScorer<a class="headerlink" href="#ifevalscorer" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.envs.llm.IfEvalScorer">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.llm.</span></span><span class="sig-name descname"><span class="pre">IfEvalScorer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">instruction_ids_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'instruction_id_list'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prompt_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'text'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keyword_args_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'kwargs'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">id_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'key'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">response_column</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'text_response'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'ifeval_score'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aggregate_reward</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData" title="torchrl.envs.llm.IFEvalScoreData"><span class="pre">IFEvalScoreData</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><span class="pre">torch.Tensor</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">format_weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/llm/reward/ifeval/_scorer.html#IfEvalScorer"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.llm.IfEvalScorer" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.llm.</span></span><span class="sig-name descname"><span class="pre">IfEvalScorer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">instruction_ids_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'instruction_id_list'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prompt_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'text'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keyword_args_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'kwargs'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">id_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'key'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">response_column</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'text_response'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'ifeval_score'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aggregate_reward</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData" title="torchrl.envs.llm.IFEvalScoreData"><span class="pre">IFEvalScoreData</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><span class="pre">torch.Tensor</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">format_weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">set_done_if_answer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/llm/reward/ifeval/_scorer.html#IfEvalScorer"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.llm.IfEvalScorer" title="Permalink to this definition">¶</a></dt>
 <dd><p>Scorer for the IF-Eval task.</p>
 <p>For the IFEval dataset format, see <a class="reference external" href="https://huggingface.co/datasets/google/IFEval">https://huggingface.co/datasets/google/IFEval</a></p>
 <p>The score data is written under the <cite>score_key</cite> using the <a class="reference internal" href="torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData" title="torchrl.envs.llm.IFEvalScoreData"><code class="xref py py-class docutils literal notranslate"><span class="pre">IFEvalScoreData</span></code></a> data structure.
@@ -456,6 +456,7 @@ Defaults to <cite>True</cite>. The default aggregator is a simple sum over the f
 <cite>prompt_level_loose_acc</cite>, <cite>inst_level_loose_acc</cite>, in that order). Defaults to <cite>[0.4, 0.3, 0.2, 0.1]</cite>.
 This is only used if <cite>aggregate_reward</cite> is <cite>True</cite> and the default aggregator is used.</p></li>
 <li><p><strong>verbose</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to print verbose information. Defaults to <cite>False</cite>.</p></li>
+<li><p><strong>set_done_if_answer</strong> (<em>bool</em>) – whether to set the done flag to <cite>True</cite> when an answer is present. Defaults to <cite>True</cite>.</p></li>
 </ul>
 </dd>
 </dl>
@@ -580,6 +581,16 @@ are direct members of this module.</p>
 <dd><p>Close the transform.</p>
 </dd></dl>
 
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.envs.llm.IfEvalScorer.collector">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">collector</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="torchrl.collectors.DataCollectorBase.html#torchrl.collectors.DataCollectorBase" title="torchrl.collectors.DataCollectorBase"><span class="pre">DataCollectorBase</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.envs.llm.IfEvalScorer.collector" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the collector associated with the container, if it exists.</p>
+<p>This can be used whenever the transform needs to be made aware of the collector or the policy associated with it.</p>
+<p>Make sure to call this property only on transforms that are not nested in sub-processes.
+The collector reference will not be passed to the workers of a <a class="reference internal" href="torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a> or
+similar batched environments.</p>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.envs.llm.IfEvalScorer.compile">
 <span class="sig-name descname"><span class="pre">compile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.envs.llm.IfEvalScorer.compile" title="Permalink to this definition">¶</a></dt>
@@ -591,7 +602,7 @@ to <a class="reference external" href="https://docs.pytorch.org/docs/stable/gene
 
 <dl class="py property">
 <dt class="sig sig-object py" id="torchrl.envs.llm.IfEvalScorer.container">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">container</span></span><a class="headerlink" href="#torchrl.envs.llm.IfEvalScorer.container" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">container</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><span class="pre">EnvBase</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrl.envs.llm.IfEvalScorer.container" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns the env containing the transform.</p>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">TransformedEnv</span><span class="p">,</span> <span class="n">Compose</span><span class="p">,</span> <span class="n">RewardSum</span><span class="p">,</span> <span class="n">StepCounter</span>
@@ -649,7 +660,7 @@ copied to that device</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.envs.llm.IfEvalScorer.default_reward_aggregator">
 <span class="sig-name descname"><span class="pre">default_reward_aggregator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">score</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData" title="torchrl.envs.llm.IFEvalScoreData"><span class="pre">IFEvalScoreData</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">think_blocks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">answer_blocks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">complete</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><span class="pre">torch.Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><span class="pre">torch.Tensor</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/llm/reward/ifeval/_scorer.html#IfEvalScorer.default_reward_aggregator"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.llm.IfEvalScorer.default_reward_aggregator" title="Permalink to this definition">¶</a></dt>
-<dd><p>Default reward aggregation function that provides a more nuanced scoring system.</p>
+<dd><p>Improved reward aggregation function with tiered multiplicative scoring.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -660,33 +671,24 @@ copied to that device</p>
 </ul>
 </dd>
 </dl>
-<p>The reward is composed of three main components:
-1. Format score (max 1.0):</p>
-<blockquote>
-<div><ul class="simple">
-<li><p>prompt_level_strict_acc: 0.4 (highest weight for strict adherence to all instructions)</p></li>
-<li><p>inst_level_strict_acc: 0.3 (high weight for strict adherence to individual instructions)</p></li>
-<li><p>prompt_level_loose_acc: 0.2 (medium weight for loose adherence to all instructions)</p></li>
-<li><p>inst_level_loose_acc: 0.1 (lowest weight for loose adherence to individual instructions)</p></li>
-</ul>
-<p>All instruction-level metrics are averaged to ensure balanced contribution.</p>
-</div></blockquote>
-<ol class="arabic simple" start="2">
-<li><p>Structure score (max 1.0):
-- think_block: 0.5 (presence of exactly one think block)
-- answer_block: 0.5 (presence of exactly one answer block)</p></li>
-<li><p>Completion bonus (max 0.2):
-- complete: 0.2 (response ends with eos token)</p></li>
+<p>The reward uses a tiered multiplicative system:</p>
+<ol class="arabic simple">
+<li><p>Critical failure check: No answer blocks = 0 reward</p></li>
+<li><p>Base format score (0-1): Weighted average of format metrics</p></li>
+<li><p>Structure multiplier (0.1-1.0): Penalties for missing/multiple blocks</p></li>
+<li><p>Quality bonus (0-0.5): Rewards for high quality and completion</p></li>
+<li><p>Task complexity scaling: More requirements = higher potential rewards</p></li>
 </ol>
-<p>The overall formula for the reward is:</p>
-<blockquote>
-<div><div class="math notranslate nohighlight">
-\[reward = format\_score + structure\_score + completion\_bonus\]</div>
-</div></blockquote>
-<p>Therefore, the maximum value the reward can take is 2.2, with:
-- 1.0 from format adherence
-- 1.0 from structural elements (think/answer blocks)
-- 0.2 from completion bonus</p>
+<dl class="simple">
+<dt>The final formula is:</dt><dd><p>reward = (format_score + quality_bonus) * structure_multiplier * complexity_scale</p>
+</dd>
+</dl>
+<p>This provides better learning signals by:
+- Requiring critical elements (answer tags) for meaningful rewards
+- Using multiplicative scaling to reward doing everything well
+- Scaling rewards based on task complexity
+- Providing clear failure modes and success incentives</p>
+<p>Reward range: 0.0 to ~1.5-2.7 depending on task complexity (more instructions = higher max reward).</p>
 </dd></dl>
 
 <dl class="py method">
@@ -2134,7 +2136,6 @@ See <a class="reference external" href="https://docs.pytorch.org/docs/stable/gen
          <script src="../../_static/_sphinx_javascript_frameworks_compat.js"></script>
          <script src="../../_static/doctools.js"></script>
          <script src="../../_static/design-tabs.js"></script>
-         <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
      
 
   

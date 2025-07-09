@@ -40,7 +40,7 @@
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="GRPOLossOutput" href="torchrl.objectives.llm.GRPOLossOutput.html" />
-    <link rel="prev" title="vLLMWorker" href="torchrl.modules.llm.vLLMWorker.html" />
+    <link rel="prev" title="as_padded_tensor" href="torchrl.envs.llm.transforms.as_padded_tensor.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -388,7 +388,7 @@
         
           <li><a href="../index.html">API Reference</a> &gt;</li>
         
-          <li><a href="../llms.html">LLM interface</a> &gt;</li>
+          <li><a href="../llms.html">LLM Interface</a> &gt;</li>
         
       <li>GRPOLoss</li>
     
@@ -440,7 +440,7 @@
 </dl>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>actor_network</strong> (<em>ProbabilisticTensorDictSequential</em>) – policy operator.</p>
+<dd class="field-odd"><p><strong>actor_network</strong> (<a class="reference internal" href="torchrl.modules.llm.LLMWrapperBase.html#torchrl.modules.llm.LLMWrapperBase" title="torchrl.modules.llm.LLMWrapperBase"><em>LLMWrapperBase</em></a>) – policy operator.</p>
 </dd>
 </dl>
 <div class="admonition note">
@@ -455,6 +455,15 @@ in RL post-training.</p>
 in the batch, computed as the inverse of the sum of the squared importance weights.
 A value of 1 indicates that all importance weights are equal (ideal case). If ESS drops or increases significantly,
 it usually indicates a problem with the model configuration, such as a train/eval mode mismatch or a large policy update.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The masking_strategy parameter is crucial for LLM training scenarios. It determines which tokens are included
+in the loss computation:
+- “sft”: Only response tokens (excludes prompt tokens) - suitable for single-turn conversations
+- “rlhf”: Only assistant tokens (excludes user/system tokens) - suitable for multi-turn conversations
+- “generic”: All valid tokens (excludes padding tokens) - suitable for generic scenarios</p>
+<p>The masking strategy must match the strategy used for advantage computation to avoid shape mismatches.</p>
 </div>
 <dl class="field-list simple">
 <dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
@@ -487,7 +496,12 @@ estimate was done by the current version of the value estimator. If instead <cod
 clipping will be performed. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>kl_to_ref_coeff</strong> (<a class="reference internal" href="#torchrl.objectives.llm.GRPOLoss.float" title="torchrl.objectives.llm.GRPOLoss.float"><em>float</em></a><em>, </em><em>optional</em>) – coefficient for the KL divergence to the reference policy. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (no KL divergence).</p></li>
 <li><p><strong>kl_to_inference_coeff</strong> (<a class="reference internal" href="#torchrl.objectives.llm.GRPOLoss.float" title="torchrl.objectives.llm.GRPOLoss.float"><em>float</em></a><em>, </em><em>optional</em>) – coefficient for the KL divergence to the inference policy. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (no KL divergence).</p></li>
-<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em>, </em><em>optional</em>) – <p>device of the buffers. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em>, </em><em>optional</em>) – device of the buffers. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>masking_strategy</strong> (<em>Literal</em><em>[</em><em>&quot;sft&quot;</em><em>, </em><em>&quot;rlhf&quot;</em><em>, </em><em>&quot;generic&quot;</em><em>]</em><em>, </em><em>optional</em>) – <p>The masking strategy to use for distribution creation.
+- “sft”: Use prompt masking (response tokens only, suitable for single-turn)
+- “rlhf”: Use assistant masking (assistant tokens only, suitable for multi-turn)
+- “generic”: Use attention masking (all valid tokens)
+Defaults to “sft” since we can’t guarantee assistant masks are available.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>Parameters and buffers from the policy / critic will not be cast to that device to ensure that
@@ -2207,7 +2221,7 @@ See <a class="reference external" href="https://docs.pytorch.org/docs/stable/gen
         <a href="torchrl.objectives.llm.GRPOLossOutput.html" class="btn btn-neutral float-right" title="GRPOLossOutput" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrl.modules.llm.vLLMWorker.html" class="btn btn-neutral" title="vLLMWorker" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="torchrl.envs.llm.transforms.as_padded_tensor.html" class="btn btn-neutral" title="as_padded_tensor" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   

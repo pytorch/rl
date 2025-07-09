@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+452c7be) &#x25BC</span></a>
+      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+1fc1e16) &#x25BC</span></a>
     </div>
     
 
@@ -427,7 +427,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">TYPE_CHECKING</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">NestedKey</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
@@ -441,6 +441,9 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.llm.envs</span><span class="w"> </span><span class="kn">import</span> <span class="n">LLMEnv</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.llm.reward.gsm8k</span><span class="w"> </span><span class="kn">import</span> <span class="n">GSM8KRewardParser</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">transformers</span>
 
 <span class="n">BASE_PROMPT</span> <span class="o">=</span> <span class="p">(</span>
     <span class="s2">&quot;A conversation between User and Assistant. The user asks a question, and the Assistant solves it. &quot;</span>
@@ -493,7 +496,7 @@
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_collate_fn</span><span class="p">(</span><span class="n">batch</span><span class="p">):</span>
     <span class="n">batch</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">TensorDict</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span><span class="n">_batch</span><span class="p">)</span> <span class="k">for</span> <span class="n">_batch</span> <span class="ow">in</span> <span class="n">batch</span><span class="p">])</span>
-    <span class="n">batch</span><span class="o">.</span><span class="n">rename_key_</span><span class="p">(</span><span class="s2">&quot;question&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">)</span>
+    <span class="n">batch</span><span class="o">.</span><span class="n">rename_key_</span><span class="p">(</span><span class="s2">&quot;question&quot;</span><span class="p">,</span> <span class="s2">&quot;query&quot;</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">batch</span>
 
 
@@ -545,7 +548,13 @@
     <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">StepCounter</span><span class="p">(</span><span class="n">max_steps</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
 
     <span class="k">if</span> <span class="n">tokenizer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">GSM8KRewardParser</span><span class="p">(</span><span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">))</span>
+        <span class="n">env</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span>
+            <span class="n">GSM8KRewardParser</span><span class="p">(</span>
+                <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
+                <span class="n">input_mode</span><span class="o">=</span><span class="s2">&quot;text&quot;</span><span class="p">,</span>
+                <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;text_response&quot;</span><span class="p">,</span> <span class="s2">&quot;answer&quot;</span><span class="p">],</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;No tokenizer specified - reward will not be assigned.&quot;</span><span class="p">)</span>
 
@@ -576,6 +585,7 @@
 <span class="sd">        collate_fn (Callable | None, optional): A custom collate function for data loading. If `None`, a default</span>
 <span class="sd">            collate function is used. Defaults to `None`.</span>
 <span class="sd">        max_steps (int, optional): The maximum number of steps allowed in an episode. Defaults to `1`.</span>
+<span class="sd">        input_mode (Literal[&quot;history&quot;, &quot;text&quot;, &quot;tokens&quot;], optional): The mode of input to use. Defaults to `&quot;history&quot;`.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; import transformers</span>
@@ -726,6 +736,7 @@
         <span class="n">compute_reward</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">collate_fn</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">max_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">input_mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="s2">&quot;tokens&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;history&quot;</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="k">if</span> <span class="n">collate_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">collate_fn</span> <span class="o">=</span> <span class="n">_collate_fn</span>
@@ -743,6 +754,7 @@
             <span class="n">template_kwargs</span><span class="o">=</span><span class="n">template_kwargs</span><span class="p">,</span>
             <span class="n">apply_template</span><span class="o">=</span><span class="n">apply_template</span><span class="p">,</span>
             <span class="n">collate_fn</span><span class="o">=</span><span class="n">collate_fn</span><span class="p">,</span>
+            <span class="n">input_mode</span><span class="o">=</span><span class="n">input_mode</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">if</span> <span class="n">max_steps</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">append_transform</span><span class="p">(</span><span class="n">StepCounter</span><span class="p">(</span><span class="n">max_steps</span><span class="o">=</span><span class="n">max_steps</span><span class="p">))</span>
