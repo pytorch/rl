@@ -37,6 +37,8 @@ train:
   total_dialog_turns: 100_000
 
   # Number of steps in each batch. Higher values will cause the inference step to be slower, but won't use more GPU memory.
+  #  If multi-turn, the actual number available may be lower as the buffer will only write trajectories which prompts have been
+  #  repeated `env.repeats` times.
   dialog_turns_per_batch: 32
 
   # Number of gradient accumulation steps. Higher values will use less GPU memory (comparing with bigger batches and lower gradient_accumulation_steps), 

@@ -1561,6 +1561,227 @@ class TestLLMMaskedCategorical:
         assert torch.isfinite(log_probs_ignore[1, 0]).all()
         assert torch.isfinite(log_probs_ignore[1, 2]).all()
 
+    def test_entropy_comprehensive_position_level(self):
+        """Comprehensive test for entropy with position-level masking."""
+        torch.manual_seed(0)
+
+        # Test case 1: Simple case with some positions masked
+        logits = torch.randn(2, 3, 4)
+        mask = torch.ones(2, 3, dtype=torch.bool)
+        mask[0, :1] = False  # mask first position of first sequence
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+        entropy = dist.entropy()
+
+        # Check shapes
+        assert entropy.shape == (2, 3)
+
+        # Check that entropy is finite for valid positions
+        assert torch.isfinite(entropy[mask]).all()
+
+        # Check that entropy is reasonable (positive for valid positions)
+        assert (entropy[mask] >= 0).all()
+
+        # Test case 2: All positions valid
+        logits2 = torch.randn(2, 3, 4)
+        mask2 = torch.ones(2, 3, dtype=torch.bool)
+
+        dist2 = LLMMaskedCategorical(logits=logits2, mask=mask2, ignore_index=-100)
+        entropy2 = dist2.entropy()
+
+        assert entropy2.shape == (2, 3)
+        assert torch.isfinite(entropy2).all()
+        assert (entropy2 >= 0).all()
+
+        # Test case 3: All positions masked
+        logits3 = torch.randn(2, 3, 4)
+        mask3 = torch.zeros(2, 3, dtype=torch.bool)
+
+        dist3 = LLMMaskedCategorical(logits=logits3, mask=mask3, ignore_index=-100)
+        entropy3 = dist3.entropy()
+
+        assert entropy3.shape == (2, 3)
+        # Entropy should be 0 for all masked positions
+        assert (entropy3 == 0.0).all()
+
+    def test_entropy_comprehensive_token_level(self):
+        """Comprehensive test for entropy with token-level masking."""
+        torch.manual_seed(0)
+
+        # Test case 1: Some tokens masked at some positions
+        logits = torch.randn(2, 3, 4)
+        mask = torch.ones(2, 3, 4, dtype=torch.bool)
+        mask[
+            0, :1, :2
+        ] = False  # mask first 2 tokens for first position of first sequence
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+        entropy = dist.entropy()
+
+        # Check shapes
+        assert entropy.shape == (2, 3)
+
+        # Check that entropy is finite for positions with valid tokens
+        position_mask = mask.any(dim=-1)
+        assert torch.isfinite(entropy[position_mask]).all()
+
+        # Check that entropy is reasonable (positive for valid positions)
+        assert (entropy[position_mask] >= 0).all()
+
+        # Test case 2: All tokens valid
+        logits2 = torch.randn(2, 3, 4)
+        mask2 = torch.ones(2, 3, 4, dtype=torch.bool)
+
+        dist2 = LLMMaskedCategorical(logits=logits2, mask=mask2, ignore_index=-100)
+        entropy2 = dist2.entropy()
+
+        assert entropy2.shape == (2, 3)
+        assert torch.isfinite(entropy2).all()
+        assert (entropy2 >= 0).all()
+
+        # Test case 3: Some positions with no valid tokens
+        logits3 = torch.randn(2, 3, 4)
+        mask3 = torch.ones(2, 3, 4, dtype=torch.bool)
+        mask3[0, 1, :] = False  # mask all tokens at position (0, 1)
+
+        dist3 = LLMMaskedCategorical(logits=logits3, mask=mask3, ignore_index=-100)
+        entropy3 = dist3.entropy()
+
+        assert entropy3.shape == (2, 3)
+        # Entropy should be 0 for position with no valid tokens
+        assert entropy3[0, 1] == 0.0
+        # Other positions should have finite entropy
+        assert torch.isfinite(entropy3[0, 0]).all()
+        assert torch.isfinite(entropy3[0, 2]).all()
+        assert torch.isfinite(entropy3[1, :]).all()
+
+    def test_entropy_gradient_position_level(self):
+        """Test that entropy is differentiable with position-level masking."""
+        torch.manual_seed(0)
+        logits = torch.randn(2, 3, 4, requires_grad=True)
+        mask = torch.ones(2, 3, dtype=torch.bool)
+        mask[0, :1] = False
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+        entropy = dist.entropy()
+
+        # Compute loss and backward pass
+        loss = entropy.sum()
+        loss.backward()
+
+        # Check that gradients exist and are finite
+        assert logits.grad is not None
+        assert torch.isfinite(logits.grad).all()
+
+    def test_entropy_gradient_token_level(self):
+        """Test that entropy is differentiable with token-level masking."""
+        torch.manual_seed(0)
+        logits = torch.randn(2, 3, 4, requires_grad=True)
+        mask = torch.ones(2, 3, 4, dtype=torch.bool)
+        mask[0, :1, :2] = False
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+        entropy = dist.entropy()
+
+        # Compute loss and backward pass
+        loss = entropy.sum()
+        loss.backward()
+
+        # Check that gradients exist and are finite
+        assert logits.grad is not None
+        assert torch.isfinite(logits.grad).all()
+
+    def test_entropy_consistency_with_sampling(self):
+        """Test that entropy is consistent with sampling behavior."""
+        torch.manual_seed(0)
+        logits = torch.randn(2, 3, 4)
+        mask = torch.ones(2, 3, dtype=torch.bool)
+        mask[0, :1] = False
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+
+        # Get entropy
+        entropy = dist.entropy()
+
+        # Sample many times and compute empirical entropy
+        num_samples = 10000
+        samples = dist.sample((num_samples,))
+
+        # Compute empirical entropy for valid positions
+        empirical_entropy = torch.zeros_like(entropy)
+        for i in range(2):
+            for j in range(3):
+                if mask[i, j]:
+                    # Count occurrences of each token
+                    token_counts = torch.bincount(samples[:, i, j], minlength=4)
+                    probs = token_counts.float() / num_samples
+                    # Compute empirical entropy: -sum(p * log(p)) where p > 0
+                    log_probs = torch.log(
+                        probs + 1e-10
+                    )  # Add small epsilon to avoid log(0)
+                    empirical_entropy[i, j] = -(probs * log_probs).sum()
+
+        # Check that theoretical and empirical entropy are reasonably close
+        # (within 0.5 for this number of samples)
+        assert torch.allclose(entropy[mask], empirical_entropy[mask], atol=0.5)
+
+    def test_entropy_edge_cases(self):
+        """Test entropy with edge cases."""
+        torch.manual_seed(0)
+
+        # Test case 1: Single token vocabulary
+        logits = torch.randn(2, 3, 1)
+        mask = torch.ones(2, 3, dtype=torch.bool)
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+        entropy = dist.entropy()
+
+        # With single token, entropy should be 0
+        assert (entropy == 0.0).all()
+
+        # Test case 2: Very large logits (should still work)
+        logits2 = torch.randn(2, 3, 4) * 1000
+        mask2 = torch.ones(2, 3, dtype=torch.bool)
+
+        dist2 = LLMMaskedCategorical(logits=logits2, mask=mask2, ignore_index=-100)
+        entropy2 = dist2.entropy()
+
+        assert torch.isfinite(entropy2).all()
+        assert (entropy2 >= 0).all()
+
+        # Test case 3: Very small logits (should still work)
+        logits3 = torch.randn(2, 3, 4) * 0.001
+        mask3 = torch.ones(2, 3, dtype=torch.bool)
+
+        dist3 = LLMMaskedCategorical(logits=logits3, mask=mask3, ignore_index=-100)
+        entropy3 = dist3.entropy()
+
+        assert torch.isfinite(entropy3).all()
+        assert (entropy3 >= 0).all()
+
+    def test_entropy_large_vocabulary(self):
+        """Test entropy with large vocabulary size."""
+        torch.manual_seed(0)
+        vocab_size = 10000
+        logits = torch.randn(2, 10, vocab_size)
+        mask = torch.ones(2, 10, dtype=torch.bool)
+        mask[0, :3] = False  # mask first 3 positions of first sequence
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+        entropy = dist.entropy()
+
+        # Check shapes
+        assert entropy.shape == (2, 10)
+
+        # Check that entropy is finite for valid positions
+        assert torch.isfinite(entropy[mask]).all()
+
+        # Check that entropy is reasonable (positive for valid positions)
+        assert (entropy[mask] >= 0).all()
+
+        # With large vocabulary, entropy should be reasonably high for uniform-like distributions
+        # but this depends on the specific logits, so we just check it's finite and positive
+
 
 class TestOrdinal:
     @pytest.mark.parametrize("dtype", [torch.float, torch.double])
