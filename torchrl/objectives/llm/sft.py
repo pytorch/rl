@@ -247,7 +247,7 @@ class SFTLoss(LossModule):
         """
 
         history: NestedKey = ("history", "full")
-        ref_log_prob: NestedKey = ("next", "ref_log_prob", "full")
+        ref_log_prob: NestedKey = ("next", "ref_log_probs", "full")
         log_probs: NestedKey = ("log_probs", "full")
 
     default_keys = _AcceptedKeys

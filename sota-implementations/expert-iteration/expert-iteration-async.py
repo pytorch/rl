@@ -35,6 +35,7 @@ from ei_utils import (
     get_tokenizer,
     get_train_model,
     log_training_metrics,
+    make_env,
     make_weight_updater,
     RemoteDataLogger,
 )
@@ -82,56 +83,7 @@ def setup_environment() -> None:
         torch.cuda.set_device("cuda:0")
 
 
-def make_env(cfg: DictConfig, devices: list[int] | None = None):
-    """Create the environment with proper device allocation.
 
-    Args:
-        cfg: The configuration object
-
-    Returns:
-        The configured environment
-    """
-    # Create reference model with proper device allocation
-    # For the collector actor, we want inference_model devices first, then ref_model devices
-    train_tokenizer = get_tokenizer(cfg)
-
-    # Get device information
-    num_inf_devices = cfg.inference_model.num_devices
-    num_ref_devices = cfg.ref_model.num_devices
-    num_inf_devices + num_ref_devices
-
-    # Create a new config with adjusted device assignments
-    ref_cfg = DictConfig(dict(cfg))
-    ref_model = get_ref_model(ref_cfg, train_tokenizer, devices=devices)
-
-    # Setup environment
-    if cfg.env.dataset == "gsm8k":
-        env = GSM8KEnv(
-            repeats=cfg.env.repeats,
-            tokenizer=train_tokenizer,
-            num_envs=cfg.env.num_envs,
-            device=torch.device("cpu"),
-        )
-    else:  # ifeval
-        env = IFEvalEnv(
-            repeats=cfg.env.repeats,
-            tokenizer=train_tokenizer,
-            num_envs=cfg.env.num_envs,
-            device=torch.device("cpu"),
-        )
-
-    # Pass device directly to RetrieveLogProb - Since, for Ray, the local device is always 0
-    # we can just use 0 here.
-    device = torch.device("cuda:0")
-    env = env.append_transform(
-        RetrieveLogProb(
-            model=ref_model,
-            assistant_only=True,
-            tokenizer_kwargs={"chat_template_name": "qwen"},
-            device=device,
-        )
-    )
-    return env
 
 
 def train(

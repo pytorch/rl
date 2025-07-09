@@ -16,6 +16,8 @@ from torch import device as torch_device, dtype as torch_dtype
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
+from torchrl.envs.llm import RetrieveLogProb
+from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from transformers.tokenization_utils import PreTrainedTokenizer
@@ -36,6 +38,62 @@ def get_tokenizer(cfg: DictConfig) -> PreTrainedTokenizer:
         tokenizer.pad_token = "PAD"
     tokenizer.padding_side = "left"
     return tokenizer
+
+
+def make_env(cfg: DictConfig, devices: list[int] | None = None):
+    """Create the environment with proper device allocation.
+
+    Args:
+        cfg: The configuration object
+        devices: The devices to use for the reference model
+
+    Returns:
+        The configured environment
+    """
+    # Create reference model with proper device allocation
+    # For the collector actor, we want inference_model devices first, then ref_model devices
+    train_tokenizer = get_tokenizer(cfg)
+
+    # Get device information
+    num_inf_devices = cfg.inference_model.num_devices
+    num_ref_devices = cfg.ref_model.num_devices
+    num_inf_devices + num_ref_devices
+
+    # Create a new config with adjusted device assignments
+    ref_cfg = DictConfig(dict(cfg))
+    ref_model = get_ref_model(ref_cfg, train_tokenizer, devices=devices)
+
+    # Setup environment
+    if cfg.env.dataset == "gsm8k":
+        from torchrl.envs.llm import GSM8KEnv
+        
+        env = GSM8KEnv(
+            repeats=cfg.env.repeats,
+            tokenizer=train_tokenizer,
+            num_envs=cfg.env.num_envs,
+            device=torch.device("cpu"),
+        )
+    else:  # ifeval
+        env = IFEvalEnv(
+            repeats=cfg.env.repeats,
+            tokenizer=train_tokenizer,
+            num_envs=cfg.env.num_envs,
+            device=torch.device("cpu"),
+        )
+
+    # Pass device directly to RetrieveLogProb - Since, for Ray, the local device is always 0
+    # we can just use 0 here.
+    device = torch.device("cuda:0")
+    env = env.append_transform(
+        RetrieveLogProb(
+            model=ref_model,
+            assistant_only=True,
+            tokenizer_kwargs={"chat_template_name": "qwen"},
+            device=device,
+            log_probs_full_key=("ref_log_probs", "full"),
+        )
+    )
+    return env
 
 
 def get_train_model(
@@ -134,7 +192,8 @@ def get_inference_model(
         cfg (DictConfig): The hydra configuration object containing model settings.
             Expected to have inference_model section with vLLM-specific parameters
             like gpu_memory_utilization and generation settings.
-        make_ray_worker (bool, optional): Whether to make a ray worker. Default: True
+        devices (list[int], optional): The devices to use for the inference model. Default: `None`.
+        make_ray_worker (bool, optional): Whether to make a ray worker. Default: `True`.
         tokenizer (PreTrainedTokenizer | None, optional): The tokenizer to use. Default: None
 
     Returns:
