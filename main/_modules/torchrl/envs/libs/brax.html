@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+5a5f63d) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+32f7d72) &#x25BC</span></a>
     </div>
     
 
@@ -448,6 +448,8 @@
 
 <span class="n">_has_brax</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;brax&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
 
+<span class="n">_DEFAULT_CACHE_CLEAR_FREQUENCY</span> <span class="o">=</span> <span class="mi">20</span>
+
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_get_envs</span><span class="p">():</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_brax</span><span class="p">:</span>
@@ -476,6 +478,9 @@
 <span class="sd">            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.Categorical`),</span>
 <span class="sd">            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHot`).</span>
 <span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        cache_clear_frequency (int, optional): automatically clear JAX&#39;s internal</span>
+<span class="sd">            cache every N steps to prevent memory leaks when using ``requires_grad=True``.</span>
+<span class="sd">            Defaults to `False` (deactivates automatic cache clearing).</span>
 
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        from_pixels (bool, optional): Not yet supported.</span>
@@ -572,7 +577,7 @@
 <span class="sd">        &gt;&gt;&gt; from torch import nn</span>
 <span class="sd">        &gt;&gt;&gt; import torch</span>
 <span class="sd">        &gt;&gt;&gt;</span>
-<span class="sd">        &gt;&gt;&gt; env = BraxWrapper(brax.envs.get_environment(&quot;ant&quot;), batch_size=[10], requires_grad=True)</span>
+<span class="sd">        &gt;&gt;&gt; env = BraxWrapper(brax.envs.get_environment(&quot;ant&quot;), batch_size=[10], requires_grad=True, cache_clear_frequency=100)</span>
 <span class="sd">        &gt;&gt;&gt; env.set_seed(0)</span>
 <span class="sd">        &gt;&gt;&gt; torch.manual_seed(0)</span>
 <span class="sd">        &gt;&gt;&gt; policy = TensorDictModule(nn.Linear(27, 8), in_keys=[&quot;observation&quot;], out_keys=[&quot;action&quot;])</span>
@@ -619,11 +624,25 @@
         <span class="bp">cls</span><span class="o">.</span><span class="n">_jax</span> <span class="o">=</span> <span class="n">jax</span>
         <span class="k">return</span> <span class="n">jax</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">categorical_action_encoding</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">env</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">categorical_action_encoding</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">cache_clear_frequency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">):</span>
         <span class="k">if</span> <span class="n">env</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;env&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">env</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_seed_calls_reset</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_categorical_action_encoding</span> <span class="o">=</span> <span class="n">categorical_action_encoding</span>
+        <span class="c1"># If user passes None or False, deactivate automatic cache clearing</span>
+        <span class="k">if</span> <span class="n">cache_clear_frequency</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">False</span><span class="p">,):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_cache_clear_frequency</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">elif</span> <span class="n">cache_clear_frequency</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_cache_clear_frequency</span> <span class="o">=</span> <span class="n">_DEFAULT_CACHE_CLEAR_FREQUENCY</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_cache_clear_frequency</span> <span class="o">=</span> <span class="n">cache_clear_frequency</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_step_count</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
             <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
@@ -838,7 +857,40 @@
             <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step_with_grad</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step_without_grad</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">out</span></div>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_step_count</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_cache_clear_frequency</span>
+            <span class="ow">and</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_step_count</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache_clear_frequency</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span>
+        <span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">clear_cache</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">out</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">clear_cache</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Clear JAX&#39;s internal cache to prevent memory leaks.</span>
+
+<span class="sd">        This method should be called periodically when using requires_grad=True</span>
+<span class="sd">        to prevent memory accumulation from JAX&#39;s internal computation graph.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;jax&quot;</span><span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="c1"># Clear JAX&#39;s compilation cache</span>
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">jax</span><span class="o">.</span><span class="n">jit</span><span class="p">,</span> <span class="s2">&quot;clear_caches&quot;</span><span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">jax</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">clear_caches</span><span class="p">()</span>
+                <span class="c1"># Alternative: clear JAX&#39;s internal cache</span>
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">jax</span><span class="p">,</span> <span class="s2">&quot;clear_caches&quot;</span><span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">jax</span><span class="o">.</span><span class="n">clear_caches</span><span class="p">()</span>
+                <span class="c1"># Clear JAX&#39;s XLA compilation cache if available</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="kn">import</span><span class="w"> </span><span class="nn">jaxlib</span>
+
+                    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">jaxlib</span><span class="p">,</span> <span class="s2">&quot;xla_extension&quot;</span><span class="p">):</span>
+                        <span class="n">jaxlib</span><span class="o">.</span><span class="n">xla_extension</span><span class="o">.</span><span class="n">clear_caches</span><span class="p">()</span>
+                <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                    <span class="k">pass</span>
+            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                <span class="k">pass</span></div>
 
 
 <div class="viewcode-block" id="BraxEnv"><a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.BraxEnv.html#torchrl.envs.BraxEnv">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">BraxEnv</span><span class="p">(</span><span class="n">BraxWrapper</span><span class="p">):</span>
@@ -860,6 +912,9 @@
 <span class="sd">            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.Categorical`),</span>
 <span class="sd">            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHot`).</span>
 <span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        cache_clear_frequency (int, optional): automatically clear JAX&#39;s internal</span>
+<span class="sd">            cache every N steps to prevent memory leaks when using ``requires_grad=True``.</span>
+<span class="sd">            Defaults to `False` (deactivates automatic cache clearing).</span>
 
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        from_pixels (bool, optional): Not yet supported.</span>
@@ -952,7 +1007,7 @@
 <span class="sd">        &gt;&gt;&gt; from torch import nn</span>
 <span class="sd">        &gt;&gt;&gt; import torch</span>
 <span class="sd">        &gt;&gt;&gt;</span>
-<span class="sd">        &gt;&gt;&gt; env = BraxEnv(&quot;ant&quot;, batch_size=[10], requires_grad=True)</span>
+<span class="sd">        &gt;&gt;&gt; env = BraxEnv(&quot;ant&quot;, batch_size=[10], requires_grad=True, cache_clear_frequency=100)</span>
 <span class="sd">        &gt;&gt;&gt; env.set_seed(0)</span>
 <span class="sd">        &gt;&gt;&gt; torch.manual_seed(0)</span>
 <span class="sd">        &gt;&gt;&gt; policy = TensorDictModule(nn.Linear(27, 8), in_keys=[&quot;observation&quot;], out_keys=[&quot;action&quot;])</span>
@@ -983,6 +1038,7 @@
         <span class="n">from_pixels</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;from_pixels&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
         <span class="n">pixels_only</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;pixels_only&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
         <span class="n">requires_grad</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;requires_grad&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="n">cache_clear_frequency</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;cache_clear_frequency&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">kwargs</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;kwargs not supported.&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">wrapper_frame_skip</span> <span class="o">=</span> <span class="mi">1</span>
@@ -992,6 +1048,7 @@
             <span class="n">pixels_only</span><span class="o">=</span><span class="n">pixels_only</span><span class="p">,</span>
             <span class="n">from_pixels</span><span class="o">=</span><span class="n">from_pixels</span><span class="p">,</span>
             <span class="n">requires_grad</span><span class="o">=</span><span class="n">requires_grad</span><span class="p">,</span>
+            <span class="n">cache_clear_frequency</span><span class="o">=</span><span class="n">cache_clear_frequency</span><span class="p">,</span>
         <span class="p">)</span>
 
     <span class="nd">@property</span>
@@ -1034,6 +1091,8 @@
         <span class="n">ctx</span><span class="o">.</span><span class="n">vjp_fn</span> <span class="o">=</span> <span class="n">vjp_fn</span>
         <span class="n">ctx</span><span class="o">.</span><span class="n">next_state</span> <span class="o">=</span> <span class="n">next_state_tensor</span>
         <span class="n">ctx</span><span class="o">.</span><span class="n">env</span> <span class="o">=</span> <span class="n">env</span>
+        <span class="c1"># Mark that backward hasn&#39;t been called yet</span>
+        <span class="n">ctx</span><span class="o">.</span><span class="n">_backward_called</span> <span class="o">=</span> <span class="kc">False</span>
 
         <span class="k">return</span> <span class="p">(</span>
             <span class="n">next_state_tensor</span><span class="p">,</span>  <span class="c1"># no gradient</span>
@@ -1044,6 +1103,11 @@
 
     <span class="nd">@staticmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">backward</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">grad_next_obs</span><span class="p">,</span> <span class="n">grad_next_reward</span><span class="p">,</span> <span class="o">*</span><span class="n">grad_next_qp_values</span><span class="p">):</span>
+        <span class="c1"># Prevent multiple backward calls on the same context</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="s2">&quot;_backward_called&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">ctx</span><span class="o">.</span><span class="n">_backward_called</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">([</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">grad_next_qp_values</span><span class="p">)))</span>
+
+        <span class="n">ctx</span><span class="o">.</span><span class="n">_backward_called</span> <span class="o">=</span> <span class="kc">True</span>
 
         <span class="n">pipeline_state</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
             <span class="nb">zip</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">next_state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;pipeline_state&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">keys</span><span class="p">(),</span> <span class="n">grad_next_qp_values</span><span class="p">)</span>
@@ -1106,6 +1170,29 @@
             <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">grad_state_qp</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
         <span class="p">}</span>
         <span class="n">grads</span> <span class="o">=</span> <span class="p">(</span><span class="n">grad_action</span><span class="p">,</span> <span class="o">*</span><span class="n">grad_state_qp</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+
+        <span class="c1"># Clean up context to prevent memory leaks</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Clear JAX VJP function reference</span>
+            <span class="k">del</span> <span class="n">ctx</span><span class="o">.</span><span class="n">vjp_fn</span>
+        <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+            <span class="k">pass</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Clear stored tensors</span>
+            <span class="k">del</span> <span class="n">ctx</span><span class="o">.</span><span class="n">next_state</span>
+        <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+            <span class="k">pass</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Clear environment reference</span>
+            <span class="k">del</span> <span class="n">ctx</span><span class="o">.</span><span class="n">env</span>
+        <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+            <span class="k">pass</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Clear the backward flag</span>
+            <span class="k">del</span> <span class="n">ctx</span><span class="o">.</span><span class="n">_backward_called</span>
+        <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+            <span class="k">pass</span>
+
         <span class="k">return</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="n">grads</span><span class="p">)</span>
 </pre></div>
 
