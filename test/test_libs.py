@@ -11,7 +11,6 @@ import importlib.util
 import os
 import urllib.error
 
-import psutil
 
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
 
@@ -2571,6 +2570,8 @@ class TestBrax:
 
     def test_brax_memory_leak(self, envname, device):
         """Test memory usage with different cache clearing strategies."""
+        import psutil
+
         process = psutil.Process(os.getpid())
         env = BraxEnv(
             envname,

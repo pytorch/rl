@@ -21,3 +21,4 @@ dependencies:
     - hydra-core
     - jax[cuda12]
     - brax
+    - psutil
