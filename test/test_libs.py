@@ -2588,6 +2588,7 @@ class TestBrax:
             torch.nn.Linear(
                 env.observation_spec[env.observation_keys[0]].shape[-1],
                 env.action_spec.shape[-1],
+                device=device,
             ),
             in_keys=env.observation_keys[:1],
             out_keys=["action"],
