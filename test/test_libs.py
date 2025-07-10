@@ -8,7 +8,10 @@ import collections
 import functools
 import gc
 import importlib.util
+import os
 import urllib.error
+
+import psutil
 
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
 
@@ -19,7 +22,6 @@ if _has_isaac:
     from torchrl.envs.libs.isaacgym import IsaacGymEnv
 import argparse
 import importlib
-import os
 
 import time
 import urllib
@@ -2414,6 +2416,28 @@ class TestEnvPool:
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("envname", ["fast"])
 class TestBrax:
+    @pytest.fixture(autouse=True)
+    def _setup_jax(self):
+        """Configure JAX for proper GPU initialization."""
+        import os
+
+        import jax
+
+        # Set JAX environment variables for better GPU handling
+        os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+        os.environ.setdefault("XLA_PYTHON_CLIENT_ALLOCATOR", "platform")
+        os.environ.setdefault("TF_FORCE_GPU_ALLOW_GROWTH", "true")
+
+        # Try to initialize JAX with GPU, fallback to CPU if it fails
+        try:
+            devices = jax.devices()
+        except Exception as e:
+            # Fallback to CPU
+            os.environ["JAX_PLATFORM_NAME"] = "cpu"
+            jax.config.update("jax_platform_name", "cpu")
+
+        yield
+
     @pytest.mark.parametrize("requires_grad", [False, True])
     def test_brax_constructor(self, envname, requires_grad, device):
         env0 = BraxEnv(envname, requires_grad=requires_grad, device=device)
@@ -2544,6 +2568,72 @@ class TestBrax:
         check_env_specs(env)
         tensordict = env.rollout(3)
         assert tensordict.shape == torch.Size([n, *batch_size, 3])
+
+    def test_brax_memory_leak(self, envname, device):
+        """Test memory usage with different cache clearing strategies."""
+        process = psutil.Process(os.getpid())
+        env = BraxEnv(
+            envname,
+            batch_size=[10],
+            requires_grad=True,
+            device=device,
+        )
+        env.clear_cache()
+        gc.collect()
+        env.set_seed(0)
+        next_td = env.reset()
+        num_steps = 200
+        policy = TensorDictModule(
+            torch.nn.Linear(
+                env.observation_spec[env.observation_keys[0]].shape[-1],
+                env.action_spec.shape[-1],
+            ),
+            in_keys=env.observation_keys[:1],
+            out_keys=["action"],
+        )
+        initial_memory = process.memory_info().rss / 1024 / 1024  # MB
+        for i in range(num_steps):
+            policy(next_td)
+            out_td, next_td = env.step_and_maybe_reset(next_td)
+            if i % 1000 == 0:
+                loss = out_td["next", "observation"].sum()
+                loss.backward()
+                next_td = next_td.detach().clone()
+            # gc.collect()
+        final_memory = process.memory_info().rss / 1024 / 1024  # MB
+        memory_increase = final_memory - initial_memory
+        assert (
+            memory_increase < 50
+        ), f"Memory leak with automatic clearing: {memory_increase:.2f} MB"
+
+    def test_brax_cache_clearing(self, envname, device):
+        env = BraxEnv(envname, batch_size=[1], requires_grad=True, device=device)
+        env.clear_cache()
+        for _ in range(5):
+            env.clear_cache()
+
+    @pytest.mark.parametrize("freq", [10, None, False])
+    def test_brax_automatic_cache_clearing_parameter(self, envname, device, freq):
+        env = BraxEnv(
+            envname,
+            batch_size=[1],
+            requires_grad=True,
+            device=device,
+            cache_clear_frequency=freq,
+        )
+        if freq is False:
+            assert env._cache_clear_frequency is False
+        elif freq is None:
+            assert env._cache_clear_frequency == 20  # Default value
+        else:
+            assert env._cache_clear_frequency == freq
+        env.set_seed(0)
+        next_td = env.reset()
+        for i in range(10):
+            action = env.action_spec.rand()
+            next_td["action"] = action
+            out_td, next_td = env.step_and_maybe_reset(next_td)
+            assert env._step_count == i + 1
 
 
 @pytest.mark.skipif(not _has_vmas, reason="vmas not installed")
