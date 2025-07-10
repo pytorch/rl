@@ -1,6 +1,6 @@
 # env and task
 env:
-  name: BabyAI-UnlockLocal-v0
+  name: MiniGrid-Empty-5x5-v0 # MiniGrid environment for discrete action space
   task: ""
   library: minari
   n_samples_stats: 1000
