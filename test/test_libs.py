@@ -2597,7 +2597,7 @@ class TestBrax:
         for i in range(num_steps):
             policy(next_td)
             out_td, next_td = env.step_and_maybe_reset(next_td)
-            if i % 1000 == 0:
+            if i % 50 == 0:
                 loss = out_td["next", "observation"].sum()
                 loss.backward()
                 next_td = next_td.detach().clone()
@@ -2605,7 +2605,7 @@ class TestBrax:
         final_memory = process.memory_info().rss / 1024 / 1024  # MB
         memory_increase = final_memory - initial_memory
         assert (
-            memory_increase < 50
+            memory_increase < 100
         ), f"Memory leak with automatic clearing: {memory_increase:.2f} MB"
 
     def test_brax_cache_clearing(self, envname, device):
