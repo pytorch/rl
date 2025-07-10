@@ -463,5 +463,9 @@ def _patch_info(info_td):
     val_td_sel = val_td_sel.apply(
         lambda x: torch.cat([torch.zeros_like(x[:1]), x], 0), batch_size=[min_shape + 1]
     )
-    val_td_sel.update(val_td.select(*unique_shapes[max_shape]))
+    source = val_td.select(*unique_shapes[max_shape])
+    # make sure source has no batch size
+    source.batch_size = ()
+    if not source.is_empty():
+        val_td_sel.update(source, update_batch_size=True)
     return val_td_sel
