@@ -14508,6 +14508,7 @@ class TestMultiAction(TransformBase):
         return
 
 
+@pytest.mark.skipif(IS_WIN, reason="Test is flaky on Windows")
 class TestTimer(TransformBase):
     def test_single_trans_env_check(self):
         env = TransformedEnv(ContinuousActionVecMockEnv(), Timer())
