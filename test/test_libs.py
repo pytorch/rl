@@ -3345,29 +3345,31 @@ _MINARI_DATASETS = []
 def _minari_init():
     """Initialize Minari datasets list. Returns True if already initialized."""
     global _MINARI_DATASETS
-    if _MINARI_DATASETS and not all(isinstance(x, str) and x.isdigit() for x in _MINARI_DATASETS):
+    if _MINARI_DATASETS and not all(
+        isinstance(x, str) and x.isdigit() for x in _MINARI_DATASETS
+    ):
         return True  # Already initialized with real dataset names
-    
+
     if not _has_minari or not _has_gymnasium:
         return False
-    
+
     try:
         import minari
+
         torch.manual_seed(0)
-        
-        print("Fetching Minari datasets from Hugging Face...")
+
         total_keys = sorted(
-            minari.list_remote_datasets(latest_version=True, compatible_minari_version=True)
+            minari.list_remote_datasets(
+                latest_version=True, compatible_minari_version=True
+            )
         )
         indices = torch.randperm(len(total_keys))[:20]
         keys = [total_keys[idx] for idx in indices]
-        
+
         assert len(keys) > 5, keys
         _MINARI_DATASETS[:] = keys  # Replace the placeholder values
-        print(f"Initialized {len(keys)} Minari datasets")
         return True
-    except Exception as e:
-        print(f"Failed to fetch Minari datasets: {e}")
+    except Exception:
         return False
 
 
@@ -3385,11 +3387,11 @@ class TestMinari:
         # Initialize Minari datasets if not already done
         if not _minari_init():
             pytest.skip("Failed to initialize Minari datasets")
-        
+
         # Get the actual dataset name from the initialized list
         if dataset_idx >= len(_MINARI_DATASETS):
             pytest.skip(f"Dataset index {dataset_idx} out of range")
-        
+
         selected_dataset = _MINARI_DATASETS[dataset_idx]
         torchrl_logger.info(f"dataset {selected_dataset}")
         data = MinariExperienceReplay(
