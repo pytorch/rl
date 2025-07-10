@@ -1070,7 +1070,7 @@ if __name__ == "__main__":
         shared_device = torch.device("cpu")
         if torch.cuda.is_available():
             original_device = torch.device("cuda:0")
-        elif torch.mps.is_available():
+        elif getattr(torch.mps, "is_available", lambda: False)():
             original_device = torch.device("mps")
         else:
             pytest.skip("No GPU or MPS device")
@@ -2708,7 +2708,8 @@ class TestMultiKeyEnvsCollector:
 
 
 @pytest.mark.skipif(
-    not torch.cuda.is_available() and not torch.mps.is_available(),
+    not torch.cuda.is_available()
+    and not getattr(torch.mps, "is_available", lambda: False)(),
     reason="No casting if no cuda",
 )
 class TestUpdateParams:

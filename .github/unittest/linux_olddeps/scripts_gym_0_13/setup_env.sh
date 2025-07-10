@@ -8,26 +8,62 @@
 set -e
 set -v
 
+# Make apt-get non-interactive
+export DEBIAN_FRONTEND=noninteractive
+# Pre-configure timezone data
+ln -fs /usr/share/zoneinfo/UTC /etc/localtime
+echo "UTC" > /etc/timezone
+
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
-apt-get update && apt-get upgrade -y
-printf "* Installing vim - git - wget\n"
-apt-get install -y vim git wget
+# Add NVIDIA repository for drivers
+apt-get update && apt-get install -y --no-install-recommends \
+    software-properties-common \
+    wget \
+    ca-certificates
 
-printf "* Installing glfw - glew - osmesa part 1\n"
-apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2 xvfb libx11-dev libegl-dev
+# Install basic build tools first
+apt-get install -y vim git wget build-essential
 
-#printf "* Installing glfw - glew - osmesa part 2\n"
-#apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev libsdl2-dev libsdl2-2.0-0
+# Install system libraries to fix version conflicts
+apt-get install -y --no-install-recommends \
+    libffi7 \
+    libffi-dev \
+    libtinfo6 \
+    libtinfo-dev \
+    libncurses5-dev \
+    libncursesw5-dev
+
+# Install OpenGL packages with focus on OSMesa
+apt-get install -y --no-install-recommends \
+    libosmesa6-dev \
+    libgl1-mesa-dev \
+    libgl1-mesa-glx \
+    libglew-dev \
+    libglfw3-dev \
+    libglvnd0 \
+    libgl1 \
+    libglx0 \
+    libegl1 \
+    libgles2 \
+    xvfb \
+    mesa-utils \
+    mesa-common-dev \
+    libglu1-mesa-dev \
+    libsdl2-dev \
+    libsdl2-2.0-0 \
+    pkg-config
 
 if [ "${CU_VERSION:-}" == cpu ] ; then
-  # solves version `GLIBCXX_3.4.29' not found for tensorboard
-#    apt-get install -y gcc-4.9
   apt-get upgrade -y libstdc++6
   apt-get dist-upgrade -y
 else
   apt-get install -y g++ gcc
 fi
+
+# Remove conflicting libraries from conda environment if they exist
+rm -f "${env_dir}/lib/libtinfo.so"* || true
+rm -f "${env_dir}/lib/libffi.so"* || true
 
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
@@ -93,19 +129,20 @@ printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
-export MUJOCO_GL=egl
+# Use OSMesa for rendering
+export MUJOCO_GL=osmesa
 conda env config vars set \
   MAX_IDLE_COUNT=1000 \
-  MUJOCO_GL=egl \
+  MUJOCO_GL=osmesa \
   SDL_VIDEODRIVER=dummy \
-  DISPLAY=unix:0.0 \
-  PYOPENGL_PLATFORM=egl \
-  LD_PRELOAD=$glew_path \
-  NVIDIA_PATH=/usr/src/nvidia-470.63.01 \
+  DISPLAY=:99 \
+  PYOPENGL_PLATFORM=osmesa \
+  LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libOSMesa.so.6:/usr/lib/x86_64-linux-gnu/libGL.so \
   MUJOCO_PY_MJKEY_PATH=${root_dir}/mujoco-py/mujoco_py/binaries/mjkey.txt \
   MUJOCO_PY_MUJOCO_PATH=${root_dir}/mujoco-py/mujoco_py/binaries/linux/mujoco210 \
-  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/circleci/project/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin \
-  TOKENIZERS_PARALLELISM=true
+  LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH:/home/circleci/project/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin \
+  TOKENIZERS_PARALLELISM=true \
+  PYGLET_GRAPHICS=opengl3
 
 # make env variables apparent
 conda deactivate && conda activate "${env_dir}"

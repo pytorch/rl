@@ -22,13 +22,20 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/pytorch/rl/mujoco-py/mujoco_py/binaries
 export MKL_THREADING_LAYER=GNU
 export BATCHED_PIPE_TIMEOUT=60
 
+# Start Xvfb with specific OpenGL configuration
+export DISPLAY=:99
+Xvfb :99 -screen 0 1400x900x24 > /dev/null 2>&1 &
+sleep 3  # Give Xvfb time to start
+
+# Verify OpenGL setup
+glxinfo -B || true
+echo "MUJOCO_GL=$MUJOCO_GL"
+echo "PYOPENGL_PLATFORM=$PYOPENGL_PLATFORM"
+
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test.py -v --durations 200
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test_deps.py -v --durations 200 -k 'test_gym'
 
-export DISPLAY=:99
-Xvfb :99 -screen 0 1400x900x24 > /dev/null 2>&1 &
-
-CKPT_BACKEND=torch MUJOCO_GL=egl python .github/unittest/helpers/coverage_run_parallel.py -m pytest \
+MUJOCO_GL=osmesa python .github/unittest/helpers/coverage_run_parallel.py -m pytest \
     --instafail -v \
     --durations 200 \
     --ignore test/test_distributed.py \
