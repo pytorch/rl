@@ -885,7 +885,11 @@
     <span class="n">val_td_sel</span> <span class="o">=</span> <span class="n">val_td_sel</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
         <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">x</span><span class="p">[:</span><span class="mi">1</span><span class="p">]),</span> <span class="n">x</span><span class="p">],</span> <span class="mi">0</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="n">min_shape</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
     <span class="p">)</span>
-    <span class="n">val_td_sel</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">val_td</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">unique_shapes</span><span class="p">[</span><span class="n">max_shape</span><span class="p">]))</span>
+    <span class="n">source</span> <span class="o">=</span> <span class="n">val_td</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">unique_shapes</span><span class="p">[</span><span class="n">max_shape</span><span class="p">])</span>
+    <span class="c1"># make sure source has no batch size</span>
+    <span class="n">source</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">source</span><span class="o">.</span><span class="n">is_empty</span><span class="p">():</span>
+        <span class="n">val_td_sel</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">update_batch_size</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">val_td_sel</span>
 </pre></div>
 
