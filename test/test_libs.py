@@ -2429,8 +2429,8 @@ class TestBrax:
 
         # Try to initialize JAX with GPU, fallback to CPU if it fails
         try:
-            devices = jax.devices()
-        except Exception as e:
+            jax.devices()
+        except Exception:
             # Fallback to CPU
             os.environ["JAX_PLATFORM_NAME"] = "cpu"
             jax.config.update("jax_platform_name", "cpu")
