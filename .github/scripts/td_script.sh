@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export TORCHRL_BUILD_VERSION=0.9.0
+export TORCHRL_BUILD_VERSION=0.9.1
 pip install --upgrade setuptools
 
 # Check if ARCH is set to aarch64
