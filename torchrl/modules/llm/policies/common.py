@@ -328,6 +328,8 @@ class LLMWrapperBase(TensorDictModuleBase):
         generate_kwargs: Additional arguments to pass to the model's generate method.
         tokenizer_kwargs: Additional arguments to pass to the tokenizer.
         pad_output: Whether to pad the output sequences to a uniform length.
+        pad_model_input: Whether to pad the model input sequences to a uniform length.
+            May not be supported by all models.
         inplace: Determines how the module should handle in-place operations.
         device: The device to use for computation.
         layout: The layout to use for the output tensors when pad_output=False.

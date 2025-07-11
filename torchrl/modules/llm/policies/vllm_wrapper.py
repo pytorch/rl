@@ -75,6 +75,8 @@ class vLLMWrapper(LLMWrapperBase):
         generate_kwargs (dict | None, optional): Additional arguments to pass to the model's generate method. Defaults to `None`.
         tokenizer_kwargs (dict | None, optional): Additional arguments to pass to the tokenizer. Defaults to `None`.
         pad_output (bool, optional): Whether to pad the output sequences to a uniform length. Defaults to `False`.
+        pad_model_input (bool, optional): Whether to pad the model input sequences to a uniform length.
+            This is not supported by vLLM.
         inplace (Literal[True, False, "empty"] | None, optional): Determines how the module should handle in-place operations. Defaults to `True`.
         device (torch.device | None, optional): The device to use for computation. Defaults to `None`.
         layout (torch.layout | None, optional): The layout to use for the output tensors when `pad_output=False`. Defaults to `torch.strided`.
@@ -166,6 +168,7 @@ class vLLMWrapper(LLMWrapperBase):
         generate_kwargs: dict | None = None,
         tokenizer_kwargs: dict | None = None,
         pad_output: bool = False,
+        pad_model_input: bool | None = None,
         inplace: Literal[True, False, "empty"] | None = None,
         device: torch.device | None = None,
         layout: torch.layout | None = None,
@@ -207,6 +210,8 @@ class vLLMWrapper(LLMWrapperBase):
         self.input_mode = input_mode
         self.attention_mask_key = attention_mask_key
         self.generate = generate
+        if pad_model_input is not None:
+            raise ValueError("pad_model_input is not supported by vLLMWrapper.")
 
         # Auto-determine what to return based on input mode
         self.return_history = input_mode in ("history",)
