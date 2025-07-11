@@ -201,10 +201,9 @@ class TransformersWrapper(LLMWrapperBase):
         self.input_mode = input_mode
         self.attention_mask_key = attention_mask_key
         self.generate = generate
-        if pad_model_input is not None:
-            if generate:
-                raise ValueError("pad_model_input is not supported when generate=True.")
-            pad_model_input = pad_model_input if pad_model_input is not None else True
+        if pad_model_input is not None and generate:
+            raise ValueError("pad_model_input is not supported when generate=True.")
+        pad_model_input = pad_model_input if pad_model_input is not None else True
         self.pad_model_input = pad_model_input
 
         # Auto-determine what to return based on input mode
