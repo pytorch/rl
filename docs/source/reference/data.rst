@@ -144,6 +144,8 @@ using the following components:
     :template: rl_template.rst
 
 
+    CompressedStorage
+    CompressedStorageCheckpointer
     FlatStorageCheckpointer
     H5StorageCheckpointer
     ImmutableDatasetWriter
@@ -190,6 +192,66 @@ were found from rough benchmarking in https://github.com/pytorch/rl/tree/main/be
 +-------------------------------+-----------+
 | :class:`LazyMemmapStorage`    | 3.44x     |
 +-------------------------------+-----------+
+
+Compressed Storage for Memory Efficiency
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For applications where memory usage is a primary concern, especially when storing
+large sensory observations like images or audio, the :class:`~torchrl.data.replay_buffers.storages.CompressedStorage`
+provides significant memory savings through compression.
+
+The `CompressedStorage`` compresses data when storing and decompresses when retrieving,
+achieving compression ratios of 2-10x for image data while maintaining full data fidelity.
+It uses zstd compression by default but supports custom compression algorithms.
+
+Key features:
+- **Memory Efficiency**: Achieves significant memory savings through compression
+- **Data Integrity**: Maintains full data fidelity through lossless compression
+- **Flexible Compression**: Supports custom compression algorithms or uses zstd by default
+- **TensorDict Support**: Seamlessly works with TensorDict structures
+- **Checkpointing**: Full support for saving and loading compressed data
+
+Example usage:
+
+    >>> import torch
+    >>> from torchrl.data import ReplayBuffer, CompressedStorage
+    >>> from tensordict import TensorDict
+    >>>
+    >>> # Create a compressed storage for image data
+    >>> storage = CompressedStorage(max_size=1000, compression_level=3)
+    >>> rb = ReplayBuffer(storage=storage, batch_size=32)
+    >>>
+    >>> # Add image data
+    >>> images = torch.randn(100, 3, 84, 84)  # Atari-like frames
+    >>> data = TensorDict({"obs": images}, batch_size=[100])
+    >>> rb.extend(data)
+    >>>
+    >>> # Sample data (automatically decompressed)
+    >>> sample = rb.sample(16)
+    >>> print(sample["obs"].shape)  # torch.Size([16, 3, 84, 84])
+
+The compression level can be adjusted from 1 (fast, less compression) to 22 (slow, more compression),
+with level 3 being a good default for most use cases.
+
+For custom compression algorithms:
+
+    >>> def my_compress(tensor):
+    ...     return tensor.to(torch.uint8)  # Simple example
+    >>>
+    >>> def my_decompress(compressed_tensor, metadata):
+    ...     return compressed_tensor.to(metadata["dtype"])
+    >>>
+    >>> storage = CompressedStorage(
+    ...     max_size=1000,
+    ...     compression_fn=my_compress,
+    ...     decompression_fn=my_decompress
+    ... )
+
+.. note:: The CompressedStorage requires the `zstandard` library for default compression.
+  Install with: ``pip install zstandard``
+
+.. note:: An example of how to use the CompressedStorage is available in the 
+  `examples/replay-buffers/compressed_replay_buffer_example.py <https://github.com/pytorch/rl/blob/main/examples/replay-buffers/compressed_replay_buffer_example.py>`_ file.
 
 Sharing replay buffers across processes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

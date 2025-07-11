@@ -68,6 +68,118 @@ class ListStorageCheckpointer(StorageCheckpointerBase):
         )
 
 
+class CompressedStorageCheckpointer(StorageCheckpointerBase):
+    """A storage checkpointer for CompressedStorage.
+
+    This checkpointer saves compressed data and metadata separately for efficient storage.
+
+    """
+
+    def dumps(self, storage, path):
+        path = Path(path)
+        path.mkdir(exist_ok=True)
+
+        if not hasattr(storage, "_compressed_data") or not storage._compressed_data:
+            raise RuntimeError(
+                "Cannot save an empty or non-initialized CompressedStorage."
+            )
+
+        # Save compressed data and metadata
+        state_dict = storage.state_dict()
+
+        # Save compressed data as separate files for efficiency
+        compressed_data = state_dict["_compressed_data"]
+        metadata = state_dict["_metadata"]
+
+        # Save metadata
+        with open(path / "compressed_metadata.json", "w") as f:
+            json.dump(metadata, f, default=str)
+
+        # Save compressed data
+        for i, (compressed_item, item_metadata) in enumerate(
+            zip(compressed_data, metadata)
+        ):
+            if compressed_item is not None:
+                if item_metadata["type"] == "tensor":
+                    # Save as numpy array
+                    np.save(
+                        path / f"compressed_data_{i}.npy", compressed_item.cpu().numpy()
+                    )
+                elif item_metadata["type"] == "tensordict":
+                    # Save each field separately
+                    item_dir = path / f"compressed_data_{i}"
+                    item_dir.mkdir(exist_ok=True)
+
+                    for key, value in compressed_item.items():
+                        if isinstance(value, torch.Tensor):
+                            np.save(item_dir / f"{key}.npy", value.cpu().numpy())
+                        else:
+                            # Save non-tensor data as pickle
+                            import pickle
+
+                            with open(item_dir / f"{key}.pkl", "wb") as f:
+                                pickle.dump(value, f)
+                else:
+                    # Save other types as pickle
+                    import pickle
+
+                    with open(path / f"compressed_data_{i}.pkl", "wb") as f:
+                        pickle.dump(compressed_item, f)
+
+    def loads(self, storage, path):
+        path = Path(path)
+
+        # Load metadata
+        with open(path / "compressed_metadata.json") as f:
+            metadata = json.load(f)
+
+        # Load compressed data
+        compressed_data = []
+        i = 0
+
+        while True:
+            if (path / f"compressed_data_{i}.npy").exists():
+                # Load tensor data
+                data = np.load(path / f"compressed_data_{i}.npy")
+                compressed_data.append(torch.from_numpy(data))
+            elif (path / f"compressed_data_{i}.pkl").exists():
+                # Load other data
+                import pickle
+
+                with open(path / f"compressed_data_{i}.pkl", "rb") as f:
+                    data = pickle.load(f)
+                compressed_data.append(data)
+            elif (path / f"compressed_data_{i}").exists():
+                # Load tensordict data
+                item_dir = path / f"compressed_data_{i}"
+                item_data = {}
+
+                for key in metadata[i]["fields"].keys():
+                    if (item_dir / f"{key}.npy").exists():
+                        data = np.load(item_dir / f"{key}.npy")
+                        item_data[key] = torch.from_numpy(data)
+                    elif (item_dir / f"{key}.pkl").exists():
+                        import pickle
+
+                        with open(item_dir / f"{key}.pkl", "rb") as f:
+                            data = pickle.load(f)
+                        item_data[key] = data
+
+                compressed_data.append(item_data)
+            else:
+                break
+
+            i += 1
+
+        # Pad with None to match metadata length
+        while len(compressed_data) < len(metadata):
+            compressed_data.append(None)
+
+        # Load into storage
+        storage._compressed_data = compressed_data
+        storage._metadata = metadata
+
+
 class TensorStorageCheckpointer(StorageCheckpointerBase):
     """A storage checkpointer for TensorStorages.
 
