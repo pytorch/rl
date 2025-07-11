@@ -1192,6 +1192,8 @@ class TestKLTransforms:
             ref_model=ref_model,
             assistant_only=assistant_only,
             tokenizer=tokenizer,
+            gen_log_probs_full_key=("gen_log_probs", "full"),
+            ref_log_probs_full_key=("ref_log_probs", "full"),
         )
 
         # Apply transform
@@ -1202,15 +1204,15 @@ class TestKLTransforms:
         # Check that both log-probs and KL are present
         assert ("gen_log_probs", "full") in result
         assert ("ref_log_probs", "full") in result
-        assert "kl" in result
+        assert "kl_penalty" in result
 
         # Check KL structure
         if pad_output:
-            kl = result.get("kl")
+            kl = result.get("kl_penalty")
             assert isinstance(kl, torch.Tensor)
             assert kl.shape[0] == 2  # batch size
         else:
-            kl = result.get("kl", as_list=True)
+            kl = result.get("kl_penalty", as_list=True)
             # For unpadded output, we get a list of tensors
             assert isinstance(kl, list)
             assert len(kl) == 2  # batch size
@@ -1391,7 +1393,7 @@ class TestKLTransforms:
 
         # Check that reward is modified
         assert "reward" in result
-        reward = result.get("reward")
+        reward = result.get("reward", as_list=True)
         assert reward is not None
 
 
