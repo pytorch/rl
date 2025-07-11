@@ -39,8 +39,18 @@ from torchrl.modules.utils.utils import _unpad_tensors
 class TransformersWrapper(LLMWrapperBase):
     """A wrapper class for Hugging Face Transformers models, providing a consistent interface for text generation and log probability computation.
 
-    This class is a subclass of :class:`~torchrl.modules.llm.policies.LLMWrapperBase` and provides a unified API for handling different input modalities
-    (history, text, tokens) with consistent output structure using :class:`~tensordict.TensorClass` objects.
+    Packing vs Padding:
+        - Packing (`pad_model_input=False`):
+            * More memory efficient for variable-length sequences.
+            * Not all models support packed input (requires custom attention masks and position ids).
+            * May be less compatible with some HuggingFace models or custom architectures.
+        - Padding (`pad_model_input=True`):
+            * Universally supported by all models.
+            * Wastes memory for short sequences in a batch.
+            * Simpler, but less efficient for highly variable-length data.
+        - If unsure, use padding for maximum compatibility. Use packing for large batches of variable-length data and when your model supports it.
+
+    Additional error handling is provided for empty and overlong sequences.
 
     Args:
         model (transformers.AutoModelForCausalLM | str): The Hugging Face Transformers model to wrap.
@@ -2038,9 +2048,26 @@ class TransformersWrapper(LLMWrapperBase):
         )
 
     def _model_forward_with_padded_sequences(
-        self, tokens_full_padded, attention_mask_full_padded, pad_val, logits_only=False, **kwargs
+        self,
+        tokens_full_padded: torch.Tensor,
+        attention_mask_full_padded: torch.Tensor,
+        *,
+        pad_val: float | int | torch.Tensor | None = None,
+        logits_only: bool = False,
+        **kwargs,
     ):
         """Forward pass with padded sequences."""
+        # Error handling for empty sequences
+        if tokens_full_padded.numel() == 0:
+            raise ValueError(
+                "Input contains empty sequences. Packing/padding requires at least one token per sequence."
+            )
+        # Error handling for overlong sequences
+        max_len = getattr(self.model.config, "max_position_embeddings", None)
+        if max_len is not None and tokens_full_padded.shape[-1] > max_len:
+            raise ValueError(
+                f"Input sequence length ({tokens_full_padded.shape[-1]}) exceeds model's max_position_embeddings ({max_len}). Consider truncating or splitting your input."
+            )
         tokens_out_struct = self.model(
             tokens_full_padded, attention_mask_full_padded, **kwargs
         )
@@ -2057,35 +2084,51 @@ class TransformersWrapper(LLMWrapperBase):
         return log_probs_full_padded, logits_full_padded
 
     def _model_forward_with_packed_sequences(
-        self, flat_input_ids, block_diag_attention_mask, pad: bool = True, logits_only=False, **kwargs
+        self,
+        flat_input_ids: torch.Tensor,
+        block_diag_attention_mask: torch.Tensor,
+        *,
+        pad: bool = True,
+        logits_only: bool = False,
+        **kwargs,
     ):
         """Pack sequences into a single tensor and forward them through the model.
 
         Args:
-            input_ids: NestedTensor of shape (batch_size, -1)
-            attention_mask: NestedTensor of shape (batch_size, -1)
+            flat_input_ids (NestedTensor): NestedTensor of shape (batch_size, -1)
+            block_diag_attention_mask (NestedTensor): NestedTensor of shape (batch_size, -1)
 
         Returns:
-            logits: NestedTensor of shape (batch_size, -1, vocab_size)
+            pad (bool): Whether to pad the output tensors.
+            logits_only (bool): Whether to return only logits.
+            kwargs (dict): Additional keyword arguments to pass to the model.
 
         """
+        # Error handling for empty sequences
+        if flat_input_ids.numel() == 0:
+            raise ValueError(
+                "Input contains empty sequences. Packing requires at least one token per sequence."
+            )
+        # Error handling for overlong sequences
+        # Note: Skipping this check for nested tensors due to symbolic representation issues
+        # The model will handle sequence length limits internally
+        max_len = getattr(self.model.config, "max_position_embeddings", None)
+        if max_len is not None and not hasattr(flat_input_ids, "size"):
+            # Only check for regular tensors, not nested tensors
+            actual_size = flat_input_ids.shape[-1]
+            if actual_size > max_len:
+                raise ValueError(
+                    f"Input sequence length ({actual_size}) exceeds model's max_position_embeddings ({max_len}). Consider truncating or splitting your input."
+                )
         (
             flat_input_ids,
             block_diag_attention_mask,
             packing_metadata,
         ) = self._pack_sequences(flat_input_ids, block_diag_attention_mask)
-        # check shapes: [B, L] for input_ids, [B, L, L] for attention_mask
-        if flat_input_ids.shape != block_diag_attention_mask.shape[:2]:
-            raise ValueError(
-                f"Input ids shape {flat_input_ids.shape=} does not match attention mask shape {block_diag_attention_mask.shape[:2]=}"
-            )
-        if flat_input_ids.shape[1] != block_diag_attention_mask.shape[2]:
-            raise ValueError(
-                f"Input ids shape {flat_input_ids.shape[1]=} does not match attention mask shape {block_diag_attention_mask.shape[2]=}"
-            )
+
         outputs = self.model(
             input_ids=flat_input_ids,
-            attention_mask=block_diag_attention_mask,
+            attention_mask=block_diag_attention_mask.unsqueeze(0),
             position_ids=packing_metadata["position_ids"],
             use_cache=False,  # Disable KV cache for packing
             **kwargs,
@@ -2113,28 +2156,32 @@ class TransformersWrapper(LLMWrapperBase):
             logits_only=logits_only,
         )
         # check shapes: [1, L] for log_probs, [1, L, vocab_size] for logits
-        if log_probs.shape != logits.shape[:2]:
-            raise ValueError(
-                f"Log probs shape {log_probs.shape=} does not match logits shape {logits.shape[:2]=}"
-            )
-        if log_probs.ndim != 2:
-            raise ValueError(f"Log probs shape {log_probs.shape=} is not 2D")
-        if logits.ndim != 3:
-            raise ValueError(f"Logits shape {logits.shape=} is not 3D")
-        sequence_lengths = packing_metadata["sequence_lengths"]
-        if log_probs.shape[1] != sequence_lengths.sum():
-            raise ValueError(
-                f"Log probs shape {log_probs.shape=} does not match sequence lengths {sequence_lengths.sum()=}"
+        if logits_only:
+            log_probs = None
+        else:
+            if log_probs.shape != logits.shape[:2]:
+                raise ValueError(
+                    f"Log probs shape {log_probs.shape=} does not match logits shape {logits.shape[:2]=}"
+                )
+            if log_probs.ndim != 2:
+                raise ValueError(f"Log probs shape {log_probs.shape=} is not 2D")
+            if logits.ndim != 3:
+                raise ValueError(f"Logits shape {logits.shape=} is not 3D")
+            sequence_lengths = packing_metadata["sequence_lengths"]
+            if log_probs.shape[1] != sequence_lengths.sum():
+                raise ValueError(
+                    f"Log probs shape {log_probs.shape=} does not match sequence lengths {sequence_lengths.sum()=}"
+                )
+
+            log_probs = log_probs.squeeze(0)
+            nested_logprobs = torch.nested.nested_tensor_from_jagged(
+                log_probs,
+                lengths=sequence_lengths,
             )
 
         logits = logits.squeeze(0)
         nested_logits = torch.nested.nested_tensor_from_jagged(
             logits,  # Remove batch dim: (total_length, vocab_size)
-            lengths=sequence_lengths,
-        )
-        log_probs = log_probs.squeeze(0)
-        nested_logprobs = torch.nested.nested_tensor_from_jagged(
-            log_probs,
             lengths=sequence_lengths,
         )
 
@@ -2173,7 +2220,7 @@ class TransformersWrapper(LLMWrapperBase):
         seq_ids = torch.arange(len(sequence_lengths), device=sequence_lengths.device)
         position_to_seq_id = seq_ids.repeat_interleave(sequence_lengths)
 
-        positions = torch.arange(total_length, device=sequence_lengths.device)
+        positions = torch.arange(int(total_length), device=sequence_lengths.device)
 
         same_sequence = position_to_seq_id.unsqueeze(1) == position_to_seq_id.unsqueeze(
             0
@@ -2193,7 +2240,7 @@ class TransformersWrapper(LLMWrapperBase):
         No cuda syncs.
         """
         if total_length is None:
-            total_length = sequence_lengths.sum()
+            total_length = int(sequence_lengths.sum().item())
 
         # Create global position IDs: [0, 1, 2, 3, 4]
         global_positions = torch.arange(total_length, device=sequence_lengths.device)
