@@ -680,8 +680,8 @@ class RetrieveKL(Compose):
                 For other input modes (`"text"` or `"tokens"`), set `assistant_only=False`.
                 This ensures users are conscious of the limitation that assistant token identification requires structured conversation history.
 
-        gen_log_prob_full_key (str): the key where the log-probs of the generation model are stored. Defaults to `("log_probs", "full")`.
-        ref_log_prob_full_key (str): the key where the log-probs of the reference model are stored. Defaults to `("ref_log_probs", "full")`.
+        gen_log_probs_full_key (str): the key where the log-probs of the generation model are stored. Defaults to `("log_probs", "full")`.
+        ref_log_probs_full_key (str): the key where the log-probs of the reference model are stored. Defaults to `("ref_log_probs", "full")`.
         history_key (str): the key where the history is stored. Defaults to `"history"`.
         tokenizer_kwargs (dict): the keyword arguments to pass to the tokenizer to be used to apply the chat template to the history when `assistant_only` is `True`.
             To control the tokenization in the actor, pass the tokenizer kwargs to the actor constructor.
