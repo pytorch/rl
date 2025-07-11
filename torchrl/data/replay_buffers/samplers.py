@@ -738,11 +738,13 @@ class PrioritizedSampler(Sampler):
         self._alpha = metadata["_alpha"]
         self._beta = metadata["_beta"]
         self._eps = metadata["_eps"]
-        tree_map(
-            lambda dest, orig: dest.copy_(orig),
+        maxp = tree_map(
+            lambda dest, orig: dest.copy_(orig) if dest is not None else orig,
             tuple(self._max_priority),
             tuple(metadata["_max_priority"]),
         )
+        if all(x is None for x in self._max_priority):
+            self._max_priority = maxp
         _max_capacity = metadata["_max_capacity"]
         if _max_capacity != self._max_capacity:
             raise RuntimeError(
