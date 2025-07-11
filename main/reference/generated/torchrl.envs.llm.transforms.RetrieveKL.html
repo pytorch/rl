@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+d2d02fa) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+523ba2e) &#x25BC</span></a>
     </div>
     
 
@@ -463,8 +463,8 @@ For other input modes (<cite>“text”</cite> or <cite>“tokens”</cite>), se
 This ensures users are conscious of the limitation that assistant token identification requires structured conversation history.</p>
 </div>
 </p></li>
-<li><p><strong>gen_log_prob_full_key</strong> (<em>str</em>) – the key where the log-probs of the generation model are stored. Defaults to <cite>(“log_probs”, “full”)</cite>.</p></li>
-<li><p><strong>ref_log_prob_full_key</strong> (<em>str</em>) – the key where the log-probs of the reference model are stored. Defaults to <cite>(“ref_log_probs”, “full”)</cite>.</p></li>
+<li><p><strong>gen_log_probs_full_key</strong> (<em>str</em>) – the key where the log-probs of the generation model are stored. Defaults to <cite>(“log_probs”, “full”)</cite>.</p></li>
+<li><p><strong>ref_log_probs_full_key</strong> (<em>str</em>) – the key where the log-probs of the reference model are stored. Defaults to <cite>(“ref_log_probs”, “full”)</cite>.</p></li>
 <li><p><strong>history_key</strong> (<em>str</em>) – the key where the history is stored. Defaults to <cite>“history”</cite>.</p></li>
 <li><p><strong>tokenizer_kwargs</strong> (<em>dict</em>) – the keyword arguments to pass to the tokenizer to be used to apply the chat template to the history when <cite>assistant_only</cite> is <cite>True</cite>.
 To control the tokenization in the actor, pass the tokenizer kwargs to the actor constructor.
