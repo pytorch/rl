@@ -726,7 +726,7 @@ class vLLMWrapper(LLMWrapperBase):
             h_responses = _extract_responses_from_full_histories(
                 text_full, prompt_histories, self.chat_template_name, self.tokenizer
             )
-            history_chat_flat.response = torch.stack(h_responses)
+            history_chat_flat.response = h_responses
         result.set(self.history_key, history_chat)
         return result
 
