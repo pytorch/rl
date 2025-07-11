@@ -1,6 +1,6 @@
 # Task and env
 env:
-  name: MiniGrid-Empty-5x5-v0
+  name: CartPole-v1
   task: ""
   backend: gymnasium
   n_samples_stats: 1000
@@ -22,7 +22,7 @@ collector:
 
 # Logger
 logger:
-  backend: csv
+  backend: wandb
   project_name: torchrl_example_cql
   group_name: null
   exp_name: cql_cartpole_gym

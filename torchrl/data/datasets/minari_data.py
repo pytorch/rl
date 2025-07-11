@@ -167,6 +167,7 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
         prefetch: int | None = None,
         transform: torchrl.envs.Transform | None = None,  # noqa-F821
         split_trajs: bool = False,
+        load_from_local_minari: bool = False,
     ):
         self.dataset_id = dataset_id
         if root is None:
@@ -175,7 +176,9 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
         self.root = root
         self.split_trajs = split_trajs
         self.download = download
-        if self.download == "force" or (self.download and not self._is_downloaded()):
+        self.load_from_local_minari = load_from_local_minari
+
+        if self.download == "force" or (self.download and not self._is_downloaded()) or self.load_from_local_minari:
             if self.download == "force":
                 try:
                     if os.path.exists(self.data_path_root):
@@ -240,13 +243,34 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             os.environ["MINARI_DATASETS_PATH"] = tmpdir
-            minari.download_dataset(dataset_id=self.dataset_id)
-            parent_dir = Path(tmpdir) / self.dataset_id / "data"
 
-            td_data = TensorDict()
             total_steps = 0
-            torchrl_logger.info("first read through data to create data structure...")
-            h5_data = PersistentTensorDict.from_h5(parent_dir / "main_data.hdf5")
+            td_data = TensorDict()
+
+            if self.load_from_local_minari:
+                # Load minari dataset from user's local Minari cache
+
+                minari_cache_dir = os.path.expanduser("~/.minari/datasets")
+                os.environ["MINARI_DATASETS_PATH"] = minari_cache_dir
+                parent_dir = Path(minari_cache_dir) / self.dataset_id / "data"
+                h5_path = parent_dir / "main_data.hdf5"
+
+                if not h5_path.exists():
+                    raise FileNotFoundError(f"{h5_path} does not exist in local Minari cache!")
+                
+                torchrl_logger.info(
+                    f"loading dataset from local Minari cache at {h5_path}"
+                )
+                h5_data = PersistentTensorDict.from_h5(h5_path)
+
+            else:
+                minari.download_dataset(dataset_id=self.dataset_id)
+                
+                parent_dir = Path(tmpdir) / self.dataset_id / "data"
+
+                torchrl_logger.info("first read through data to create data structure...")
+                h5_data = PersistentTensorDict.from_h5(parent_dir / "main_data.hdf5")
+
             # populate the tensordict
             episode_dict = {}
             for i, (episode_key, episode) in enumerate(h5_data.items()):
