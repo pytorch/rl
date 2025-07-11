@@ -12,7 +12,7 @@ from functools import partial
 
 import pytest
 import torch
-from tensordict import lazy_stack, set_list_to_stack, TensorDict
+from tensordict import assert_close, lazy_stack, set_list_to_stack, TensorDict
 
 from tensordict.utils import _zip_strict
 from torchrl.data.llm import History
@@ -161,6 +161,22 @@ def sample_tokens(vllm_instance):
     ]
     tokenized = tokenizer(text, return_tensors="pt", padding=True, padding_side="left")
     return tokenized["input_ids"], tokenized["attention_mask"]
+
+
+@pytest.fixture
+def sample_tokens_unpadded(vllm_instance):
+    """Create sample tokens for testing."""
+    model, tokenizer = vllm_instance
+    text = [
+        "Are you happy? Say yes or no.",
+        "Explain the difference between a cat and a dog. Be very detailed.",
+    ]
+    tokenized = tokenizer(text, padding=False)
+    return torch.nested.nested_tensor(
+        [torch.tensor(t) for t in tokenized["input_ids"]], layout=torch.jagged
+    ), torch.nested.nested_tensor(
+        [torch.tensor(t) for t in tokenized["attention_mask"]], layout=torch.jagged
+    )
 
 
 def check_output_shapes(out, pad_output, requested_log_probs=False):
@@ -339,6 +355,7 @@ class TestWrappers:
             data = data[0]
 
         # Run wrapper
+        print(f"{data=}")
         result = wrapper(data)
         check_output_shapes(result, pad_output, requested_log_probs=not generate)
 
@@ -1656,8 +1673,6 @@ class TestLogProbsComparison:
         vllm_lp_result = vllm_lp_wrapper(new_data.copy())
         tf_lp_result = tf_lp_wrapper(new_data.copy())
 
-        from tensordict import assert_close
-
         assert_close(
             vllm_lp_result, tf_lp_result, atol=1e-1, rtol=1e-1, intersection=True
         )
@@ -1823,6 +1838,102 @@ class TestDistributionMethods:
 
         assert dist is not None
         assert hasattr(dist, "log_prob")
+
+
+@pytest.mark.skipif(not _has_transformers, reason="transformers not available")
+@pytest.mark.parametrize("pad_output", [True, False])
+class TestPacking:
+    def test_packing_history(
+        self, transformers_instance, sample_history_assistant, pad_output
+    ):
+        model, tokenizer = transformers_instance
+
+        wrapper_packed = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode="history",
+            generate=False,
+            return_log_probs=True,
+            pad_output=pad_output,
+            pad_model_input=False,
+        )
+        wrapped_padded = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode="history",
+            generate=False,
+            return_log_probs=True,
+            pad_output=pad_output,
+            pad_model_input=True,
+        )
+
+        td = TensorDict(
+            {"history": ChatHistory(full=sample_history_assistant)}, batch_size=(2,)
+        ).to_lazystack(0)
+
+        result_packed = wrapper_packed(td)
+        result_padded = wrapped_padded(td)
+        assert_close(result_packed["log_probs"], result_padded["log_probs"])
+
+    def test_packing_text(self, transformers_instance, sample_text, pad_output):
+        model, tokenizer = transformers_instance
+        wrapper_packed = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode="text",
+            generate=False,
+            return_log_probs=True,
+            pad_output=pad_output,
+            pad_model_input=False,
+        )
+        wrapped_padded = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode="text",
+            generate=False,
+            return_log_probs=True,
+            pad_output=pad_output,
+            pad_model_input=True,
+        )
+        td = TensorDict({"text": Text(full=sample_text)}, batch_size=(2,)).to_lazystack(
+            0
+        )
+        result_packed = wrapper_packed(td)
+        result_padded = wrapped_padded(td)
+        assert_close(result_packed["log_probs"], result_padded["log_probs"])
+
+    def test_packing_tokens(
+        self, transformers_instance, sample_tokens_unpadded, pad_output
+    ):
+        model, tokenizer = transformers_instance
+        wrapper_packed = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode="tokens",
+            generate=False,
+            return_log_probs=True,
+            pad_output=pad_output,
+            pad_model_input=False,
+        )
+        wrapped_padded = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode="tokens",
+            generate=False,
+            return_log_probs=True,
+            pad_output=pad_output,
+            pad_model_input=True,
+        )
+        td = TensorDict(
+            {
+                "tokens": Tokens(full=sample_tokens_unpadded[0]),
+                "masks": Masks(all_attention_mask=sample_tokens_unpadded[1]),
+            },
+            batch_size=(2,),
+        ).to_lazystack(0)
+        result_packed = wrapper_packed(td)
+        result_padded = wrapped_padded(td)
+        assert_close(result_packed["log_probs"], result_padded["log_probs"])
 
 
 if __name__ == "__main__":
