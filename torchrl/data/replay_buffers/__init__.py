@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from .checkpointers import (
-    CompressedStorageCheckpointer,
+    CompressedListStorageCheckpointer,
     FlatStorageCheckpointer,
     H5StorageCheckpointer,
     ListStorageCheckpointer,
@@ -33,7 +33,7 @@ from .samplers import (
     SliceSamplerWithoutReplacement,
 )
 from .storages import (
-    CompressedStorage,
+    CompressedListStorage,
     LazyMemmapStorage,
     LazyStackStorage,
     LazyTensorStorage,
@@ -53,8 +53,8 @@ from .writers import (
 )
 
 __all__ = [
-    "CompressedStorage",
-    "CompressedStorageCheckpointer",
+    "CompressedListStorage",
+    "CompressedListStorageCheckpointer",
     "FlatStorageCheckpointer",
     "H5StorageCheckpointer",
     "ListStorageCheckpointer",

@@ -144,8 +144,8 @@ using the following components:
     :template: rl_template.rst
 
 
-    CompressedStorage
-    CompressedStorageCheckpointer
+    CompressedListStorage
+    CompressedListStorageCheckpointer
     FlatStorageCheckpointer
     H5StorageCheckpointer
     ImmutableDatasetWriter
@@ -197,10 +197,10 @@ Compressed Storage for Memory Efficiency
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 For applications where memory usage or memory bandwidth is a primary concern, especially when storing or transferring
-large sensory observations like images or audio, the :class:`~torchrl.data.replay_buffers.storages.CompressedStorage`
+large sensory observations like images, audio, or text. The :class:`~torchrl.data.replay_buffers.storages.CompressedListStorage`
 provides significant memory savings through compression.
 
-The `CompressedStorage`` compresses data when storing and decompresses when retrieving,
+The `CompressedListStorage`` compresses data when storing and decompresses when retrieving,
 achieving compression ratios of 2-10x for image data while maintaining full data fidelity.
 It uses zstd compression by default but supports custom compression algorithms.
 
@@ -214,11 +214,11 @@ Key features:
 Example usage:
 
     >>> import torch
-    >>> from torchrl.data import ReplayBuffer, CompressedStorage
+    >>> from torchrl.data import ReplayBuffer, CompressedListStorage
     >>> from tensordict import TensorDict
     >>>
     >>> # Create a compressed storage for image data
-    >>> storage = CompressedStorage(max_size=1000, compression_level=3)
+    >>> storage = CompressedListStorage(max_size=1000, compression_level=3)
     >>> rb = ReplayBuffer(storage=storage, batch_size=32)
     >>>
     >>> # Add image data
@@ -241,16 +241,16 @@ For custom compression algorithms:
     >>> def my_decompress(compressed_tensor, metadata):
     ...     return compressed_tensor.to(metadata["dtype"])
     >>>
-    >>> storage = CompressedStorage(
+    >>> storage = CompressedListStorage(
     ...     max_size=1000,
     ...     compression_fn=my_compress,
     ...     decompression_fn=my_decompress
     ... )
 
-.. note:: The CompressedStorage requires the `zstandard` library for default compression.
+.. note:: The CompressedListStorage requires the `zstandard` library for default compression.
   Install with: ``pip install zstandard``
 
-.. note:: An example of how to use the CompressedStorage is available in the 
+.. note:: An example of how to use the CompressedListStorage is available in the 
   `examples/replay-buffers/compressed_replay_buffer_example.py <https://github.com/pytorch/rl/blob/main/examples/replay-buffers/compressed_replay_buffer_example.py>`_ file.
 
 Sharing replay buffers across processes
