@@ -68,8 +68,8 @@ class ListStorageCheckpointer(StorageCheckpointerBase):
         )
 
 
-class CompressedStorageCheckpointer(StorageCheckpointerBase):
-    """A storage checkpointer for CompressedStorage.
+class CompressedListStorageCheckpointer(StorageCheckpointerBase):
+    """A storage checkpointer for CompressedListStorage.
 
     This checkpointer saves compressed data and metadata separately for efficient storage.
 
@@ -79,9 +79,12 @@ class CompressedStorageCheckpointer(StorageCheckpointerBase):
         path = Path(path)
         path.mkdir(exist_ok=True)
 
-        if not hasattr(storage, "_compressed_data") or not storage._compressed_data:
+        if (
+            not hasattr(storage, "_compressed_data")
+            or len(storage._compressed_data) == 0
+        ):
             raise RuntimeError(
-                "Cannot save an empty or non-initialized CompressedStorage."
+                "Cannot save an empty or non-initialized CompressedListStorage."
             )
 
         # Save compressed data and metadata
@@ -107,7 +110,7 @@ class CompressedStorageCheckpointer(StorageCheckpointerBase):
                     )
                 elif item_metadata["type"] == "tensordict":
                     # Save each field separately
-                    item_dir = path / f"compressed_data_{i}"
+                    item_dir = path / f"compressed_data_{i}.td"
                     item_dir.mkdir(exist_ok=True)
 
                     for key, value in compressed_item.items():
@@ -133,10 +136,34 @@ class CompressedStorageCheckpointer(StorageCheckpointerBase):
         with open(path / "compressed_metadata.json") as f:
             metadata = json.load(f)
 
+        # Convert string dtypes back to torch.dtype objects
+        def convert_dtype(item):
+            if isinstance(item, dict):
+                if "dtype" in item and isinstance(item["dtype"], str):
+                    # Convert string back to torch.dtype
+                    dtype_str = item["dtype"]
+                    if hasattr(torch, dtype_str.replace("torch.", "")):
+                        item["dtype"] = getattr(torch, dtype_str.replace("torch.", ""))
+                    else:
+                        # Handle cases like 'torch.float32' -> torch.float32
+                        item["dtype"] = eval(dtype_str)
+
+                # Recursively handle nested dictionaries
+                for _key, value in item.items():
+                    if isinstance(value, dict):
+                        convert_dtype(value)
+            return item
+
+        for item in metadata:
+            if item is not None:
+                convert_dtype(item)
+
         # Load compressed data
         compressed_data = []
         i = 0
 
+        # TODO(adrian): Can we not know the serialised format beforehand? Then we can use glob to iterate through the files we know exist:
+        # `for path in glob.glob(path / f"compressed_data_*.{fmt}" for fmt in ["npy", "pkl", "td"]):``
         while True:
             if (path / f"compressed_data_{i}.npy").exists():
                 # Load tensor data
@@ -149,9 +176,9 @@ class CompressedStorageCheckpointer(StorageCheckpointerBase):
                 with open(path / f"compressed_data_{i}.pkl", "rb") as f:
                     data = pickle.load(f)
                 compressed_data.append(data)
-            elif (path / f"compressed_data_{i}").exists():
+            elif (path / f"compressed_data_{i}.td").exists():
                 # Load tensordict data
-                item_dir = path / f"compressed_data_{i}"
+                item_dir = path / f"compressed_data_{i}.td"
                 item_data = {}
 
                 for key in metadata[i]["fields"].keys():
