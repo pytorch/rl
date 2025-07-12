@@ -196,7 +196,7 @@ were found from rough benchmarking in https://github.com/pytorch/rl/tree/main/be
 Compressed Storage for Memory Efficiency
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-For applications where memory usage is a primary concern, especially when storing
+For applications where memory usage or memory bandwidth is a primary concern, especially when storing or transferring
 large sensory observations like images or audio, the :class:`~torchrl.data.replay_buffers.storages.CompressedStorage`
 provides significant memory savings through compression.
 
