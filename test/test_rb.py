@@ -4322,7 +4322,7 @@ class TestCompressedListStorage:
         storage.set(0, large_tensor)
 
         # Estimate compressed size
-        compressed_data = storage._compressed_data[0]
+        compressed_data = storage._storage[0]
         compressed_size = compressed_data.numel()  # uint8 bytes
 
         # Verify compression ratio is reasonable (at least 2x for random data)
