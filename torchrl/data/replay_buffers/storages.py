@@ -7,6 +7,7 @@ from __future__ import annotations
 import abc
 import logging
 import os
+import sys
 import textwrap
 import warnings
 from collections import OrderedDict
@@ -303,10 +304,10 @@ class ListStorage(Storage):
                 )
             return
         else:
-            if cursor > len(self):
+            if cursor > len(self._storage):
                 raise RuntimeError(
                     "Cannot append data located more than one item away from "
-                    f"the storage size: the storage size is {len(self)} "
+                    f"the storage size: the storage size is {len(self._storage)} "
                     f"and the index of the item to be set is {cursor}."
                 )
             if cursor >= self.max_size:
@@ -402,7 +403,7 @@ class ListStorage(Storage):
     def contains(self, item):
         if isinstance(item, int):
             if item < 0:
-                item += len(self)
+                item += len(self._storage)
             return self._contains_int(item)
         if isinstance(item, torch.Tensor):
             return torch.tensor(
@@ -414,7 +415,7 @@ class ListStorage(Storage):
 
     def _contains_int(self, item: int) -> bool:
         """Check if an integer index is contained in the storage."""
-        return 0 <= item < len(self)
+        return 0 <= item < len(self._storage)
 
 
 class LazyStackStorage(ListStorage):
@@ -1462,42 +1463,44 @@ class CompressedListStorage(ListStorage):
 
     def _default_compression_fn(self, tensor: torch.Tensor) -> torch.Tensor:
         """Default compression using zstd."""
-        try:
-            import zstandard as zstd
-        except ImportError:
-            raise ImportError(
-                "zstandard is required for default compression. "
-                "Install with: pip install zstandard"
-            )
+        if sys.version_info >= (3, 14):
+            from compression import zstd
+
+            compressor_fn = zstd.compress
+
+        else:
+            import zlib
+
+            compressor_fn = zlib.compress
 
         # Convert tensor to bytes
-        tensor_bytes = tensor.cpu().numpy().tobytes()
+        tensor_bytes = self.to_bytestream(tensor)
 
         # Compress with zstd
-        compressor = zstd.ZstdCompressor(level=self.compression_level)
-        compressed_bytes = compressor.compress(tensor_bytes)
+        compressed_bytes = compressor_fn(tensor_bytes, level=self.compression_level)
 
         # Convert to tensor
-        return torch.tensor(list(compressed_bytes), dtype=torch.uint8)
+        return torch.frombuffer(bytearray(compressed_bytes), dtype=torch.uint8)
 
     def _default_decompression_fn(
         self, compressed_tensor: torch.Tensor, metadata: dict
     ) -> torch.Tensor:
         """Default decompression using zstd."""
-        try:
-            import zstandard as zstd
-        except ImportError:
-            raise ImportError(
-                "zstandard is required for default decompression. "
-                "Install with: pip install zstandard"
-            )
+        if sys.version_info >= (3, 14):
+            from compression import zstd
+
+            decompressor_fn = zstd.decompress
+
+        else:
+            import zlib
+
+            decompressor_fn = zlib.decompress
 
         # Convert tensor to bytes
-        compressed_bytes = bytes(compressed_tensor.cpu().numpy())
+        compressed_bytes = self.to_bytestream(compressed_tensor.cpu())
 
         # Decompress with zstd
-        decompressor = zstd.ZstdDecompressor()
-        decompressed_bytes = decompressor.decompress(compressed_bytes)
+        decompressed_bytes = decompressor_fn(compressed_bytes)
 
         # Convert back to tensor
         tensor = torch.frombuffer(
@@ -1645,7 +1648,7 @@ class CompressedListStorage(ListStorage):
         self._storage = state_dict["_storage"]
         self._metadata = state_dict["_metadata"]
 
-    def bytes(self):
+    def num_bytes(self):
         """Return the number of bytes in the storage."""
 
         def compressed_size_from_list(data: Any) -> int:
@@ -1669,6 +1672,45 @@ class CompressedListStorage(ListStorage):
             warnings.warn("Compressed storage is empty, returning 0 bytes.")
 
         return compressed_size_estimate
+
+    def to_bytestream(self, data_to_bytestream: torch.Tensor | np.array | Any) -> bytes:
+        """Convert data to a byte stream."""
+        if isinstance(data_to_bytestream, torch.Tensor):
+            byte_stream = data_to_bytestream.cpu().numpy().tobytes()
+
+        elif isinstance(data_to_bytestream, np.array):
+            byte_stream = bytes(data_to_bytestream.tobytes())
+
+        else:
+            import io
+            import pickle
+
+            buffer = io.BytesIO()
+            pickle.dump(data_to_bytestream, buffer)
+            buffer.seek(0)
+            byte_stream = bytes(buffer.read())
+
+        return byte_stream
+
+    # def to_bytestream(
+    #     self, data_to_bytestream: Union[torch.Tensor, np.array, Any]
+    # ) -> bytes:
+    #     """Convert data to a byte stream."""
+    #     if isinstance(data_to_bytestream, torch.Tensor):
+    #         from safetensors.torch import save
+    #         byte_stream = save({"0": data_to_bytestream})
+
+    #     elif isinstance(data_to_bytestream, np.array):
+    #         from safetensors.numpy import save
+    #         byte_stream = bytes(data_to_bytestream.tobytes())
+
+    #     else:
+    #         buffer = io.BytesIO()
+    #         pickle.dump(data_to_bytestream, buffer)
+    #         buffer.seek(0)
+    #         byte_stream = bytes(buffer.read())
+
+    #     return byte_stream
 
 
 class StorageEnsemble(Storage):
