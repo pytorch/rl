@@ -79,10 +79,7 @@ class CompressedListStorageCheckpointer(StorageCheckpointerBase):
         path = Path(path)
         path.mkdir(exist_ok=True)
 
-        if (
-            not hasattr(storage, "_compressed_data")
-            or len(storage._compressed_data) == 0
-        ):
+        if not hasattr(storage, "_storage") or len(storage._storage) == 0:
             raise RuntimeError(
                 "Cannot save an empty or non-initialized CompressedListStorage."
             )
@@ -90,8 +87,8 @@ class CompressedListStorageCheckpointer(StorageCheckpointerBase):
         # Save compressed data and metadata
         state_dict = storage.state_dict()
 
-        # Save compressed data as separate files for efficiency
-        compressed_data = state_dict["_compressed_data"]
+        # Save compressed data and metadata
+        compressed_data = state_dict["_storage"]
         metadata = state_dict["_metadata"]
 
         # Save metadata
@@ -203,7 +200,7 @@ class CompressedListStorageCheckpointer(StorageCheckpointerBase):
             compressed_data.append(None)
 
         # Load into storage
-        storage._compressed_data = compressed_data
+        storage._storage = compressed_data
         storage._metadata = metadata
 
 
