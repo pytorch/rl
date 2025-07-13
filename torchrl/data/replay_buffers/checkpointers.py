@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import abc
 import json
+import tempfile
 import warnings
 from pathlib import Path
 
@@ -13,11 +14,14 @@ import numpy as np
 import torch
 from tensordict import (
     is_tensor_collection,
+    lazy_stack,
     NonTensorData,
     PersistentTensorDict,
     TensorDict,
 )
 from tensordict.memmap import MemoryMappedTensor
+from tensordict.utils import _zip_strict
+from torch.utils._pytree import tree_map
 from torchrl._utils import _STRDTYPE2DTYPE
 
 from torchrl.data.replay_buffers.utils import (
@@ -71,11 +75,18 @@ class ListStorageCheckpointer(StorageCheckpointerBase):
 class CompressedListStorageCheckpointer(StorageCheckpointerBase):
     """A storage checkpointer for CompressedListStorage.
 
-    This checkpointer saves compressed data and metadata separately for efficient storage.
+    This checkpointer saves compressed data and metadata using memory-mapped storage
+    for efficient disk I/O and memory usage.
 
     """
 
     def dumps(self, storage, path):
+        """Save compressed storage to disk using memory-mapped storage.
+
+        Args:
+            storage: The CompressedListStorage instance to save
+            path: Directory path where to save the storage
+        """
         path = Path(path)
         path.mkdir(exist_ok=True)
 
@@ -84,120 +95,182 @@ class CompressedListStorageCheckpointer(StorageCheckpointerBase):
                 "Cannot save an empty or non-initialized CompressedListStorage."
             )
 
-        # Save compressed data and metadata
+        # Get state dict from storage
         state_dict = storage.state_dict()
-
-        # Save compressed data and metadata
         compressed_data = state_dict["_storage"]
         metadata = state_dict["_metadata"]
 
-        # Save metadata
-        with open(path / "compressed_metadata.json", "w") as f:
-            json.dump(metadata, f, default=str)
+        # Create a temporary directory for processing
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
 
-        # Save compressed data
-        for i, (compressed_item, item_metadata) in enumerate(
-            zip(compressed_data, metadata)
-        ):
-            if compressed_item is not None:
-                if item_metadata["type"] == "tensor":
-                    # Save as numpy array
-                    np.save(
-                        path / f"compressed_data_{i}.npy", compressed_item.cpu().numpy()
-                    )
-                elif item_metadata["type"] == "tensordict":
-                    # Save each field separately
-                    item_dir = path / f"compressed_data_{i}.td"
-                    item_dir.mkdir(exist_ok=True)
+            # Process compressed data for memmap storage
+            processed_data = []
+            for item in compressed_data:
+                if item is None:
+                    processed_data.append(None)
+                    continue
 
-                    for key, value in compressed_item.items():
-                        if isinstance(value, torch.Tensor):
-                            np.save(item_dir / f"{key}.npy", value.cpu().numpy())
-                        else:
-                            # Save non-tensor data as pickle
-                            import pickle
-
-                            with open(item_dir / f"{key}.pkl", "wb") as f:
-                                pickle.dump(value, f)
+                if isinstance(item, torch.Tensor):
+                    # For tensor data, create a TensorDict with the tensor
+                    processed_item = TensorDict({"data": item}, batch_size=[])
+                elif isinstance(item, dict):
+                    # For dict data (tensordict fields), convert to TensorDict
+                    processed_item = TensorDict(item, batch_size=[])
                 else:
-                    # Save other types as pickle
-                    import pickle
+                    # For other types, wrap in TensorDict
+                    processed_item = TensorDict({"data": item}, batch_size=[])
 
-                    with open(path / f"compressed_data_{i}.pkl", "wb") as f:
-                        pickle.dump(compressed_item, f)
+                processed_data.append(processed_item)
+
+            # Stack all non-None items into a single TensorDict for memmap
+            non_none_data = [item for item in processed_data if item is not None]
+            if non_none_data:
+                # Use lazy_stack to handle heterogeneous structures
+                stacked_data = lazy_stack(non_none_data)
+
+                # Save to memmap
+                stacked_data.memmap_(tmp_path / "compressed_data")
+
+                # Create index mapping for None values
+                data_indices = []
+                current_idx = 0
+                for item in processed_data:
+                    if item is None:
+                        data_indices.append(None)
+                    else:
+                        data_indices.append(current_idx)
+                        current_idx += 1
+            else:
+                # No data to save
+                data_indices = []
+
+            # Process metadata for JSON serialization
+            def is_leaf(item):
+                return isinstance(
+                    item,
+                    (
+                        torch.Size,
+                        torch.dtype,
+                        torch.device,
+                        str,
+                        int,
+                        float,
+                        bool,
+                        torch.Tensor,
+                        NonTensorData,
+                    ),
+                )
+
+            def map_to_json_serializable(item):
+                if isinstance(item, torch.Size):
+                    return {"__type__": "torch.Size", "value": list(item)}
+                elif isinstance(item, torch.dtype):
+                    return {"__type__": "torch.dtype", "value": str(item)}
+                elif isinstance(item, torch.device):
+                    return {"__type__": "torch.device", "value": str(item)}
+                elif isinstance(item, torch.Tensor):
+                    return {"__type__": "torch.Tensor", "value": item.tolist()}
+                elif isinstance(item, NonTensorData):
+                    return {"__type__": "NonTensorData", "value": item.data}
+                return item
+
+            serializable_metadata = tree_map(
+                map_to_json_serializable, metadata, is_leaf=is_leaf
+            )
+
+            # Save metadata and indices
+            metadata_file = tmp_path / "metadata.json"
+            with open(metadata_file, "w") as f:
+                json.dump(serializable_metadata, f, indent=2)
+
+            indices_file = tmp_path / "data_indices.json"
+            with open(indices_file, "w") as f:
+                json.dump(data_indices, f, indent=2)
+
+            # Copy all files from temp directory to final destination
+            import shutil
+
+            for item in tmp_path.iterdir():
+                if item.is_file():
+                    shutil.copy2(item, path / item.name)
+                elif item.is_dir():
+                    shutil.copytree(item, path / item.name, dirs_exist_ok=True)
 
     def loads(self, storage, path):
+        """Load compressed storage from disk.
+
+        Args:
+            storage: The CompressedListStorage instance to load into
+            path: Directory path where the storage was saved
+        """
         path = Path(path)
 
         # Load metadata
-        with open(path / "compressed_metadata.json") as f:
-            metadata = json.load(f)
+        metadata_file = path / "metadata.json"
+        if not metadata_file.exists():
+            raise FileNotFoundError(f"Metadata file not found at {metadata_file}")
 
-        # Convert string dtypes back to torch.dtype objects
-        def convert_dtype(item):
-            if isinstance(item, dict):
-                if "dtype" in item and isinstance(item["dtype"], str):
-                    # Convert string back to torch.dtype
-                    dtype_str = item["dtype"]
+        with open(metadata_file) as f:
+            serializable_metadata = json.load(f)
+
+        # Load data indices
+        indices_file = path / "data_indices.json"
+        if not indices_file.exists():
+            raise FileNotFoundError(f"Data indices file not found at {indices_file}")
+
+        with open(indices_file) as f:
+            data_indices = json.load(f)
+
+        # Convert serializable metadata back to original format
+        def is_leaf(item):
+            return isinstance(item, dict) and "__type__" in item
+
+        def map_from_json_serializable(item):
+            if isinstance(item, dict) and "__type__" in item:
+                if item["__type__"] == "torch.Size":
+                    return torch.Size(item["value"])
+                elif item["__type__"] == "torch.dtype":
+                    # Handle torch.dtype conversion
+                    dtype_str = item["value"]
                     if hasattr(torch, dtype_str.replace("torch.", "")):
-                        item["dtype"] = getattr(torch, dtype_str.replace("torch.", ""))
+                        return getattr(torch, dtype_str.replace("torch.", ""))
                     else:
                         # Handle cases like 'torch.float32' -> torch.float32
-                        item["dtype"] = eval(dtype_str)
-
-                # Recursively handle nested dictionaries
-                for _key, value in item.items():
-                    if isinstance(value, dict):
-                        convert_dtype(value)
+                        return eval(dtype_str)
+                elif item["__type__"] == "torch.device":
+                    return torch.device(item["value"])
+                elif item["__type__"] == "torch.Tensor":
+                    return torch.tensor(item["value"])
+                elif item["__type__"] == "NonTensorData":
+                    return NonTensorData(item["value"])
             return item
 
-        for item in metadata:
-            if item is not None:
-                convert_dtype(item)
+        metadata = tree_map(
+            map_from_json_serializable, serializable_metadata, is_leaf=is_leaf
+        )
 
-        # Load compressed data
+        # Load compressed data from memmap
         compressed_data = []
-        i = 0
+        memmap_path = path / "compressed_data"
 
-        # TODO(adrian): Can we not know the serialised format beforehand? Then we can use glob to iterate through the files we know exist:
-        # `for path in glob.glob(path / f"compressed_data_*.{fmt}" for fmt in ["npy", "pkl", "td"]):``
-        while True:
-            if (path / f"compressed_data_{i}.npy").exists():
-                # Load tensor data
-                data = np.load(path / f"compressed_data_{i}.npy")
-                compressed_data.append(torch.from_numpy(data))
-            elif (path / f"compressed_data_{i}.pkl").exists():
-                # Load other data
-                import pickle
+        if memmap_path.exists():
+            # Load the memmapped data
+            stacked_data = TensorDict.load_memmap(memmap_path)
+            compressed_data = stacked_data.tolist()
+            if len(compressed_data) != len(data_indices):
+                raise ValueError(
+                    f"Length of compressed data ({len(compressed_data)}) does not match length of data indices ({len(data_indices)})"
+                )
+            for i, (data, mtdt) in enumerate(_zip_strict(compressed_data, metadata)):
+                if mtdt["type"] == "tensor":
+                    compressed_data[i] = data["data"]
+                else:
+                    compressed_data[i] = data
 
-                with open(path / f"compressed_data_{i}.pkl", "rb") as f:
-                    data = pickle.load(f)
-                compressed_data.append(data)
-            elif (path / f"compressed_data_{i}.td").exists():
-                # Load tensordict data
-                item_dir = path / f"compressed_data_{i}.td"
-                item_data = {}
-
-                for key in metadata[i]["fields"].keys():
-                    if (item_dir / f"{key}.npy").exists():
-                        data = np.load(item_dir / f"{key}.npy")
-                        item_data[key] = torch.from_numpy(data)
-                    elif (item_dir / f"{key}.pkl").exists():
-                        import pickle
-
-                        with open(item_dir / f"{key}.pkl", "rb") as f:
-                            data = pickle.load(f)
-                        item_data[key] = data
-
-                compressed_data.append(item_data)
-            else:
-                break
-
-            i += 1
-
-        # Pad with None to match metadata length
-        while len(compressed_data) < len(metadata):
-            compressed_data.append(None)
+        else:
+            # No data to load
+            compressed_data = [None] * len(data_indices)
 
         # Load into storage
         storage._storage = compressed_data
