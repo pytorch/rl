@@ -1944,7 +1944,7 @@ class TestCollectorLib:
 
 
 @pytest.mark.skipif(not _has_habitat, reason="habitat not installed")
-@pytest.mark.parametrize("envname", ["HabitatRenderPick-v0", "HabitatPick-v0"])
+@pytest.mark.parametrize("envname", ["HabitatPointNav-v0", "HabitatRenderPointNav-v0"])
 class TestHabitat:
     def test_habitat(self, envname):
         env = HabitatEnv(envname)

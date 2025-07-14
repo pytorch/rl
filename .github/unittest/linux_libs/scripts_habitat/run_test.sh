@@ -37,17 +37,17 @@ export MKL_THREADING_LAYER=GNU
 # Set Habitat data path
 export HABITAT_DATA_PATH="$(pwd)/data"
 
-# Check if required datasets are present
-echo "Checking for required Habitat datasets..."
-if [ ! -d "data/scene_datasets/habitat_test_scenes" ] && [ ! -d "data/scene_datasets/replica_cad" ]; then
-    echo "ERROR: Required scene datasets not found!"
+# Check if required datasets are present (using official Habitat test datasets)
+echo "Checking for required Habitat test datasets..."
+if [ ! -d "data/scene_datasets/habitat_test_scenes" ]; then
+    echo "ERROR: Required habitat_test_scenes not found!"
     echo "Available directories in data/scene_datasets:"
     ls -la data/scene_datasets/ 2>/dev/null || echo "No scene_datasets directory found"
     exit 1
 fi
 
-if [ ! -d "data/datasets/rearrange_pick_replica_cad_v0" ]; then
-    echo "ERROR: Rearrange pick dataset not found!"
+if [ ! -d "data/datasets/habitat_test_pointnav_dataset" ]; then
+    echo "ERROR: Required habitat_test_pointnav_dataset not found!"
     echo "Available directories in data/datasets:"
     ls -la data/datasets/ 2>/dev/null || echo "No datasets directory found"
     exit 1
@@ -69,7 +69,7 @@ conda deactivate && conda activate ./env
 # this workflow only tests the libs
 python -c "import habitat;import habitat.gym"
 python -c """from torchrl.envs.libs.habitat import HabitatEnv
-env = HabitatEnv('HabitatRenderPick-v0')
+env = HabitatEnv('HabitatPointNav-v0')
 env.reset()
 """
 
