@@ -13778,9 +13778,8 @@ class TestLineariseRewards(TransformBase):
         ):
             LineariseRewards(in_keys=("reward",), weights=torch.ones(size=(2, 4)))
 
-    def test_weight_sign_error(self):
-        with pytest.raises(ValueError, match="Expected all weights to be >0"):
-            LineariseRewards(in_keys=("reward",), weights=-torch.ones(size=(2,)))
+    def test_weight_no_sign_error(self):
+        LineariseRewards(in_keys=("reward",), weights=-torch.ones(size=(2,)))
 
     def test_discrete_spec_error(self):
         with pytest.raises(
@@ -13980,6 +13979,7 @@ class TestLineariseRewards(TransformBase):
             (1, None),
             (3, None),
             (2, [1.0, 2.0]),
+            (2, [1.0, -1.0]),
         ],
     )
     def test_transform_env(self, num_rewards, weights):
@@ -14061,6 +14061,15 @@ class TestLineariseRewards(TransformBase):
                     shape=2,
                 ),
                 BoundedContinuous(low=-1.0, high=1.0, shape=1),
+            ),
+            (
+                [1.0, -1.0],
+                BoundedContinuous(
+                    low=[-1.0, -2.0],
+                    high=[1.0, 2.0],
+                    shape=2,
+                ),
+                BoundedContinuous(low=-3.0, high=3.0, shape=1),
             ),
         ],
     )

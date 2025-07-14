@@ -10748,10 +10748,6 @@ class LineariseRewards(Transform):
                     f"Expected weights to be a unidimensional tensor. Got {weights.ndim} dimension."
                 )
 
-            # Avoids switching from reward to costs.
-            if (weights < 0).any():
-                raise ValueError(f"Expected all weights to be >0. Got {weights}.")
-
             self.register_buffer("weights", weights)
         else:
             self.weights = None
@@ -10781,13 +10777,18 @@ class LineariseRewards(Transform):
             reward_spec.shape = torch.Size([*batch_size, 1])
             return reward_spec
 
-        # The lines below are correct only if all weights are positive.
-        low = (weights * reward_spec.space.low).sum(dim=-1, keepdim=True)
-        high = (weights * reward_spec.space.high).sum(dim=-1, keepdim=True)
+        weights_pos = weights.clamp(min=0)
+        weights_neg = weights.clamp(max=0)
+
+        low_pos = (weights_pos * reward_spec.space.low).sum(dim=-1, keepdim=True)
+        low_neg = (weights_neg * reward_spec.space.high).sum(dim=-1, keepdim=True)
+
+        high_pos = (weights_pos * reward_spec.space.high).sum(dim=-1, keepdim=True)
+        high_neg = (weights_neg * reward_spec.space.low).sum(dim=-1, keepdim=True)
 
         return BoundedContinuous(
-            low=low,
-            high=high,
+            low=low_pos + low_neg,
+            high=high_pos + high_neg,
             device=reward_spec.device,
             dtype=reward_spec.dtype,
         )
