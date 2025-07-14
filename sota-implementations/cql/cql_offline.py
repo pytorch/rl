@@ -191,10 +191,6 @@ def main(cfg: DictConfig):  # noqa: F821
             metrics_to_log.update(timeit.todict(prefix="time"))
             metrics_to_log["time/speed"] = pbar.format_dict["rate"]
 
-            if i % evaluation_interval == 0:
-                print(
-                    f"Step {i}: loss={loss.item():.4f}, eval_reward={eval_reward:.4f}"
-                )
             log_metrics(logger, metrics_to_log, i)
 
     pbar.close()
