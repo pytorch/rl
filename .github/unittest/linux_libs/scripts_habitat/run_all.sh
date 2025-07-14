@@ -24,10 +24,11 @@ bash ${this_dir}/install.sh
 
 # Download required Habitat datasets
 echo "Starting Habitat dataset download..."
-if bash ${this_dir}/download_datasets.sh; then
+echo "Setting timeout of 30 minutes for dataset downloads..."
+if timeout 1800 bash ${this_dir}/download_datasets.sh; then
     echo "Habitat dataset download completed successfully!"
 else
-    echo "ERROR: Habitat dataset download failed!"
+    echo "ERROR: Habitat dataset download failed or timed out!"
     echo "Checking what was downloaded:"
     ls -la data/ 2>/dev/null || echo "No data directory found"
     ls -la data/scene_datasets/ 2>/dev/null || echo "No scene_datasets directory found"

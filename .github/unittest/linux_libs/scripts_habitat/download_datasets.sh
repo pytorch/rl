@@ -3,6 +3,9 @@
 set -e
 set -v
 
+# Add progress indicators
+echo "=== Starting Habitat Dataset Download Process ==="
+
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
@@ -27,8 +30,9 @@ download_habitat_dataset() {
             # Manual download for test scenes
             cd data/scene_datasets
             if [ ! -d "habitat_test_scenes" ]; then
-                git clone https://github.com/facebookresearch/habitat-test-scenes.git habitat_test_scenes || {
-                    echo "Manual download failed for $description"
+                echo "Cloning habitat-test-scenes repository (this may take a few minutes)..."
+                timeout 600 git clone --depth 1 https://github.com/facebookresearch/habitat-test-scenes.git habitat_test_scenes || {
+                    echo "Manual download failed for $description (timeout or error)"
                     return 1
                 }
             else
@@ -40,8 +44,9 @@ download_habitat_dataset() {
             # Manual download for ReplicaCAD
             cd data/scene_datasets
             if [ ! -d "replica_cad" ]; then
-                git clone https://github.com/facebookresearch/replica-cad.git replica_cad || {
-                    echo "Manual download failed for $description"
+                echo "Cloning replica-cad repository (this may take a few minutes)..."
+                timeout 600 git clone --depth 1 https://github.com/facebookresearch/replica-cad.git replica_cad || {
+                    echo "Manual download failed for $description (timeout or error)"
                     return 1
                 }
             else
@@ -53,10 +58,12 @@ download_habitat_dataset() {
             # Manual download for pointnav dataset
             cd data/datasets
             if [ ! -d "habitat_test_pointnav_dataset" ]; then
-                wget -O habitat_test_pointnav_dataset.zip https://dl.fbaipublicfiles.com/habitat/data/datasets/pointnav/habitat-test-scenes/v1/habitat-test-scenes-v1.zip || {
-                    echo "Manual download failed for $description"
+                echo "Downloading pointnav dataset..."
+                timeout 300 wget --progress=bar:force:noscroll -O habitat_test_pointnav_dataset.zip https://dl.fbaipublicfiles.com/habitat/data/datasets/pointnav/habitat-test-scenes/v1/habitat-test-scenes-v1.zip || {
+                    echo "Manual download failed for $description (timeout or error)"
                     return 1
                 }
+                echo "Extracting pointnav dataset..."
                 unzip -o habitat_test_pointnav_dataset.zip
                 rm habitat_test_pointnav_dataset.zip
             else
@@ -73,13 +80,22 @@ download_habitat_dataset() {
 }
 
 # Download datasets with fallback
+echo "=== Downloading Scene Datasets ==="
 download_habitat_dataset "habitat_test_scenes" "Habitat test scenes"
 download_habitat_dataset "replica_cad" "ReplicaCAD scenes"
+echo "=== Scene Datasets Download Complete ==="
 
+echo "=== Downloading Task Datasets ==="
 echo "Downloading rearrange pick dataset..."
 cd data/datasets
 if [ ! -d "rearrange_pick_replica_cad_v0" ]; then
-    wget -O rearrange_pick_replica_cad_v0.zip https://dl.fbaipublicfiles.com/habitat/data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0.zip
+    echo "Downloading rearrange pick dataset (this may take a few minutes)..."
+    timeout 600 wget --progress=bar:force:noscroll -O rearrange_pick_replica_cad_v0.zip https://dl.fbaipublicfiles.com/habitat/data/datasets/rearrange_pick/replica_cad/v0/rearrange_pick_replica_cad_v0.zip || {
+        echo "Failed to download rearrange pick dataset (timeout or error)"
+        cd ../..
+        return 1
+    }
+    echo "Extracting rearrange pick dataset..."
     unzip -o rearrange_pick_replica_cad_v0.zip
     rm rearrange_pick_replica_cad_v0.zip
 else
@@ -88,6 +104,7 @@ fi
 cd ../..
 
 download_habitat_dataset "habitat_test_pointnav_dataset" "Point-goal navigation episodes for test scenes"
+echo "=== Task Datasets Download Complete ==="
 
 echo "Datasets downloaded successfully!"
 
@@ -111,8 +128,11 @@ else
 fi
 
 if [ $required_scenes -eq 1 ] && [ $required_datasets -eq 1 ]; then
-    echo "All required datasets are present!"
+    echo "=== All required datasets are present! ==="
+    echo "=== Habitat Dataset Download Process Completed Successfully ==="
 else
     echo "ERROR: Some required datasets are missing!"
+    echo "Required scenes: $required_scenes"
+    echo "Required datasets: $required_datasets"
     exit 1
 fi 
