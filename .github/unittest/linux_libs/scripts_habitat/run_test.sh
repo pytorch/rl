@@ -36,6 +36,24 @@ export MKL_THREADING_LAYER=GNU
 
 # Set Habitat data path
 export HABITAT_DATA_PATH="$(pwd)/data"
+
+# Check if required datasets are present
+echo "Checking for required Habitat datasets..."
+if [ ! -d "data/scene_datasets/habitat_test_scenes" ] && [ ! -d "data/scene_datasets/replica_cad" ]; then
+    echo "ERROR: Required scene datasets not found!"
+    echo "Available directories in data/scene_datasets:"
+    ls -la data/scene_datasets/ 2>/dev/null || echo "No scene_datasets directory found"
+    exit 1
+fi
+
+if [ ! -d "data/datasets/rearrange_pick_replica_cad_v0" ]; then
+    echo "ERROR: Rearrange pick dataset not found!"
+    echo "Available directories in data/datasets:"
+    ls -la data/datasets/ 2>/dev/null || echo "No datasets directory found"
+    exit 1
+fi
+
+echo "Required datasets found successfully!"
 # more logging
 
 #wget https://github.com/openai/mujoco-py/blob/master/vendor/10_nvidia.json

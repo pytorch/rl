@@ -23,7 +23,17 @@ bash ${this_dir}/setup_env.sh
 bash ${this_dir}/install.sh
 
 # Download required Habitat datasets
-bash ${this_dir}/download_datasets.sh
+echo "Starting Habitat dataset download..."
+if bash ${this_dir}/download_datasets.sh; then
+    echo "Habitat dataset download completed successfully!"
+else
+    echo "ERROR: Habitat dataset download failed!"
+    echo "Checking what was downloaded:"
+    ls -la data/ 2>/dev/null || echo "No data directory found"
+    ls -la data/scene_datasets/ 2>/dev/null || echo "No scene_datasets directory found"
+    ls -la data/datasets/ 2>/dev/null || echo "No datasets directory found"
+    exit 1
+fi
 
 #apt-get install -y freeglut3 freeglut3-dev
 bash ${this_dir}/run_test.sh
