@@ -32,6 +32,9 @@ from unittest import mock
 import numpy as np
 import pytest
 import torch
+from minari import DataCollector
+import gymnasium as gym
+import minari
 
 from packaging import version
 from tensordict import (
@@ -3452,7 +3455,58 @@ class TestMinari:
         assert len(dataset) == 100
         assert sample["data"].shape == torch.Size([32, 8])
         assert sample["next", "data"].shape == torch.Size([32, 8])
+    
+        
+    @pytest.mark.skipif(not _has_minari or not _has_gymnasium, reason="Minari or Gym not available")
+    def test_local_minari_dataset_loading(self):
 
+        if not _minari_init():
+            pytest.skip("Failed to initialize Minari datasets")
+
+        dataset_id = "cartpole/test-local-v1"
+
+        # Create dataset using Gym + DataCollector
+        env = gym.make("CartPole-v1")
+        env = DataCollector(env, record_infos=True)
+        for _ in range(50):
+            env.reset(seed=123)
+            while True:
+                action = env.action_space.sample()
+                obs, rew, terminated, truncated, info = env.step(action)
+                if terminated or truncated:
+                    break
+
+        env.create_dataset(
+            dataset_id=dataset_id,
+            algorithm_name="RandomPolicy",
+            code_permalink="https://github.com/Farama-Foundation/Minari",
+            author="Farama",
+            author_email="contact@farama.org",
+            eval_env="CartPole-v1"
+        )
+
+        # Load from local cache
+        data = MinariExperienceReplay(
+            dataset_id=dataset_id,
+            split_trajs=False,
+            batch_size=32,
+            download=False,
+            sampler=SamplerWithoutReplacement(drop_last=True),
+            prefetch=2,
+            load_from_local_minari=True,
+        )
+
+        t0 = time.time()
+        for i, sample in enumerate(data):
+            t1 = time.time()
+            torchrl_logger.info(f"[Local Minari] Sampling time {1000 * (t1 - t0):4.4f} ms")
+            assert data.metadata["action_space"].is_in(sample["action"]), "Invalid action sample"
+            assert data.metadata["observation_space"].is_in(sample["observation"]), "Invalid observation sample"
+            t0 = time.time()
+            if i == 10:
+                break
+        
+        minari.delete_dataset(dataset_id="cartpole/test-local-v1")
 
 @pytest.mark.slow
 class TestRoboset:
