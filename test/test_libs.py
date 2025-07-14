@@ -29,7 +29,6 @@ from pathlib import Path
 from sys import platform
 from unittest import mock
 
-import minari
 
 import numpy as np
 import pytest
@@ -3460,7 +3459,8 @@ class TestMinari:
         not _has_minari or not _has_gymnasium, reason="Minari or Gym not available"
     )
     def test_local_minari_dataset_loading(self):
-
+        import minari 
+        
         if not _minari_init():
             pytest.skip("Failed to initialize Minari datasets")
 
