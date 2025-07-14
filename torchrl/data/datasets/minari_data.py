@@ -88,6 +88,14 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
             it is assumed that any ``truncated`` or ``terminated`` signal is
             equivalent to the end of a trajectory.
             Defaults to ``False``.
+        load_from_local_minari (bool, optional): if ``True``, the dataset will be loaded directly
+            from the local Minari cache (typically located at ``~/.minari/datasets``),
+            bypassing any remote download. This is useful when working with custom
+            Minari datasets previously generated and stored locally, or when network
+            access should be avoided. If the dataset is not found in the expected
+            cache directory, a ``FileNotFoundError`` will be raised.
+            Defaults to ``False``.
+
 
     Attributes:
         available_datasets: a list of accepted entries to be downloaded.
@@ -168,6 +176,7 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
         transform: torchrl.envs.Transform | None = None,  # noqa-F821
         split_trajs: bool = False,
         load_from_local_minari: bool = False,
+        load_from_local_minari: bool = False,
     ):
         self.dataset_id = dataset_id
         if root is None:
@@ -176,6 +185,13 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
         self.root = root
         self.split_trajs = split_trajs
         self.download = download
+        self.load_from_local_minari = load_from_local_minari
+
+        if (
+            self.download == "force"
+            or (self.download and not self._is_downloaded())
+            or self.load_from_local_minari
+        ):
         self.load_from_local_minari = load_from_local_minari
 
         if self.download == "force" or (self.download and not self._is_downloaded()) or self.load_from_local_minari:
@@ -245,7 +261,37 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
             os.environ["MINARI_DATASETS_PATH"] = tmpdir
 
             total_steps = 0
+            total_steps = 0
             td_data = TensorDict()
+
+            if self.load_from_local_minari:
+                # Load minari dataset from user's local Minari cache
+
+                minari_cache_dir = os.path.expanduser("~/.minari/datasets")
+                os.environ["MINARI_DATASETS_PATH"] = minari_cache_dir
+                parent_dir = Path(minari_cache_dir) / self.dataset_id / "data"
+                h5_path = parent_dir / "main_data.hdf5"
+
+                if not h5_path.exists():
+                    raise FileNotFoundError(
+                        f"{h5_path} does not exist in local Minari cache!"
+                    )
+
+                torchrl_logger.info(
+                    f"loading dataset from local Minari cache at {h5_path}"
+                )
+                h5_data = PersistentTensorDict.from_h5(h5_path)
+
+            else:
+                minari.download_dataset(dataset_id=self.dataset_id)
+
+                parent_dir = Path(tmpdir) / self.dataset_id / "data"
+
+                torchrl_logger.info(
+                    "first read through data to create data structure..."
+                )
+                h5_data = PersistentTensorDict.from_h5(parent_dir / "main_data.hdf5")
+
 
             if self.load_from_local_minari:
                 # Load minari dataset from user's local Minari cache
@@ -487,5 +533,9 @@ def _patch_info(info_td):
     val_td_sel = val_td_sel.apply(
         lambda x: torch.cat([torch.zeros_like(x[:1]), x], 0), batch_size=[min_shape + 1]
     )
-    val_td_sel.update(val_td.select(*unique_shapes[max_shape]))
+    source = val_td.select(*unique_shapes[max_shape])
+    # make sure source has no batch size
+    source.batch_size = ()
+    if not source.is_empty():
+        val_td_sel.update(source, update_batch_size=True)
     return val_td_sel

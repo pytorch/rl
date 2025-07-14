@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import time
 
-from typing import Any, Callable, Literal
+from typing import Any, Literal
 
 import torch
 from omegaconf import DictConfig
@@ -16,6 +16,8 @@ from torch import device as torch_device, dtype as torch_dtype
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
+from torchrl.envs.llm import RetrieveLogProb
+from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from transformers.tokenization_utils import PreTrainedTokenizer
@@ -36,6 +38,62 @@ def get_tokenizer(cfg: DictConfig) -> PreTrainedTokenizer:
         tokenizer.pad_token = "PAD"
     tokenizer.padding_side = "left"
     return tokenizer
+
+
+def make_env(cfg: DictConfig, devices: list[int] | None = None):
+    """Create the environment with proper device allocation.
+
+    Args:
+        cfg: The configuration object
+        devices: The devices to use for the reference model
+
+    Returns:
+        The configured environment
+    """
+    # Create reference model with proper device allocation
+    # For the collector actor, we want inference_model devices first, then ref_model devices
+    train_tokenizer = get_tokenizer(cfg)
+
+    # Get device information
+    num_inf_devices = cfg.inference_model.num_devices
+    num_ref_devices = cfg.ref_model.num_devices
+    num_inf_devices + num_ref_devices
+
+    # Create a new config with adjusted device assignments
+    ref_cfg = DictConfig(dict(cfg))
+    ref_model = get_ref_model(ref_cfg, train_tokenizer, devices=devices)
+
+    # Setup environment
+    if cfg.env.dataset == "gsm8k":
+        from torchrl.envs.llm import GSM8KEnv
+
+        env = GSM8KEnv(
+            repeats=cfg.env.repeats,
+            tokenizer=train_tokenizer,
+            num_envs=cfg.env.num_envs,
+            device=torch.device("cpu"),
+        )
+    else:  # ifeval
+        env = IFEvalEnv(
+            repeats=cfg.env.repeats,
+            tokenizer=train_tokenizer,
+            num_envs=cfg.env.num_envs,
+            device=torch.device("cpu"),
+        )
+
+    # Pass device directly to RetrieveLogProb - Since, for Ray, the local device is always 0
+    # we can just use 0 here.
+    device = torch.device("cuda:0")
+    env = env.append_transform(
+        RetrieveLogProb(
+            model=ref_model,
+            assistant_only=True,
+            tokenizer_kwargs={"chat_template_name": "qwen"},
+            device=device,
+            log_probs_full_key=("ref_log_probs", "full"),
+        )
+    )
+    return env
 
 
 def get_train_model(
@@ -103,20 +161,14 @@ def get_train_model(
     for param in train_model.parameters():
         param.data = param.data.to(model_dtype)
 
-    if chat_template_name is not None:
-        from torchrl.data.llm.chat import _CHAT_TEMPLATES
-
-        chat_template = _CHAT_TEMPLATES[chat_template_name]
-        train_tokenizer.chat_template = chat_template
-
     policy_training = TransformersWrapper(
         train_model,
         tokenizer=train_tokenizer,
-        from_text=True,
+        input_mode="history",
         generate=False,
         return_log_probs=True,
-        # Should be retrieved and corrected automatically from the tokenizer
-        chat_template_name=chat_template_name,
+        pad_output=False,
+        device=torch.device("cuda:0"),
     )
     # Ensure model stays in eval mode after wrapping
     policy_training.model.eval()
@@ -125,7 +177,10 @@ def get_train_model(
 
 
 def get_inference_model(
-    cfg: DictConfig, devices: list[int] | None = None, make_ray_worker: bool = True
+    cfg: DictConfig,
+    devices: list[int] | None = None,
+    make_ray_worker: bool = True,
+    tokenizer: PreTrainedTokenizer | None = None,
 ) -> vLLMWrapper:
     """Creates the vLLM-based inference model for fast generation.
 
@@ -137,7 +192,9 @@ def get_inference_model(
         cfg (DictConfig): The hydra configuration object containing model settings.
             Expected to have inference_model section with vLLM-specific parameters
             like gpu_memory_utilization and generation settings.
-        make_ray_worker (bool, optional): Whether to make a ray worker. Default: True
+        devices (list[int], optional): The devices to use for the inference model. Default: `None`.
+        make_ray_worker (bool, optional): Whether to make a ray worker. Default: `True`.
+        tokenizer (PreTrainedTokenizer | None, optional): The tokenizer to use. Default: None
 
     Returns:
         vLLMWrapper: The wrapped vLLM model ready for inference.
@@ -158,6 +215,9 @@ def get_inference_model(
 
     model_name = cfg.model.name
 
+    if tokenizer is None:
+        tokenizer = get_tokenizer(cfg)
+
     # vLLM handles device mapping internally
     inference_server = make_vllm_worker(
         model_name=model_name,
@@ -172,8 +232,11 @@ def get_inference_model(
     assert inference_server is not None
     policy = vLLMWrapper(
         inference_server,
-        from_text=True,
-        return_log_probs=False,
+        input_mode="history",
+        chat_template_name="qwen",
+        return_log_probs=True,
+        tokenizer=tokenizer,
+        pad_output=False,
         generate_kwargs={
             "max_tokens": cfg.inference_model.max_tokens,
             "include_stop_str_in_output": cfg.inference_model.include_stop_str_in_output,
@@ -201,8 +264,6 @@ def get_ref_model(
     Returns:
         TransformersWrapper: The wrapped reference model in eval mode with detached weights.
     """
-    from tensordict import TensorDict
-
     torchrl_logger.info("Creating ref model")
 
     # Get configured devices or default to [2]
@@ -242,10 +303,11 @@ def get_ref_model(
     ref_model = TransformersWrapper(
         ref_model,
         tokenizer=tokenizer,
-        from_text=True,
+        input_mode="history",
         generate=False,
         return_log_probs=True,
-        # Should be retrieved and corrected automatically from the tokenizer
+        pad_output=False,
+        device=torch.device("cuda:0"),
         chat_template_name="qwen",
     )
     return ref_model
@@ -333,9 +395,8 @@ def get_hf_model(
         # Configure training settings based on FSDP usage
         if fsdp != "" and fsdp_config is not None:
             torchrl_logger.info("Configurations for FSDP")
-            bnb_config_params = {"bnb_4bit_quant_storage": torch_dtype}
         else:
-            bnb_config_params = {}
+            pass
 
         # Enable Quantization
         if quantize:
@@ -351,7 +412,6 @@ def get_hf_model(
                 bnb_4bit_use_double_quant=True,
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_compute_dtype=torch_dtype,
-                **bnb_config_params,
             )
             model_configs["quantization_config"] = bnb_config
 
@@ -425,7 +485,7 @@ def make_weight_updater(
     master_port=None,
     model_metadata=None,
     vllm_tp_size=None,
-) -> vLLMUpdater | Callable[[], vLLMUpdater]:
+) -> vLLMUpdater:
     """Creates a vLLM weight updater for the policy.
 
     This function can be used in two ways:
@@ -441,7 +501,7 @@ def make_weight_updater(
         vllm_tp_size (Optional[int]): vLLM tensor parallel size. If not provided, will be set to 1.
 
     Returns:
-        vLLMUpdater | partial[vLLMUpdater]: An instance of the weight updater configured to update
+        vLLMUpdater: An instance of the weight updater configured to update
             the vLLM worker's weights.
     """
     if model_metadata is None and policy_training is not None:
@@ -576,10 +636,91 @@ def get_wandb_run_id(wandb_logger):
         return None
 
 
+def log_training_metrics(
+    wandb_logger,
+    replay_buffer,
+    batch,
+    loss,
+    grad_norm,
+    global_step,
+    data_read_count,
+    collector,
+    start_time,
+    gradient_accumulation_steps,
+    history_str=None,
+):
+    """Log training metrics to wandb.
+
+    Args:
+        wandb_logger: The wandb logger instance
+        replay_buffer: The replay buffer containing collected data
+        batch: The current training batch
+        loss: The computed loss object
+        grad_norm: The gradient norm value
+        global_step: Current global training step
+        data_read_count: Total data read count
+        collector: The collector instance
+        start_time: Training start time
+        gradient_accumulation_steps: Number of gradient accumulation steps
+        history_str: Optional history string for logging
+    """
+    with torch.no_grad():
+        rb_content = replay_buffer[:]
+        batch_policy_version = batch["next", "policy_version"].view(-1).min()
+        batch_policy_age = collector.policy_version - batch_policy_version
+
+        metrics = {
+            "reward from buffer": float(
+                torch.cat(rb_content.get(("next", "reward"), as_list=True)).mean()
+            ),
+            "reward from batch": float(batch["next", "reward"].mean()),
+            "seq_length from buffer": float(
+                torch.tensor(
+                    [
+                        t.numel()
+                        for t in rb_content.get(("tokens", "response"), as_list=True)
+                    ],
+                    dtype=torch.float,
+                ).mean()
+            ),
+            "loss_sft, from loss": float(loss.loss_sft),
+            "loss_kl_to_ref, from loss": float(loss.loss_kl_to_ref),
+            "kl_to_ref, from loss": float(loss.kl_to_ref),
+            "grad_norm": float(grad_norm)
+            if global_step % gradient_accumulation_steps == 0
+            else 0.0,
+            "write_count, from buffer": int(replay_buffer.write_count),
+            # how many gradient steps per write
+            "gradient_step_throughput (gradient step per write)": float(
+                global_step / replay_buffer.write_count
+            ),
+            # how many optim steps per write
+            "optim_step_throughput (optim step per write)": float(
+                (global_step // gradient_accumulation_steps) / replay_buffer.write_count
+            ),
+            "data_read_count (total)": data_read_count,
+            "current_policy_version (collector)": collector.policy_version,
+            # FIXME: Assume batch is a single trajectory
+            # FIXME: The addition of the transform after the env instantiation + _shuttle creation
+            #  is messed up - we need the next data
+            "batch_policy_version (sampled batch)": batch_policy_version,
+            "batch_policy_age (sampled batch)": batch_policy_age,
+            "throughput (steps per second)": float(
+                global_step / (time.time() - start_time)
+            ),
+        }
+
+        for name, value in metrics.items():
+            wandb_logger.log_scalar(name, value, step=global_step)
+
+        if history_str is not None:
+            wandb_logger.log_str("history", history_str, step=global_step)
+
+
 class RemoteDataLogger:
     """A remote post-processing function that sends logging data to the main process via Ray for centralized logging."""
 
-    def __init__(self, log_queue: ray.util.queue.Queue):
+    def __init__(self, log_queue):
         """Initialize RemoteDataLogger with a Ray actor reference for logging.
 
         Args:
@@ -610,7 +751,7 @@ class RemoteDataLogger:
 
         # Response length
         lengths = []
-        responses = data["text_response"]
+        responses = data["text", "response"]
         for r in responses:
             lengths.append(len(r))
         lengths = torch.tensor(lengths, dtype=torch.float32)

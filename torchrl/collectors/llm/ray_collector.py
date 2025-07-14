@@ -170,6 +170,9 @@ class RayLLMCollector(LLMCollector):
         pending_task = self._collector.start.remote()
         return ray.get(pending_task)
 
+    def is_running(self):
+        return ray.get(self._collector.is_running.remote())
+
     def shutdown(self):
         """Shuts down the collector."""
         pending_task = self._collector.shutdown.remote()

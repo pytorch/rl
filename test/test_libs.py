@@ -8,7 +8,9 @@ import collections
 import functools
 import gc
 import importlib.util
+import os
 import urllib.error
+
 
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
 
@@ -19,7 +21,6 @@ if _has_isaac:
     from torchrl.envs.libs.isaacgym import IsaacGymEnv
 import argparse
 import importlib
-import os
 
 import time
 import urllib
@@ -28,9 +29,12 @@ from pathlib import Path
 from sys import platform
 from unittest import mock
 
+import minari
+
 import numpy as np
 import pytest
 import torch
+from minari import DataCollector
 
 from packaging import version
 from tensordict import (
@@ -133,6 +137,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import (
         _make_multithreaded_env,
         CARTPOLE_VERSIONED,
+        CLIFFWALKING_VERSIONED,
         get_available_devices,
         get_default_devices,
         HALFCHEETAH_VERSIONED,
@@ -146,6 +151,7 @@ else:
     from _utils_internal import (
         _make_multithreaded_env,
         CARTPOLE_VERSIONED,
+        CLIFFWALKING_VERSIONED,
         get_available_devices,
         get_default_devices,
         HALFCHEETAH_VERSIONED,
@@ -1028,11 +1034,15 @@ class TestGym:
 
     def _test_one_hot_and_categorical(self):
         # tests that one-hot and categorical work ok when an integer is expected as action
-        cliff_walking = GymEnv("CliffWalking-v0", categorical_action_encoding=True)
+        cliff_walking = GymEnv(
+            CLIFFWALKING_VERSIONED(), categorical_action_encoding=True
+        )
         cliff_walking.rollout(10)
         check_env_specs(cliff_walking)
 
-        cliff_walking = GymEnv("CliffWalking-v0", categorical_action_encoding=False)
+        cliff_walking = GymEnv(
+            CLIFFWALKING_VERSIONED(), categorical_action_encoding=False
+        )
         cliff_walking.rollout(10)
         check_env_specs(cliff_walking)
 
@@ -2408,6 +2418,28 @@ class TestEnvPool:
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("envname", ["fast"])
 class TestBrax:
+    @pytest.fixture(autouse=True)
+    def _setup_jax(self):
+        """Configure JAX for proper GPU initialization."""
+        import os
+
+        import jax
+
+        # Set JAX environment variables for better GPU handling
+        os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+        os.environ.setdefault("XLA_PYTHON_CLIENT_ALLOCATOR", "platform")
+        os.environ.setdefault("TF_FORCE_GPU_ALLOW_GROWTH", "true")
+
+        # Try to initialize JAX with GPU, fallback to CPU if it fails
+        try:
+            jax.devices()
+        except Exception:
+            # Fallback to CPU
+            os.environ["JAX_PLATFORM_NAME"] = "cpu"
+            jax.config.update("jax_platform_name", "cpu")
+
+        yield
+
     @pytest.mark.parametrize("requires_grad", [False, True])
     def test_brax_constructor(self, envname, requires_grad, device):
         env0 = BraxEnv(envname, requires_grad=requires_grad, device=device)
@@ -2538,6 +2570,75 @@ class TestBrax:
         check_env_specs(env)
         tensordict = env.rollout(3)
         assert tensordict.shape == torch.Size([n, *batch_size, 3])
+
+    def test_brax_memory_leak(self, envname, device):
+        """Test memory usage with different cache clearing strategies."""
+        import psutil
+
+        process = psutil.Process(os.getpid())
+        env = BraxEnv(
+            envname,
+            batch_size=[10],
+            requires_grad=True,
+            device=device,
+        )
+        env.clear_cache()
+        gc.collect()
+        env.set_seed(0)
+        next_td = env.reset()
+        num_steps = 200
+        policy = TensorDictModule(
+            torch.nn.Linear(
+                env.observation_spec[env.observation_keys[0]].shape[-1],
+                env.action_spec.shape[-1],
+                device=device,
+            ),
+            in_keys=env.observation_keys[:1],
+            out_keys=["action"],
+        )
+        initial_memory = process.memory_info().rss / 1024 / 1024  # MB
+        for i in range(num_steps):
+            policy(next_td)
+            out_td, next_td = env.step_and_maybe_reset(next_td)
+            if i % 50 == 0:
+                loss = out_td["next", "observation"].sum()
+                loss.backward()
+                next_td = next_td.detach().clone()
+            # gc.collect()
+        final_memory = process.memory_info().rss / 1024 / 1024  # MB
+        memory_increase = final_memory - initial_memory
+        assert (
+            memory_increase < 100
+        ), f"Memory leak with automatic clearing: {memory_increase:.2f} MB"
+
+    def test_brax_cache_clearing(self, envname, device):
+        env = BraxEnv(envname, batch_size=[1], requires_grad=True, device=device)
+        env.clear_cache()
+        for _ in range(5):
+            env.clear_cache()
+
+    @pytest.mark.parametrize("freq", [10, None, False])
+    def test_brax_automatic_cache_clearing_parameter(self, envname, device, freq):
+        env = BraxEnv(
+            envname,
+            batch_size=[1],
+            requires_grad=True,
+            device=device,
+            cache_clear_frequency=freq,
+        )
+        if freq is False:
+            assert env._cache_clear_frequency is False
+        elif freq is None:
+            assert env._cache_clear_frequency == 20  # Default value
+        else:
+            assert env._cache_clear_frequency == freq
+        env.set_seed(0)
+        next_td = env.reset()
+        for i in range(10):
+            action = env.action_spec.rand()
+            next_td["action"] = action
+            out_td, next_td = env.step_and_maybe_reset(next_td)
+            assert env._step_count == i + 1
 
 
 @pytest.mark.skipif(not _has_vmas, reason="vmas not installed")
@@ -3244,33 +3345,57 @@ class TestD4RL:
 _MINARI_DATASETS = []
 
 
-def _minari_selected_datasets():
-    if not _has_minari or not _has_gymnasium:
-        return
+def _minari_init():
+    """Initialize Minari datasets list. Returns True if already initialized."""
     global _MINARI_DATASETS
-    import minari
+    if _MINARI_DATASETS and not all(
+        isinstance(x, str) and x.isdigit() for x in _MINARI_DATASETS
+    ):
+        return True  # Already initialized with real dataset names
 
-    torch.manual_seed(0)
+    if not _has_minari or not _has_gymnasium:
+        return False
 
-    total_keys = sorted(
-        minari.list_remote_datasets(latest_version=True, compatible_minari_version=True)
-    )
-    indices = torch.randperm(len(total_keys))[:20]
-    keys = [total_keys[idx] for idx in indices]
+    try:
+        import minari
 
-    assert len(keys) > 5, keys
-    _MINARI_DATASETS += keys
+        torch.manual_seed(0)
+
+        total_keys = sorted(
+            minari.list_remote_datasets(
+                latest_version=True, compatible_minari_version=True
+            )
+        )
+        indices = torch.randperm(len(total_keys))[:20]
+        keys = [total_keys[idx] for idx in indices]
+
+        assert len(keys) > 5, keys
+        _MINARI_DATASETS[:] = keys  # Replace the placeholder values
+        return True
+    except Exception:
+        return False
 
 
-_minari_selected_datasets()
+# Initialize with placeholder values for parametrization
+# These will be replaced with actual dataset names when the first Minari test runs
+_MINARI_DATASETS = [str(i) for i in range(20)]
 
 
 @pytest.mark.skipif(not _has_minari or not _has_gymnasium, reason="Minari not found")
 @pytest.mark.slow
 class TestMinari:
     @pytest.mark.parametrize("split", [False, True])
-    @pytest.mark.parametrize("selected_dataset", _MINARI_DATASETS)
-    def test_load(self, selected_dataset, split):
+    @pytest.mark.parametrize("dataset_idx", range(20))
+    def test_load(self, dataset_idx, split):
+        # Initialize Minari datasets if not already done
+        if not _minari_init():
+            pytest.skip("Failed to initialize Minari datasets")
+
+        # Get the actual dataset name from the initialized list
+        if dataset_idx >= len(_MINARI_DATASETS):
+            pytest.skip(f"Dataset index {dataset_idx} out of range")
+
+        selected_dataset = _MINARI_DATASETS[dataset_idx]
         torchrl_logger.info(f"dataset {selected_dataset}")
         data = MinariExperienceReplay(
             selected_dataset, batch_size=32, split_trajs=split
@@ -3330,6 +3455,65 @@ class TestMinari:
         assert len(dataset) == 100
         assert sample["data"].shape == torch.Size([32, 8])
         assert sample["next", "data"].shape == torch.Size([32, 8])
+
+    @pytest.mark.skipif(
+        not _has_minari or not _has_gymnasium, reason="Minari or Gym not available"
+    )
+    def test_local_minari_dataset_loading(self):
+
+        if not _minari_init():
+            pytest.skip("Failed to initialize Minari datasets")
+
+        dataset_id = "cartpole/test-local-v1"
+
+        # Create dataset using Gym + DataCollector
+        env = gymnasium.make("CartPole-v1")
+        env = DataCollector(env, record_infos=True)
+        for _ in range(50):
+            env.reset(seed=123)
+            while True:
+                action = env.action_space.sample()
+                obs, rew, terminated, truncated, info = env.step(action)
+                if terminated or truncated:
+                    break
+
+        env.create_dataset(
+            dataset_id=dataset_id,
+            algorithm_name="RandomPolicy",
+            code_permalink="https://github.com/Farama-Foundation/Minari",
+            author="Farama",
+            author_email="contact@farama.org",
+            eval_env="CartPole-v1",
+        )
+
+        # Load from local cache
+        data = MinariExperienceReplay(
+            dataset_id=dataset_id,
+            split_trajs=False,
+            batch_size=32,
+            download=False,
+            sampler=SamplerWithoutReplacement(drop_last=True),
+            prefetch=2,
+            load_from_local_minari=True,
+        )
+
+        t0 = time.time()
+        for i, sample in enumerate(data):
+            t1 = time.time()
+            torchrl_logger.info(
+                f"[Local Minari] Sampling time {1000 * (t1 - t0):4.4f} ms"
+            )
+            assert data.metadata["action_space"].is_in(
+                sample["action"]
+            ), "Invalid action sample"
+            assert data.metadata["observation_space"].is_in(
+                sample["observation"]
+            ), "Invalid observation sample"
+            t0 = time.time()
+            if i == 10:
+                break
+
+        minari.delete_dataset(dataset_id="cartpole/test-local-v1")
 
 
 @pytest.mark.slow

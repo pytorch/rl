@@ -10,6 +10,7 @@ import importlib.util
 import random
 import re
 import time
+from functools import partial
 
 import pytest
 import torch
@@ -25,7 +26,7 @@ from tensordict import (
 )
 
 from torchrl._utils import logger as torchrl_logger
-from torchrl.data.llm.chat import History
+from torchrl.data.llm.history import History
 from torchrl.envs import StepCounter
 from torchrl.envs.llm import (
     as_padded_tensor,
@@ -35,19 +36,33 @@ from torchrl.envs.llm import (
     KLRewardTransform,
     LLMEnv,
     make_gsm8k_env,
+    RetrieveKL,
 )
 
-from torchrl.modules.llm import TransformersWrapper
+from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from transformers import AutoTokenizer
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_datasets = importlib.util.find_spec("datasets") is not None
+_has_vllm = importlib.util.find_spec("vllm") is not None
 _has_ifeval = (
     _has_datasets
     and (importlib.util.find_spec("langdetect") is not None)
     and (importlib.util.find_spec("nltk") is not None)
     and (importlib.util.find_spec("immutabledict") is not None)
 )
+
+
+@pytest.fixture(scope="module", autouse=True)
+def set_seed():
+    seed = 2
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+    yield
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -418,49 +433,91 @@ class TestChatEnv:
     def tokenizer(self):
         return AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B")
 
-    def test_chat_env(slef, tokenizer):
+    @pytest.mark.parametrize("input_mode", ["text", "tokens", "history"])
+    def test_chat_env(self, tokenizer, input_mode):
         # Set list to stack for tensordict
         set_list_to_stack(True).set()
         # Initialize environment
         env = ChatEnv(
             batch_size=(1,),
             tokenizer=tokenizer,
-            apply_template=True,
             system_prompt="I'm system, do what I want.",
+            input_mode=input_mode,
         )
         # Reset environment
-        td_reset = env.reset(
-            TensorDict(
-                text=["I'm the user. I'm going to tell you a little about something."],
-                batch_size=(1,),
-            )
+        td_reset = TensorDict(
+            query=["I'm the user. I'm going to tell you a little about something."],
+            batch_size=(1,),
+            device=env.device,
         )
+        td_reset = env.reset(td_reset)
         # Check history after reset
-        torchrl_logger.info(f'{td_reset["history"].content=}')
-        assert len(td_reset["history"][0].content) == 2
-        assert td_reset["history"][0, 0].content == "I'm system, do what I want."
-        assert td_reset["history"][0, 1].content.startswith("I'm the user.")
-        assert td_reset["history"][0].role == ["system", "user"]
+        if input_mode == "history":
+            torchrl_logger.info(f'{td_reset["history"].prompt.content=}')
+            assert len(td_reset["history"][0].prompt.content) == 2
+            assert (
+                td_reset["history"][0].prompt[0].content
+                == "I'm system, do what I want."
+            )
+            assert td_reset["history"][0].prompt[1].content.startswith("I'm the user.")
+            assert td_reset["history"][0].prompt.role == ["system", "user"]
+        elif input_mode == "tokens":
+            torchrl_logger.info(f'{td_reset["tokens"].prompt=}')
+        elif input_mode == "text":
+            torchrl_logger.info(f'{td_reset["text"].prompt=}')
         # Check text after reset
         expected_text = "<|im_start|>system\nI'm system, do what I want.<|im_end|>\n<|im_start|>user\nI'm the user. I'm going to tell you a little about something.<|im_end|>\n<|im_start|>assistant\n"
-        assert td_reset["text"][0] == expected_text
+        if input_mode in ("text",):
+            assert td_reset["text"][0].prompt == expected_text
         # Take step in environment
-        td_action = td_reset.set(
-            "text_response", ["This is the action from the assistant!<|im_end|>"]
-        )
+        if input_mode == "history":
+            td_reset["history"].response = History(
+                content="This is the action from the assistant!", role="assistant"
+            ).view(1, 1)
+            td_reset["history"].full = td_reset["history"].prompt.extend(
+                td_reset["history"].response, dim=-1
+            )
+            td_action = td_reset
+        elif input_mode == "tokens":
+            td_reset["tokens"][0].response = tokenizer.encode(
+                "This is the action from the assistant!<|im_end|>"
+            )
+            td_action = td_reset
+        elif input_mode == "text":
+            td_reset["text"].response = [
+                "This is the action from the assistant!<|im_end|>"
+            ]
+            td_reset["text"].full = [
+                td_reset["text"][0].prompt
+                + "This is the action from the assistant!<|im_end|>"
+            ]
+            td_action = td_reset
         td_next = env.step(td_action)
-        # Check history after step
-        assert len(td_next["next", "history"].content[0]) == 3
-        assert td_next["next", "history"][0, 0].content == "I'm system, do what I want."
-        assert td_next["next", "history"][0, 1].content.startswith("I'm the user.")
-        assert (
-            td_next["next", "history"][0, 2].content
-            == "This is the action from the assistant!"
-        )
-        assert td_next["next", "history"][0].role == ["system", "user", "assistant"]
-        # Check text after step
-        expected_text = "<|im_start|>system\nI'm system, do what I want.<|im_end|>\n<|im_start|>user\nI'm the user. I'm going to tell you a little about something.<|im_end|>\n<|im_start|>assistant\nThis is the action from the assistant!<|im_end|>\n<|im_start|>assistant\n"
-        assert td_next["next", "text"][0] == expected_text
+        if input_mode == "history":
+            # Check history after step
+            assert len(td_next["next", "history"][0].prompt.content) == 3
+            assert (
+                td_next["next", "history"][0].prompt[0].content
+                == "I'm system, do what I want."
+            )
+            assert (
+                td_next["next", "history"][0]
+                .prompt[1]
+                .content.startswith("I'm the user.")
+            )
+            assert (
+                td_next["next", "history"][0].prompt[2].content
+                == "This is the action from the assistant!"
+            )
+            assert td_next["next", "history"][0].prompt.role == [
+                "system",
+                "user",
+                "assistant",
+            ]
+        if input_mode in ("text",):
+            # Check text after step
+            expected_text = "<|im_start|>system\nI'm system, do what I want.<|im_end|>\n<|im_start|>user\nI'm the user. I'm going to tell you a little about something.<|im_end|>\n<|im_start|>assistant\nThis is the action from the assistant!<|im_end|>"
+            assert td_next["next", "text"][0].prompt == expected_text
 
 
 @pytest.mark.skipif(not _has_datasets, reason="requires datasets")
@@ -506,45 +563,6 @@ class TestGSM8K:
         assert ("next", "reward") in r
         assert r["next", "reward"].shape == (n_envs, 3, 1, 1)
 
-    @pytest.mark.skipif(not _has_transformers, reason="requires transformers library")
-    @pytest.mark.parametrize("n_envs", [1, 4])
-    def test_kl_bonus(self, n_envs, ref_model):
-        torch.manual_seed(0)
-        ref_device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-        with torch.device(ref_device):
-            model, tokenizer = ref_model
-            ref_model = TransformersWrapper(
-                model,
-                return_log_probs=True,
-                generate=False,
-                # In practice, we should have the tokens available
-                from_text=False,
-                tokenizer=tokenizer,
-            )
-            policy = TransformersWrapper(
-                model,
-                return_log_probs=True,
-                generate=True,
-                from_text=True,
-                tokenizer=tokenizer,
-                generate_kwargs={"max_new_tokens": 20},
-                tokenizer_kwargs={"add_special_tokens": False},
-            )
-
-            env = make_gsm8k_env(num_envs=n_envs, tokenizer=tokenizer)
-            env.append_transform(
-                KLRewardTransform(
-                    actor=ref_model,
-                    coef=0.1,
-                    device=ref_device,
-                )
-            )
-            r = env.rollout(3, policy)
-            r = r.view(-1)
-            for _r in r.unbind(0):
-                assert _r["tokens_response"].shape + (1,) == _r["next", "reward"].shape
-
     def test_gsm8kenv(self):
         import transformers
 
@@ -553,33 +571,21 @@ class TestGSM8K:
         # env.check_env_specs(break_when_any_done="both")
         r = env.reset()
         assert "history" in r
-        assert r["history"].shape == (1, 2)
-        assert "text" in r
+        assert r["history"].prompt.shape == (1, 2)
         r = r.clone()
         response = "<think>First, calculate the total number of snakes in the breeding balls. There are 3 breeding balls with 8 snakes each, so 3 * 8 = 24 snakes. Next, calculate the number of snakes in the additional pairs. There are 6 pairs of snakes, and each pair has 2 snakes, so 6 * 2 = 12 snakes. Finally, add the number of snakes from the breeding balls and the additional pairs: 24 + 12 = 36 snakes.</think> <answer>Mary saw a total of 36 snakes.</answer><|im_end|>"
-        r["text_response"] = [response]
+        text = (
+            r["history"]
+            .prompt[0]
+            .apply_chat_template(tokenizer=tokenizer, add_generation_prompt=True)
+            + response
+        )
+        history_full = History.from_text(text).unsqueeze(0)
+        assert history_full.shape[-1] == 3
+        r["history"].full = history_full
         s = env.step(r)
         assert s["next", "reward"] >= 10
         assert s["next", "done"].all()
-
-    def test_gsm8kenv_batch(self):
-        import transformers
-
-        tokenizer = transformers.AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B")
-        env = GSM8KEnv(tokenizer=tokenizer, apply_template=True, num_envs=4)
-        # env.check_env_specs(break_when_any_done="both")
-        r = env.reset()
-        assert "history" in r
-        assert r["history"].shape == (4, 2)
-        assert "text" in r
-        r = r.clone()
-        response = "<think>First, calculate the total number of snakes in the breeding balls. There are 3 breeding balls with 8 snakes each, so 3 * 8 = 24 snakes. Next, calculate the number of snakes in the additional pairs. There are 6 pairs of snakes, and each pair has 2 snakes, so 6 * 2 = 12 snakes. Finally, add the number of snakes from the breeding balls and the additional pairs: 24 + 12 = 36 snakes.</think> <answer>Mary saw a total of 36 snakes.</answer><|im_end|>"
-        r["text_response"] = [response] * 4
-        s = env.step(r)
-        assert (s["next", "reward"] >= 10).all()
-        assert s["next", "done"].all()
-
-        env.rollout(10, break_when_any_done=False)
 
 
 @pytest.mark.skipif(not _has_ifeval, reason="requires IFEval libs")
@@ -592,13 +598,14 @@ class TestIFEvalEnv:
         torch.manual_seed(0)
 
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B")
-        env = IFEvalEnv(apply_template=True, tokenizer=tokenizer)
+        env = IFEvalEnv(apply_template=True, tokenizer=tokenizer, input_mode="history")
         torchrl_logger.info(env.reset())
         r = env.reset()
-        r.set(
-            "text_response",
-            [
-                """<think>
+        r["history"].full = History.from_text(
+            r["history"]
+            .prompt[0]
+            .apply_chat_template(tokenizer=tokenizer, add_generation_prompt=True)
+            + """<think>
 The task requires crafting a riddle about a 'house' that's not traditionally considered one. The answer must be included, and the response should be at least 400 words with a title wrapped in double angular brackets. Let's start by brainstorming what could be considered a 'house' in a non-traditional sense. Ideas include natural shelters, abstract concepts, or objects that serve a similar purpose to a house.
 One potential concept is a "womb," as it provides shelter and housing for a developing being. However, we need to ensure our riddle is engaging, meets the word count requirement, and includes the necessary elements like a title.
 Let's construct a narrative around the chosen concept, ensuring it's detailed and follows the required structure.
@@ -640,8 +647,7 @@ The beauty of this concept lies in its universality and the depth of emotion it 
 By embracing such metaphors, we're encouraged to look beyond the obvious and appreciate the myriad ways 'shelter' manifests in our lives. And so, the riddle serves not just as a puzzle to be solved but as a reflection on the profound connections that bind us to the very essence of existence.
 </answer><|im_end|>
 """
-            ],
-        )
+        ).unsqueeze(0)
         td = env.step(r)
         assert td["next", "ifeval_score"].all()
         assert td.get(("next", "reward")) is not None
@@ -660,26 +666,32 @@ class TestTools:
         base_env = ChatEnv(
             batch_size=(1,),
             system_prompt="I'm the system, do as I say",
-            apply_template=True,
             tokenizer=tokenizer,
+            input_mode="history",
         )
         env = base_env.append_transform(PythonInterpreter())
-        r = env.reset(TensorDict(text=["This is the user prompt"], batch_size=(1,)))
+        r = env.reset(
+            TensorDict(
+                {base_env.data_key: ["This is the user prompt"]}, batch_size=(1,)
+            )
+        )
         rc = r.clone()
-        h = r["history"]
+        h = r["history"].prompt
         history_from_text = h.apply_chat_template(tokenizer=tokenizer)
         assert history_from_text == [
             "<|im_start|>system\nI'm the system, do as I say<|im_end|>\n<|im_start|>user\nThis is the user prompt<|im_end|>\n<|im_start|>assistant\n"
         ]
-        r["text_response"] = [
-            """Here is a python code to execute:
-```python
-print(1 + 1)
-```<|im_end|>\n
-"""
-        ]
+        r["history"].full = h.extend(
+            History(
+                role="assistant",
+                content="Here is a python code to execute:\n```python\nprint(1 + 1)\n```",
+            ).view(1, 1),
+            dim=-1,
+        )
         s = env.step(r)
-        history_str = s["next", "history"].apply_chat_template(tokenizer=tokenizer)
+        history_str = s["next", "history"].prompt.apply_chat_template(
+            tokenizer=tokenizer, add_generation_prompt=True
+        )
         assert history_str == [
             "<|im_start|>system\n"
             "I'm the system, do as I say<|im_end|>\n"
@@ -690,7 +702,7 @@ print(1 + 1)
             "```python\n"
             "print(1 + 1)\n"
             "```<|im_end|>\n"
-            "<|im_start|>user\n"
+            "    <|im_start|>user\n"
             "<tool_response>\n"
             "Code block 1 executed successfully:\n"
             "2\n"
@@ -719,22 +731,35 @@ print(1 + 1)
         ).all()
         # Check what happens if there is no tool response
         r = rc.clone()
-        r["text_response"] = [
-            """Here is a response without a python code to execute.<|im_end|>"""
-        ]
+        r["history"].full = h.extend(
+            History(
+                role="assistant",
+                content="Here is a response without a python code to execute.",
+            ).view(1, 1),
+            dim=-1,
+        )
         s = env.step(r)
-        history_str = s["next", "history"].apply_chat_template(tokenizer=tokenizer)
+        history_str = s["next", "history"].prompt.apply_chat_template(
+            tokenizer=tokenizer, add_generation_prompt=True
+        )
         assert history_str == [
             "<|im_start|>system\n"
             "I'm the system, do as I say<|im_end|>\n"
             "<|im_start|>user\n"
             "This is the user prompt<|im_end|>\n"
             "<|im_start|>assistant\n"
+            "Here is a python code to execute:\n"
+            "```python\n"
+            "print(1 + 1)\n"
+            "```<|im_end|>\n"
+            "    <|im_start|>assistant\n"
             "Here is a response without a python code to execute.<|im_end|>\n"
-            "<|im_start|>assistant\n"
+            "    <|im_start|>assistant\n"
         ]
 
     def test_python_interpreter_persistent(self):
+        pass
+
         from torchrl.envs.llm.transforms import PythonInterpreter
         from transformers import AutoTokenizer
 
@@ -742,29 +767,35 @@ print(1 + 1)
         env = ChatEnv(
             batch_size=(1,),
             system_prompt="I'm the system, do as I say",
-            apply_template=True,
             tokenizer=tokenizer,
+            input_mode="history",
         )
         env = env.append_transform(PythonInterpreter(persistent=True))
-        r = env.reset(TensorDict(text=["This is the user prompt"], batch_size=(1,)))
-        r["text_response"] = [
-            """Here is a python code to execute:
-```python
-a=1
-```<|im_end|>\n
-"""
-        ]
+        r = env.reset(
+            TensorDict({env.data_key: ["This is the user prompt"]}, batch_size=(1,))
+        )
+        r["history"].full = r["history"].prompt.extend(
+            History(
+                role="assistant",
+                content="Here is a python code to execute:\n```python\na=1\n```",
+            ).view(1, 1),
+            dim=-1,
+        )
         s, s_ = env.step_and_maybe_reset(r)
-        s_["text_response"] = [
-            """Here is a python code to execute:
-```python
-a+=1
-assert a == 2
-```<|im_end|>\n
-"""
-        ]
+        s_["history"].full = s_["history"].prompt.extend(
+            History(
+                role="assistant",
+                content="Here is a python code to execute:\n```python\na+=1\nassert a == 2\n```",
+            ).view(1, 1),
+            dim=-1,
+            inplace=False,
+        )
         s, s_ = env.step_and_maybe_reset(s_)
-        assert s_["history"].apply_chat_template(tokenizer=tokenizer) == [
+        response = s_["history"].prompt.apply_chat_template(
+            tokenizer=tokenizer, add_generation_prompt=True
+        )
+
+        assert response == [
             "<|im_start|>system\n"
             "I'm the system, do as I say<|im_end|>\n"
             "<|im_start|>user\n"
@@ -774,7 +805,7 @@ assert a == 2
             "```python\n"
             "a=1\n"
             "```<|im_end|>\n"
-            "<|im_start|>user\n"
+            "    <|im_start|>user\n"
             "<tool_response>\n"
             "Code block 1 executed successfully:\n"
             "\n"
@@ -785,7 +816,7 @@ assert a == 2
             "a+=1\n"
             "assert a == 2\n"
             "```<|im_end|>\n"
-            "<|im_start|>user\n"
+            "    <|im_start|>user\n"
             "<tool_response>\n"
             "Code block 1 executed successfully:\n"
             "\n"
@@ -801,30 +832,33 @@ assert a == 2
         env = ChatEnv(
             batch_size=(1,),
             system_prompt="I'm the system, do as I say",
-            apply_template=True,
             tokenizer=tokenizer,
+            input_mode="history",
         )
         env = env.append_transform(PythonInterpreter(persistent=True))
-        r = env.reset(TensorDict(text=["This is the user prompt"], batch_size=(1,)))
-        r["text_response"] = [
-            """Here is a python code to execute:
-```python
-raise ValueError("This is an error")
-```<|im_end|>\n
-"""
-        ]
+        r = env.reset(
+            TensorDict({env.data_key: ["This is the user prompt"]}, batch_size=(1,))
+        )
+        r["history"].full = r["history"].prompt.extend(
+            History(
+                role="assistant",
+                content="Here is a python code to execute:\n```python\nraise ValueError('This is an error')\n```",
+            ).view(1, 1),
+            dim=-1,
+        )
         s, s_ = env.step_and_maybe_reset(r)
-        s_["text_response"] = [
-            """Here is a python code to execute:
-```python
-a=1
-assert a == 1
-```<|im_end|>\n
-"""
-        ]
+        s_["history"].full = s_["history"].prompt.extend(
+            History(
+                role="assistant",
+                content="Here is a python code to execute:\n```python\na=1\nassert a == 1\n```",
+            ).view(1, 1),
+            dim=-1,
+        )
         s, s_ = env.step_and_maybe_reset(s_)
         assert re.match(
-            s_["history"].apply_chat_template(tokenizer=tokenizer)[0],
+            s_["history"].prompt.apply_chat_template(
+                tokenizer=tokenizer, add_generation_prompt=True
+            )[0],
             r"<|im_start|>system\n"
             "I'm the system, do as I say<|im_end|>\n"
             "<|im_start|>user\n"
@@ -834,7 +868,7 @@ assert a == 1
             "```python\n"
             'raise ValueError("This is an error")\n'
             "```<|im_end|>\n"
-            "<|im_start|>user\n"
+            "    <|im_start|>user\n"
             "<tool_response>\n"
             "Code block 1 failed:\n"
             "Error: This is an error\n"
@@ -853,7 +887,7 @@ assert a == 1
             "a=1\n"
             "assert a == 1\n"
             "```<|im_end|>\n"
-            "<|im_start|>user\n"
+            "    <|im_start|>user\n"
             "<tool_response>\n"
             "Code block 1 executed successfully:\n"
             "\n"
@@ -869,34 +903,35 @@ assert a == 1
         env = ChatEnv(
             batch_size=(1,),
             system_prompt="I'm the system, do as I say",
-            apply_template=True,
             tokenizer=tokenizer,
         )
         env = env.append_transform(PythonInterpreter(persistent=True))
-        r = env.reset(TensorDict(text=["This is the user prompt"], batch_size=(1,)))
-        r["text_response"] = [
-            """Here is a python code to execute:
-```python
-a = [0]
-```<|im_end|>\n
-"""
-        ]
+        r = env.reset(
+            TensorDict({env.data_key: ["This is the user prompt"]}, batch_size=(1,))
+        )
+        r["history"].full = r["history"].prompt.extend(
+            History(
+                role="assistant",
+                content="Here is a python code to execute:\n```python\na = [0]\n```",
+            ).view(1, 1),
+            dim=-1,
+        )
         s, s_ = env.step_and_maybe_reset(r)
-        r = env.reset(TensorDict(text=["This is the user prompt"], batch_size=(1,)))
-        r["text_response"] = [
-            """Here is a python code to execute:
-```python
-# check if a is still defined
-if "a" in globals():
-    raise RuntimeError("a is still defined")
-else:
-    print("a is not defined")
-```<|im_end|>\n
-"""
-        ]
+        r = env.reset(
+            TensorDict({env.data_key: ["This is the user prompt"]}, batch_size=(1,))
+        )
+        r["history"].full = r["history"].prompt.extend(
+            History(
+                role="assistant",
+                content="Here is a python code to execute:\n```python\n# check if a is still defined\nif 'a' in globals():\n    raise RuntimeError('a is still defined')\nelse:\n    print('a is not defined')\n```",
+            ).view(1, 1),
+            dim=-1,
+        )
         s, s_ = env.step_and_maybe_reset(r)
         assert re.match(
-            s_["history"].apply_chat_template(tokenizer=tokenizer)[0],
+            s_["history"].prompt.apply_chat_template(
+                tokenizer=tokenizer, add_generation_prompt=True
+            )[0],
             "<|im_start|>system\n"
             "I'm the system, do as I say<|im_end|>\n"
             "<|im_start|>user\n"
@@ -910,7 +945,7 @@ else:
             "else:\n"
             '    print("a is not defined")\n'
             "```<|im_end|>\n"
-            "<|im_start|>user\n"
+            "    <|im_start|>user\n"
             "<tool_response>\n"
             "Code block 1 executed successfully:\n"
             "a is not defined\n"
@@ -956,41 +991,50 @@ else:
 
         # Create environment and transform
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B")
-        env = ChatEnv(
+        base_env = ChatEnv(
             batch_size=(1,),
             system_prompt="You are a helpful assistant that uses a calculator.",
-            apply_template=True,
             tokenizer=tokenizer,
         )
         transform = MCPToolTransform(tools, schemas)
-        env = env.append_transform(transform)
+        env = base_env.append_transform(transform)
 
         # Test single tool call
-        td = TensorDict({"text": ["Let me calculate 2 + 3"]}, batch_size=(1,))
+        td = TensorDict(
+            {base_env.data_key: ["Let me calculate 2 + 3"]}, batch_size=(1,)
+        )
         td = env.reset(td)
-        td["text_response"] = [
-            'I will help you calculate 2 + 3:\n<tool>calculator\n{"operation": "add", "a": 2, "b": 3}</tool><|im_end|>'
-        ]
+        td["history"].full = td["history"].prompt.extend(
+            History(
+                role="assistant",
+                content='I will help you calculate 2 + 3:\n<tool>calculator\n{"operation": "add", "a": 2, "b": 3}</tool><|im_end|>',
+            ).view(1, 1),
+            dim=-1,
+        )
         result = env.step(td)
 
         # Check that the tool was executed and returned correct result
-        history = result["next", "history"]
+        history = result["next", "history"].prompt
         assert len(history[0]) == 4  # system, user, assistant, tool response
         assert history[0, -1].role == "tool"
         assert "result': 5" in history[0, -1].content
 
         # Test multiple tool calls in one response
-        td = TensorDict({"text": ["Calculate 2 + 3 and 4 * 5"]}, batch_size=(1,))
+        td = TensorDict(
+            {base_env.data_key: ["Calculate 2 + 3 and 4 * 5"]}, batch_size=(1,)
+        )
         td = env.reset(td)
-        td["text_response"] = [
-            "I will help you calculate both:\n"
-            '<tool>calculator\n{"operation": "add", "a": 2, "b": 3}</tool>\n'
-            '<tool>calculator\n{"operation": "multiply", "a": 4, "b": 5}</tool><|im_end|>'
-        ]
+        td["history"].full = td["history"].prompt.extend(
+            History(
+                role="assistant",
+                content='I will help you calculate both:\n<tool>calculator\n{"operation": "add", "a": 2, "b": 3}</tool>\n<tool>calculator\n{"operation": "multiply", "a": 4, "b": 5}</tool><|im_end|>',
+            ).view(1, 1),
+            dim=-1,
+        )
         result = env.step(td)
 
         # Check that both tools were executed and returned correct results
-        history = result["next", "history"]
+        history = result["next", "history"].prompt
         assert (
             len(history[0]) == 5
         )  # system, user, assistant, tool response 1, tool response 2
@@ -1000,30 +1044,38 @@ else:
         assert "result': 20" in history[0, -1].content  # 4 * 5 = 20
 
         # Test error handling
-        td = TensorDict({"text": ["Calculate 2 ? 3"]}, batch_size=(1,))
+        td = TensorDict({base_env.data_key: ["Calculate 2 ? 3"]}, batch_size=(1,))
         td = env.reset(td)
-        td["text_response"] = [
-            'I will try to calculate:\n<tool>calculator\n{"operation": "invalid", "a": 2, "b": 3}</tool><|im_end|>'
-        ]
+        td["history"].full = td["history"].prompt.extend(
+            History(
+                role="assistant",
+                content='I will try to calculate:\n<tool>calculator\n{"operation": "invalid", "a": 2, "b": 3}</tool><|im_end|>',
+            ).view(1, 1),
+            dim=-1,
+        )
         result = env.step(td)
 
         # Check that error was handled gracefully
-        history = result["next", "history"]
+        history = result["next", "history"].prompt
         assert len(history[0]) == 4
         assert history[0, -1].role == "tool"
         assert "failed" in history[0, -1].content
         assert "Unknown operation: invalid" in history[0, -1].content
 
         # Test invalid JSON
-        td = TensorDict({"text": ["Calculate something"]}, batch_size=(1,))
+        td = TensorDict({base_env.data_key: ["Calculate something"]}, batch_size=(1,))
         td = env.reset(td)
-        td["text_response"] = [
-            "Let me calculate:\n<tool>calculator\ninvalid json</tool><|im_end|>"
-        ]
+        td["history"].full = td["history"].prompt.extend(
+            History(
+                role="assistant",
+                content="Let me calculate:\n<tool>calculator\ninvalid json</tool><|im_end|>",
+            ).view(1, 1),
+            dim=-1,
+        )
         result = env.step(td)
 
         # Check that JSON error was handled gracefully
-        history = result["next", "history"]
+        history = result["next", "history"].prompt
         assert len(history[0]) == 4
         assert history[0, -1].role == "tool"
         assert "failed" in history[0, -1].content
@@ -1066,7 +1118,6 @@ else:
         env = ChatEnv(
             batch_size=(1,),
             system_prompt="I'm a calculator assistant",
-            apply_template=True,
             tokenizer=tokenizer,
         )
         tools = {"calculator": cls.delayed_calculator}
@@ -1086,20 +1137,30 @@ else:
         try:
             # Reset both environments
             tdreset = TensorDict(
-                text=[["Let me calculate 2 + 3"], ["Let me calculate 4 * 5"]],
+                query=[["Let me calculate 2 + 3"], ["Let me calculate 4 * 5"]],
                 batch_size=(2, 1),
             )
             td = env_pool.reset(tdreset)
 
             # Send async steps to both environments
-            td["text_response"] = [
+            td["history"].full = torch.stack(
                 [
-                    'Let me calculate 2 + 3:\n<tool>calculator\n{"operation": "add", "a": 2, "b": 3}</tool><|im_end|>'
-                ],
-                [
-                    'Let me calculate 4 * 5:\n<tool>calculator\n{"operation": "multiply", "a": 4, "b": 5}</tool><|im_end|>'
-                ],
-            ]
+                    td[0]["history"].prompt.extend(
+                        History(
+                            role="assistant",
+                            content='Let me calculate 2 + 3:\n<tool>calculator\n{"operation": "add", "a": 2, "b": 3}</tool><|im_end|>',
+                        ).view(1, 1),
+                        dim=-1,
+                    ),
+                    td[1]["history"].prompt.extend(
+                        History(
+                            role="assistant",
+                            content='Let me calculate 4 * 5:\n<tool>calculator\n{"operation": "multiply", "a": 4, "b": 5}</tool><|im_end|>',
+                        ).view(1, 1),
+                        dim=-1,
+                    ),
+                ]
+            )
             env_pool.async_step_send(td)
 
             # Get results as they complete
@@ -1116,7 +1177,7 @@ else:
             all_results = torch.stack(list(results) + list(remaining))
 
             # Verify results
-            history = all_results["next", "history"]
+            history = all_results["next", "history"].prompt
             assert len(history[0, 0]) == 4  # system, user, assistant, tool response
             assert history[0, 0, -1].role == "tool"
             assert any(
@@ -1174,14 +1235,18 @@ class TestThinkingPrompt:
             )
         )
         reset = env.reset()
-        assert reset[0]["history"][-1].content.startswith(
-            "Natalia sold clips to 48 of her friends in April"
+        assert (
+            reset[0]["history"]
+            .prompt[-1]
+            .content.startswith("Natalia sold clips to 48 of her friends in April")
         )
-        policy_anser = (
+        policy_answer = (
             "<think>Let me solve this step by step. Natalia sold clips to 48 friends in April. Then she sold half as many in May. Half of 48 is 24. So in May she sold 24 clips. "
             "To find the total, I need to add April and May: 48 + 24 = 72. Therefore, Natalia sold 72 clips altogether in April and May.</think>\n<answer>322 clips</answer><|im_end|>"
         )
-        reset["text_response"] = [policy_anser]
+        reset["history"].full = reset["history"].prompt.extend(
+            History(role="assistant", content=policy_answer).view(1, 1), dim=-1
+        )
         s = env.step(reset)
         if zero_reward:
             assert (s["next", "reward"] == 0).all()
@@ -1192,13 +1257,13 @@ class TestThinkingPrompt:
         else:
             assert (s["next", "done"] != 0).all()
         if edit_last_turn:
-            assert s["next", "history"].shape == (1, 3)
+            assert s["next", "history"].prompt.shape == (1, 3)
         else:
-            assert s["next", "history"].shape == (1, 4)
+            assert s["next", "history"].prompt.shape == (1, 4)
         if role == "assistant":
-            assert s[0]["next", "history", "role"][-1] == "assistant"
+            assert s[0]["next", "history"].prompt[-1].role == "assistant"
         else:
-            assert s[0]["next", "history", "role"][-1] == "user"
+            assert s[0]["next", "history"].prompt[-1].role == "user"
 
     @pytest.mark.skipif(not _has_transformers, reason="requires transformers")
     @pytest.mark.skipif(not _has_datasets, reason="requires gsm8k")
@@ -1237,19 +1302,269 @@ class TestThinkingPrompt:
             )
         )
         reset = env.reset()
-        assert reset[0]["history"][-1].content.startswith(
-            "Natalia sold clips to 48 of her friends in April"
+        assert (
+            reset[0]["history"]
+            .prompt[-1]
+            .content.startswith("Natalia sold clips to 48 of her friends in April")
         )
-        policy_anser = (
+        policy_answer = (
             "<think>Let me solve this step by step. Natalia sold clips to 48 friends in April. Then she sold half as many in May. Half of 48 is 24. So in May she sold 24 clips. "
             "To find the total, I need to add April and May: 48 + 24 = 72. Therefore, Natalia sold 72 clips altogether in April and May.</think>\n<answer>72</answer><|im_end|>"
         )
-        reset["text_response"] = [policy_anser]
+        reset["history"].full = reset["history"].prompt.extend(
+            History(role="assistant", content=policy_answer).view(1, 1), dim=-1
+        )
         s = env.step(reset)
         assert (s["next", "reward"] != 0).all(), s["next", "reward"]
-        assert s[0]["next", "history", "role"][-1] == "assistant"
+        assert s[0]["next", "history"].prompt[-1].role == "assistant"
         assert s["next", "done"].all()
-        assert len(s[0]["next", "history", "content"]) == 3
+        assert len(s[0]["next", "history"].prompt) == 3
+
+
+class TestChatEnvIntegration:
+    @pytest.fixture(scope="module")
+    def transformers_instance(self):
+        """Create transformers model and tokenizer for testing."""
+        if not _has_transformers:
+            pytest.skip("transformers not available")
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B")
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+        tokenizer.pad_token = tokenizer.eos_token
+        return model, tokenizer
+
+    @pytest.fixture(scope="module")
+    def vllm_instance(self):
+        """Create vLLM model and tokenizer for testing."""
+        if not _has_vllm:
+            pytest.skip("vllm not available")
+
+        import vllm.envs as envs
+        from transformers import AutoTokenizer
+        from vllm import LLM
+
+        envs.VLLM_HOST_IP = "0.0.0.0" or "127.0.0.1"
+
+        try:
+            model = LLM("Qwen/Qwen2.5-0.5B")
+            tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
+            tokenizer.pad_token = tokenizer.eos_token
+            return model, tokenizer
+        except Exception as e:
+            pytest.skip(f"Failed to load vLLM model: {e}")
+
+    @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
+    @pytest.mark.skipif(not _has_datasets, reason="datasets not available")
+    @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
+    @pytest.mark.parametrize(
+        "input_mode,compute_reward",
+        [["history", True], ["history", False], ["text", False], ["tokens", False]],
+        ids=[
+            "history_compute_reward",
+            "history_no_compute_reward",
+            "text_no_compute_reward",
+            "tokens_no_compute_reward",
+        ],
+    )
+    def test_chat_env_integration_ifeval(self, compute_reward, pad_output, input_mode):
+        """Test that the wrapper works correctly with the ChatEnv."""
+        import vllm.envs as envs
+        from torchrl.envs.llm import IFEvalEnv
+
+        envs.VLLM_HOST_IP = "0.0.0.0" or "127.0.0.1"
+
+        policy = vLLMWrapper(
+            model="Qwen/Qwen2.5-0.5B",
+            tokenizer="Qwen/Qwen2.5-0.5B",
+            input_mode=input_mode,
+            pad_output=pad_output,
+            generate=True,
+        )
+        env = IFEvalEnv(
+            max_steps=1,
+            compute_reward=compute_reward,
+            input_mode=input_mode,
+            tokenizer=policy.tokenizer,
+        )
+        r = env.reset()
+        prompt = None
+        if input_mode == "history":
+            assert r["history", "prompt"].shape == (1, 2)
+        elif input_mode == "text":
+            prompt = r["text", "prompt"][0]
+        r = policy(r)
+        if input_mode == "history":
+            assert r["history", "response"].shape == (1, 1)
+            assert r["history", "full"].shape == (1, 3)
+        elif input_mode == "text":
+            assert r["text", "full"][0].startswith(prompt)
+        r, r_ = env.step_and_maybe_reset(r)
+        if input_mode == "history":
+            assert r["next", "history", "prompt"].shape == (1, 3)
+            assert r_["history", "prompt"] is not None
+            assert r_.get(("history", "response"), as_list=True) is None
+            assert r_.get(("history", "full"), as_list=True) is None
+        assert r["next", "done"].all()
+        r = policy(r_)
+        r, r_ = env.step_and_maybe_reset(r)
+
+    @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
+    @pytest.mark.skipif(not _has_datasets, reason="datasets not available")
+    @pytest.mark.parametrize(
+        "compute_reward", [False, True], ids=["no_compute_reward", "compute_reward"]
+    )
+    @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
+    @pytest.mark.parametrize(
+        "input_mode", ["history", "text", "tokens"], ids=["history", "text", "tokens"]
+    )
+    def test_chat_env_integration_gsm8k(self, compute_reward, pad_output, input_mode):
+        """Test that the wrapper works correctly with the ChatEnv."""
+        import vllm.envs as envs
+        from torchrl.envs.llm import GSM8KEnv
+
+        envs.VLLM_HOST_IP = "0.0.0.0" or "127.0.0.1"
+
+        policy = vLLMWrapper(
+            model="Qwen/Qwen2.5-0.5B",
+            tokenizer="Qwen/Qwen2.5-0.5B",
+            input_mode=input_mode,
+            pad_output=pad_output,
+            generate=True,
+        )
+        env = GSM8KEnv(
+            max_steps=1,
+            compute_reward=compute_reward,
+            input_mode=input_mode,
+            tokenizer=policy.tokenizer,
+        )
+        r = env.reset()
+        prompt = None
+        if input_mode == "history":
+            assert r["history", "prompt"].shape == (1, 2)
+        elif input_mode == "text":
+            prompt = r["text", "prompt"][0]
+        r = policy(r)
+        if input_mode == "history":
+            assert r["history", "response"].shape == (1, 1)
+            assert r["history", "full"].shape == (1, 3)
+        elif input_mode == "text":
+            assert r["text", "full"][0].startswith(prompt)
+        r, r_ = env.step_and_maybe_reset(r)
+        if input_mode == "history":
+            assert r["next", "history", "prompt"].shape == (1, 3)
+            assert r_["history", "prompt"] is not None
+            assert r_.get(("history", "response"), as_list=True) is None
+            assert r_.get(("history", "full"), as_list=True) is None
+        assert r["next", "done"].all()
+        r = policy(r_)
+        r, r_ = env.step_and_maybe_reset(r)
+
+    @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
+    @pytest.mark.parametrize("ref_input_mode", ["tokens"], ids=["tokens"])
+    @pytest.mark.parametrize(
+        "env_class", ["GSM8KEnv", "IFEvalEnv"], ids=["gsm8k", "ifeval"]
+    )
+    def test_chat_env_kl(
+        self,
+        transformers_instance,
+        vllm_instance,
+        pad_output,
+        ref_input_mode,
+        env_class,
+    ):
+        """Test that the wrapper works correctly with the ChatEnv."""
+        import vllm.envs as envs
+        from torchrl.envs.llm import GSM8KEnv, IFEvalEnv
+
+        envs.VLLM_HOST_IP = "0.0.0.0" or "127.0.0.1"
+
+        vllm_model, vllm_tokenizer = vllm_instance
+        tf_model, tf_tokenizer = transformers_instance
+
+        # a policy
+        policy = vLLMWrapper(
+            vllm_model,
+            tokenizer=vllm_tokenizer,
+            input_mode="history",
+            generate=True,
+            pad_output=pad_output,
+        )
+        ref_model = TransformersWrapper(
+            tf_model,
+            tokenizer=tf_tokenizer,
+            input_mode="tokens",
+            # TODO: check that generate=True causes an error
+            generate=False,
+            return_log_probs=True,
+            pad_output=pad_output,
+        )
+
+        if env_class == "GSM8KEnv":
+            env = GSM8KEnv(max_steps=10, num_envs=3, input_mode="history")
+        elif env_class == "IFEvalEnv":
+            env = IFEvalEnv(max_steps=10, num_envs=3, input_mode="history")
+        else:
+            raise ValueError(f"Invalid environment class: {env_class}")
+        env = env.append_transform(KLRewardTransform(ref_model))
+        r = env.rollout(1, policy)
+        reward = r.get(("next", "reward"), as_list=not pad_output)
+        assert reward is not None
+        if pad_output:
+            assert reward.shape[0] == 3
+            assert reward.shape[1] == 1
+            assert reward.shape[2] > 1
+            assert reward.shape[3] == 1
+        else:
+            assert len(reward) == 3
+            for r in reward:
+                assert r.shape[0] == 1
+                assert r.shape[1] > 1
+                assert r.shape[2] == 1
+
+    @pytest.mark.parametrize(
+        "env_class", ["GSM8KEnv", "IFEvalEnv"], ids=["gsm8k", "ifeval"]
+    )
+    def test_retrievekl_transform(
+        self, transformers_instance, vllm_instance, env_class
+    ):
+        """Test that the RetrieveKL transform works correctly."""
+        from torchrl.collectors.llm.base import LLMCollector
+        from torchrl.envs.llm import GSM8KEnv, IFEvalEnv
+
+        model, tokenizer = transformers_instance
+        vllm_model, vllm_tokenizer = vllm_instance
+        ref_model = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode="history",
+            generate=False,
+            pad_output=True,
+        )
+        if env_class == "GSM8KEnv":
+            env = GSM8KEnv(max_steps=1, num_envs=3)
+        elif env_class == "IFEvalEnv":
+            env = IFEvalEnv(max_steps=1, num_envs=3)
+        else:
+            raise ValueError(f"Invalid environment class: {env_class}")
+        env = env.append_transform(RetrieveKL("from_collector", ref_model))
+        c = LLMCollector(
+            env,
+            policy_factory=partial(
+                vLLMWrapper,
+                vllm_model,
+                tokenizer=vllm_tokenizer,
+                input_mode="history",
+                generate=True,
+                pad_output=True,
+            ),
+            dialog_turns_per_batch=6,
+        )
+        for d in c:
+            assert ("history", "full") in d
+            assert ("next", "history", "prompt") in d
+            break
+        return
 
 
 if __name__ == "__main__":

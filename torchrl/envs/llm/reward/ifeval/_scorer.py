@@ -20,7 +20,14 @@ import re
 from typing import Callable
 
 import torch
-from tensordict import NestedKey, NonTensorData, TensorClass, TensorDict, TensorDictBase
+from tensordict import (
+    lazy_stack,
+    NestedKey,
+    NonTensorData,
+    TensorClass,
+    TensorDict,
+    TensorDictBase,
+)
 from tensordict.tensorclass import is_non_tensor
 from torchrl._utils import logger as torchrl_logger
 
@@ -39,6 +46,27 @@ class IFEvalScoreData(TensorClass):
     inst_level_strict_acc: torch.Tensor | None
     prompt_level_loose_acc: torch.Tensor | None
     inst_level_loose_acc: torch.Tensor | None
+
+    @classmethod
+    def default_spec(
+        cls, shape: torch.Size, device: torch.device | None = None
+    ) -> Composite:
+        return Composite(
+            prompt_level_strict_acc=Unbounded(
+                shape=shape, dtype=torch.bool, device=device
+            ),
+            inst_level_strict_acc=Unbounded(
+                shape=shape, dtype=torch.bool, device=device
+            ),
+            prompt_level_loose_acc=Unbounded(
+                shape=shape, dtype=torch.bool, device=device
+            ),
+            inst_level_loose_acc=Unbounded(
+                shape=shape, dtype=torch.bool, device=device
+            ),
+            data_cls=cls,
+            step_mdp_static=True,
+        )
 
     def __post_init__(self):
         prompt_level_loose_acc = self.get(
@@ -72,7 +100,10 @@ class IFEvalScoreData(TensorClass):
 
 
 def _process_results(
-    data: TensorDict, response: str | NonTensorData, verbose: bool = False
+    data: TensorDict,
+    response: str | NonTensorData,
+    verbose: bool = False,
+    prompt: str | None = None,
 ) -> IFEvalScoreData:
     if not _has_langdetect:
         raise ImportError("langdetect must be installed to user IFEvalScorer.")
@@ -85,10 +116,13 @@ def _process_results(
         _test_instruction_following_strict,
     )
 
+    if prompt is None:
+        prompt = data["text"]
+
     inp = _InputExample(
         key=data["key"],
         instruction_id_list=data["instruction_id_list"],
-        prompt=data["text"],
+        prompt=prompt if prompt is not None else "",
         kwargs=data["kwargs"],
     )
 
@@ -136,6 +170,7 @@ class IfEvalScorer(Transform):
             `prompt_level_loose_acc`, `inst_level_loose_acc`, in that order). Defaults to `[0.4, 0.3, 0.2, 0.1]`.
             This is only used if `aggregate_reward` is `True` and the default aggregator is used.
         verbose (bool, optional): Whether to print verbose information. Defaults to `False`.
+        set_done_if_answer (bool): whether to set the done flag to `True` when an answer is present. Defaults to `True`.
 
     .. note:: `IFEvalScorer` requires the following libraries to be installed: `langdetect`, `nltk` and `immutabledict`.
 
@@ -156,9 +191,11 @@ class IfEvalScorer(Transform):
         ] = True,
         format_weights: list[float] | None = None,
         verbose: bool = False,
+        set_done_if_answer: bool = True,
     ):
         self.aggregate_reward = aggregate_reward
         self.score_key = score_key
+        self.set_done_if_answer = set_done_if_answer
         out_keys = [self.score_key]
         if aggregate_reward:
             out_keys.append("reward")
@@ -193,7 +230,7 @@ class IfEvalScorer(Transform):
         answer_blocks: list[str] | None = None,
         complete: bool | torch.Tensor | None = None,
     ) -> torch.Tensor:
-        r"""Default reward aggregation function that provides a more nuanced scoring system.
+        r"""Improved reward aggregation function with tiered multiplicative scoring.
 
         Args:
             score (IFEvalScoreData): The score data.
@@ -201,45 +238,56 @@ class IfEvalScorer(Transform):
             answer_blocks (list[str], optional): The list of answer blocks.
             complete (bool, optional): Whether the response is complete (ends with a eos token).
 
-        The reward is composed of three main components:
-        1. Format score (max 1.0):
-           - prompt_level_strict_acc: 0.4 (highest weight for strict adherence to all instructions)
-           - inst_level_strict_acc: 0.3 (high weight for strict adherence to individual instructions)
-           - prompt_level_loose_acc: 0.2 (medium weight for loose adherence to all instructions)
-           - inst_level_loose_acc: 0.1 (lowest weight for loose adherence to individual instructions)
-           All instruction-level metrics are averaged to ensure balanced contribution.
+        The reward uses a tiered multiplicative system:
 
-        2. Structure score (max 1.0):
-           - think_block: 0.5 (presence of exactly one think block)
-           - answer_block: 0.5 (presence of exactly one answer block)
+        1. Critical failure check: No answer blocks = 0 reward
+        2. Base format score (0-1): Weighted average of format metrics
+        3. Structure multiplier (0.1-1.0): Penalties for missing/multiple blocks
+        4. Quality bonus (0-0.5): Rewards for high quality and completion
+        5. Task complexity scaling: More requirements = higher potential rewards
 
-        3. Completion bonus (max 0.2):
-           - complete: 0.2 (response ends with eos token)
+        The final formula is:
+            reward = (format_score + quality_bonus) * structure_multiplier * complexity_scale
 
-        The overall formula for the reward is:
+        This provides better learning signals by:
+        - Requiring critical elements (answer tags) for meaningful rewards
+        - Using multiplicative scaling to reward doing everything well
+        - Scaling rewards based on task complexity
+        - Providing clear failure modes and success incentives
 
-          .. math::
-
-            reward = format\_score + structure\_score + completion\_bonus
-
-        Therefore, the maximum value the reward can take is 2.2, with:
-        - 1.0 from format adherence
-        - 1.0 from structural elements (think/answer blocks)
-        - 0.2 from completion bonus
+        Reward range: 0.0 to ~1.5-2.7 depending on task complexity (more instructions = higher max reward).
         """
         default_dtype = torch.get_default_dtype()
         score = score.to(default_dtype)
 
-        # Format score calculation - using mean for instruction-level metrics
+        # Critical failure check - no answer = no reward
+        if not answer_blocks:
+            return torch.zeros(
+                score.batch_size + (1,), device=score.device, dtype=default_dtype
+            )
+
+        # Base format score calculation (0-1)
         format_components = torch.stack(
             [
-                score.prompt_level_strict_acc.sum(-1, keepdim=True),  # Single value
-                score.inst_level_strict_acc.mean(
-                    -1, keepdim=True
+                score.prompt_level_strict_acc.sum(-1, keepdim=True)
+                if score.prompt_level_strict_acc is not None
+                else torch.zeros(
+                    score.batch_size + (1,), device=score.device, dtype=default_dtype
+                ),  # Single value
+                score.inst_level_strict_acc.mean(-1, keepdim=True)
+                if score.inst_level_strict_acc is not None
+                else torch.zeros(
+                    score.batch_size + (1,), device=score.device, dtype=default_dtype
                 ),  # Average across instructions
-                score.prompt_level_loose_acc.sum(-1, keepdim=True),  # Single value
-                score.inst_level_loose_acc.mean(
-                    -1, keepdim=True
+                score.prompt_level_loose_acc.sum(-1, keepdim=True)
+                if score.prompt_level_loose_acc is not None
+                else torch.zeros(
+                    score.batch_size + (1,), device=score.device, dtype=default_dtype
+                ),  # Single value
+                score.inst_level_loose_acc.mean(-1, keepdim=True)
+                if score.inst_level_loose_acc is not None
+                else torch.zeros(
+                    score.batch_size + (1,), device=score.device, dtype=default_dtype
                 ),  # Average across instructions
             ],
             -1,
@@ -247,33 +295,55 @@ class IfEvalScorer(Transform):
         weights = torch.tensor(
             self.format_weights,
             device=format_components.device,
-            dtype=torch.get_default_dtype(),
+            dtype=default_dtype,
         )
         format_score = (format_components * weights).sum(dim=-1, keepdim=True)
 
-        # Structure score calculation
-        if think_blocks is not None:
-            think_score = float(len(think_blocks) == 1) * 0.5
-        else:
-            think_score = 0.0
+        # Structure multiplier (0.1-1.0)
+        structure_multiplier = 1.0
 
-        if answer_blocks is not None:
-            answer_score = float(len(answer_blocks) == 1) * 0.5
-        else:
-            answer_score = 0.0
+        # Heavy penalty for missing think blocks (but not zero)
+        if not think_blocks:
+            structure_multiplier *= 0.3
+        elif len(think_blocks) > 1:
+            structure_multiplier *= 0.7  # Penalty for multiple think blocks
 
-        structure_score = think_score + answer_score
+        # Penalty for multiple answer blocks
+        if len(answer_blocks) > 1:
+            structure_multiplier *= 0.7
+
+        # Quality bonus (0-0.5)
+        quality_bonus = torch.zeros_like(format_score)
+
+        # Bonus for high quality responses
+        if format_score > 0.8:
+            quality_bonus += 0.3
 
         # Completion bonus
-        if complete is None:
-            completion_bonus = 0.0
-        elif isinstance(complete, torch.Tensor):
-            completion_bonus = complete.to(default_dtype) * 0.2
-        else:
-            completion_bonus = float(complete) * 0.2
+        if complete is not None:
+            if isinstance(complete, torch.Tensor):
+                completion_bonus = complete.to(default_dtype) * 0.2
+            else:
+                completion_bonus = float(complete) * 0.2
+            quality_bonus += completion_bonus
 
-        # Combine all components
-        final_reward = format_score + structure_score + completion_bonus
+        # Task complexity scaling based on number of instructions
+        # More instructions = higher potential rewards
+        if (
+            score.inst_level_strict_acc is not None
+            and score.inst_level_strict_acc.numel() > 0
+        ):
+            num_instructions = score.inst_level_strict_acc.shape[-1]
+        else:
+            num_instructions = 1
+        complexity_scale = (
+            1.0 + (num_instructions - 1) * 0.2
+        )  # 1.0 for 1 instruction, 1.2 for 2, etc.
+
+        # Final reward: (format + quality) * structure_multiplier * complexity_scale
+        final_reward = (
+            (format_score + quality_bonus) * structure_multiplier * complexity_scale
+        )
         final_reward = final_reward.to(default_dtype)
 
         return final_reward
@@ -281,8 +351,11 @@ class IfEvalScorer(Transform):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
+        if not getattr(self.parent.base_env, "input_mode", "history") == "history":
+            raise ValueError("IFEvalScorer only supports history input mode")
+
         if tensordict.ndim:
-            return torch.stack(
+            return lazy_stack(
                 [
                     self._step(td, next_td)
                     for td, next_td in zip(
@@ -290,7 +363,8 @@ class IfEvalScorer(Transform):
                     )
                 ]
             )
-        h = next_tensordict["history"][..., -1]
+        h = tensordict["history", "full"][..., -1]
+        prompt = tensordict["history", "prompt"][..., -1].content
         response = h.content
         complete = h.is_complete
         # response = tensordict.get(self.response_key)
@@ -311,6 +385,7 @@ class IfEvalScorer(Transform):
             tensordict.copy().auto_device_(),
             answer_blocks[0] if answer_blocks else "",
             verbose=self.verbose,
+            prompt=prompt,
         )
         next_tensordict.set(
             self.score_key,
@@ -327,8 +402,31 @@ class IfEvalScorer(Transform):
                 answer_blocks=answer_blocks,
                 complete=complete,
             )
+            reward = reward.view(
+                next_tensordict.batch_size
+                + (
+                    1,
+                    1,
+                )
+            )
             next_tensordict.set("reward", reward)
-
+        if self.set_done_if_answer and bool(answer_blocks):
+            next_tensordict.set(
+                "done",
+                torch.ones(
+                    next_tensordict.batch_size + (1,),
+                    device=next_tensordict.device,
+                    dtype=torch.bool,
+                ),
+            )
+            next_tensordict.set(
+                "terminated",
+                torch.ones(
+                    next_tensordict.batch_size + (1,),
+                    device=next_tensordict.device,
+                    dtype=torch.bool,
+                ),
+            )
         return next_tensordict
 
     @property
@@ -343,23 +441,14 @@ class IfEvalScorer(Transform):
 
     def transform_reward_spec(self, reward_spec: Composite) -> Composite:
         reward_spec["reward"] = Unbounded(
-            reward_spec.shape + (1,), dtype=torch.get_default_dtype()
+            reward_spec.shape + (1, 1),
+            dtype=torch.get_default_dtype(),
+            device=reward_spec.device,
         )
         return reward_spec
 
     def transform_observation_spec(self, observation_spec: Composite) -> Composite:
-        observation_spec[self.score_key] = Composite(
-            prompt_level_strict_acc=Unbounded(
-                shape=observation_spec.shape, dtype=torch.bool
-            ),
-            inst_level_strict_acc=Unbounded(
-                shape=observation_spec.shape, dtype=torch.bool
-            ),
-            prompt_level_loose_acc=Unbounded(
-                shape=observation_spec.shape, dtype=torch.bool
-            ),
-            inst_level_loose_acc=Unbounded(
-                shape=observation_spec.shape, dtype=torch.bool
-            ),
+        observation_spec[self.score_key] = IFEvalScoreData.default_spec(
+            observation_spec.shape, device=observation_spec.device
         )
         return observation_spec

@@ -1,6 +1,7 @@
 # env and task
 env:
   name: Hopper-v5
+  name: Hopper-v5
   task: ""
   library: gym
   n_samples_stats: 1000
@@ -18,6 +19,7 @@ logger:
   eval_steps: 1000
   mode: online
   eval_envs: 5
+  video: True
   video: True
 
 # replay buffer

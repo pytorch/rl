@@ -178,10 +178,12 @@ class PolicyVersion(Transform):
         """
         if self.version_type in (str, "uuid"):
             spec["policy_version"] = NonTensor(
-                example_data=uuid.uuid4(), shape=spec.shape
+                example_data=uuid.uuid4(), shape=spec.shape, device=spec.device
             )
         elif self.version_type in (int, "int"):
-            spec["policy_version"] = Unbounded(shape=spec.shape, dtype=torch.int64)
+            spec["policy_version"] = Unbounded(
+                shape=spec.shape, dtype=torch.int64, device=spec.device
+            )
         else:
             raise ValueError(f"Invalid version type: {self.version_type}")
         return spec

@@ -9642,7 +9642,7 @@ class TestPPO(LossModuleTestBase):
                     KeyError,
                     match=f"clip_value is set to {loss_fn.clip_value}, but the key "
                     "state_value was not found in the input tensordict. "
-                    "Make sure that the value_key passed to PPO exists in "
+                    "Make sure that the.*passed to PPO exists in "
                     "the input tensordict.",
                 ):
                     loss = loss_fn(td)
@@ -9864,6 +9864,47 @@ class TestPPO(LossModuleTestBase):
         entropy = TensorDict({"head_0": {"action_log_prob": torch.tensor(1.0)}}, [])
         with pytest.raises(KeyError):
             loss._weighted_loss_entropy(entropy)
+
+    def test_critic_loss_tensordict(self):
+        # Creates a dummy actor.
+        actor, _ = self._create_mock_actor_value()
+
+        # Creates a critic that produces a tensordict of values.
+        class CompositeValueNetwork(nn.Module):
+            def forward(self, _) -> tuple[torch.Tensor, torch.Tensor]:
+                return torch.tensor([0.0]), torch.tensor([0.0])
+
+        critic = TensorDictModule(
+            CompositeValueNetwork(),
+            in_keys=["state"],
+            out_keys=[("state_value", "value_0"), ("state_value", "value_1")],
+        )
+
+        # Creates the loss and its input tensordict.
+        loss = ClipPPOLoss(actor, critic, loss_critic_type="l2", clip_value=0.1)
+        td = TensorDict(
+            {
+                "state": torch.tensor([0.0]),
+                "value_target": TensorDict(
+                    {"value_0": torch.tensor([-1.0]), "value_1": torch.tensor([2.0])}
+                ),
+                # Log an existing 'state_value' for the 'clip_fraction'
+                "state_value": TensorDict(
+                    {"value_0": torch.tensor([0.0]), "value_1": torch.tensor([0.0])}
+                ),
+            },
+            batch_size=(1,),
+        )
+
+        critic_loss, clip_fraction, explained_variance = loss.loss_critic(td)
+
+        assert isinstance(critic_loss, TensorDict)
+        assert "value_0" in critic_loss.keys() and "value_1" in critic_loss.keys()
+        torch.testing.assert_close(critic_loss["value_0"], torch.tensor([1.0]))
+        torch.testing.assert_close(critic_loss["value_1"], torch.tensor([4.0]))
+
+        assert isinstance(clip_fraction, TensorDict)
+        assert isinstance(explained_variance, TensorDict)
 
 
 class TestA2C(LossModuleTestBase):

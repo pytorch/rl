@@ -1110,6 +1110,11 @@ and the tree can be expanded for each of these. The following figure shows how t
 Large language models and Reinforcement Learning From Human Feedback (RLHF)
 ---------------------------------------------------------------------------
 
+.. warning::
+    These APIs are deprecated and will be removed in the future.
+    Use the :mod:`torchrl.data.llm` module instead.
+    See the full :ref:`LLM documentation <ref_llms>` for more information.
+
 Data is of utmost importance in LLM post-training (e.g., GRPO or Reinforcement Learning from Human Feedback (RLHF)).
 Given that these techniques are commonly employed in the realm of language,
 which is scarcely addressed in other subdomains of RL within the library,
@@ -1135,9 +1140,6 @@ efficient sampling.
     get_dataloader
     ConstantKLController
     AdaptiveKLController
-    LLMData
-    LLMInput
-    LLMOutput
 
 
 Utils

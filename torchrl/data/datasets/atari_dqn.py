@@ -411,6 +411,12 @@ class AtariDQNExperienceReplay(BaseDatasetExperienceReplay):
         mp_start_method: str = "fork",
         **kwargs,
     ):
+        import warnings
+
+        warnings.warn(
+            "This dataset is no longer available. We are working on a fix, or possibly a deprecation.",
+            DeprecationWarning,
+        )
         if dataset_id not in self.available_datasets:
             raise ValueError(
                 "The dataseet_id is not part of the available datasets. The dataset should be named <game_name>/<run> "

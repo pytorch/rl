@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import time
 from typing import Any, Callable, Literal
 
 import torch
@@ -12,6 +13,8 @@ from torch import device as torch_device, dtype as torch_dtype
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
+from torchrl.envs.llm import AddThinkingPrompt, GSM8KEnv, KLRewardTransform, RetrieveKL
+from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from transformers.tokenization_utils import PreTrainedTokenizer
@@ -93,9 +96,11 @@ def get_train_model(
     policy_training = TransformersWrapper(
         train_model,
         tokenizer=train_tokenizer,
-        from_text=False,
+        input_mode="tokens" if not cfg.env.reasoning else "history",
         generate=False,
         return_log_probs=True,
+        pad_output=False,
+        device=torch.device("cuda:0"),
     )
     # Ensure model stays in eval mode after wrapping
     policy_training.model.eval()
@@ -104,7 +109,10 @@ def get_train_model(
 
 
 def get_inference_model(
-    cfg: DictConfig, devices: list[int] | None = None, make_ray_worker: bool = True
+    cfg: DictConfig,
+    devices: list[int] | None = None,
+    make_ray_worker: bool = True,
+    tokenizer: PreTrainedTokenizer | None = None,
 ) -> vLLMWrapper:
     """Creates the vLLM-based inference model for fast generation.
 
@@ -116,7 +124,9 @@ def get_inference_model(
         cfg (DictConfig): The hydra configuration object containing model settings.
             Expected to have inference_model section with vLLM-specific parameters
             like gpu_memory_utilization and generation settings.
-        make_ray_worker (bool, optional): Whether to make a ray worker. Default: True
+        devices (list[int], optional): The devices to use for the inference model. Default: `None`.
+        make_ray_worker (bool, optional): Whether to make a ray worker. Default: `True`.
+        tokenizer (PreTrainedTokenizer, optional): The tokenizer to use with the inference model. Default: `None`.
 
     Returns:
         vLLMWrapper: The wrapped vLLM model ready for inference.
@@ -149,10 +159,20 @@ def get_inference_model(
         enforce_eager=cfg.inference_model.enforce_eager,
     )
     assert inference_server is not None
+    if tokenizer is None:
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        if tokenizer.pad_token == tokenizer.eos_token:
+            tokenizer.pad_token = "PAD"
+        tokenizer.padding_side = "left"
     policy = vLLMWrapper(
         inference_server,
-        from_text=True,
-        return_log_probs=True,
+        input_mode="history",
+        chat_template_name="qwen",
+        return_log_probs=not cfg.env.reasoning,
+        tokenizer=tokenizer,
+        pad_output=False,
         generate_kwargs={
             "max_tokens": cfg.inference_model.max_tokens,
             "include_stop_str_in_output": cfg.inference_model.include_stop_str_in_output,
@@ -164,7 +184,9 @@ def get_inference_model(
 
 
 def get_ref_model(
-    cfg: DictConfig, tokenizer: PreTrainedTokenizer, devices: list[int] | None = None
+    cfg: DictConfig,
+    tokenizer: PreTrainedTokenizer,
+    devices: list[int] | None = None,
 ) -> TransformersWrapper:
     """Creates the reference model for KL penalty computation.
 
@@ -218,10 +240,12 @@ def get_ref_model(
     TensorDict.from_module(ref_model).data.to_module(ref_model)
     ref_model = TransformersWrapper(
         ref_model,
+        input_mode="tokens" if not cfg.env.reasoning else "history",
         tokenizer=tokenizer,
-        from_text=False,
         generate=False,
         return_log_probs=True,
+        pad_output=False,
+        device=torch.device("cuda:0"),
     )
     return ref_model
 
@@ -473,3 +497,181 @@ def compute_device_allocation(cfg):
         "ray_num_gpus": ray_num_gpus,
         "cuda_visible_devices": cuda_visible_devices,
     }
+
+
+def make_env(cfg: DictConfig, devices: list[int] | None = None):
+    """Create the environment with proper device allocation.
+
+    Args:
+        cfg: The configuration object
+
+    Returns:
+        The configured environment
+    """
+    # Create reference model with proper device allocation
+    # For the collector actor, we want inference_model devices first, then ref_model devices
+    train_tokenizer = get_tokenizer(cfg)
+
+    # Create a new config with adjusted device assignments
+    ref_cfg = DictConfig(dict(cfg))
+    ref_model = get_ref_model(
+        ref_cfg,
+        train_tokenizer,
+        devices=devices,
+    )
+
+    # Setup environment
+    max_steps = cfg.env.max_steps if cfg.env.reasoning else 1
+    if cfg.env.dataset == "gsm8k":
+        # Reward scale is 0.0 to 100
+        reward_threshold = 20
+        env = GSM8KEnv(
+            repeats=cfg.env.repeats,
+            tokenizer=train_tokenizer,
+            num_envs=cfg.env.num_envs,
+            max_steps=max_steps,
+            device=torch.device("cuda:0") if devices is not None else None,
+        )
+    elif cfg.env.dataset == "ifeval":  # ifeval
+        # Reward scale is 0.0 to 2.2
+        reward_threshold = 1.0
+        env = IFEvalEnv(
+            repeats=cfg.env.repeats,
+            tokenizer=train_tokenizer,
+            num_envs=cfg.env.num_envs,
+            max_steps=max_steps,
+            device=torch.device("cuda:0") if devices is not None else None,
+        )
+    else:
+        raise NotImplementedError(f"Dataset {cfg.env.dataset} not implemented")
+    if cfg.env.reasoning:
+        env = env.append_transform(
+            AddThinkingPrompt(
+                cond=lambda td, reward_threshol=reward_threshold, max_steps=max_steps: td[
+                    "reward"
+                ]
+                <= reward_threshold
+                and td["step_count"] < max_steps,
+                role="user",
+                edit_last_turn=False,
+                zero_reward=False,
+                undo_done=True,
+                random_prompt=True,
+            ),
+        )
+        env = env.append_transform(
+            # RetrieveKL will be lazily initialized in the collector.
+            # We use RetrieveKL instead of KLRewardTransform because the assistant response may change when
+            # adding the thinking prompt, requiring a second pass in vllm to compute the log-probs.
+            RetrieveKL(
+                ref_model=ref_model,
+                add_to_reward=not cfg.train.kl_coef_in_loss,
+                coeff=cfg.train.kl_to_ref_coeff,
+            )
+        )
+    else:
+        # Pass device directly to KLRewardTransform - Since, for Ray, the local device is always 0
+        # we can just use 0 here.
+        device = torch.device("cuda:0")
+        env = env.append_transform(
+            KLRewardTransform(
+                ref_model=ref_model,
+                coef=cfg.train.kl_to_ref_coeff,
+                add_to_reward=not cfg.train.kl_coef_in_loss,
+                device=device,
+            )
+        )
+    return env
+
+
+def log_training_metrics(
+    wandb_logger,
+    replay_buffer,
+    batch,
+    loss,
+    grad_norm,
+    global_step,
+    data_read_count,
+    collector,
+    start_time,
+    gradient_accumulation_steps,
+    history_str=None,
+):
+    """Log training metrics to wandb.
+
+    Args:
+        wandb_logger: The wandb logger instance
+        replay_buffer: The replay buffer containing collected data
+        batch: The current training batch
+        loss: The computed loss object
+        grad_norm: The gradient norm value
+        global_step: Current global training step
+        data_read_count: Total data read count
+        collector: The collector instance
+        start_time: Training start time
+        gradient_accumulation_steps: Number of gradient accumulation steps
+        history_str: Optional history string for logging
+    """
+    with torch.no_grad():
+        rb_content = replay_buffer[:]
+        step_count = rb_content.get(("next", "step_count")).view(-1).float().mean()
+        batch_policy_version = batch["next", "policy_version"].view(-1).min()
+        batch_policy_age = collector.policy_version - batch_policy_version
+
+        metrics = {
+            "step_count from buffer": float(step_count),
+            "reward from buffer": float(
+                torch.cat(rb_content.get(("next", "reward"), as_list=True)).mean()
+            ),
+            "kl_penalty (inference to ref) from buffer": float(
+                torch.cat(rb_content.get(("next", "kl_penalty"), as_list=True)).mean()
+            ),
+            "seq_length from buffer": float(
+                torch.tensor(
+                    [
+                        t.numel()
+                        for t in rb_content.get(("tokens", "response"), as_list=True)
+                    ],
+                    dtype=torch.float,
+                ).mean()
+            ),
+            "ESS, from loss": float(loss.ESS),
+            "loss_objective, from loss": float(loss.loss_objective),
+            "clip_fraction, from loss": float(loss.clip_fraction),
+            "kl_approx (train to inference), from loss": float(loss.kl_approx),
+            "kl_to_inference (train to inference - differentiable), from loss": float(
+                loss.kl_to_inference.mean()
+            ),
+            "kl_to_ref, from loss": float(loss.kl_to_ref.mean()),
+            "loss_kl_to_inference, from loss": float(loss.loss_kl_to_inference.mean()),
+            "loss_kl_to_ref, from loss": float(loss.loss_kl_to_ref.mean()),
+            "entropy loss, from loss": float(loss.loss_entropy.mean()),
+            "grad_norm": float(grad_norm)
+            if global_step % gradient_accumulation_steps == 0
+            else 0.0,
+            "write_count, from buffer": int(replay_buffer.write_count),
+            # how many gradient steps per write
+            "gradient_step_throughput (gradient step per write)": float(
+                global_step / replay_buffer.write_count
+            ),
+            # how many optim steps per write
+            "optim_step_throughput (optim step per write)": float(
+                (global_step // gradient_accumulation_steps) / replay_buffer.write_count
+            ),
+            "data_read_count (total)": data_read_count,
+            "current_policy_version (collector)": collector.policy_version,
+            # FIXME: Assume batch is a single trajectory
+            # FIXME: The addition of the transform after the env instantiation + _shuttle creation
+            #  is messed up - we need the next data
+            "batch_policy_version (sampled batch)": batch_policy_version,
+            "batch_policy_age (sampled batch)": batch_policy_age,
+            "throughput (steps per second)": float(
+                global_step / (time.time() - start_time)
+            ),
+        }
+
+        for name, value in metrics.items():
+            wandb_logger.log_scalar(name, value, step=global_step)
+
+        if history_str is not None:
+            wandb_logger.log_str("history", history_str, step=global_step)

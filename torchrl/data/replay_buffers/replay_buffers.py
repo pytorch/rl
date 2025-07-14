@@ -383,6 +383,17 @@ class ReplayBuffer:
     def dim_extend(self):
         return self._dim_extend
 
+    @property
+    def batch_size(self):
+        """The batch size of the replay buffer.
+
+        The batch size can be overriden by setting the `batch_size` parameter in the :meth:`sample` method.
+
+        It defines both the number of samples returned by :meth:`sample` and the number of samples that are
+        yielded by the :class:`ReplayBuffer` iterator.
+        """
+        return self._batch_size
+
     @dim_extend.setter
     def dim_extend(self, value):
         if (
@@ -691,7 +702,21 @@ class ReplayBuffer:
         """
         if self._transform is not None and len(self._transform):
             with _set_dispatch_td_nn_modules(is_tensor_collection(data)):
-                data = self._transform.inv(data)
+                make_none = False
+                # Transforms usually expect a time batch dimension when called within a RB, so we unsqueeze the data temporarily
+                is_tc = is_tensor_collection(data)
+                cm = data.unsqueeze(-1) if is_tc else contextlib.nullcontext(data)
+                new_data = None
+                with cm as data_unsq:
+                    data_unsq_r = self._transform.inv(data_unsq)
+                    if is_tc and data_unsq_r is not None:
+                        # this is a no-op whenever the result matches the input
+                        new_data = data_unsq_r.squeeze(-1)
+                    else:
+                        make_none = data_unsq_r is None
+                data = new_data if new_data is not None else data
+                if make_none:
+                    data = None
         if data is None:
             return torch.zeros((0, self._storage.ndim), dtype=torch.long)
         return self._add(data)
@@ -783,9 +808,13 @@ class ReplayBuffer:
 
         return data, info
 
-    def empty(self):
-        """Empties the replay buffer and reset cursor to 0."""
-        self._writer._empty()
+    def empty(self, empty_write_count: bool = True):
+        """Empties the replay buffer and reset cursor to 0.
+
+        Args:
+            empty_write_count (bool, optional): Whether to empty the write_count attribute. Defaults to `True`.
+        """
+        self._writer._empty(empty_write_count=empty_write_count)
         self._sampler._empty()
         self._storage._empty()
 

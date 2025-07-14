@@ -12,18 +12,24 @@ import time
 import pytest
 import torch
 from mocking_classes_llm import DummyStrDataLoader
+from tensordict import set_list_to_stack
 from torchrl import logger as torchrl_logger
 from torchrl.collectors.llm import LLMCollector
 from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
 from torchrl.data import LazyStackStorage, ReplayBuffer
 from torchrl.envs import AsyncEnvPool, StepCounter
-from torchrl.envs.llm import LLMEnv
+from torchrl.envs.llm.chat import ChatEnv
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
-
 from torchrl.modules.llm.backends.vllm import make_vllm_worker
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_vllm = importlib.util.find_spec("vllm") is not None
+
+
+@pytest.fixture(scope="module", autouse=True)
+def set_list_to_stack_fixture():
+    with set_list_to_stack(True):
+        yield
 
 
 @pytest.mark.skipif(not _has_transformers, reason="missing transformers dependencies")
@@ -90,7 +96,7 @@ class TestLLMCollector:
         policy = TransformersWrapper(
             model,
             tokenizer=tokenizer,
-            from_text=True,
+            input_mode="history",
             generate=True,
             return_log_probs=True,
         )
@@ -100,12 +106,11 @@ class TestLLMCollector:
         bsz = 4
         dataloader = DummyStrDataLoader(bsz)
 
-        env = LLMEnv.from_dataloader(
+        env = ChatEnv.from_dataloader(
             dataloader=dataloader,
-            from_text=True,
             batch_size=bsz,
             group_repeats=True,
-            eos_token_id=tokenizer.eos_token_id,
+            input_mode="history",
         )
         queue = None
         if rb:
@@ -138,13 +143,15 @@ class TestLLMCollector:
             assert sample.shape == (4,)
             assert not sample._has_exclusive_keys
             # Should match length
-            assert len(sample["text"]) == 4
+            assert len(sample["text", "prompt"]) == 4
             # assert len(sample["text"][0]) == 10, sample["text"][0]
             # Should be non-empty
-            assert sample["text_response"] is not None
+            assert sample["text", "response"] is not None
             for i in range(4):
                 # Check that there are more chars in the next step
-                assert len(sample["text"][i]) < len(sample["next", "text"][i])
+                assert len(sample["history", "prompt"][i]) < len(
+                    sample["next", "history", "prompt"][i]
+                )
         else:
             stack = torch.cat(stack)
             assert not stack._has_exclusive_keys
@@ -152,7 +159,9 @@ class TestLLMCollector:
             stack = stack.view(-1)
             for i in range(stack.numel()):
                 # Check that there are more chars in the next step
-                assert len(stack["text"][i]) < len(stack["next", "text"][i])
+                assert len(stack["history", "prompt"][i]) < len(
+                    stack["next", "history", "prompt"][i]
+                )
         assert collector._frames >= total_steps
 
     @pytest.mark.slow
@@ -164,11 +173,11 @@ class TestLLMCollector:
         bsz = 4
         dataloader = DummyStrDataLoader(bsz)
 
-        env = LLMEnv.from_dataloader(
+        env = ChatEnv.from_dataloader(
             dataloader=dataloader,
-            from_text=True,
             batch_size=bsz,
             group_repeats=True,
+            input_mode="history",
         )
 
         rb = ReplayBuffer(storage=LazyStackStorage(max_size=total_steps * 2))
@@ -191,7 +200,9 @@ class TestLLMCollector:
                 assert sample.ndim == 1
                 for i in range(10):
                     # Check that there are more chars in the next step
-                    assert len(sample["text"][i]) < len(sample["next", "text"][i])
+                    assert len(sample["history", "prompt"][i]) < len(
+                        sample["next", "history", "prompt"][i]
+                    )
                 assert not sample._has_exclusive_keys, sample
                 j += 1
                 if rb.write_count >= total_steps:
@@ -201,25 +212,33 @@ class TestLLMCollector:
             collector.async_shutdown(timeout=10)
 
     @pytest.mark.slow
-    @pytest.mark.parametrize("rb", [False, True])
-    @pytest.mark.parametrize("yield_only_last_steps", [False, True])
+    @pytest.mark.parametrize("rb", [False, True], ids=["rb_false", "rb_true"])
+    @pytest.mark.parametrize(
+        "yield_only_last_steps",
+        [False, True],
+        ids=["yield_only_last_steps_false", "yield_only_last_steps_true"],
+    )
+    @pytest.mark.parametrize(
+        "dialog_turns_per_batch",
+        [4, None],
+        ids=["dialog_turns_per_batch_4", "dialog_turns_per_batch_none"],
+    )
     def test_llm_collector_completed(
-        self, vllm_instance_opt, rb, yield_only_last_steps
+        self, vllm_instance_opt, rb, yield_only_last_steps, dialog_turns_per_batch
     ):
         torch.manual_seed(0)
         policy = vLLMWrapper(vllm_instance_opt)
-        tokenizer = vllm_instance_opt.get_tokenizer()
+        vllm_instance_opt.get_tokenizer()
         bsz = 4
         total_steps = 20
         max_steps = 20
         dataloader = DummyStrDataLoader(bsz)
 
-        env = LLMEnv.from_dataloader(
+        env = ChatEnv.from_dataloader(
             dataloader=dataloader,
-            from_text=True,
+            input_mode="history",
             batch_size=bsz,
             group_repeats=True,
-            eos_token_id=tokenizer.eos_token_id,
         )
         # To make sure the env breaks at some point
         env = env.append_transform(StepCounter(max_steps=max_steps))
@@ -228,15 +247,23 @@ class TestLLMCollector:
             rb = ReplayBuffer(storage=LazyStackStorage(max_size=total_steps * 2))
         else:
             rb = None
+
+        kwargs = (
+            {"dialog_turns_per_batch": dialog_turns_per_batch}
+            if dialog_turns_per_batch is not None
+            else {}
+        )
         collector = LLMCollector(
             env=env,
             policy_factory=lambda: policy,
-            dialog_turns_per_batch=env.batch_size[0],
             replay_buffer=rb,
             total_dialog_turns=total_steps,
             yield_completed_trajectories=True,
             yield_only_last_steps=yield_only_last_steps,
+            **kwargs,
         )
+        if not dialog_turns_per_batch:
+            assert collector.dialog_turns_per_batch == 1
         assert collector.yield_completed_trajectories
         assert collector.yield_only_last_steps is yield_only_last_steps
 
@@ -250,51 +277,43 @@ class TestLLMCollector:
                 for i in range(data.numel()):
                     if data[i]["next", "step_count"] == max_steps:
                         continue
-                    if data[i]["text_response"]:
-                        # Check that there are more chars in the next step
-                        assert len(data["text"][i]) < len(data["next", "text"][i]), (
-                            i,
-                            data[i]["next", "step_count"],
-                            data[i]["next", "done"],
-                            data[i]["text_response"],
-                        )
-                    else:
-                        assert len(data["text"][i]) == len(data["next", "text"][i]), (
-                            i,
-                            data[i]["next", "step_count"],
-                            data[i]["next", "done"],
-                            data[i]["text_response"],
-                        )
+                    # Check that there are more chars in the next step
+                    assert len(data["history", "prompt"][i]) < len(
+                        data["next", "history", "prompt"][i]
+                    ), (
+                        i,
+                        data[i]["next", "step_count"],
+                        data[i]["next", "done"],
+                        data[i]["text_response"],
+                    )
 
+                expected_shape = (
+                    collector.dialog_turns_per_batch
+                    if collector.dialog_turns_per_batch
+                    else 1
+                )
+                # since we want only completed trajs, either we have all the steps (and hence the number of elements is
+                # bigger than dialog_turns_per_batch) or we have all the last steps in number strictly equal to dialog_turns_per_batch
                 if yield_only_last_steps:
-                    assert data.shape == (1,)
+                    assert data.numel() == expected_shape, (data.shape, expected_shape)
                 else:
-                    has_found_one_with_more_steps |= data.numel() > 1
+                    assert data.numel() >= expected_shape, (data.shape, expected_shape)
+                has_found_one_with_more_steps |= data.numel() > 1
             else:
                 assert data is None
                 sample = rb.sample(5)
                 for i in range(sample.numel()):
                     if sample[i]["next", "step_count"] == max_steps:
                         continue
-                    if sample[i]["text_response"]:
-                        # Check that there are more chars in the next step
-                        assert len(sample["text"][i]) < len(
-                            sample["next", "text"][i]
-                        ), (
-                            i,
-                            sample[i]["next", "step_count"],
-                            sample[i]["next", "done"],
-                            sample[i]["text_response"],
-                        )
-                    else:
-                        assert len(sample["text"][i]) == len(
-                            sample["next", "text"][i]
-                        ), (
-                            i,
-                            sample[i]["next", "step_count"],
-                            sample[i]["next", "done"],
-                            sample[i]["text_response"],
-                        )
+                    # Check that there are more chars in the next step
+                    assert len(sample["history", "prompt"][i]) < len(
+                        sample["next", "history", "prompt"][i]
+                    ), (
+                        i,
+                        sample[i]["next", "step_count"],
+                        sample[i]["next", "done"],
+                        sample[i]["text_response"],
+                    )
 
                 assert sample.ndim == 1
                 assert sample.shape == (5,)
@@ -313,19 +332,18 @@ class TestLLMCollector:
     ):
         torch.manual_seed(0)
         policy = vLLMWrapper(vllm_instance_opt)
-        tokenizer = vllm_instance_opt.get_tokenizer()
+        vllm_instance_opt.get_tokenizer()
         bsz = 4
         total_steps = 20
         max_steps = 20
         dataloader = DummyStrDataLoader(bsz)
 
         def env_maker():
-            env = LLMEnv.from_dataloader(
+            env = ChatEnv.from_dataloader(
                 dataloader=dataloader,
                 from_text=True,
                 batch_size=(),
                 group_repeats=True,
-                eos_token_id=tokenizer.eos_token_id,
             )
             # To make sure the env breaks at some point
             env = env.append_transform(StepCounter(max_steps=max_steps))
@@ -359,21 +377,15 @@ class TestLLMCollector:
                 for i in range(data.numel()):
                     if data[i]["next", "step_count"] == max_steps:
                         continue
-                    if data[i]["text_response"]:
-                        # Check that there are more chars in the next step
-                        assert len(data["text"][i]) < len(data["next", "text"][i]), (
-                            i,
-                            data[i]["next", "step_count"],
-                            data[i]["next", "done"],
-                            data[i]["text_response"],
-                        )
-                    else:
-                        assert len(data["text"][i]) == len(data["next", "text"][i]), (
-                            i,
-                            data[i]["next", "step_count"],
-                            data[i]["next", "done"],
-                            data[i]["text_response"],
-                        )
+                    # Check that there are more chars in the next step
+                    assert len(data["history", "prompt"][i]) < len(
+                        data["next", "history", "prompt"][i]
+                    ), (
+                        i,
+                        data[i]["next", "step_count"],
+                        data[i]["next", "done"],
+                        data[i]["text_response"],
+                    )
 
                 if yield_only_last_steps:
                     assert data.shape == (1,)
@@ -385,25 +397,15 @@ class TestLLMCollector:
                 for i in range(sample.numel()):
                     if sample[i]["next", "step_count"] == max_steps:
                         continue
-                    if sample[i]["text_response"]:
-                        # Check that there are more chars in the next step
-                        assert len(sample["text"][i]) < len(
-                            sample["next", "text"][i]
-                        ), (
-                            i,
-                            sample[i]["next", "step_count"],
-                            sample[i]["next", "done"],
-                            sample[i]["text_response"],
-                        )
-                    else:
-                        assert len(sample["text"][i]) == len(
-                            sample["next", "text"][i]
-                        ), (
-                            i,
-                            sample[i]["next", "step_count"],
-                            sample[i]["next", "done"],
-                            sample[i]["text_response"],
-                        )
+                    # Check that there are more chars in the next step
+                    assert len(sample["history", "prompt"][i]) < len(
+                        sample["next", "history", "prompt"][i]
+                    ), (
+                        i,
+                        sample[i]["next", "step_count"],
+                        sample[i]["next", "done"],
+                        sample[i]["text_response"],
+                    )
 
                 assert sample.ndim == 1
                 assert sample.shape == (5,)

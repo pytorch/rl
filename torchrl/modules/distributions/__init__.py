@@ -15,6 +15,7 @@ from .continuous import (
     TruncatedNormal,
 )
 from .discrete import (
+    LLMMaskedCategorical,
     MaskedCategorical,
     MaskedOneHotCategorical,
     OneHotCategorical,
@@ -57,6 +58,7 @@ __all__ = [
     "distributions",
     "Delta",
     "IndependentNormal",
+    "LLMMaskedCategorical",
     "NormalParamWrapper",
     "TanhDelta",
     "TanhNormal",
@@ -65,6 +67,7 @@ __all__ = [
     "MaskedOneHotCategorical",
     "OneHotCategorical",
     "OneHotOrdinal",
+    "LLMMaskedCategorical",
     "Ordinal",
     "ReparamGradientStrategy",
 ]

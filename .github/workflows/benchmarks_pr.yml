@@ -14,7 +14,9 @@ jobs:
 
   benchmark_cpu:
     name: CPU Pytest benchmark
-    runs-on: linux.g5.4xlarge.nvidia.cpu
+    runs-on: linux.4xlarge
+    # Disabling job since it hasn't worked for months
+    if: false 
     defaults:
       run:
         shell: bash -l {0}
