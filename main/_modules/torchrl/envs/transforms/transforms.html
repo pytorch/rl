@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+523ba2e) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+77c00b9) &#x25BC</span></a>
     </div>
     
 
@@ -11170,10 +11170,6 @@
                     <span class="sa">f</span><span class="s2">&quot;Expected weights to be a unidimensional tensor. Got </span><span class="si">{</span><span class="n">weights</span><span class="o">.</span><span class="n">ndim</span><span class="si">}</span><span class="s2"> dimension.&quot;</span>
                 <span class="p">)</span>
 
-            <span class="c1"># Avoids switching from reward to costs.</span>
-            <span class="k">if</span> <span class="p">(</span><span class="n">weights</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected all weights to be &gt;0. Got </span><span class="si">{</span><span class="n">weights</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
-
             <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;weights&quot;</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">weights</span> <span class="o">=</span> <span class="kc">None</span>
@@ -11203,13 +11199,18 @@
             <span class="n">reward_spec</span><span class="o">.</span><span class="n">shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([</span><span class="o">*</span><span class="n">batch_size</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
             <span class="k">return</span> <span class="n">reward_spec</span>
 
-        <span class="c1"># The lines below are correct only if all weights are positive.</span>
-        <span class="n">low</span> <span class="o">=</span> <span class="p">(</span><span class="n">weights</span> <span class="o">*</span> <span class="n">reward_spec</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">low</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-        <span class="n">high</span> <span class="o">=</span> <span class="p">(</span><span class="n">weights</span> <span class="o">*</span> <span class="n">reward_spec</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">high</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">weights_pos</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="nb">min</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">weights_neg</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="nb">max</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="n">low_pos</span> <span class="o">=</span> <span class="p">(</span><span class="n">weights_pos</span> <span class="o">*</span> <span class="n">reward_spec</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">low</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">low_neg</span> <span class="o">=</span> <span class="p">(</span><span class="n">weights_neg</span> <span class="o">*</span> <span class="n">reward_spec</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">high</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="n">high_pos</span> <span class="o">=</span> <span class="p">(</span><span class="n">weights_pos</span> <span class="o">*</span> <span class="n">reward_spec</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">high</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">high_neg</span> <span class="o">=</span> <span class="p">(</span><span class="n">weights_neg</span> <span class="o">*</span> <span class="n">reward_spec</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">low</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">BoundedContinuous</span><span class="p">(</span>
-            <span class="n">low</span><span class="o">=</span><span class="n">low</span><span class="p">,</span>
-            <span class="n">high</span><span class="o">=</span><span class="n">high</span><span class="p">,</span>
+            <span class="n">low</span><span class="o">=</span><span class="n">low_pos</span> <span class="o">+</span> <span class="n">low_neg</span><span class="p">,</span>
+            <span class="n">high</span><span class="o">=</span><span class="n">high_pos</span> <span class="o">+</span> <span class="n">high_neg</span><span class="p">,</span>
             <span class="n">device</span><span class="o">=</span><span class="n">reward_spec</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
             <span class="n">dtype</span><span class="o">=</span><span class="n">reward_spec</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
         <span class="p">)</span></div>
