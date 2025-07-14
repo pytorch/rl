@@ -33,6 +33,9 @@ python -c "import habitat;import habitat.gym"
 # solves ImportError: /lib64/libstdc++.so.6: version `GLIBCXX_3.4.21' not found
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
 export MKL_THREADING_LAYER=GNU
+
+# Set Habitat data path
+export HABITAT_DATA_PATH="$(pwd)/data"
 # more logging
 
 #wget https://github.com/openai/mujoco-py/blob/master/vendor/10_nvidia.json

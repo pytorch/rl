@@ -5,7 +5,7 @@ set -v
 
 
 apt-get update && apt-get upgrade -y
-apt-get install -y vim git wget cmake
+apt-get install -y vim git wget cmake unzip
 
 apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev
 apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2
@@ -21,6 +21,9 @@ cp $this_dir/10_nvidia.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
 
 bash ${this_dir}/setup_env.sh
 bash ${this_dir}/install.sh
+
+# Download required Habitat datasets
+bash ${this_dir}/download_datasets.sh
 
 #apt-get install -y freeglut3 freeglut3-dev
 bash ${this_dir}/run_test.sh
