@@ -93,7 +93,7 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
             bypassing any remote download. This is useful when working with custom
             Minari datasets previously generated and stored locally, or when network
             access should be avoided. If the dataset is not found in the expected
-            cache directory, a ``FileNotFoundError`` will be raised. 
+            cache directory, a ``FileNotFoundError`` will be raised.
             Defaults to ``False``.
 
 
@@ -186,7 +186,11 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
         self.download = download
         self.load_from_local_minari = load_from_local_minari
 
-        if self.download == "force" or (self.download and not self._is_downloaded()) or self.load_from_local_minari:
+        if (
+            self.download == "force"
+            or (self.download and not self._is_downloaded())
+            or self.load_from_local_minari
+        ):
             if self.download == "force":
                 try:
                     if os.path.exists(self.data_path_root):
@@ -264,8 +268,10 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
                 h5_path = parent_dir / "main_data.hdf5"
 
                 if not h5_path.exists():
-                    raise FileNotFoundError(f"{h5_path} does not exist in local Minari cache!")
-                
+                    raise FileNotFoundError(
+                        f"{h5_path} does not exist in local Minari cache!"
+                    )
+
                 torchrl_logger.info(
                     f"loading dataset from local Minari cache at {h5_path}"
                 )
@@ -273,10 +279,12 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
 
             else:
                 minari.download_dataset(dataset_id=self.dataset_id)
-                
+
                 parent_dir = Path(tmpdir) / self.dataset_id / "data"
 
-                torchrl_logger.info("first read through data to create data structure...")
+                torchrl_logger.info(
+                    "first read through data to create data structure..."
+                )
                 h5_data = PersistentTensorDict.from_h5(parent_dir / "main_data.hdf5")
 
             # populate the tensordict
@@ -397,6 +405,7 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
                 json.dump(self.metadata, metadata_file)
             self._load_and_proc_metadata()
             return td_data
+
     def _make_split(self):
         from torchrl.collectors.utils import split_trajectories
 
