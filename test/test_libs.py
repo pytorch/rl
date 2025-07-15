@@ -29,11 +29,9 @@ from pathlib import Path
 from sys import platform
 from unittest import mock
 
-
 import numpy as np
 import pytest
 import torch
-from minari import DataCollector
 
 from packaging import version
 from tensordict import (
@@ -3343,6 +3341,39 @@ class TestD4RL:
 
 _MINARI_DATASETS = []
 
+MUJOCO_ENVIRONMENTS = [
+    "Hopper-v5",
+    "Pusher-v5",
+    "Humanoid-v5",
+    "InvertedDoublePendulum-v5",
+    "HalfCheetah-v5",
+    "Swimmer-v5",
+    "Walker2d-v5",
+    "Ant-v5",
+    "Reacher-v5",
+]
+
+D4RL_ENVIRONMENTS = [
+    "AntMaze_UMaze-v5",
+    "AdroitHandPen-v1",
+    "AntMaze_Medium-v4",
+    "AntMaze_Large_Diverse_GR-v4",
+    "AntMaze_Large-v4",
+    "AntMaze_Medium_Diverse_GR-v4",
+    "PointMaze_OpenDense-v3",
+    "PointMaze_UMaze-v3",
+    "PointMaze_LargeDense-v3",
+    "PointMaze_Medium-v3",
+    "PointMaze_UMazeDense-v3",
+    "PointMaze_MediumDense-v3",
+    "PointMaze_Large-v3",
+    "PointMaze_Open-v3",
+    "FrankaKitchen-v1",
+    "AdroitHandDoor-v1",
+    "AdroitHandHammer-v1",
+    "AdroitHandRelocate-v1",
+]
+
 
 def _minari_init():
     """Initialize Minari datasets list. Returns True if already initialized."""
@@ -3375,30 +3406,148 @@ def _minari_init():
         return False
 
 
-# Initialize with placeholder values for parametrization
-# These will be replaced with actual dataset names when the first Minari test runs
-_MINARI_DATASETS = [str(i) for i in range(20)]
+def get_random_minigrid_datasets():
+    """
+    Fetch 5 random Minigrid datasets from the Minari server.
+    """
+    import minari
+
+    all_minigrid = [
+        dataset
+        for dataset in minari.list_remote_datasets(
+            latest_version=True, compatible_minari_version=True
+        ).keys()
+        if dataset.startswith("minigrid/")
+    ]
+
+    if len(all_minigrid) < 5:
+        raise RuntimeError("Not enough minigrid datasets found on Minari server.")
+    indices = torch.randperm(len(all_minigrid))[:5]
+    return [all_minigrid[idx] for idx in indices]
+
+
+def get_random_atari_envs():
+    """
+    Fetch 10 random Atari environments using ale_py and torch.
+    """
+    import ale_py
+    import gymnasium as gym
+
+    gym.register_envs(ale_py)
+
+    env_specs = gym.envs.registry.values()
+    all_env_ids = [env_spec.id for env_spec in env_specs]
+    atari_env_ids = [env_id for env_id in all_env_ids if env_id.startswith("ALE")]
+    if len(atari_env_ids) < 10:
+        raise RuntimeError("Not enough Atari environments found.")
+    indices = torch.randperm(len(atari_env_ids))[:10]
+    return [atari_env_ids[idx] for idx in indices]
+
+
+def custom_minari_init(custom_envs, num_episodes=5):
+    """
+    Initialize custom Minari datasets for the given environments.
+    """
+    import gymnasium
+    import gymnasium_robotics
+    from minari import DataCollector
+
+    gymnasium.register_envs(gymnasium_robotics)
+
+    custom_dataset_ids = []
+    for env_id in custom_envs:
+        dataset_id = f"{env_id.lower()}/test-custom-local-v1"
+        env = gymnasium.make(env_id)
+        collector = DataCollector(env)
+
+        for ep in range(num_episodes):
+            collector.reset(seed=123 + ep)
+
+            while True:
+                action = collector.action_space.sample()
+                _, _, terminated, truncated, _ = collector.step(action)
+                if terminated or truncated:
+                    break
+
+        collector.create_dataset(
+            dataset_id=dataset_id,
+            algorithm_name="RandomPolicy",
+            code_permalink="https://github.com/Farama-Foundation/Minari",
+            author="Farama",
+            author_email="contact@farama.org",
+            eval_env=env_id,
+        )
+        custom_dataset_ids.append(dataset_id)
+
+    return custom_dataset_ids
 
 
 @pytest.mark.skipif(not _has_minari or not _has_gymnasium, reason="Minari not found")
 @pytest.mark.slow
 class TestMinari:
     @pytest.mark.parametrize("split", [False, True])
-    @pytest.mark.parametrize("dataset_idx", range(20))
+    @pytest.mark.parametrize(
+        "dataset_idx",
+        range(
+            len(MUJOCO_ENVIRONMENTS)
+            + len(D4RL_ENVIRONMENTS)
+            + len(get_random_minigrid_datasets())
+            + len(get_random_atari_envs())
+        ),
+    )
     def test_load(self, dataset_idx, split):
-        # Initialize Minari datasets if not already done
-        if not _minari_init():
-            pytest.skip("Failed to initialize Minari datasets")
+        """
+        Test loading from custom datasets for Mujoco and D4RL,
+        Minari remote datasets for Minigrid, and random Atari environments.
+        """
+        import minari
 
-        # Get the actual dataset name from the initialized list
-        if dataset_idx >= len(_MINARI_DATASETS):
-            pytest.skip(f"Dataset index {dataset_idx} out of range")
+        custom_envs = MUJOCO_ENVIRONMENTS + D4RL_ENVIRONMENTS
+        num_custom = len(custom_envs)
+        minigrid_datasets = get_random_minigrid_datasets()
+        num_minigrid = len(minigrid_datasets)
+        atari_envs = get_random_atari_envs()
 
-        selected_dataset = _MINARI_DATASETS[dataset_idx]
-        torchrl_logger.info(f"dataset {selected_dataset}")
-        data = MinariExperienceReplay(
-            selected_dataset, batch_size=32, split_trajs=split
-        )
+        if dataset_idx < num_custom:
+            # Custom dataset for Mujoco/D4RL
+            custom_dataset_ids = custom_minari_init(
+                [custom_envs[dataset_idx]], num_episodes=5
+            )
+            dataset_id = custom_dataset_ids[0]
+            data = MinariExperienceReplay(
+                dataset_id=dataset_id,
+                split_trajs=split,
+                batch_size=32,
+                load_from_local_minari=True,
+            )
+            cleanup_needed = True
+
+        elif dataset_idx < num_custom + num_minigrid:
+            # Minigrid datasets from Minari server
+            minigrid_idx = dataset_idx - num_custom
+            dataset_id = minigrid_datasets[minigrid_idx]
+            data = MinariExperienceReplay(
+                dataset_id=dataset_id,
+                batch_size=32,
+                split_trajs=split,
+                download="force",
+            )
+            cleanup_needed = False
+
+        else:
+            # Atari environment datasets
+            atari_idx = dataset_idx - num_custom - num_minigrid
+            env_id = atari_envs[atari_idx]
+            custom_dataset_ids = custom_minari_init([env_id], num_episodes=5)
+            dataset_id = custom_dataset_ids[0]
+            data = MinariExperienceReplay(
+                dataset_id=dataset_id,
+                split_trajs=split,
+                batch_size=32,
+                load_from_local_minari=True,
+            )
+            cleanup_needed = True
+
         t0 = time.time()
         for i, sample in enumerate(data):
             t1 = time.time()
@@ -3408,6 +3557,10 @@ class TestMinari:
             t0 = time.time()
             if i == 10:
                 break
+
+        # Clean up custom datasets after running local dataset tests
+        if cleanup_needed:
+            minari.delete_dataset(dataset_id=dataset_id)
 
     def test_minari_preproc(self, tmpdir):
         dataset = MinariExperienceReplay(
@@ -3459,8 +3612,9 @@ class TestMinari:
         not _has_minari or not _has_gymnasium, reason="Minari or Gym not available"
     )
     def test_local_minari_dataset_loading(self):
-        import minari 
-        
+        import minari
+        from minari import DataCollector
+
         if not _minari_init():
             pytest.skip("Failed to initialize Minari datasets")
 
