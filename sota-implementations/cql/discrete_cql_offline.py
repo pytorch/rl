@@ -28,7 +28,7 @@ from utils import (
     make_discrete_loss,
     make_discretecql_model,
     make_environment,
-    make_offline_replay_buffer,
+    make_offline_discrete_replay_buffer,
 )
 
 torch.set_float32_matmul_precision("high")
@@ -66,7 +66,7 @@ def main(cfg):  # noqa: F821
         )
     
     # Create replay buffer
-    replay_buffer = make_offline_replay_buffer(cfg.replay_buffer)
+    replay_buffer = make_offline_discrete_replay_buffer(cfg.replay_buffer)
 
     # Create env
     train_env, eval_env = make_environment(

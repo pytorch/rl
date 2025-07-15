@@ -21,8 +21,10 @@ logger:
 
 # replay buffer
 replay_buffer:
-  dataset: minigrid/BabyAI-UnlockLocal/optimal-v0
+  env: CartPole-v1
+  dataset: CartPole-v1-random-v0
   batch_size: 128
+  episodes: 1000
 
 # optimization
 optim:
