@@ -9,7 +9,7 @@ import weakref
 from typing import Any, Literal, overload
 
 import torch
-from tensordict import NestedKey, TensorDictBase
+from tensordict import lazy_stack, NestedKey, TensorDictBase
 from tensordict.nn import TensorDictModuleBase, TensorDictSequential
 from tensordict.tensorclass import TensorClass
 from tensordict.utils import _zip_strict
@@ -175,29 +175,35 @@ class ChatHistory(TensorClass["nocast"]):
     def __post_init__(self):
         # Check that all history objects have one more batch dimension than the ChatHistory object
         if self.prompt is not None:
-            if self.prompt.batch_dims != self.batch_dims + 1:
+            if getattr(self.prompt, "batch_dims", None) == self.batch_dims:
                 warnings.warn(
                     "Prompt history should have one more batch dimension than the ChatHistory object to handle multi-turn conversations, "
                     f"got {self.prompt.batch_dims} and {self.batch_dims}. "
                     "The batch dimension of the ChatHistory object will be unsqueezed along the last dimension."
                 )
-                self.prompt = self.prompt.unsqueeze(-1)
+                self.prompt = lazy_stack(
+                    [self.prompt], -1
+                )  # equivalent to unsqueeze(-1) but make sure it's a lazy stack
         if self.response is not None:
-            if self.response.batch_dims != self.batch_dims + 1:
+            if getattr(self.response, "batch_dims", None) == self.batch_dims:
                 warnings.warn(
                     "Response history should have one more batch dimension than the ChatHistory object to handle multi-turn conversations, "
                     f"got {self.response.batch_dims} and {self.batch_dims}. "
                     "The batch dimension of the ChatHistory object will be unsqueezed along the last dimension."
                 )
-                self.response = self.response.unsqueeze(-1)
+                self.response = lazy_stack(
+                    [self.response], -1
+                )  # equivalent to unsqueeze(-1) but make sure it's a lazy stack
         if self.full is not None:
-            if self.full.batch_dims != self.batch_dims + 1:
+            if getattr(self.full, "batch_dims", None) == self.batch_dims:
                 warnings.warn(
                     "Full history should have one more batch dimension than the ChatHistory object to handle multi-turn conversations, "
                     f"got {self.full.batch_dims} and {self.batch_dims}. "
                     "The batch dimension of the ChatHistory object will be unsqueezed along the last dimension."
                 )
-                self.full = self.full.unsqueeze(-1)
+                self.full = lazy_stack(
+                    [self.full], -1
+                )  # equivalent to unsqueeze(-1) but make sure it's a lazy stack
 
 
 class LogProbs(TensorClass["nocast"]):

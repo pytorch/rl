@@ -13,6 +13,7 @@ from typing import Literal
 import torch
 from tensordict import (
     lazy_stack,
+    LazyStackedTensorDict,
     MetaData,
     NonTensorStack,
     set_list_to_stack,
@@ -471,16 +472,15 @@ class TransformersWrapper(LLMWrapperBase):
         tensordict_out: TensorDictBase | None = None,
         **kwargs,
     ) -> TensorDictBase:
+        tensordict_orig = tensordict
         if not tensordict.ndim:
             # unsqueeze - squeeze the input
-            try:
-                return self(lazy_stack([tensordict])).squeeze(0)
-            except Exception as e:
-                raise RuntimeError(
-                    f"Unsqueeze/squeeze failed. Inputs to {type(self).__name__} should ideally be 1 dimensional."
-                ) from e
+            return self(lazy_stack([tensordict]))[0]
         elif tensordict.ndim > 1:
             return self(tensordict.reshape(-1)).view(tensordict.shape)
+
+        if not isinstance(tensordict, LazyStackedTensorDict):
+            tensordict = tensordict.to_lazystack(0)
 
         _source_device = None
         if self._device:
@@ -535,7 +535,7 @@ class TransformersWrapper(LLMWrapperBase):
         if tensordict_out is None:
             if self.inplace is True:
                 # The output is the input
-                tensordict_out = tensordict
+                tensordict_out = tensordict_orig
             elif self.inplace is False:
                 # The output is the new structure
                 tensordict_out = out
