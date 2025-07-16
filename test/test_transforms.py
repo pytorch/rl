@@ -10427,16 +10427,6 @@ class TestTransformedEnv:
         def _set_seed(self, seed: int) -> None:
             pass
 
-    class PatchedRenameTransform(RenameTransform):  # type: ignore[misc]
-        """
-        Fixes a bug in the RenameTransform due to modifying the input_spec of the `base_env` to be transformed.
-        This is fixed by adding a clone to break stateful modifications to proapagate to the `base_env`.
-        """
-
-        def transform_input_spec(self, input_spec: Composite) -> Composite:
-            input_spec = input_spec.clone()
-            return super().transform_input_spec(input_spec)
-
     def test_no_modif_specs(self) -> None:
         base_env = self.DummyCompositeEnv()
         specs = base_env.specs.clone()
