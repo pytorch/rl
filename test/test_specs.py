@@ -1134,6 +1134,9 @@ class TestEquality:
         )
         assert ts != ts_other
 
+    def test_equality_binary_empty_shape(self):
+        assert Binary(shape=()) == Binary(shape=()).clone()
+
     @pytest.mark.parametrize("nvec", [[3], [3, 4], [3, 4, 5]])
     def test_equality_multi_onehot(self, nvec):
         device = "cpu"
