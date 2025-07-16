@@ -501,15 +501,29 @@ class vLLMWrapper(LLMWrapperBase):
     def forward(
         self,
         tensordict: TensorDictBase,
+        *,
         tensordict_out: TensorDictBase | None = None,
+        logits_only: bool = False,
         **kwargs,
     ) -> TensorDictBase:
         tensordict_orig = tensordict
         if not tensordict.ndim:
+            if tensordict_out is not None:
+                raise ValueError(
+                    "tensordict_out must not be provided when tensordict.ndim == 0. If this is needed, "
+                    "please submit an issue on github."
+                )
             # unsqueeze - squeeze the input
-            return self(lazy_stack([tensordict]))[0]
+            return self.forward(lazy_stack([tensordict]), logits_only=logits_only)[0]
         elif tensordict.ndim > 1:
-            return self(tensordict.reshape(-1)).view(tensordict.shape)
+            if tensordict_out is not None:
+                raise ValueError(
+                    "tensordict_out must not be provided when tensordict.ndim > 1. If this is needed, "
+                    "please submit an issue on github."
+                )
+            return self.forward(tensordict.reshape(-1), logits_only=logits_only).view(
+                tensordict.shape
+            )
 
         if not isinstance(tensordict, LazyStackedTensorDict):
             tensordict = tensordict.to_lazystack(0)

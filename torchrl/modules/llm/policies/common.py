@@ -10,7 +10,7 @@ from typing import Any, Literal, overload
 
 import torch
 from tensordict import lazy_stack, NestedKey, TensorDictBase
-from tensordict.nn import TensorDictModuleBase, TensorDictSequential
+from tensordict.nn import TensorDictModuleBase
 from tensordict.tensorclass import TensorClass
 from tensordict.utils import _zip_strict
 from torch import distributions as D
@@ -488,7 +488,7 @@ class LLMWrapperBase(TensorDictModuleBase):
                 "You can create a new version of this wrapper using the `get_new_version` method."
             )
 
-        td_out = self(tensordict.copy())
+        td_out = self.forward(tensordict.copy(), logits_only=True)
 
         # Get logits/log-probs
         if as_padded_tensor is None:
@@ -563,7 +563,7 @@ class LLMWrapperBase(TensorDictModuleBase):
                 "get_dist_with_prompt_mask is not implemented for generate=True. "
                 "You can create a new version of this wrapper using the `get_new_version` method."
             )
-        td_out = self(tensordict.copy())
+        td_out = self.forward(tensordict.copy(), logits_only=True)
 
         # Try to get prompt tokens first
         if self.pad_output:
@@ -674,7 +674,7 @@ class LLMWrapperBase(TensorDictModuleBase):
                 "get_dist_with_assistant_mask is not implemented for generate=True. "
                 "You can create a new version of this wrapper using the `get_new_version` method."
             )
-        td_out = self(tensordict.copy())
+        td_out = self.forward(tensordict.copy(), logits_only=True)
         # Update the tokens key to reflect the tokenized history when querying the log-probs
         tensordict.update(
             td_out,
@@ -743,7 +743,7 @@ class LLMWrapperBase(TensorDictModuleBase):
                 "get_dist_with_attention_mask is not implemented for generate=True. "
                 "You can create a new version of this wrapper using the `get_new_version` method."
             )
-        td_out = self(tensordict.copy())
+        td_out = self.forward(tensordict.copy(), logits_only=True)
         if self.pad_output:
             logits = td_out.get(logits_key)
             attention_mask = td_out.get(attention_mask_key)
@@ -800,7 +800,7 @@ class LLMWrapperBase(TensorDictModuleBase):
                 "get_dist_with_custom_mask is not implemented for generate=True. "
                 "You can create a new version of this wrapper using the `get_new_version` method."
             )
-        td_out = self(tensordict.copy())
+        td_out = self.forward(tensordict.copy(), logits_only=True)
         if self.pad_output:
             logits = td_out.get(logits_key)
         else:
@@ -847,8 +847,24 @@ class LLMWrapperBase(TensorDictModuleBase):
         """
         return self._get_dist_with_attention_mask(tensordict, **kwargs)
 
-    # Sampling is taken care of by the sub-modules
-    forward = TensorDictSequential.forward
+    def forward(
+        self,
+        tensordict: TensorDictBase,
+        *,
+        tensordict_out: TensorDictBase | None = None,
+        logits_only: bool = False,
+        **kwargs,
+    ) -> TensorDictBase:  # noqa: D417
+        """Forward pass for the LLM policy.
+
+        Args:
+            tensordict (TensorDictBase): The input tensordict.
+
+        Keyword Args:
+            tensordict_out (TensorDictBase | None): The output tensordict.
+            logits_only (bool): Whether to return only the logits. Only effective if generate=False. Defaults to `False`.
+        """
+        raise NotImplementedError
 
     def _check_padded(self, val: torch.Tensor) -> torch.Tensor:
         """Check that a value is a padded tensor."""
