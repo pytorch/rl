@@ -435,6 +435,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">lazy_stack</span><span class="p">,</span>
+    <span class="n">LazyStackedTensorDict</span><span class="p">,</span>
     <span class="n">MetaData</span><span class="p">,</span>
     <span class="n">NonTensorStack</span><span class="p">,</span>
     <span class="n">set_list_to_stack</span><span class="p">,</span>
@@ -893,16 +894,15 @@
         <span class="n">tensordict_out</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="n">tensordict_orig</span> <span class="o">=</span> <span class="n">tensordict</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
             <span class="c1"># unsqueeze - squeeze the input</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="k">return</span> <span class="bp">self</span><span class="p">(</span><span class="n">lazy_stack</span><span class="p">([</span><span class="n">tensordict</span><span class="p">]))</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Unsqueeze/squeeze failed. Inputs to </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> should ideally be 1 dimensional.&quot;</span>
-                <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="p">(</span><span class="n">lazy_stack</span><span class="p">([</span><span class="n">tensordict</span><span class="p">]))[</span><span class="mi">0</span><span class="p">]</span>
         <span class="k">elif</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">LazyStackedTensorDict</span><span class="p">):</span>
+            <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">to_lazystack</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
 
         <span class="n">_source_device</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_device</span><span class="p">:</span>
@@ -957,7 +957,7 @@
         <span class="k">if</span> <span class="n">tensordict_out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
                 <span class="c1"># The output is the input</span>
-                <span class="n">tensordict_out</span> <span class="o">=</span> <span class="n">tensordict</span>
+                <span class="n">tensordict_out</span> <span class="o">=</span> <span class="n">tensordict_orig</span>
             <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">:</span>
                 <span class="c1"># The output is the new structure</span>
                 <span class="n">tensordict_out</span> <span class="o">=</span> <span class="n">out</span>

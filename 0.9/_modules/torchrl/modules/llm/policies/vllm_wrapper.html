@@ -433,6 +433,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">lazy_stack</span><span class="p">,</span>
+    <span class="n">LazyStackedTensorDict</span><span class="p">,</span>
     <span class="n">MetaData</span><span class="p">,</span>
     <span class="n">NonTensorStack</span><span class="p">,</span>
     <span class="n">set_list_to_stack</span><span class="p">,</span>
@@ -925,16 +926,15 @@
         <span class="n">tensordict_out</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="n">tensordict_orig</span> <span class="o">=</span> <span class="n">tensordict</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
             <span class="c1"># unsqueeze - squeeze the input</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="k">return</span> <span class="bp">self</span><span class="p">(</span><span class="n">lazy_stack</span><span class="p">([</span><span class="n">tensordict</span><span class="p">]))</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Unsqueeze/squeeze failed. Inputs to </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> should ideally be 1 dimensional.&quot;</span>
-                <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="p">(</span><span class="n">lazy_stack</span><span class="p">([</span><span class="n">tensordict</span><span class="p">]))[</span><span class="mi">0</span><span class="p">]</span>
         <span class="k">elif</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">LazyStackedTensorDict</span><span class="p">):</span>
+            <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">to_lazystack</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
 
         <span class="n">_source_device</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_device</span><span class="p">:</span>
@@ -989,7 +989,7 @@
         <span class="k">if</span> <span class="n">tensordict_out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
                 <span class="c1"># The output is the input</span>
-                <span class="n">tensordict_out</span> <span class="o">=</span> <span class="n">tensordict</span>
+                <span class="n">tensordict_out</span> <span class="o">=</span> <span class="n">tensordict_orig</span>
             <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">:</span>
                 <span class="c1"># The output is the new structure</span>
                 <span class="n">tensordict_out</span> <span class="o">=</span> <span class="n">out</span>
@@ -1664,12 +1664,14 @@
 
         <span class="n">generate_kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;sampling_params&quot;</span><span class="p">:</span> <span class="n">sampling_params</span><span class="p">}</span>
         <span class="n">args</span> <span class="o">=</span> <span class="p">()</span>
+        <span class="n">empirical_attention_mask</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="k">if</span> <span class="n">tokens_prompt_unpadded</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># TODO: To be on the safe side, we may do this even in the unpadded case since we&#39;re not sure</span>
             <span class="c1">#  the user passed an unpadded tensor in the first place.</span>
+            <span class="n">empirical_attention_mask</span> <span class="o">=</span> <span class="n">tokens_prompt_padded</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">padding_value</span>
             <span class="n">tokens_prompt_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_list</span><span class="p">(</span>
-                <span class="n">tokens_prompt_padded</span><span class="p">,</span> <span class="n">tokens_prompt_padded</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">padding_value</span>
+                <span class="n">tokens_prompt_padded</span><span class="p">,</span> <span class="n">empirical_attention_mask</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">tokens_prompt_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_list</span><span class="p">(</span><span class="n">tokens_prompt_unpadded</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
@@ -1787,6 +1789,22 @@
                         <span class="n">padding_value</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">padding_value</span><span class="p">,</span>
                         <span class="n">padding_side</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">,</span>
                     <span class="p">)</span>
+                    <span class="k">if</span> <span class="p">(</span>
+                        <span class="n">prompt_logprobs_padded</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+                        <span class="o">!=</span> <span class="n">tokens_prompt_padded</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+                    <span class="p">):</span>
+                        <span class="n">tshape</span> <span class="o">=</span> <span class="n">tokens_prompt_padded</span><span class="o">.</span><span class="n">shape</span>
+                        <span class="n">oshape</span> <span class="o">=</span> <span class="n">prompt_logprobs_padded</span><span class="o">.</span><span class="n">shape</span>
+                        <span class="c1"># it could be that the input was padded already - padding again then</span>
+                        <span class="n">prompt_logprobs_padded</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span>
+                            <span class="p">[</span>
+                                <span class="n">prompt_logprobs_padded</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span>
+                                    <span class="n">tshape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span><span class="n">tshape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">oshape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],)</span>
+                                <span class="p">),</span>
+                                <span class="n">prompt_logprobs_padded</span><span class="p">,</span>
+                            <span class="p">],</span>
+                            <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+                        <span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">prompt_logprobs_list</span> <span class="o">=</span> <span class="n">request_output_tc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
                         <span class="s2">&quot;prompt_logprobs&quot;</span><span class="p">,</span>
@@ -1912,26 +1930,21 @@
 
         <span class="n">request_output_tc</span> <span class="o">=</span> <span class="n">_RequestOutput_tc</span><span class="o">.</span><span class="n">from_request_output</span><span class="p">(</span><span class="n">tokens_out_stuct</span><span class="p">)</span>
 
+        <span class="c1"># For unpadded case, extract from each sequence</span>
+        <span class="n">log_probs_full_unpadded</span> <span class="o">=</span> <span class="n">request_output_tc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;prompt_logprobs&quot;</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
         <span class="c1"># Extract log-probs from prompt_logprobs</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">:</span>
             <span class="c1"># For padded case, use all prompt_logprobs</span>
-            <span class="n">log_probs_full_padded</span> <span class="o">=</span> <span class="n">request_output_tc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-                <span class="s2">&quot;prompt_logprobs&quot;</span><span class="p">,</span>
-                <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                <span class="n">padding_value</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-                <span class="n">padding_side</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span>
+            <span class="k">if</span> <span class="n">attention_mask_full_padded</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">attention_mask_full_padded</span> <span class="o">=</span> <span class="n">tokens_full_padded</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">padding_value</span>
+            <span class="n">log_probs_full_padded</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span>
+                <span class="n">tokens_full_padded</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">get_default_dtype</span><span class="p">()</span>
             <span class="p">)</span>
-
-            <span class="c1"># Mask out padding</span>
-            <span class="n">attention_mask_full_padded</span> <span class="o">=</span> <span class="n">tokens_full_padded</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">padding_value</span>
-            <span class="n">log_probs_full_padded</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
-                <span class="n">attention_mask_full_padded</span><span class="p">,</span> <span class="n">log_probs_full_padded</span><span class="p">,</span> <span class="mf">0.0</span>
+            <span class="n">log_probs_full_padded</span><span class="p">[</span><span class="n">attention_mask_full_padded</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span>
+                <span class="n">log_probs_full_unpadded</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="c1"># For unpadded case, extract from each sequence</span>
-            <span class="n">log_probs_full_unpadded</span> <span class="o">=</span> <span class="n">request_output_tc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-                <span class="s2">&quot;prompt_logprobs&quot;</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span>
-            <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_check_not_padded</span><span class="p">(</span><span class="n">log_probs_full_unpadded</span><span class="p">)</span>
 
         <span class="n">assistant_mask_full_padded</span> <span class="o">=</span> <span class="kc">None</span>

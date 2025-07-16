@@ -453,7 +453,7 @@ formula for the entropy, a Monte-Carlo estimate will be used.
 samples will be used to compute this estimate.
 Defaults to <code class="docutils literal notranslate"><span class="pre">1</span></code>.</p></li>
 <li><p><strong>entropy_coeff</strong> (<code class="xref py py-obj docutils literal notranslate"><span class="pre">float</span></code>) – the weight of the entropy loss. Defaults to <cite>0.01`</cite>.</p></li>
-<li><p><strong>critic_coef</strong> (<code class="xref py py-obj docutils literal notranslate"><span class="pre">float</span></code>) – the weight of the critic loss. Defaults to <code class="docutils literal notranslate"><span class="pre">1.0</span></code>. If <code class="docutils literal notranslate"><span class="pre">None</span></code>, the critic
+<li><p><strong>critic_coeff</strong> (<code class="xref py py-obj docutils literal notranslate"><span class="pre">float</span></code>) – the weight of the critic loss. Defaults to <code class="docutils literal notranslate"><span class="pre">1.0</span></code>. If <code class="docutils literal notranslate"><span class="pre">None</span></code>, the critic
 loss won’t be included and the in-keys will miss the critic inputs.</p></li>
 <li><p><strong>loss_critic_type</strong> (<em>str</em>) – loss function for the value discrepancy.
 Can be one of “l1”, “l2” or “smooth_l1”. Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;smooth_l1&quot;</span></code>.</p></li>
@@ -531,7 +531,7 @@ used without recurring to any tensordict-related primitive. In this case,
 the expected keyword arguments are:
 <code class="docutils literal notranslate"><span class="pre">[&quot;action&quot;,</span> <span class="pre">&quot;next_reward&quot;,</span> <span class="pre">&quot;next_done&quot;,</span> <span class="pre">&quot;next_terminated&quot;]</span></code> + in_keys of the actor and critic.
 The return value is a tuple of tensors in the following order:
-<code class="docutils literal notranslate"><span class="pre">[&quot;loss_objective&quot;]</span></code> + <code class="docutils literal notranslate"><span class="pre">[&quot;loss_critic&quot;]</span></code> if critic_coef is not None + <code class="docutils literal notranslate"><span class="pre">[&quot;entropy&quot;,</span> <span class="pre">&quot;loss_entropy&quot;]</span></code> if entropy_bonus is True and critic_coef is not None</p>
+<code class="docutils literal notranslate"><span class="pre">[&quot;loss_objective&quot;]</span></code> + <code class="docutils literal notranslate"><span class="pre">[&quot;loss_critic&quot;]</span></code> if critic_coeff is not None + <code class="docutils literal notranslate"><span class="pre">[&quot;entropy&quot;,</span> <span class="pre">&quot;loss_entropy&quot;]</span></code> if entropy_bonus is True and critic_coeff is not None</p>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">nn</span>
@@ -622,7 +622,7 @@ backpropagation.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.objectives.A2CLoss.loss_critic">
 <span class="sig-name descname"><span class="pre">loss_critic</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><span class="pre">torch.Tensor</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/torchrl/objectives/a2c.html#A2CLoss.loss_critic"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.objectives.A2CLoss.loss_critic" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns the loss value of the critic, multiplied by <code class="docutils literal notranslate"><span class="pre">critic_coef</span></code> if it is not <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+<dd><p>Returns the loss value of the critic, multiplied by <code class="docutils literal notranslate"><span class="pre">critic_coeff</span></code> if it is not <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
 <p>Returns the loss and the clip-fraction.</p>
 </dd></dl>
 

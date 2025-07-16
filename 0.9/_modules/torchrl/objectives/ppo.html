@@ -524,13 +524,13 @@
 <span class="sd">            Defaults to ``1``.</span>
 <span class="sd">        entropy_coeff: scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.</span>
 <span class="sd">            * **Scalar**: one value applied to the summed entropy of every action head.</span>
-<span class="sd">            * **Mapping** ``{head_name: coef}`` gives an individual coefficient for each action-head&#39;s entropy.</span>
+<span class="sd">            * **Mapping** ``{head_name: coeff}`` gives an individual coefficient for each action-head&#39;s entropy.</span>
 <span class="sd">            Defaults to ``0.01``.</span>
 <span class="sd">        log_explained_variance (bool, optional): if ``True``, the explained variance of the critic</span>
 <span class="sd">            predictions w.r.t. value targets will be computed and logged as ``&quot;explained_variance&quot;``.</span>
 <span class="sd">            This can help monitor critic quality during training. Best possible score is 1.0, lower values are worse. Defaults to ``True``.</span>
-<span class="sd">        critic_coef (scalar, optional): critic loss multiplier when computing the total</span>
-<span class="sd">            loss. Defaults to ``1.0``. Set ``critic_coef`` to ``None`` to exclude the value</span>
+<span class="sd">        critic_coeff (scalar, optional): critic loss multiplier when computing the total</span>
+<span class="sd">            loss. Defaults to ``1.0``. Set ``critic_coeff`` to ``None`` to exclude the value</span>
 <span class="sd">            loss from the forward outputs.</span>
 <span class="sd">        loss_critic_type (str, optional): loss function for the value discrepancy.</span>
 <span class="sd">            Can be one of &quot;l1&quot;, &quot;l2&quot; or &quot;smooth_l1&quot;. Defaults to ``&quot;smooth_l1&quot;``.</span>
@@ -661,7 +661,7 @@
 <span class="sd">    the expected keyword arguments are:</span>
 <span class="sd">    ``[&quot;action&quot;, &quot;sample_log_prob&quot;, &quot;next_reward&quot;, &quot;next_done&quot;, &quot;next_terminated&quot;]`` + in_keys of the actor and value network.</span>
 <span class="sd">    The return value is a tuple of tensors in the following order:</span>
-<span class="sd">    ``[&quot;loss_objective&quot;]`` + ``[&quot;entropy&quot;, &quot;loss_entropy&quot;]`` if entropy_bonus is set + ``&quot;loss_critic&quot;`` if critic_coef is not ``None``.</span>
+<span class="sd">    ``[&quot;loss_objective&quot;]`` + ``[&quot;entropy&quot;, &quot;loss_entropy&quot;]`` if entropy_bonus is set + ``&quot;loss_critic&quot;`` if critic_coeff is not ``None``.</span>
 <span class="sd">    The output keys can also be filtered using :meth:`PPOLoss.select_out_keys` method.</span>
 
 <span class="sd">    Examples:</span>
@@ -773,9 +773,9 @@
         <span class="o">*</span><span class="p">,</span>
         <span class="n">entropy_bonus</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">samples_mc_entropy</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
-        <span class="n">entropy_coeff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.01</span><span class="p">,</span>
+        <span class="n">entropy_coeff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">log_explained_variance</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="n">critic_coef</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">critic_coeff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">loss_critic_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;smooth_l1&quot;</span><span class="p">,</span>
         <span class="n">normalize_advantage</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">normalize_advantage_exclude_dims</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
@@ -799,13 +799,23 @@
             <span class="n">critic_network</span> <span class="o">=</span> <span class="n">critic</span>
             <span class="k">del</span> <span class="n">critic</span>
 
-        <span class="k">if</span> <span class="n">critic_coef</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">critic_network</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">critic_coef</span> <span class="o">=</span> <span class="mf">1.0</span>
-        <span class="k">elif</span> <span class="n">critic_coef</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">and</span> <span class="n">critic_network</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">critic_coef</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># Handle deprecated critic_coef argument</span>
+        <span class="k">if</span> <span class="s2">&quot;critic_coef&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">critic_coeff</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot specify both &#39;critic_coef&#39; and &#39;critic_coeff&#39;&quot;</span><span class="p">)</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;&#39;critic_coef&#39; is deprecated and will be removed in torchrl v0.11. Please use &#39;critic_coeff&#39; instead.&quot;</span><span class="p">,</span>
+                <span class="ne">DeprecationWarning</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">critic_coeff</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;critic_coef&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">critic_coeff</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">critic_network</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">critic_coeff</span> <span class="o">=</span> <span class="mf">1.0</span>
+        <span class="k">elif</span> <span class="n">critic_coeff</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">and</span> <span class="n">critic_network</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">critic_coeff</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="k">if</span> <span class="n">actor_network</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="p">(</span>
-            <span class="n">critic_network</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">critic_coef</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+            <span class="n">critic_network</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">critic_coeff</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
         <span class="p">):</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
                 <span class="s2">&quot;Missing positional arguments actor_network or critic_network.&quot;</span>
@@ -853,13 +863,21 @@
                     <span class="n">torch</span><span class="p">,</span> <span class="s2">&quot;get_default_device&quot;</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
                 <span class="p">)()</span>
 
-        <span class="c1"># Handle deprecated entropy_coeff argument</span>
-        <span class="k">if</span> <span class="s2">&quot;entropy_coeff&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+        <span class="c1"># Handle deprecated entropy_coef argument</span>
+        <span class="k">if</span> <span class="s2">&quot;entropy_coef&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">entropy_coeff</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># Check if entropy_coeff was explicitly set</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Cannot specify both &#39;entropy_coef&#39; and &#39;entropy_coeff&#39;&quot;</span>
+                <span class="p">)</span>
             <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="s2">&quot;&#39;entropy_coeff&#39; is deprecated and will be removed in torchrl v0.11. Please use &#39;entropy_coeff&#39; instead.&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;&#39;entropy_coef&#39; is deprecated and will be removed in torchrl v0.11. Please use &#39;entropy_coeff&#39; instead.&quot;</span><span class="p">,</span>
                 <span class="ne">DeprecationWarning</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="n">entropy_coeff</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;entropy_coeff&quot;</span><span class="p">)</span>
+            <span class="n">entropy_coeff</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;entropy_coef&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Set default value if None</span>
+        <span class="k">if</span> <span class="n">entropy_coeff</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">entropy_coeff</span> <span class="o">=</span> <span class="mf">0.01</span>
 
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entropy_coeff</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
             <span class="c1"># Store the mapping for per-head coefficients</span>
@@ -879,13 +897,13 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_entropy_coeff_map</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;entropy_coeff must be a float or a Mapping[str, float]&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">critic_coef</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">critic_coeff</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
-                <span class="s2">&quot;critic_coef&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">critic_coef</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+                <span class="s2">&quot;critic_coeff&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">critic_coeff</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">critic_coef</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_has_critic</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">critic_coef</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_coef</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">critic_coeff</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_has_critic</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">critic_coeff</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_coeff</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">loss_critic_type</span> <span class="o">=</span> <span class="n">loss_critic_type</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">normalize_advantage</span> <span class="o">=</span> <span class="n">normalize_advantage</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">normalize_advantage_exclude_dims</span> <span class="o">=</span> <span class="n">normalize_advantage_exclude_dims</span>
@@ -1114,7 +1132,7 @@
 <div class="viewcode-block" id="PPOLoss.loss_critic"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.PPOLoss.html#torchrl.objectives.PPOLoss.loss_critic">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">loss_critic</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the critic loss multiplied by ``critic_coef``, if it is not ``None``.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the critic loss multiplied by ``critic_coeff``, if it is not ``None``.&quot;&quot;&quot;</span>
         <span class="c1"># TODO: if the advantage is gathered by forward, this introduces an</span>
         <span class="c1"># overhead that we could easily reduce.</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">separate_losses</span><span class="p">:</span>
@@ -1188,7 +1206,7 @@
             <span class="s2">&quot;target_critic_network_params&quot;</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_has_critic</span><span class="p">:</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_coef</span> <span class="o">*</span> <span class="n">loss_value</span><span class="p">,</span> <span class="n">clip_fraction</span><span class="p">,</span> <span class="n">explained_variance</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_coeff</span> <span class="o">*</span> <span class="n">loss_value</span><span class="p">,</span> <span class="n">clip_fraction</span><span class="p">,</span> <span class="n">explained_variance</span>
         <span class="k">return</span> <span class="n">loss_value</span><span class="p">,</span> <span class="n">clip_fraction</span><span class="p">,</span> <span class="n">explained_variance</span></div>
 
     <span class="nd">@property</span>
@@ -1376,10 +1394,10 @@
 <span class="sd">            Defaults to ``1``.</span>
 <span class="sd">        entropy_coeff: (scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.</span>
 <span class="sd">            * **Scalar**: one value applied to the summed entropy of every action head.</span>
-<span class="sd">            * **Mapping** ``{head_name: coef}`` gives an individual coefficient for each action-head&#39;s entropy.</span>
+<span class="sd">            * **Mapping** ``{head_name: coeff}`` gives an individual coefficient for each action-head&#39;s entropy.</span>
 <span class="sd">            Defaults to ``0.01``.</span>
-<span class="sd">        critic_coef (scalar, optional): critic loss multiplier when computing the total</span>
-<span class="sd">            loss. Defaults to ``1.0``. Set ``critic_coef`` to ``None`` to exclude the value</span>
+<span class="sd">        critic_coeff (scalar, optional): critic loss multiplier when computing the total</span>
+<span class="sd">            loss. Defaults to ``1.0``. Set ``critic_coeff`` to ``None`` to exclude the value</span>
 <span class="sd">            loss from the forward outputs.</span>
 <span class="sd">        loss_critic_type (str, optional): loss function for the value discrepancy.</span>
 <span class="sd">            Can be one of &quot;l1&quot;, &quot;l2&quot; or &quot;smooth_l1&quot;. Defaults to ``&quot;smooth_l1&quot;``.</span>
@@ -1479,8 +1497,8 @@
         <span class="n">clip_epsilon</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.2</span><span class="p">,</span>
         <span class="n">entropy_bonus</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">samples_mc_entropy</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
-        <span class="n">entropy_coeff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.01</span><span class="p">,</span>
-        <span class="n">critic_coef</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">entropy_coeff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">critic_coeff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">loss_critic_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;smooth_l1&quot;</span><span class="p">,</span>
         <span class="n">normalize_advantage</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">normalize_advantage_exclude_dims</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
@@ -1501,7 +1519,7 @@
             <span class="n">entropy_bonus</span><span class="o">=</span><span class="n">entropy_bonus</span><span class="p">,</span>
             <span class="n">samples_mc_entropy</span><span class="o">=</span><span class="n">samples_mc_entropy</span><span class="p">,</span>
             <span class="n">entropy_coeff</span><span class="o">=</span><span class="n">entropy_coeff</span><span class="p">,</span>
-            <span class="n">critic_coef</span><span class="o">=</span><span class="n">critic_coef</span><span class="p">,</span>
+            <span class="n">critic_coeff</span><span class="o">=</span><span class="n">critic_coeff</span><span class="p">,</span>
             <span class="n">loss_critic_type</span><span class="o">=</span><span class="n">loss_critic_type</span><span class="p">,</span>
             <span class="n">normalize_advantage</span><span class="o">=</span><span class="n">normalize_advantage</span><span class="p">,</span>
             <span class="n">normalize_advantage_exclude_dims</span><span class="o">=</span><span class="n">normalize_advantage_exclude_dims</span><span class="p">,</span>
@@ -1669,9 +1687,9 @@
 <span class="sd">            Defaults to ``1``.</span>
 <span class="sd">        entropy_coeff: scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.</span>
 <span class="sd">            * **Scalar**: one value applied to the summed entropy of every action head.</span>
-<span class="sd">            * **Mapping** ``{head_name: coef}`` gives an individual coefficient for each action-head&#39;s entropy.</span>
+<span class="sd">            * **Mapping** ``{head_name: coeff}`` gives an individual coefficient for each action-head&#39;s entropy.</span>
 <span class="sd">            Defaults to ``0.01``.</span>
-<span class="sd">        critic_coef (scalar, optional): critic loss multiplier when computing the total</span>
+<span class="sd">        critic_coeff (scalar, optional): critic loss multiplier when computing the total</span>
 <span class="sd">            loss. Defaults to ``1.0``.</span>
 <span class="sd">        loss_critic_type (str, optional): loss function for the value discrepancy.</span>
 <span class="sd">            Can be one of &quot;l1&quot;, &quot;l2&quot; or &quot;smooth_l1&quot;. Defaults to ``&quot;smooth_l1&quot;``.</span>
@@ -1773,8 +1791,8 @@
         <span class="n">samples_mc_kl</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">entropy_bonus</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">samples_mc_entropy</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
-        <span class="n">entropy_coeff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.01</span><span class="p">,</span>
-        <span class="n">critic_coef</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">entropy_coeff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">critic_coeff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">loss_critic_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;smooth_l1&quot;</span><span class="p">,</span>
         <span class="n">normalize_advantage</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">normalize_advantage_exclude_dims</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
@@ -1791,7 +1809,7 @@
             <span class="n">entropy_bonus</span><span class="o">=</span><span class="n">entropy_bonus</span><span class="p">,</span>
             <span class="n">samples_mc_entropy</span><span class="o">=</span><span class="n">samples_mc_entropy</span><span class="p">,</span>
             <span class="n">entropy_coeff</span><span class="o">=</span><span class="n">entropy_coeff</span><span class="p">,</span>
-            <span class="n">critic_coef</span><span class="o">=</span><span class="n">critic_coef</span><span class="p">,</span>
+            <span class="n">critic_coeff</span><span class="o">=</span><span class="n">critic_coeff</span><span class="p">,</span>
             <span class="n">loss_critic_type</span><span class="o">=</span><span class="n">loss_critic_type</span><span class="p">,</span>
             <span class="n">normalize_advantage</span><span class="o">=</span><span class="n">normalize_advantage</span><span class="p">,</span>
             <span class="n">normalize_advantage_exclude_dims</span><span class="o">=</span><span class="n">normalize_advantage_exclude_dims</span><span class="p">,</span>

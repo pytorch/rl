@@ -468,9 +468,9 @@ samples will be used to compute this estimate.
 Defaults to <code class="docutils literal notranslate"><span class="pre">1</span></code>.</p></li>
 <li><p><strong>entropy_coeff</strong> – scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.
 * <strong>Scalar</strong>: one value applied to the summed entropy of every action head.
-* <strong>Mapping</strong> <code class="docutils literal notranslate"><span class="pre">{head_name:</span> <span class="pre">coef}</span></code> gives an individual coefficient for each action-head’s entropy.
+* <strong>Mapping</strong> <code class="docutils literal notranslate"><span class="pre">{head_name:</span> <span class="pre">coeff}</span></code> gives an individual coefficient for each action-head’s entropy.
 Defaults to <code class="docutils literal notranslate"><span class="pre">0.01</span></code>.</p></li>
-<li><p><strong>critic_coef</strong> (<em>scalar</em><em>, </em><em>optional</em>) – critic loss multiplier when computing the total
+<li><p><strong>critic_coeff</strong> (<em>scalar</em><em>, </em><em>optional</em>) – critic loss multiplier when computing the total
 loss. Defaults to <code class="docutils literal notranslate"><span class="pre">1.0</span></code>.</p></li>
 <li><p><strong>loss_critic_type</strong> (<em>str</em><em>, </em><em>optional</em>) – loss function for the value discrepancy.
 Can be one of “l1”, “l2” or “smooth_l1”. Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;smooth_l1&quot;</span></code>.</p></li>
