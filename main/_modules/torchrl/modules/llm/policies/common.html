@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+5df91da) &#x25BC</span></a>
+      <a href="../../../../../../versions.html"><span style="font-size:110%">main (0.9.0+db0e30d) &#x25BC</span></a>
     </div>
     
 
@@ -431,8 +431,8 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">overload</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">NestedKey</span><span class="p">,</span> <span class="n">TensorDictBase</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModuleBase</span><span class="p">,</span> <span class="n">TensorDictSequential</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">lazy_stack</span><span class="p">,</span> <span class="n">NestedKey</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModuleBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.tensorclass</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorClass</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_zip_strict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">distributions</span> <span class="k">as</span> <span class="n">D</span>
@@ -597,29 +597,35 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="c1"># Check that all history objects have one more batch dimension than the ChatHistory object</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">prompt</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">prompt</span><span class="o">.</span><span class="n">batch_dims</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_dims</span> <span class="o">+</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">prompt</span><span class="p">,</span> <span class="s2">&quot;batch_dims&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_dims</span><span class="p">:</span>
                 <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
                     <span class="s2">&quot;Prompt history should have one more batch dimension than the ChatHistory object to handle multi-turn conversations, &quot;</span>
                     <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">prompt</span><span class="o">.</span><span class="n">batch_dims</span><span class="si">}</span><span class="s2"> and </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_dims</span><span class="si">}</span><span class="s2">. &quot;</span>
                     <span class="s2">&quot;The batch dimension of the ChatHistory object will be unsqueezed along the last dimension.&quot;</span>
                 <span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">prompt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">prompt</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">prompt</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">(</span>
+                    <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">prompt</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span>
+                <span class="p">)</span>  <span class="c1"># equivalent to unsqueeze(-1) but make sure it&#39;s a lazy stack</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">response</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">response</span><span class="o">.</span><span class="n">batch_dims</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_dims</span> <span class="o">+</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">response</span><span class="p">,</span> <span class="s2">&quot;batch_dims&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_dims</span><span class="p">:</span>
                 <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
                     <span class="s2">&quot;Response history should have one more batch dimension than the ChatHistory object to handle multi-turn conversations, &quot;</span>
                     <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">response</span><span class="o">.</span><span class="n">batch_dims</span><span class="si">}</span><span class="s2"> and </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_dims</span><span class="si">}</span><span class="s2">. &quot;</span>
                     <span class="s2">&quot;The batch dimension of the ChatHistory object will be unsqueezed along the last dimension.&quot;</span>
                 <span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">response</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">response</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">(</span>
+                    <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">response</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span>
+                <span class="p">)</span>  <span class="c1"># equivalent to unsqueeze(-1) but make sure it&#39;s a lazy stack</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">full</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">full</span><span class="o">.</span><span class="n">batch_dims</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_dims</span> <span class="o">+</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">full</span><span class="p">,</span> <span class="s2">&quot;batch_dims&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_dims</span><span class="p">:</span>
                 <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
                     <span class="s2">&quot;Full history should have one more batch dimension than the ChatHistory object to handle multi-turn conversations, &quot;</span>
                     <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">full</span><span class="o">.</span><span class="n">batch_dims</span><span class="si">}</span><span class="s2"> and </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_dims</span><span class="si">}</span><span class="s2">. &quot;</span>
                     <span class="s2">&quot;The batch dimension of the ChatHistory object will be unsqueezed along the last dimension.&quot;</span>
                 <span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">full</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">full</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span></div>
+                <span class="bp">self</span><span class="o">.</span><span class="n">full</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">(</span>
+                    <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">full</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span>
+                <span class="p">)</span>  <span class="c1"># equivalent to unsqueeze(-1) but make sure it&#39;s a lazy stack</span></div>
 
 
 <div class="viewcode-block" id="LogProbs"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.LogProbs.html#torchrl.modules.llm.LogProbs">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">LogProbs</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">&quot;nocast&quot;</span><span class="p">]):</span>
@@ -904,7 +910,7 @@
                 <span class="s2">&quot;You can create a new version of this wrapper using the `get_new_version` method.&quot;</span>
             <span class="p">)</span>
 
-        <span class="n">td_out</span> <span class="o">=</span> <span class="bp">self</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+        <span class="n">td_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span> <span class="n">logits_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
         <span class="c1"># Get logits/log-probs</span>
         <span class="k">if</span> <span class="n">as_padded_tensor</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -979,7 +985,7 @@
                 <span class="s2">&quot;get_dist_with_prompt_mask is not implemented for generate=True. &quot;</span>
                 <span class="s2">&quot;You can create a new version of this wrapper using the `get_new_version` method.&quot;</span>
             <span class="p">)</span>
-        <span class="n">td_out</span> <span class="o">=</span> <span class="bp">self</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+        <span class="n">td_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span> <span class="n">logits_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
         <span class="c1"># Try to get prompt tokens first</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">:</span>
@@ -1090,7 +1096,7 @@
                 <span class="s2">&quot;get_dist_with_assistant_mask is not implemented for generate=True. &quot;</span>
                 <span class="s2">&quot;You can create a new version of this wrapper using the `get_new_version` method.&quot;</span>
             <span class="p">)</span>
-        <span class="n">td_out</span> <span class="o">=</span> <span class="bp">self</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+        <span class="n">td_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span> <span class="n">logits_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="c1"># Update the tokens key to reflect the tokenized history when querying the log-probs</span>
         <span class="n">tensordict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
             <span class="n">td_out</span><span class="p">,</span>
@@ -1159,7 +1165,7 @@
                 <span class="s2">&quot;get_dist_with_attention_mask is not implemented for generate=True. &quot;</span>
                 <span class="s2">&quot;You can create a new version of this wrapper using the `get_new_version` method.&quot;</span>
             <span class="p">)</span>
-        <span class="n">td_out</span> <span class="o">=</span> <span class="bp">self</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+        <span class="n">td_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span> <span class="n">logits_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">:</span>
             <span class="n">logits</span> <span class="o">=</span> <span class="n">td_out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">logits_key</span><span class="p">)</span>
             <span class="n">attention_mask</span> <span class="o">=</span> <span class="n">td_out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">attention_mask_key</span><span class="p">)</span>
@@ -1216,7 +1222,7 @@
                 <span class="s2">&quot;get_dist_with_custom_mask is not implemented for generate=True. &quot;</span>
                 <span class="s2">&quot;You can create a new version of this wrapper using the `get_new_version` method.&quot;</span>
             <span class="p">)</span>
-        <span class="n">td_out</span> <span class="o">=</span> <span class="bp">self</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+        <span class="n">td_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span> <span class="n">logits_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">:</span>
             <span class="n">logits</span> <span class="o">=</span> <span class="n">td_out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">logits_key</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
@@ -1263,8 +1269,24 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_dist_with_attention_mask</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
-    <span class="c1"># Sampling is taken care of by the sub-modules</span>
-    <span class="n">forward</span> <span class="o">=</span> <span class="n">TensorDictSequential</span><span class="o">.</span><span class="n">forward</span>
+<div class="viewcode-block" id="LLMWrapperBase.forward"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.LLMWrapperBase.html#torchrl.modules.llm.LLMWrapperBase.forward">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">tensordict_out</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">logits_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>  <span class="c1"># noqa: D417</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Forward pass for the LLM policy.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tensordict (TensorDictBase): The input tensordict.</span>
+
+<span class="sd">        Keyword Args:</span>
+<span class="sd">            tensordict_out (TensorDictBase | None): The output tensordict.</span>
+<span class="sd">            logits_only (bool): Whether to return only the logits. Only effective if generate=False. Defaults to `False`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_check_padded</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">val</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Check that a value is a padded tensor.&quot;&quot;&quot;</span>
