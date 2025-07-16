@@ -11,6 +11,7 @@ from typing import Any, Literal
 import torch
 from tensordict import (
     lazy_stack,
+    LazyStackedTensorDict,
     MetaData,
     NonTensorStack,
     set_list_to_stack,
@@ -503,16 +504,15 @@ class vLLMWrapper(LLMWrapperBase):
         tensordict_out: TensorDictBase | None = None,
         **kwargs,
     ) -> TensorDictBase:
+        tensordict_orig = tensordict
         if not tensordict.ndim:
             # unsqueeze - squeeze the input
-            try:
-                return self(lazy_stack([tensordict])).squeeze(0)
-            except Exception as e:
-                raise RuntimeError(
-                    f"Unsqueeze/squeeze failed. Inputs to {type(self).__name__} should ideally be 1 dimensional."
-                ) from e
+            return self(lazy_stack([tensordict]))[0]
         elif tensordict.ndim > 1:
             return self(tensordict.reshape(-1)).view(tensordict.shape)
+
+        if not isinstance(tensordict, LazyStackedTensorDict):
+            tensordict = tensordict.to_lazystack(0)
 
         _source_device = None
         if self._device:
@@ -567,7 +567,7 @@ class vLLMWrapper(LLMWrapperBase):
         if tensordict_out is None:
             if self.inplace is True:
                 # The output is the input
-                tensordict_out = tensordict
+                tensordict_out = tensordict_orig
             elif self.inplace is False:
                 # The output is the new structure
                 tensordict_out = out
@@ -1242,12 +1242,14 @@ class vLLMWrapper(LLMWrapperBase):
 
         generate_kwargs = {"sampling_params": sampling_params}
         args = ()
+        empirical_attention_mask = None
 
         if tokens_prompt_unpadded is None:
             # TODO: To be on the safe side, we may do this even in the unpadded case since we're not sure
             #  the user passed an unpadded tensor in the first place.
+            empirical_attention_mask = tokens_prompt_padded != self.padding_value
             tokens_prompt_list = self._to_list(
-                tokens_prompt_padded, tokens_prompt_padded != self.padding_value
+                tokens_prompt_padded, empirical_attention_mask
             )
         else:
             tokens_prompt_list = self._to_list(tokens_prompt_unpadded, None)
@@ -1365,6 +1367,22 @@ class vLLMWrapper(LLMWrapperBase):
                         padding_value=self.padding_value,
                         padding_side="right",
                     )
+                    if (
+                        prompt_logprobs_padded.shape[-1]
+                        != tokens_prompt_padded.shape[-1]
+                    ):
+                        tshape = tokens_prompt_padded.shape
+                        oshape = prompt_logprobs_padded.shape
+                        # it could be that the input was padded already - padding again then
+                        prompt_logprobs_padded = torch.cat(
+                            [
+                                prompt_logprobs_padded.new_zeros(
+                                    tshape[:-1] + (tshape[-1] - oshape[-1],)
+                                ),
+                                prompt_logprobs_padded,
+                            ],
+                            -1,
+                        )
                 else:
                     prompt_logprobs_list = request_output_tc.get(
                         "prompt_logprobs",
@@ -1490,26 +1508,21 @@ class vLLMWrapper(LLMWrapperBase):
 
         request_output_tc = _RequestOutput_tc.from_request_output(tokens_out_stuct)
 
+        # For unpadded case, extract from each sequence
+        log_probs_full_unpadded = request_output_tc.get("prompt_logprobs", as_list=True)
+
         # Extract log-probs from prompt_logprobs
         if self.pad_output:
             # For padded case, use all prompt_logprobs
-            log_probs_full_padded = request_output_tc.get(
-                "prompt_logprobs",
-                as_padded_tensor=True,
-                padding_value=0,
-                padding_side="left",
+            if attention_mask_full_padded is not None:
+                attention_mask_full_padded = tokens_full_padded != self.padding_value
+            log_probs_full_padded = torch.zeros_like(
+                tokens_full_padded, dtype=torch.get_default_dtype()
             )
-
-            # Mask out padding
-            attention_mask_full_padded = tokens_full_padded != self.padding_value
-            log_probs_full_padded = torch.where(
-                attention_mask_full_padded, log_probs_full_padded, 0.0
+            log_probs_full_padded[attention_mask_full_padded] = torch.cat(
+                log_probs_full_unpadded, -1
             )
         else:
-            # For unpadded case, extract from each sequence
-            log_probs_full_unpadded = request_output_tc.get(
-                "prompt_logprobs", as_list=True
-            )
             self._check_not_padded(log_probs_full_unpadded)
 
         assistant_mask_full_padded = None

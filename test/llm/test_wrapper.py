@@ -164,7 +164,7 @@ def sample_tokens(vllm_instance):
 
 
 def check_output_shapes(out, pad_output, requested_log_probs=False):
-    if pad_output:
+    if pad_output or not out.ndim:
         # We can get all tensors or they are none
         log_probs = out.get("log_probs")
         masks = out.get("masks")
@@ -287,6 +287,7 @@ class TestWrappers:
     )
     @pytest.mark.parametrize("generate", [True, False], ids=["generate", "no_generate"])
     @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
+    @pytest.mark.parametrize("batch_size", ["null", 2])
     def test_history_input_mode(
         self,
         wrapper_class,
@@ -296,6 +297,7 @@ class TestWrappers:
         sample_history_assistant,
         generate,
         pad_output,
+        batch_size,
     ):
         """Test history input mode with various configurations."""
 
@@ -333,6 +335,8 @@ class TestWrappers:
                 history=ChatHistory(full=sample_history_assistant),
                 batch_size=(2,),
             )
+        if batch_size == "null":
+            data = data[0]
 
         # Run wrapper
         result = wrapper(data)
@@ -351,7 +355,11 @@ class TestWrappers:
 
         if generate:
             assert text_obj.response is not None
-            assert isinstance(text_obj.response, list)
+            if batch_size == "null":
+                assert isinstance(text_obj.response, str)
+            else:
+                assert isinstance(text_obj.response, list)
+
             assert isinstance(text_obj.response[0], str)
 
         tokens_obj = result["tokens"]
@@ -360,7 +368,10 @@ class TestWrappers:
             assert hasattr(tokens_obj, "response")
             assert hasattr(tokens_obj, "full")
             assert hasattr(tokens_obj, "padded")
-        assert all(tokens_obj.padded) == pad_output
+        if batch_size == "null":
+            assert tokens_obj.padded == pad_output
+        else:
+            assert all(tokens_obj.padded) == pad_output
 
         if generate:
             if pad_output:
@@ -369,7 +380,10 @@ class TestWrappers:
                 assert tokens_obj.get("response", as_list=True) is not None
             if not pad_output:
                 response_tokens = result["tokens"].get("response", as_list=True)
-                assert isinstance(response_tokens, list)
+                if batch_size == "null":
+                    assert isinstance(response_tokens, torch.Tensor)
+                else:
+                    assert isinstance(response_tokens, list)
             else:
                 assert isinstance(tokens_obj.response, torch.Tensor)
 
@@ -378,7 +392,10 @@ class TestWrappers:
             assert hasattr(masks_obj, "all_attention_mask")
             assert hasattr(masks_obj, "all_assistant_mask")
             assert hasattr(masks_obj, "padded")
-        assert all(masks_obj.padded) == pad_output
+        if batch_size == "null":
+            assert masks_obj.padded == pad_output
+        else:
+            assert all(masks_obj.padded) == pad_output
 
         log_probs_obj = result["log_probs"]
         if pad_output:
@@ -386,7 +403,34 @@ class TestWrappers:
             assert hasattr(log_probs_obj, "response")
             assert hasattr(log_probs_obj, "full")
             assert hasattr(log_probs_obj, "padded")
-        assert all(log_probs_obj.padded) == pad_output
+        if batch_size == "null":
+            assert log_probs_obj.padded == pad_output
+        else:
+            assert all(log_probs_obj.padded) == pad_output
+
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_single_history_item_unsqueeze(
+        self, sample_history, wrapper_class, vllm_instance, transformers_instance
+    ):
+        """Test that the wrapper can handle a single history item."""
+        pad_output = False
+        generate = True
+        if wrapper_class == vLLMWrapper:
+            model, tokenizer = vllm_instance
+        else:
+            model, tokenizer = transformers_instance
+        wrapper = wrapper_class(model, tokenizer=tokenizer, input_mode="history")
+
+        data = TensorDict(
+            history=ChatHistory(prompt=sample_history[:, 0], batch_size=(2,)),
+            batch_size=(2,),
+        )
+        result = wrapper(data)
+        check_output_shapes(result, pad_output, requested_log_probs=not generate)
 
     # ================================================
     # Text Input Mode Tests
@@ -399,6 +443,7 @@ class TestWrappers:
     )
     @pytest.mark.parametrize("generate", [True, False], ids=["generate", "no_generate"])
     @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
+    @pytest.mark.parametrize("batch_size", ["null", 2])
     def test_text_input_mode(
         self,
         wrapper_class,
@@ -407,6 +452,7 @@ class TestWrappers:
         sample_text,
         generate,
         pad_output,
+        batch_size,
     ):
         """Test text input mode with various configurations."""
         model, tokenizer = vllm_instance
@@ -434,6 +480,8 @@ class TestWrappers:
             data = TensorDict(text=Text(prompt=sample_text), batch_size=(2,))
         else:
             data = TensorDict(text=Text(full=sample_text), batch_size=(2,))
+        if batch_size == "null":
+            data = data[0]
 
         # Run wrapper
         result = wrapper(data)
@@ -447,9 +495,15 @@ class TestWrappers:
         # Check text output
         text_obj = result["text"]
         if generate:
-            assert text_obj.prompt == sample_text
+            if batch_size == "null":
+                assert text_obj.prompt == sample_text[0]
+            else:
+                assert text_obj.prompt == sample_text
         else:
-            assert text_obj.full == sample_text
+            if batch_size == "null":
+                assert text_obj.full == sample_text[0]
+            else:
+                assert text_obj.full == sample_text
         if generate:
             assert text_obj.response is not None
 
@@ -458,7 +512,10 @@ class TestWrappers:
         if generate:
             if not pad_output:
                 response_tokens = tokens_obj.get("response", as_list=True)
-                assert isinstance(tokens_obj.get("response", as_list=True), list)
+                if batch_size == "null":
+                    assert isinstance(response_tokens, torch.Tensor)
+                else:
+                    assert isinstance(response_tokens, list)
             else:
                 assert isinstance(tokens_obj.response, torch.Tensor)
 
@@ -473,6 +530,7 @@ class TestWrappers:
     )
     @pytest.mark.parametrize("generate", [True, False], ids=["generate", "no_generate"])
     @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
+    @pytest.mark.parametrize("batch_size", ["null", 2])
     def test_tokens_input_mode(
         self,
         wrapper_class,
@@ -481,6 +539,7 @@ class TestWrappers:
         sample_tokens,
         generate,
         pad_output,
+        batch_size,
     ):
         """Test tokens input mode with various configurations."""
         if wrapper_class == vLLMWrapper:
@@ -512,6 +571,8 @@ class TestWrappers:
             attention_mask=attention_mask,
             batch_size=(2,),
         )
+        if batch_size == "null":
+            data = data[0]
 
         # Run wrapper
         result = wrapper(data)
@@ -527,7 +588,10 @@ class TestWrappers:
         if generate:
             if not pad_output:
                 response_tokens = result["tokens"].get("response", as_list=True)
-                assert isinstance(response_tokens, list)
+                if batch_size == "null":
+                    assert isinstance(response_tokens, torch.Tensor)
+                else:
+                    assert isinstance(response_tokens, list)
             else:
                 assert isinstance(tokens_obj.response, torch.Tensor)
 
@@ -541,7 +605,10 @@ class TestWrappers:
         ids=["vllm", "transformers"],
     )
     def test_invalid_input_mode(
-        self, wrapper_class, vllm_instance, transformers_instance
+        self,
+        wrapper_class,
+        vllm_instance,
+        transformers_instance,
     ):
         """Test that invalid input_mode raises an error."""
         if wrapper_class == vLLMWrapper:
@@ -616,8 +683,9 @@ class TestWrappers:
         [vLLMWrapper, TransformersWrapperMaxTokens],
         ids=["vllm", "transformers"],
     )
+    @pytest.mark.parametrize("batch_size", ["null", 2])
     def test_generate_false_without_log_probs(
-        self, wrapper_class, vllm_instance, transformers_instance
+        self, wrapper_class, vllm_instance, transformers_instance, batch_size
     ):
         """Test that generate=False without return_log_probs=True raises an error."""
         if wrapper_class == vLLMWrapper:
@@ -711,8 +779,14 @@ class TestWrappers:
         [vLLMWrapper, TransformersWrapperMaxTokens],
         ids=["vllm", "transformers"],
     )
+    @pytest.mark.parametrize("batch_size", ["null", 2])
     def test_custom_input_key(
-        self, wrapper_class, vllm_instance, transformers_instance, sample_history
+        self,
+        wrapper_class,
+        vllm_instance,
+        transformers_instance,
+        sample_history,
+        batch_size,
     ):
         """Test wrapper with custom input key."""
         if wrapper_class == vLLMWrapper:
@@ -736,6 +810,8 @@ class TestWrappers:
         data = TensorDict(
             custom_history_key=ChatHistory(prompt=sample_history), batch_size=(2,)
         )
+        if batch_size == "null":
+            data = data[0]
         result = wrapper(data)
         check_output_shapes(
             result, pad_output=wrapper.pad_output, requested_log_probs=False
@@ -758,6 +834,7 @@ class TestWrappers:
         [vLLMWrapper, TransformersWrapperMaxTokens],
         ids=["vllm", "transformers"],
     )
+    @pytest.mark.parametrize("batch_size", ["null", 2])
     def test_selective_outputs(
         self,
         wrapper_class,
@@ -765,6 +842,7 @@ class TestWrappers:
         transformers_instance,
         sample_history,
         return_log_probs,
+        batch_size,
     ):
         """Test wrapper with selective output configurations."""
         if wrapper_class == vLLMWrapper:
@@ -797,6 +875,8 @@ class TestWrappers:
 
         # Run wrapper
         data = TensorDict(history=ChatHistory(prompt=sample_history), batch_size=(2,))
+        if batch_size == "null":
+            data = data[0]
         result = wrapper(data)
         check_output_shapes(
             result, pad_output=wrapper.pad_output, requested_log_probs=False
@@ -821,12 +901,14 @@ class TestWrappers:
         [vLLMWrapper, TransformersWrapperMaxTokens],
         ids=["vllm", "transformers"],
     )
+    @pytest.mark.parametrize("batch_size", ["null", 2])
     def test_log_probs_only_mode(
         self,
         wrapper_class,
         vllm_instance,
         transformers_instance,
         sample_history_assistant,
+        batch_size,
     ):
         """Test wrapper in log-probs only mode (generate=False)."""
         if wrapper_class == vLLMWrapper:
@@ -845,6 +927,8 @@ class TestWrappers:
         data = TensorDict(
             history=ChatHistory(full=sample_history_assistant), batch_size=(2,)
         )
+        if batch_size == "null":
+            data = data[0]
         result = wrapper(data)
         check_output_shapes(
             result, pad_output=wrapper.pad_output, requested_log_probs=True
@@ -869,8 +953,14 @@ class TestWrappers:
         [vLLMWrapper, TransformersWrapperMaxTokens],
         ids=["vllm", "transformers"],
     )
+    @pytest.mark.parametrize("batch_size", ["null", 2])
     def test_tensorclass_structure(
-        self, wrapper_class, vllm_instance, transformers_instance, sample_history
+        self,
+        wrapper_class,
+        vllm_instance,
+        transformers_instance,
+        sample_history,
+        batch_size,
     ):
         """Test that TensorClass objects have the correct structure."""
         if wrapper_class == vLLMWrapper:
@@ -888,6 +978,8 @@ class TestWrappers:
         )
 
         data = TensorDict(history=ChatHistory(prompt=sample_history), batch_size=(2,))
+        if batch_size == "null":
+            data = data[0]
         result = wrapper(data)
 
         # Test Text TensorClass
@@ -939,8 +1031,14 @@ class TestWrappers:
         [vLLMWrapper, TransformersWrapperMaxTokens],
         ids=["vllm", "transformers"],
     )
+    @pytest.mark.parametrize("batch_size", ["null", 2])
     def test_unpadded_output_with_as_list(
-        self, wrapper_class, vllm_instance, transformers_instance, sample_history
+        self,
+        wrapper_class,
+        vllm_instance,
+        transformers_instance,
+        sample_history,
+        batch_size,
     ):
         """Test unpadded output using as_list=True to avoid stacking issues."""
         if wrapper_class == vLLMWrapper:
@@ -958,6 +1056,8 @@ class TestWrappers:
         )
 
         data = TensorDict(history=ChatHistory(prompt=sample_history), batch_size=(2,))
+        if batch_size == "null":
+            data = data[0]
         result = wrapper(data)
         check_output_shapes(
             result, pad_output=wrapper.pad_output, requested_log_probs=False
@@ -970,19 +1070,30 @@ class TestWrappers:
         log_probs_list = result.get("log_probs", as_list=True)
 
         # Check that we get lists
-        assert isinstance(text_list.response, list)
-        assert isinstance(tokens_list.get("response", as_list=True), list)
-        assert isinstance(log_probs_list.get("response", as_list=True), list)
+        if batch_size == "null":
+            assert isinstance(text_list.response, str)
+            assert isinstance(tokens_list.get("response", as_list=True), torch.Tensor)
+            assert isinstance(
+                log_probs_list.get("response", as_list=True), torch.Tensor
+            )
+        else:
+            assert isinstance(text_list.response, list)
+            assert isinstance(tokens_list.get("response", as_list=True), list)
+            assert isinstance(log_probs_list.get("response", as_list=True), list)
 
-        # Check list lengths
-        assert len(text_list.response) == 2
-        assert len(tokens_list.get("response", as_list=True)) == 2
-        assert len(log_probs_list.get("response", as_list=True)) == 2
+            # Check list lengths
+            assert len(text_list.response) == 2
+            assert len(tokens_list.get("response", as_list=True)) == 2
+            assert len(log_probs_list.get("response", as_list=True)) == 2
 
-        # Check that individual elements are tensors
-        assert isinstance(text_list.response[0], str)
-        assert isinstance(tokens_list.get("response", as_list=True)[0], torch.Tensor)
-        assert isinstance(log_probs_list.get("response", as_list=True)[0], torch.Tensor)
+            # Check that individual elements are tensors
+            assert isinstance(text_list.response[0], str)
+            assert isinstance(
+                tokens_list.get("response", as_list=True)[0], torch.Tensor
+            )
+            assert isinstance(
+                log_probs_list.get("response", as_list=True)[0], torch.Tensor
+            )
 
     @pytest.mark.parametrize("num_samples", [2], ids=["num_samples_2"])
     @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
@@ -997,6 +1108,7 @@ class TestWrappers:
         [vLLMWrapper, TransformersWrapperMaxTokens],
         ids=["vllm", "transformers"],
     )
+    @pytest.mark.parametrize("batch_size", ["null", 2])
     def test_num_samples(
         self,
         wrapper_class,
@@ -1009,6 +1121,7 @@ class TestWrappers:
         pad_output,
         return_log_probs,
         input_mode,
+        batch_size,
     ):
         """Test wrapper with num_samples."""
         if wrapper_class == vLLMWrapper:
@@ -1035,8 +1148,13 @@ class TestWrappers:
             data = TensorDict(tokens=Tokens(prompt=sample_tokens[0]), batch_size=(2,))
         else:
             raise ValueError(f"Invalid input mode: {input_mode}")
+        if batch_size == "null":
+            data = data[0]
         result = wrapper(data)
-        assert result.batch_size == (2, num_samples)
+        if batch_size == "null":
+            assert result.batch_size == (num_samples,)
+        else:
+            assert result.batch_size == (2, num_samples)
         check_output_shapes(
             result, pad_output=wrapper.pad_output, requested_log_probs=False
         )
