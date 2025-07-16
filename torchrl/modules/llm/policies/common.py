@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import warnings
 import weakref
 from typing import Any, Literal, overload
 
@@ -170,6 +171,33 @@ class ChatHistory(TensorClass["nocast"]):
             data_cls=cls,
             step_mdp_static=True,
         )
+
+    def __post_init__(self):
+        # Check that all history objects have one more batch dimension than the ChatHistory object
+        if self.prompt is not None:
+            if self.prompt.batch_dims != self.batch_dims + 1:
+                warnings.warn(
+                    "Prompt history should have one more batch dimension than the ChatHistory object to handle multi-turn conversations, "
+                    f"got {self.prompt.batch_dims} and {self.batch_dims}. "
+                    "The batch dimension of the ChatHistory object will be unsqueezed along the last dimension."
+                )
+                self.prompt = self.prompt.unsqueeze(-1)
+        if self.response is not None:
+            if self.response.batch_dims != self.batch_dims + 1:
+                warnings.warn(
+                    "Response history should have one more batch dimension than the ChatHistory object to handle multi-turn conversations, "
+                    f"got {self.response.batch_dims} and {self.batch_dims}. "
+                    "The batch dimension of the ChatHistory object will be unsqueezed along the last dimension."
+                )
+                self.response = self.response.unsqueeze(-1)
+        if self.full is not None:
+            if self.full.batch_dims != self.batch_dims + 1:
+                warnings.warn(
+                    "Full history should have one more batch dimension than the ChatHistory object to handle multi-turn conversations, "
+                    f"got {self.full.batch_dims} and {self.batch_dims}. "
+                    "The batch dimension of the ChatHistory object will be unsqueezed along the last dimension."
+                )
+                self.full = self.full.unsqueeze(-1)
 
 
 class LogProbs(TensorClass["nocast"]):
