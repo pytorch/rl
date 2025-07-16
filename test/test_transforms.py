@@ -10383,6 +10383,78 @@ def test_added_transforms_are_in_eval_mode():
 
 
 class TestTransformedEnv:
+    class DummyCompositeEnv(EnvBase):  # type: ignore[misc]
+        """A dummy environment with a composite action set."""
+
+        def __init__(self) -> None:
+            super().__init__()
+
+            self.observation_spec = Composite(
+                observation=UnboundedContinuous((*self.batch_size, 3))
+            )
+
+            self.action_spec = Composite(
+                action=Composite(
+                    head_0=Composite(
+                        action=Categorical(2, (*self.batch_size, 1), dtype=torch.bool)
+                    ),
+                    head_1=Composite(
+                        action=Categorical(2, (*self.batch_size, 1), dtype=torch.bool)
+                    ),
+                )
+            )
+
+            self.done_spec = Categorical(2, (*self.batch_size, 1), dtype=torch.bool)
+
+            self.full_done_spec["truncated"] = self.full_done_spec["terminated"].clone()
+
+            self.reward_spec = UnboundedContinuous(*self.batch_size, 1)
+
+        def _reset(self, tensordict: TensorDict) -> TensorDict:
+            return TensorDict(
+                {"observation": torch.randn((*self.batch_size, 3)), "done": False}
+            )
+
+        def _step(self, tensordict: TensorDict) -> TensorDict:
+            return TensorDict(
+                {
+                    "observation": torch.randn((*self.batch_size, 3)),
+                    "done": False,
+                    "reward": torch.randn((*self.batch_size, 1)),
+                }
+            )
+
+        def _set_seed(self, seed: int) -> None:
+            pass
+
+    class PatchedRenameTransform(RenameTransform):  # type: ignore[misc]
+        """
+        Fixes a bug in the RenameTransform due to modifying the input_spec of the `base_env` to be transformed.
+        This is fixed by adding a clone to break stateful modifications to proapagate to the `base_env`.
+        """
+
+        def transform_input_spec(self, input_spec: Composite) -> Composite:
+            input_spec = input_spec.clone()
+            return super().transform_input_spec(input_spec)
+
+    def test_no_modif_specs(self) -> None:
+        base_env = self.DummyCompositeEnv()
+        specs = base_env.specs.clone()
+        transformed_env = TransformedEnv(
+            base_env,
+            RenameTransform(
+                in_keys=[],
+                out_keys=[],
+                in_keys_inv=[("action", "head_0", "action")],
+                out_keys_inv=[("action", "head_99", "action")],
+            ),
+        )
+        td = transformed_env.reset()
+        # A second reset with a TD passed fails due to override of the `input_spec`
+        td = transformed_env.reset(td)
+        specs_after = base_env.specs.clone()
+        assert specs == specs_after
+
     @pytest.mark.filterwarnings("error")
     def test_nested_transformed_env(self):
         base_env = ContinuousActionVecMockEnv()

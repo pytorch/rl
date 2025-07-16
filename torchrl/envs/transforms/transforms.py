@@ -1211,7 +1211,6 @@ but got an object of type {type(transform)}."""
         if tensordict is not None:
             # We must avoid modifying the original tensordict so a shallow copy is necessary.
             # We just select the input data and reset signal, which is all we need.
-            self.transform.transform_input_spec(self.base_env.input_spec.unlock_())
             tensordict = tensordict.select(
                 *self.reset_keys, *self.state_spec.keys(True, True), strict=False
             )
