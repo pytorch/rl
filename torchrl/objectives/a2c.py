@@ -70,7 +70,7 @@ class A2CLoss(LossModule):
             samples will be used to compute this estimate.
             Defaults to ``1``.
         entropy_coeff (:obj:`float`): the weight of the entropy loss. Defaults to `0.01``.
-        critic_coef (:obj:`float`): the weight of the critic loss. Defaults to ``1.0``. If ``None``, the critic
+        critic_coeff (:obj:`float`): the weight of the critic loss. Defaults to ``1.0``. If ``None``, the critic
             loss won't be included and the in-keys will miss the critic inputs.
         loss_critic_type (str): loss function for the value discrepancy.
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
@@ -156,7 +156,7 @@ class A2CLoss(LossModule):
     the expected keyword arguments are:
     ``["action", "next_reward", "next_done", "next_terminated"]`` + in_keys of the actor and critic.
     The return value is a tuple of tensors in the following order:
-    ``["loss_objective"]`` + ``["loss_critic"]`` if critic_coef is not None + ``["entropy", "loss_entropy"]`` if entropy_bonus is True and critic_coef is not None
+    ``["loss_objective"]`` + ``["loss_critic"]`` if critic_coeff is not None + ``["entropy", "loss_entropy"]`` if entropy_bonus is True and critic_coeff is not None
 
     Examples:
         >>> import torch
@@ -277,8 +277,8 @@ class A2CLoss(LossModule):
         *,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
-        entropy_coeff: float = 0.01,
-        critic_coef: float = 1.0,
+        entropy_coeff: float | None = None,
+        critic_coeff: float = 1.0,
         loss_critic_type: str = "smooth_l1",
         gamma: float | None = None,
         separate_losses: bool = False,
@@ -291,12 +291,31 @@ class A2CLoss(LossModule):
         clip_value: float | None = None,
         **kwargs,
     ):
+        # Handle deprecated entropy_coef argument
         if "entropy_coef" in kwargs:
+            if entropy_coeff is not None:  # Check if entropy_coeff was explicitly set
+                raise ValueError(
+                    "Cannot specify both 'entropy_coef' and 'entropy_coeff'"
+                )
             warnings.warn(
                 "'entropy_coef' is deprecated and will be removed in torchrl v0.11. Please use 'entropy_coeff' instead.",
                 DeprecationWarning,
             )
             entropy_coeff = kwargs.pop("entropy_coef")
+
+        # Set default value if None
+        if entropy_coeff is None:
+            entropy_coeff = 0.01
+
+        # Handle deprecated critic_coef argument
+        if "critic_coef" in kwargs:
+            if critic_coeff != 1.0:  # Check if critic_coeff was explicitly set
+                raise ValueError("Cannot specify both 'critic_coef' and 'critic_coeff'")
+            warnings.warn(
+                "'critic_coef' is deprecated and will be removed in torchrl v0.11. Please use 'critic_coeff' instead.",
+                DeprecationWarning,
+            )
+            critic_coeff = kwargs.pop("critic_coef")
 
         if actor is not None:
             actor_network = actor
@@ -349,12 +368,12 @@ class A2CLoss(LossModule):
         self.register_buffer(
             "entropy_coeff", torch.as_tensor(entropy_coeff, device=device)
         )
-        if critic_coef is not None:
+        if critic_coeff is not None:
             self.register_buffer(
-                "critic_coef", torch.as_tensor(critic_coef, device=device)
+                "critic_coeff", torch.as_tensor(critic_coeff, device=device)
             )
         else:
-            self.critic_coef = None
+            self.critic_coeff = None
 
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
@@ -399,7 +418,7 @@ class A2CLoss(LossModule):
             *self.actor_network.in_keys,
             *[("next", key) for key in self.actor_network.in_keys],
         ]
-        if self.critic_coef is not None:
+        if self.critic_coeff is not None:
             keys.extend(self.critic_network.in_keys)
         return list(set(keys))
 
@@ -407,7 +426,7 @@ class A2CLoss(LossModule):
     def out_keys(self):
         if self._out_keys is None:
             outs = ["loss_objective"]
-            if self.critic_coef is not None:
+            if self.critic_coeff is not None:
                 outs.append("loss_critic")
             if self.entropy_bonus:
                 outs.append("entropy")
@@ -478,7 +497,7 @@ class A2CLoss(LossModule):
         return log_prob, dist
 
     def loss_critic(self, tensordict: TensorDictBase) -> tuple[torch.Tensor, float]:
-        """Returns the loss value of the critic, multiplied by ``critic_coef`` if it is not ``None``.
+        """Returns the loss value of the critic, multiplied by ``critic_coeff`` if it is not ``None``.
 
         Returns the loss and the clip-fraction.
 
@@ -539,8 +558,8 @@ class A2CLoss(LossModule):
             "target_actor_network_params",
             "target_critic_network_params",
         )
-        if self.critic_coef is not None:
-            return self.critic_coef * loss_value, clip_fraction
+        if self.critic_coeff is not None:
+            return self.critic_coeff * loss_value, clip_fraction
         return loss_value, clip_fraction
 
     @property
@@ -568,7 +587,7 @@ class A2CLoss(LossModule):
             entropy = self.get_entropy_bonus(dist)
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coeff * entropy)
-        if self.critic_coef is not None:
+        if self.critic_coeff is not None:
             loss_critic, value_clip_fraction = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic)
             if value_clip_fraction is not None:
