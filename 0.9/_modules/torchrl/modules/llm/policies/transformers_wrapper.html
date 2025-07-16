@@ -891,15 +891,29 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
         <span class="n">tensordict_out</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">logits_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="n">tensordict_orig</span> <span class="o">=</span> <span class="n">tensordict</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">tensordict_out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;tensordict_out must not be provided when tensordict.ndim == 0. If this is needed, &quot;</span>
+                    <span class="s2">&quot;please submit an issue on github.&quot;</span>
+                <span class="p">)</span>
             <span class="c1"># unsqueeze - squeeze the input</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="p">(</span><span class="n">lazy_stack</span><span class="p">([</span><span class="n">tensordict</span><span class="p">]))[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">lazy_stack</span><span class="p">([</span><span class="n">tensordict</span><span class="p">]),</span> <span class="n">logits_only</span><span class="o">=</span><span class="n">logits_only</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
         <span class="k">elif</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">tensordict_out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;tensordict_out must not be provided when tensordict.ndim &gt; 1. If this is needed, &quot;</span>
+                    <span class="s2">&quot;please submit an issue on github.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">logits_only</span><span class="o">=</span><span class="n">logits_only</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span>
+                <span class="n">tensordict</span><span class="o">.</span><span class="n">shape</span>
+            <span class="p">)</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">LazyStackedTensorDict</span><span class="p">):</span>
             <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">to_lazystack</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
@@ -939,17 +953,23 @@
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">generate</span><span class="p">:</span>
                 <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_from_transformers_generate_history</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_from_transformers_logprobs_history</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span>
+                <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_from_transformers_logprobs_history</span><span class="p">(</span>
+                    <span class="n">tensordict</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">out</span><span class="p">,</span> <span class="n">logits_only</span><span class="o">=</span><span class="n">logits_only</span>
+                <span class="p">)</span>
         <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_mode</span> <span class="o">==</span> <span class="s2">&quot;text&quot;</span><span class="p">:</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">generate</span><span class="p">:</span>
                 <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_from_transformers_generate_text</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_from_transformers_logprobs_text</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span>
+                <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_from_transformers_logprobs_text</span><span class="p">(</span>
+                    <span class="n">tensordict</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">out</span><span class="p">,</span> <span class="n">logits_only</span><span class="o">=</span><span class="n">logits_only</span>
+                <span class="p">)</span>
         <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_mode</span> <span class="o">==</span> <span class="s2">&quot;tokens&quot;</span><span class="p">:</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">generate</span><span class="p">:</span>
                 <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_from_transformers_generate_tokens</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_from_transformers_logprobs_tokens</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span>
+                <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_from_transformers_logprobs_tokens</span><span class="p">(</span>
+                    <span class="n">tensordict</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">out</span><span class="p">,</span> <span class="n">logits_only</span><span class="o">=</span><span class="n">logits_only</span>
+                <span class="p">)</span>
 
         <span class="k">if</span> <span class="n">_source_device</span><span class="p">:</span>
             <span class="n">out</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">_source_device</span><span class="p">)</span>
@@ -1112,7 +1132,7 @@
         <span class="n">result</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">history_key</span><span class="p">,</span> <span class="n">history_chat</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">result</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_from_transformers_logprobs_history</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">td</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">out</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_from_transformers_logprobs_history</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">td</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">out</span><span class="p">,</span> <span class="n">logits_only</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute log-probs from history input.&quot;&quot;&quot;</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span>
 
@@ -1153,7 +1173,9 @@
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;Expected TensorDictBase for history input, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">response_tokens</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
-        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_logprobs_from_history_tokens</span><span class="p">(</span><span class="n">response_tokens</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_logprobs_from_history_tokens</span><span class="p">(</span>
+            <span class="n">response_tokens</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">out</span><span class="p">,</span> <span class="n">logits_only</span><span class="o">=</span><span class="n">logits_only</span>
+        <span class="p">)</span>
         <span class="n">text_result</span> <span class="o">=</span> <span class="n">Text</span><span class="o">.</span><span class="n">_from_tensordict</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">empty</span><span class="p">())</span>
         <span class="n">result</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">text_key</span><span class="p">,</span> <span class="n">text_result</span><span class="p">)</span>
         <span class="n">result</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">text_key</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">text_full</span>
@@ -1374,7 +1396,9 @@
                 <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">cast</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">result</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_logprobs_from_history_tokens</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response_tokens</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">out</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_logprobs_from_history_tokens</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">response_tokens</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">out</span><span class="p">,</span> <span class="n">logits_only</span><span class="o">=</span><span class="kc">False</span>
+    <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute log-probs from history tokens.&quot;&quot;&quot;</span>
         <span class="n">pad_val</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">pad_token_id</span>
 
@@ -1418,6 +1442,7 @@
             <span class="n">tokens_full_padded</span><span class="p">,</span>
             <span class="n">attention_mask_full_padded</span><span class="p">,</span>
             <span class="n">pad_val</span><span class="p">,</span>
+            <span class="n">logits_only</span><span class="o">=</span><span class="n">logits_only</span><span class="p">,</span>
         <span class="p">)</span>
 
         <span class="c1"># Build output TensorClass objects</span>
@@ -1473,19 +1498,20 @@
         <span class="n">tokens_obj</span><span class="o">.</span><span class="n">padded</span> <span class="o">=</span> <span class="n">MetaData</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">)</span>
         <span class="n">out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tokens_key</span><span class="p">,</span> <span class="n">tokens_obj</span><span class="p">)</span>
 
-        <span class="n">log_probs_obj</span> <span class="o">=</span> <span class="n">LogProbs</span><span class="o">.</span><span class="n">_from_tensordict</span><span class="p">(</span>
-            <span class="n">TensorDict</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="n">out</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span><span class="o">.</span><span class="n">to_lazystack</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-        <span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">:</span>
-            <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">full</span> <span class="o">=</span> <span class="n">log_probs_full_padded</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">log_probs_full_unpadded</span> <span class="o">=</span> <span class="n">_unpad_tensors</span><span class="p">(</span>
-                <span class="n">log_probs_full_padded</span><span class="p">,</span> <span class="n">attention_mask_full_padded</span><span class="p">,</span> <span class="n">as_nested</span><span class="o">=</span><span class="kc">False</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">logits_only</span><span class="p">:</span>
+            <span class="n">log_probs_obj</span> <span class="o">=</span> <span class="n">LogProbs</span><span class="o">.</span><span class="n">_from_tensordict</span><span class="p">(</span>
+                <span class="n">TensorDict</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="n">out</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span><span class="o">.</span><span class="n">to_lazystack</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
             <span class="p">)</span>
-            <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">full</span> <span class="o">=</span> <span class="n">log_probs_full_unpadded</span>
-        <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">response</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">padded</span> <span class="o">=</span> <span class="n">MetaData</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">)</span>
-        <span class="n">out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">log_probs_key</span><span class="p">,</span> <span class="n">log_probs_obj</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">:</span>
+                <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">full</span> <span class="o">=</span> <span class="n">log_probs_full_padded</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">log_probs_full_unpadded</span> <span class="o">=</span> <span class="n">_unpad_tensors</span><span class="p">(</span>
+                    <span class="n">log_probs_full_padded</span><span class="p">,</span> <span class="n">attention_mask_full_padded</span><span class="p">,</span> <span class="n">as_nested</span><span class="o">=</span><span class="kc">False</span>
+                <span class="p">)</span>
+                <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">full</span> <span class="o">=</span> <span class="n">log_probs_full_unpadded</span>
+            <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">response</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">padded</span> <span class="o">=</span> <span class="n">MetaData</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">)</span>
+            <span class="n">out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">log_probs_key</span><span class="p">,</span> <span class="n">log_probs_obj</span><span class="p">)</span>
 
         <span class="c1"># Add logits to output if we&#39;re in a get_dist call</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_in_get_dist_call</span><span class="p">:</span>
@@ -1517,7 +1543,7 @@
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected list of text for text input, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">text</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_generate_from_text</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_from_transformers_logprobs_text</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">td</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">out</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_from_transformers_logprobs_text</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">td</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">out</span><span class="p">,</span> <span class="n">logits_only</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute log-probs from text input.&quot;&quot;&quot;</span>
         <span class="c1"># Validate input</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">td</span><span class="p">:</span>
@@ -1590,6 +1616,7 @@
             <span class="n">input_ids_full_padded</span><span class="p">,</span>
             <span class="n">attention_mask_full_padded</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">pad_token_id</span><span class="p">,</span>
+            <span class="n">logits_only</span><span class="o">=</span><span class="n">logits_only</span><span class="p">,</span>
         <span class="p">)</span>
 
         <span class="c1"># Build output TensorClass objects</span>
@@ -1634,19 +1661,20 @@
         <span class="n">masks_obj</span><span class="o">.</span><span class="n">padded</span> <span class="o">=</span> <span class="n">MetaData</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">)</span>
         <span class="n">out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">masks_key</span><span class="p">,</span> <span class="n">masks_obj</span><span class="p">)</span>
 
-        <span class="n">log_probs_obj</span> <span class="o">=</span> <span class="n">LogProbs</span><span class="o">.</span><span class="n">_from_tensordict</span><span class="p">(</span>
-            <span class="n">TensorDict</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="n">out</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span><span class="o">.</span><span class="n">to_lazystack</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-        <span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">:</span>
-            <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">full</span> <span class="o">=</span> <span class="n">log_probs_full_padded</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">log_probs_full_unpadded</span> <span class="o">=</span> <span class="n">_unpad_tensors</span><span class="p">(</span>
-                <span class="n">log_probs_full_padded</span><span class="p">,</span> <span class="n">attention_mask_full_padded</span><span class="p">,</span> <span class="n">as_nested</span><span class="o">=</span><span class="kc">False</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">logits_only</span><span class="p">:</span>
+            <span class="n">log_probs_obj</span> <span class="o">=</span> <span class="n">LogProbs</span><span class="o">.</span><span class="n">_from_tensordict</span><span class="p">(</span>
+                <span class="n">TensorDict</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="n">out</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span><span class="o">.</span><span class="n">to_lazystack</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
             <span class="p">)</span>
-            <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">full</span> <span class="o">=</span> <span class="n">log_probs_full_unpadded</span>
-        <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">response</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">padded</span> <span class="o">=</span> <span class="n">MetaData</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">)</span>
-        <span class="n">out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">log_probs_key</span><span class="p">,</span> <span class="n">log_probs_obj</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">:</span>
+                <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">full</span> <span class="o">=</span> <span class="n">log_probs_full_padded</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">log_probs_full_unpadded</span> <span class="o">=</span> <span class="n">_unpad_tensors</span><span class="p">(</span>
+                    <span class="n">log_probs_full_padded</span><span class="p">,</span> <span class="n">attention_mask_full_padded</span><span class="p">,</span> <span class="n">as_nested</span><span class="o">=</span><span class="kc">False</span>
+                <span class="p">)</span>
+                <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">full</span> <span class="o">=</span> <span class="n">log_probs_full_unpadded</span>
+            <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">response</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">padded</span> <span class="o">=</span> <span class="n">MetaData</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">)</span>
+            <span class="n">out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">log_probs_key</span><span class="p">,</span> <span class="n">log_probs_obj</span><span class="p">)</span>
 
         <span class="c1"># Add logits to output if we&#39;re in a get_dist call</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_in_get_dist_call</span><span class="p">:</span>
@@ -1838,7 +1866,11 @@
         <span class="k">return</span> <span class="n">out</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_from_transformers_logprobs_tokens</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">td</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">cfg</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">out</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">td</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+        <span class="n">cfg</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">out</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+        <span class="n">logits_only</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute log-probs from tokens input.&quot;&quot;&quot;</span>
         <span class="c1"># Validate input</span>
@@ -1892,6 +1924,7 @@
             <span class="n">input_ids_full_padded</span><span class="p">,</span>
             <span class="n">attention_mask_full_padded</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">pad_token_id</span><span class="p">,</span>
+            <span class="n">logits_only</span><span class="o">=</span><span class="n">logits_only</span><span class="p">,</span>
         <span class="p">)</span>
 
         <span class="c1"># Build output TensorClass objects</span>
@@ -1936,19 +1969,20 @@
         <span class="n">masks_obj</span><span class="o">.</span><span class="n">padded</span> <span class="o">=</span> <span class="n">MetaData</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">)</span>
         <span class="n">out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">masks_key</span><span class="p">,</span> <span class="n">masks_obj</span><span class="p">)</span>
 
-        <span class="n">log_probs_obj</span> <span class="o">=</span> <span class="n">LogProbs</span><span class="o">.</span><span class="n">_from_tensordict</span><span class="p">(</span>
-            <span class="n">TensorDict</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="n">out</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span><span class="o">.</span><span class="n">to_lazystack</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-        <span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">:</span>
-            <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">full</span> <span class="o">=</span> <span class="n">log_probs_full_padded</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">log_probs_full_unpadded</span> <span class="o">=</span> <span class="n">_unpad_tensors</span><span class="p">(</span>
-                <span class="n">log_probs_full_padded</span><span class="p">,</span> <span class="n">attention_mask_full_padded</span><span class="p">,</span> <span class="n">as_nested</span><span class="o">=</span><span class="kc">False</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">logits_only</span><span class="p">:</span>
+            <span class="n">log_probs_obj</span> <span class="o">=</span> <span class="n">LogProbs</span><span class="o">.</span><span class="n">_from_tensordict</span><span class="p">(</span>
+                <span class="n">TensorDict</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="n">out</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span><span class="o">.</span><span class="n">to_lazystack</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
             <span class="p">)</span>
-            <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">full</span> <span class="o">=</span> <span class="n">log_probs_full_unpadded</span>
-        <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">response</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">padded</span> <span class="o">=</span> <span class="n">MetaData</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">)</span>
-        <span class="n">out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">log_probs_key</span><span class="p">,</span> <span class="n">log_probs_obj</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">:</span>
+                <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">full</span> <span class="o">=</span> <span class="n">log_probs_full_padded</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">log_probs_full_unpadded</span> <span class="o">=</span> <span class="n">_unpad_tensors</span><span class="p">(</span>
+                    <span class="n">log_probs_full_padded</span><span class="p">,</span> <span class="n">attention_mask_full_padded</span><span class="p">,</span> <span class="n">as_nested</span><span class="o">=</span><span class="kc">False</span>
+                <span class="p">)</span>
+                <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">full</span> <span class="o">=</span> <span class="n">log_probs_full_unpadded</span>
+            <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">response</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">log_probs_obj</span><span class="o">.</span><span class="n">padded</span> <span class="o">=</span> <span class="n">MetaData</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span><span class="p">)</span>
+            <span class="n">out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">log_probs_key</span><span class="p">,</span> <span class="n">log_probs_obj</span><span class="p">)</span>
 
         <span class="c1"># Add logits to output if we&#39;re in a get_dist call</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_in_get_dist_call</span><span class="p">:</span>
@@ -1989,7 +2023,7 @@
         <span class="k">return</span> <span class="n">log_probs</span><span class="p">,</span> <span class="n">logits</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_compute_log_probs_from_model_output</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">model_output</span><span class="p">,</span> <span class="n">input_ids</span><span class="p">,</span> <span class="n">attention_mask</span><span class="p">,</span> <span class="n">pad_val</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">model_output</span><span class="p">,</span> <span class="n">input_ids</span><span class="p">,</span> <span class="n">attention_mask</span><span class="p">,</span> <span class="n">pad_val</span><span class="p">,</span> <span class="n">logits_only</span><span class="o">=</span><span class="kc">False</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute log-probs from model output without modifying original tensors.</span>
 
@@ -1998,6 +2032,7 @@
 <span class="sd">            input_ids: Original input token ids</span>
 <span class="sd">            attention_mask: Original attention mask</span>
 <span class="sd">            pad_val: Padding token value to ignore in loss computation</span>
+<span class="sd">            logits_only: Whether to return only the logits.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            tuple: (log_probs, shifted_logits) where log_probs are the computed log probabilities</span>
@@ -2022,6 +2057,8 @@
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;The logits shape </span><span class="si">{</span><span class="n">shifted_logits</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> does not match the input ids shape </span><span class="si">{</span><span class="n">shifted_input_ids</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
+        <span class="k">if</span> <span class="n">logits_only</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="n">shifted_logits</span>
 
         <span class="c1"># Compute log-probs</span>
         <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>

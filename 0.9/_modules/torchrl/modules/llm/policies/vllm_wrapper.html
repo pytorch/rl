@@ -923,15 +923,29 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
         <span class="n">tensordict_out</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">logits_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="n">tensordict_orig</span> <span class="o">=</span> <span class="n">tensordict</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">tensordict_out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;tensordict_out must not be provided when tensordict.ndim == 0. If this is needed, &quot;</span>
+                    <span class="s2">&quot;please submit an issue on github.&quot;</span>
+                <span class="p">)</span>
             <span class="c1"># unsqueeze - squeeze the input</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="p">(</span><span class="n">lazy_stack</span><span class="p">([</span><span class="n">tensordict</span><span class="p">]))[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">lazy_stack</span><span class="p">([</span><span class="n">tensordict</span><span class="p">]),</span> <span class="n">logits_only</span><span class="o">=</span><span class="n">logits_only</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
         <span class="k">elif</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">tensordict_out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;tensordict_out must not be provided when tensordict.ndim &gt; 1. If this is needed, &quot;</span>
+                    <span class="s2">&quot;please submit an issue on github.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">logits_only</span><span class="o">=</span><span class="n">logits_only</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span>
+                <span class="n">tensordict</span><span class="o">.</span><span class="n">shape</span>
+            <span class="p">)</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">LazyStackedTensorDict</span><span class="p">):</span>
             <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">to_lazystack</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
