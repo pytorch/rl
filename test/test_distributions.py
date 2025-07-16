@@ -554,6 +554,54 @@ class TestMaskedCategorical:
             data = data.unsqueeze(0)
         torch.testing.assert_close(dist.log_prob(data), dist_ce.log_prob(data))
 
+    def test_cross_entropy_random(self):
+        torch.manual_seed(0)
+        logits = torch.randn(4)
+        probs = F.softmax(logits, dim=-1)
+        mask = torch.tensor([True, False, True, True])
+        indices = torch.tensor([0, 2, 3])
+        ref_probs = probs.masked_fill(~mask, 0.0)
+        ref_probs /= ref_probs.sum(dim=-1, keepdim=True)
+
+        dist0 = MaskedCategorical(
+            logits=logits,
+            indices=indices,
+            use_cross_entropy=True,
+        )
+        dist1 = MaskedCategorical(
+            logits=logits,
+            indices=indices,
+            use_cross_entropy=False,
+        )
+        r = dist0.sample()
+        lp0 = dist0.log_prob(r)
+        lp1 = dist1.log_prob(r)
+        torch.testing.assert_close(lp0, lp1)
+
+    def test_crossentropy_batch(self) -> None:
+        batch_size = (
+            2,
+            3,
+            4,
+        )  # typical tensor shape [N, T, A] ie, (batch_size, sequence_length, num_agents)
+
+        masks = torch.tensor([[True, False, True, False, True]], dtype=torch.bool)
+        logits = torch.randn((5,)).expand(
+            *batch_size, -1
+        )  # has shape [N, T, A, num_actions] during train
+        action = torch.tensor(0, dtype=torch.long).expand(
+            *batch_size
+        )  # has shape [N, T, A] during train
+
+        fixed_cat = MaskedCategorical(
+            logits=logits, mask=masks, use_cross_entropy=False
+        )
+        lp0 = fixed_cat.log_prob(action)
+
+        cat = MaskedCategorical(logits=logits, mask=masks, use_cross_entropy=True)
+        lp1 = cat.log_prob(action)
+        torch.testing.assert_close(lp0, lp1)
+
 
 class TestOneHotCategorical:
     def test_one_hot(self):
