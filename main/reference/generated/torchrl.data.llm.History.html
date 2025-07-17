@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+bec8f03) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.9.0+4001d9c) &#x25BC</span></a>
     </div>
     
 
@@ -589,6 +589,54 @@ type Field.</p>
 </ul>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.llm.History.from_text">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_text</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">text</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chat_template_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chat_template</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tokenizer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">transformers.AutoTokenizer</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">transformers.AutoProcessor</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrl.data.llm.History" title="torchrl.data.llm.History"><span class="pre">History</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/data/llm/history.html#History.from_text"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.llm.History.from_text" title="Permalink to this definition">¶</a></dt>
+<dd><p>Inverts a chat template into a History object.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>text</strong> (<em>str</em><em> | </em><em>list</em><em>[</em><em>str</em><em>]</em>) – The chat template to invert.</p></li>
+<li><p><strong>chat_template_name</strong> (<em>str</em><em>, </em><em>optional</em>) – The name of the chat template to use.</p></li>
+<li><p><strong>tokenizer</strong> (<em>transformers.AutoTokenizer</em><em> | </em><em>transformers.AutoProcessor</em><em>, </em><em>optional</em>) – The tokenizer to use.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The inverted History object.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#torchrl.data.llm.History" title="torchrl.data.llm.History">History</a></p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.llm.history</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutoTokenizer</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="s2">&quot;Qwen/Qwen2.5-7B-Instruct&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">text</span> <span class="o">=</span> <span class="s2">&quot;&lt;|im_start|&gt;system</span><span class="se">\n</span><span class="s2">You are a helpful assistant.</span><span class="se">\n</span><span class="s2">&lt;|im_end|&gt;</span><span class="se">\n</span><span class="s2">&lt;|im_start|&gt;user</span><span class="se">\n</span><span class="s2">Write a python script that gives the capital of France or Germany.</span><span class="se">\n</span><span class="s2">&lt;|im_end|&gt;</span><span class="se">\n</span><span class="s2">&lt;|im_start|&gt;assistant</span><span class="se">\n</span><span class="s2">&lt;think&gt;The capital of France is Paris, the capital of Germany is Berlin.&lt;/think&gt;</span><span class="se">\n</span><span class="s2">&lt;answer&gt;&lt;python&gt;</span><span class="se">\n</span><span class="s2">&quot;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">history</span> <span class="o">=</span> <span class="n">History</span><span class="o">.</span><span class="n">from_text</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">history</span><span class="p">)</span>
+<span class="go">History(</span>
+<span class="go">    content=NonTensorStack(</span>
+<span class="go">        [&#39;You are a helpful assistant.&#39;, &#39;Write a python s...,</span>
+<span class="go">        batch_size=torch.Size([3]),</span>
+<span class="go">        device=None),</span>
+<span class="go">    is_complete=NonTensorStack(</span>
+<span class="go">        [True, True, False],</span>
+<span class="go">        batch_size=torch.Size([3]),</span>
+<span class="go">        device=None),</span>
+<span class="go">    role=NonTensorStack(</span>
+<span class="go">        [&#39;system&#39;, &#39;user&#39;, &#39;assistant&#39;],</span>
+<span class="go">        batch_size=torch.Size([3]),</span>
+<span class="go">        device=None),</span>
+<span class="go">    tool_calls=None,</span>
+<span class="go">    tool_responses=None,</span>
+<span class="go">    batch_size=torch.Size([3]),</span>
+<span class="go">    device=None,</span>
+<span class="go">    is_shared=False)</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <dl class="py method">
