@@ -1,12 +1,26 @@
 # env and task
 env:
-  name: MiniGrid-Empty-5x5-v0 # MiniGrid environment for discrete action space
+  name: CartPole-v1 # CartPole environment for discrete action space
   task: ""
   library: minari
   n_samples_stats: 1000
   seed: 0
   backend: gymnasium  
-  
+
+# Collector
+collector:
+  frames_per_batch: 200
+  total_frames: 1_000_000
+  multi_step: 0
+  init_random_frames: 1000
+  env_per_collector: 1
+  device:
+  max_frames_per_traj: 200
+  annealing_frames: 10000
+  eps_start: 1.0
+  eps_end: 0.01
+
+
 # logger
 logger:
   backend: wandb
@@ -22,7 +36,7 @@ logger:
 # replay buffer
 replay_buffer:
   env: CartPole-v1
-  dataset: CartPole-v1-random-v0
+  dataset: CartPole-v2-random-v1
   batch_size: 128
   episodes: 1000
 

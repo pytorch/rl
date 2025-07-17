@@ -200,6 +200,7 @@ def make_offline_replay_buffer(rb_cfg):
 def make_offline_discrete_replay_buffer(rb_cfg):
     import gymnasium as gym
     from minari import DataCollector
+    import minari
 
     # Create custom minari dataset from environment
 
@@ -233,6 +234,17 @@ def make_offline_discrete_replay_buffer(rb_cfg):
     
     data.append_transform(DoubleToFloat())
 
+    def transform_data(data):
+        data*=1
+    with torch.enable_grad():
+        data.append_transform(
+            transform_data,
+            invert=True,
+        )
+
+    # Clean up
+
+    minari.delete_dataset(rb_cfg.dataset)
     return data
 
 # ====================================================================

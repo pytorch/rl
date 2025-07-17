@@ -69,20 +69,19 @@ def main(cfg):  # noqa: F821
     replay_buffer = make_offline_discrete_replay_buffer(cfg.replay_buffer)
 
     # Create env
-    train_env, eval_env = make_environment(
-        cfg, train_num_envs=1, eval_num_envs=cfg.logger.eval_envs, logger=logger
-    )
+    train_env, eval_env = make_environment(cfg)
 
     # Create agent
     model, explore_policy = make_discretecql_model(cfg, train_env, eval_env, device)
 
     # Create loss
-    loss_module, target_net_updater = make_discrete_loss(cfg.loss, model, train_env, device)
+    loss_module, target_net_updater = make_discrete_loss(cfg.loss, model, device)
+
 
     # Create optimizers
     optimizer = make_discrete_cql_optimizer(cfg, loss_module) # optimizer for CQL loss
 
-    def update(sampled_tensordict, policy_eval_start=None, iteration=None):
+    def update(sampled_tensordict):
         optimizer.zero_grad(set_to_none=True)
         loss_dict = loss_module(sampled_tensordict)
 
@@ -132,7 +131,7 @@ def main(cfg):  # noqa: F821
             torch.compiler.cudagraph_mark_step_begin()
             i_device = torch.tensor(i, device=device)
             loss, loss_vals = update(
-                data.to(device), policy_eval_start=policy_eval_start, iteration=i_device
+                data.to(device)
             )
 
         # log metrics
