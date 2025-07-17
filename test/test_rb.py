@@ -133,7 +133,6 @@ _has_snapshot = importlib.util.find_spec("torchsnapshot") is not None
 _os_is_windows = sys.platform == "win32"
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_ray = importlib.util.find_spec("ray") is not None
-_has_zstandard = importlib.util.find_spec("zstandard") is not None
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
@@ -4061,7 +4060,6 @@ class TestRayRB:
             rb.close()
 
 
-@pytest.mark.skipif(not _has_zstandard, reason="zstandard required for this test.")
 class TestCompressedListStorage:
     """Test cases for CompressedListStorage."""
 
