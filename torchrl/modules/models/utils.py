@@ -160,3 +160,20 @@ def _reset_parameters_recursive(module, warn_if_no_op: bool = True) -> bool:
             "_reset_parameters_recursive was called without the parameters argument and did not find any parameters to reset"
         )
     return any_reset
+
+def primers_from_module(module: nn.Module, target_cls: T) -> list[TensorDictPrimer]:
+    """Get primers from a module.
+
+    Iterates over the module's children and returns the primers of the children that are instances of the target class.
+    These primers will write some data to be used by the models at reset time.
+    The tensors are set within the model during the policy call by <TODO>
+
+
+    Args:
+        module (nn.Module): the module to get primers from.
+
+    Returns:
+        list[TensorDictPrimer]: the primers from the module.
+    """
+    # 
+    ...
