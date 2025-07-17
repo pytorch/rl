@@ -713,6 +713,42 @@ class History(TensorClass["nocast"]):
         | transformers.AutoProcessor  # noqa: F821
         | None = None,
     ) -> History:
+        r"""Inverts a chat template into a History object.
+
+        Args:
+            text (str | list[str]): The chat template to invert.
+            chat_template_name (str, optional): The name of the chat template to use.
+            tokenizer (transformers.AutoTokenizer | transformers.AutoProcessor, optional): The tokenizer to use.
+
+        Returns:
+            History: The inverted History object.
+
+        Examples:
+            >>> from torchrl.data.llm.history import History
+            >>> from transformers import AutoTokenizer
+            >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-7B-Instruct")
+            >>> text = "<|im_start|>system\nYou are a helpful assistant.\n<|im_end|>\n<|im_start|>user\nWrite a python script that gives the capital of France or Germany.\n<|im_end|>\n<|im_start|>assistant\n<think>The capital of France is Paris, the capital of Germany is Berlin.</think>\n<answer><python>\n"
+            >>> history = History.from_text(text, tokenizer=tokenizer)
+            >>> print(history)
+            History(
+                content=NonTensorStack(
+                    ['You are a helpful assistant.', 'Write a python s...,
+                    batch_size=torch.Size([3]),
+                    device=None),
+                is_complete=NonTensorStack(
+                    [True, True, False],
+                    batch_size=torch.Size([3]),
+                    device=None),
+                role=NonTensorStack(
+                    ['system', 'user', 'assistant'],
+                    batch_size=torch.Size([3]),
+                    device=None),
+                tool_calls=None,
+                tool_responses=None,
+                batch_size=torch.Size([3]),
+                device=None,
+                is_shared=False)
+        """
         if chat_template_name is None:
             if chat_template is not None:
                 # TODO: find best match given template
