@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+db0e30d) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+bec8f03) &#x25BC</span></a>
     </div>
     
 
@@ -1108,6 +1108,10 @@
                 <span class="n">policy</span> <span class="o">=</span> <span class="n">RandomPolicy</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">full_action_spec</span><span class="p">)</span>
         <span class="k">elif</span> <span class="n">policy_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;policy_factory cannot be used with policy argument.&quot;</span><span class="p">)</span>
+        <span class="c1"># If the underlying policy has a state_dict, we keep a reference to the policy and</span>
+        <span class="c1"># do all policy weight saving/loading through it</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="s2">&quot;state_dict&quot;</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_policy_w_state_dict</span> <span class="o">=</span> <span class="n">policy</span>
 
         <span class="k">if</span> <span class="n">trust_policy</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">trust_policy</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="p">(</span><span class="n">RandomPolicy</span><span class="p">,</span> <span class="n">CudaGraphModule</span><span class="p">))</span>
@@ -2108,8 +2112,8 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="n">env_state_dict</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
 
-        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="p">,</span> <span class="s2">&quot;state_dict&quot;</span><span class="p">):</span>
-            <span class="n">policy_state_dict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_policy_w_state_dict&quot;</span><span class="p">):</span>
+            <span class="n">policy_state_dict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_policy_w_state_dict</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
             <span class="n">state_dict</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">(</span>
                 <span class="n">policy_state_dict</span><span class="o">=</span><span class="n">policy_state_dict</span><span class="p">,</span>
                 <span class="n">env_state_dict</span><span class="o">=</span><span class="n">env_state_dict</span><span class="p">,</span>
@@ -2133,7 +2137,13 @@
         <span class="k">if</span> <span class="n">strict</span> <span class="ow">or</span> <span class="s2">&quot;env_state_dict&quot;</span> <span class="ow">in</span> <span class="n">state_dict</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;env_state_dict&quot;</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">strict</span> <span class="ow">or</span> <span class="s2">&quot;policy_state_dict&quot;</span> <span class="ow">in</span> <span class="n">state_dict</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">policy</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;policy_state_dict&quot;</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_policy_w_state_dict&quot;</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Underlying policy does not have state_dict to load policy_state_dict into.&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_policy_w_state_dict</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span>
+                <span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;policy_state_dict&quot;</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span>
+            <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_frames</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;frames&quot;</span><span class="p">]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_iter</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;iter&quot;</span><span class="p">]</span></div>
 
