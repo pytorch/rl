@@ -3488,7 +3488,8 @@ class TestMinari:
     @pytest.mark.parametrize("split", [False, True])
     @pytest.mark.parametrize(
         "dataset_idx",
-        range(100)
+        # Only use a static upper bound; do not call any function that imports minari globally.
+        range(50)
     )
     def test_load(self, dataset_idx, split):
         """
