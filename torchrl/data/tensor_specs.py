@@ -4449,12 +4449,18 @@ class Binary(Categorical):
                 f"shape of the {self.__class__.__name__} spec in expand()."
             )
         return self.__class__(
-            n=self.shape[-1], shape=shape, device=self.device, dtype=self.dtype
+            n=self.shape[-1] if len(self.shape) > 0 else None,
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
         )
 
     def _reshape(self, shape):
         return self.__class__(
-            n=self.shape[-1], shape=shape, device=self.device, dtype=self.dtype
+            n=self.shape[-1] if len(self.shape) > 0 else None,
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
         )
 
     def _unflatten(self, dim, sizes):
@@ -4464,7 +4470,10 @@ class Binary(Categorical):
             .shape
         )
         return self.__class__(
-            n=self.shape[-1], shape=shape, device=self.device, dtype=self.dtype
+            n=self.shape[-1] if len(self.shape) > 0 else None,
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
         )
 
     def squeeze(self, dim=None):
@@ -4472,13 +4481,19 @@ class Binary(Categorical):
         if shape is None:
             return self
         return self.__class__(
-            n=self.shape[-1], shape=shape, device=self.device, dtype=self.dtype
+            n=self.shape[-1] if len(self.shape) > 0 else None,
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
         )
 
     def unsqueeze(self, dim: int):
         shape = _unsqueezed_shape(self.shape, dim)
         return self.__class__(
-            n=self.shape[-1], shape=shape, device=self.device, dtype=self.dtype
+            n=self.shape[-1] if len(self.shape) > 0 else None,
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
         )
 
     def unbind(self, dim: int = 0):
@@ -4495,7 +4510,10 @@ class Binary(Categorical):
         shape = tuple(s for i, s in enumerate(self.shape) if i != dim)
         return tuple(
             self.__class__(
-                n=self.shape[-1], shape=shape, device=self.device, dtype=self.dtype
+                n=self.shape[-1] if len(self.shape) > 0 else None,
+                shape=shape,
+                device=self.device,
+                dtype=self.dtype,
             )
             for i in range(self.shape[dim])
         )
@@ -4512,12 +4530,15 @@ class Binary(Categorical):
         if dest_device == self.device and dest_dtype == self.dtype:
             return self
         return self.__class__(
-            n=self.shape[-1], shape=self.shape, device=dest_device, dtype=dest_dtype
+            n=self.shape[-1] if len(self.shape) > 0 else None,
+            shape=self.shape,
+            device=dest_device,
+            dtype=dest_dtype,
         )
 
     def clone(self) -> Binary:
         return self.__class__(
-            n=self.shape[-1],
+            n=self.shape[-1] if len(self.shape) > 0 else None,
             shape=self.shape,
             device=self.device,
             dtype=self.dtype,
@@ -4528,6 +4549,8 @@ class Binary(Categorical):
 
         The last dimension of the spec (length n of the binary vector) cannot be indexed.
         """
+        if not len(self.shape):
+            raise ValueError("Cannot index a Binary spec with an empty shape")
         indexed_shape = _shape_indexing(self.shape[:-1], idx)
         return self.__class__(
             n=self.shape[-1],
@@ -5533,8 +5556,10 @@ class Composite(TensorSpec):
         sub_str = [
             indent(f"{k}: {str(item)}", 4 * " ") for k, item in self._specs.items()
         ]
+        if len(sub_str) == 0:
+            return f"{self.__class__.__name__}(device={self._device}, shape={self.shape}, data_cls={self.data_cls})"
         sub_str = ",\n".join(sub_str)
-        return f"Composite(\n{sub_str},\n    device={self._device},\n    shape={self.shape})"
+        return f"{self.__class__.__name__}(\n{sub_str},\n    device={self._device},\n    shape={self.shape},\n    data_cls={self.data_cls})"
 
     def type_check(
         self,

@@ -13,6 +13,7 @@ from typing import Literal
 import torch
 from tensordict import (
     lazy_stack,
+    LazyStackedTensorDict,
     MetaData,
     NonTensorStack,
     set_list_to_stack,
@@ -468,19 +469,32 @@ class TransformersWrapper(LLMWrapperBase):
     def forward(
         self,
         tensordict: TensorDictBase,
+        *,
         tensordict_out: TensorDictBase | None = None,
+        logits_only: bool = False,
         **kwargs,
     ) -> TensorDictBase:
+        tensordict_orig = tensordict
         if not tensordict.ndim:
+            if tensordict_out is not None:
+                raise ValueError(
+                    "tensordict_out must not be provided when tensordict.ndim == 0. If this is needed, "
+                    "please submit an issue on github."
+                )
             # unsqueeze - squeeze the input
-            try:
-                return self(lazy_stack([tensordict])).squeeze(0)
-            except Exception as e:
-                raise RuntimeError(
-                    f"Unsqueeze/squeeze failed. Inputs to {type(self).__name__} should ideally be 1 dimensional."
-                ) from e
+            return self.forward(lazy_stack([tensordict]), logits_only=logits_only)[0]
         elif tensordict.ndim > 1:
-            return self(tensordict.reshape(-1)).view(tensordict.shape)
+            if tensordict_out is not None:
+                raise ValueError(
+                    "tensordict_out must not be provided when tensordict.ndim > 1. If this is needed, "
+                    "please submit an issue on github."
+                )
+            return self.forward(tensordict.reshape(-1), logits_only=logits_only).view(
+                tensordict.shape
+            )
+
+        if not isinstance(tensordict, LazyStackedTensorDict):
+            tensordict = tensordict.to_lazystack(0)
 
         _source_device = None
         if self._device:
@@ -517,17 +531,23 @@ class TransformersWrapper(LLMWrapperBase):
             if self.generate:
                 out = self._from_transformers_generate_history(tensordict, cfg, out)
             else:
-                out = self._from_transformers_logprobs_history(tensordict, cfg, out)
+                out = self._from_transformers_logprobs_history(
+                    tensordict, cfg, out, logits_only=logits_only
+                )
         elif self.input_mode == "text":
             if self.generate:
                 out = self._from_transformers_generate_text(tensordict, cfg, out)
             else:
-                out = self._from_transformers_logprobs_text(tensordict, cfg, out)
+                out = self._from_transformers_logprobs_text(
+                    tensordict, cfg, out, logits_only=logits_only
+                )
         elif self.input_mode == "tokens":
             if self.generate:
                 out = self._from_transformers_generate_tokens(tensordict, cfg, out)
             else:
-                out = self._from_transformers_logprobs_tokens(tensordict, cfg, out)
+                out = self._from_transformers_logprobs_tokens(
+                    tensordict, cfg, out, logits_only=logits_only
+                )
 
         if _source_device:
             out = out.to(_source_device)
@@ -535,7 +555,7 @@ class TransformersWrapper(LLMWrapperBase):
         if tensordict_out is None:
             if self.inplace is True:
                 # The output is the input
-                tensordict_out = tensordict
+                tensordict_out = tensordict_orig
             elif self.inplace is False:
                 # The output is the new structure
                 tensordict_out = out
@@ -690,7 +710,7 @@ class TransformersWrapper(LLMWrapperBase):
         result.set(self.history_key, history_chat)
         return result
 
-    def _from_transformers_logprobs_history(self, td, cfg, out):
+    def _from_transformers_logprobs_history(self, td, cfg, out, logits_only=False):
         """Compute log-probs from history input."""
         from torchrl.data.llm import History
 
@@ -731,7 +751,9 @@ class TransformersWrapper(LLMWrapperBase):
             raise ValueError(
                 f"Expected TensorDictBase for history input, got {type(response_tokens)}"
             )
-        result = self._logprobs_from_history_tokens(response_tokens, cfg, out)
+        result = self._logprobs_from_history_tokens(
+            response_tokens, cfg, out, logits_only=logits_only
+        )
         text_result = Text._from_tensordict(result.empty())
         result.set(self.text_key, text_result)
         result[self.text_key, "full"] = text_full
@@ -952,7 +974,9 @@ class TransformersWrapper(LLMWrapperBase):
                 result = result.to(cast)
             return result
 
-    def _logprobs_from_history_tokens(self, response_tokens, cfg, out):
+    def _logprobs_from_history_tokens(
+        self, response_tokens, cfg, out, logits_only=False
+    ):
         """Compute log-probs from history tokens."""
         pad_val = self.tokenizer.pad_token_id
 
@@ -996,6 +1020,7 @@ class TransformersWrapper(LLMWrapperBase):
             tokens_full_padded,
             attention_mask_full_padded,
             pad_val,
+            logits_only=logits_only,
         )
 
         # Build output TensorClass objects
@@ -1051,19 +1076,20 @@ class TransformersWrapper(LLMWrapperBase):
         tokens_obj.padded = MetaData(self.pad_output)
         out.set(self.tokens_key, tokens_obj)
 
-        log_probs_obj = LogProbs._from_tensordict(
-            TensorDict(batch_size=out.batch_size).to_lazystack(0)
-        )
-        if self.pad_output:
-            log_probs_obj.full = log_probs_full_padded
-        else:
-            log_probs_full_unpadded = _unpad_tensors(
-                log_probs_full_padded, attention_mask_full_padded, as_nested=False
+        if not logits_only:
+            log_probs_obj = LogProbs._from_tensordict(
+                TensorDict(batch_size=out.batch_size).to_lazystack(0)
             )
-            log_probs_obj.full = log_probs_full_unpadded
-        log_probs_obj.response = None
-        log_probs_obj.padded = MetaData(self.pad_output)
-        out.set(self.log_probs_key, log_probs_obj)
+            if self.pad_output:
+                log_probs_obj.full = log_probs_full_padded
+            else:
+                log_probs_full_unpadded = _unpad_tensors(
+                    log_probs_full_padded, attention_mask_full_padded, as_nested=False
+                )
+                log_probs_obj.full = log_probs_full_unpadded
+            log_probs_obj.response = None
+            log_probs_obj.padded = MetaData(self.pad_output)
+            out.set(self.log_probs_key, log_probs_obj)
 
         # Add logits to output if we're in a get_dist call
         if self._in_get_dist_call:
@@ -1095,7 +1121,7 @@ class TransformersWrapper(LLMWrapperBase):
             raise ValueError(f"Expected list of text for text input, got {type(text)}")
         return self._generate_from_text(text, cfg, out)
 
-    def _from_transformers_logprobs_text(self, td, cfg, out):
+    def _from_transformers_logprobs_text(self, td, cfg, out, logits_only=False):
         """Compute log-probs from text input."""
         # Validate input
         if self.input_key not in td:
@@ -1168,6 +1194,7 @@ class TransformersWrapper(LLMWrapperBase):
             input_ids_full_padded,
             attention_mask_full_padded,
             self.tokenizer.pad_token_id,
+            logits_only=logits_only,
         )
 
         # Build output TensorClass objects
@@ -1212,19 +1239,20 @@ class TransformersWrapper(LLMWrapperBase):
         masks_obj.padded = MetaData(self.pad_output)
         out.set(self.masks_key, masks_obj)
 
-        log_probs_obj = LogProbs._from_tensordict(
-            TensorDict(batch_size=out.batch_size).to_lazystack(0)
-        )
-        if self.pad_output:
-            log_probs_obj.full = log_probs_full_padded
-        else:
-            log_probs_full_unpadded = _unpad_tensors(
-                log_probs_full_padded, attention_mask_full_padded, as_nested=False
+        if not logits_only:
+            log_probs_obj = LogProbs._from_tensordict(
+                TensorDict(batch_size=out.batch_size).to_lazystack(0)
             )
-            log_probs_obj.full = log_probs_full_unpadded
-        log_probs_obj.response = None
-        log_probs_obj.padded = MetaData(self.pad_output)
-        out.set(self.log_probs_key, log_probs_obj)
+            if self.pad_output:
+                log_probs_obj.full = log_probs_full_padded
+            else:
+                log_probs_full_unpadded = _unpad_tensors(
+                    log_probs_full_padded, attention_mask_full_padded, as_nested=False
+                )
+                log_probs_obj.full = log_probs_full_unpadded
+            log_probs_obj.response = None
+            log_probs_obj.padded = MetaData(self.pad_output)
+            out.set(self.log_probs_key, log_probs_obj)
 
         # Add logits to output if we're in a get_dist call
         if self._in_get_dist_call:
@@ -1416,7 +1444,11 @@ class TransformersWrapper(LLMWrapperBase):
         return out
 
     def _from_transformers_logprobs_tokens(
-        self, td: TensorDictBase, cfg: dict | None, out: TensorDictBase
+        self,
+        td: TensorDictBase,
+        cfg: dict | None,
+        out: TensorDictBase,
+        logits_only=False,
     ) -> TensorDictBase:
         """Compute log-probs from tokens input."""
         # Validate input
@@ -1470,6 +1502,7 @@ class TransformersWrapper(LLMWrapperBase):
             input_ids_full_padded,
             attention_mask_full_padded,
             self.tokenizer.pad_token_id,
+            logits_only=logits_only,
         )
 
         # Build output TensorClass objects
@@ -1514,19 +1547,20 @@ class TransformersWrapper(LLMWrapperBase):
         masks_obj.padded = MetaData(self.pad_output)
         out.set(self.masks_key, masks_obj)
 
-        log_probs_obj = LogProbs._from_tensordict(
-            TensorDict(batch_size=out.batch_size).to_lazystack(0)
-        )
-        if self.pad_output:
-            log_probs_obj.full = log_probs_full_padded
-        else:
-            log_probs_full_unpadded = _unpad_tensors(
-                log_probs_full_padded, attention_mask_full_padded, as_nested=False
+        if not logits_only:
+            log_probs_obj = LogProbs._from_tensordict(
+                TensorDict(batch_size=out.batch_size).to_lazystack(0)
             )
-            log_probs_obj.full = log_probs_full_unpadded
-        log_probs_obj.response = None
-        log_probs_obj.padded = MetaData(self.pad_output)
-        out.set(self.log_probs_key, log_probs_obj)
+            if self.pad_output:
+                log_probs_obj.full = log_probs_full_padded
+            else:
+                log_probs_full_unpadded = _unpad_tensors(
+                    log_probs_full_padded, attention_mask_full_padded, as_nested=False
+                )
+                log_probs_obj.full = log_probs_full_unpadded
+            log_probs_obj.response = None
+            log_probs_obj.padded = MetaData(self.pad_output)
+            out.set(self.log_probs_key, log_probs_obj)
 
         # Add logits to output if we're in a get_dist call
         if self._in_get_dist_call:
@@ -1567,7 +1601,7 @@ class TransformersWrapper(LLMWrapperBase):
         return log_probs, logits
 
     def _compute_log_probs_from_model_output(
-        self, model_output, input_ids, attention_mask, pad_val
+        self, model_output, input_ids, attention_mask, pad_val, logits_only=False
     ):
         """Compute log-probs from model output without modifying original tensors.
 
@@ -1576,6 +1610,7 @@ class TransformersWrapper(LLMWrapperBase):
             input_ids: Original input token ids
             attention_mask: Original attention mask
             pad_val: Padding token value to ignore in loss computation
+            logits_only: Whether to return only the logits.
 
         Returns:
             tuple: (log_probs, shifted_logits) where log_probs are the computed log probabilities
@@ -1600,6 +1635,8 @@ class TransformersWrapper(LLMWrapperBase):
             raise ValueError(
                 f"The logits shape {shifted_logits.shape} does not match the input ids shape {shifted_input_ids.shape}"
             )
+        if logits_only:
+            return None, shifted_logits
 
         # Compute log-probs
         td = TensorDict(

@@ -1134,6 +1134,9 @@ class TestEquality:
         )
         assert ts != ts_other
 
+    def test_equality_binary_empty_shape(self):
+        assert Binary(shape=()) == Binary(shape=()).clone()
+
     @pytest.mark.parametrize("nvec", [[3], [3, 4], [3, 4, 5]])
     def test_equality_multi_onehot(self, nvec):
         device = "cpu"
@@ -3259,7 +3262,8 @@ class TestLazyStackedComposite:
                     dtype=torch.float32,
                     domain=continuous),
                 device=cpu,
-                shape=torch.Size([3])),
+                shape=torch.Size([3]),
+                data_cls=None),
         1 ->
             lidar: BoundedContinuous(
                 shape=torch.Size([20]),
@@ -3279,7 +3283,8 @@ class TestLazyStackedComposite:
                     dtype=torch.float32,
                     domain=continuous),
                 device=cpu,
-                shape=torch.Size([3])),
+                shape=torch.Size([3]),
+                data_cls=None),
         2 ->
             individual_2_obs: Composite(
                 individual_1_obs_0: UnboundedContinuous(
@@ -3291,7 +3296,8 @@ class TestLazyStackedComposite:
                     dtype=torch.float32,
                     domain=continuous),
                 device=cpu,
-                shape=torch.Size([3]))}},
+                shape=torch.Size([3]),
+                data_cls=None)}},
     device=cpu,
     shape={torch.Size((3,))},
     stack_dim={c.stack_dim})"""

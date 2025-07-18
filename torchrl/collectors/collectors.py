@@ -686,6 +686,10 @@ class SyncDataCollector(DataCollectorBase):
                 policy = RandomPolicy(env.full_action_spec)
         elif policy_factory is not None:
             raise TypeError("policy_factory cannot be used with policy argument.")
+        # If the underlying policy has a state_dict, we keep a reference to the policy and
+        # do all policy weight saving/loading through it
+        if hasattr(policy, "state_dict"):
+            self._policy_w_state_dict = policy
 
         if trust_policy is None:
             trust_policy = isinstance(policy, (RandomPolicy, CudaGraphModule))
@@ -1686,8 +1690,8 @@ class SyncDataCollector(DataCollectorBase):
         else:
             env_state_dict = OrderedDict()
 
-        if hasattr(self.policy, "state_dict"):
-            policy_state_dict = self.policy.state_dict()
+        if hasattr(self, "_policy_w_state_dict"):
+            policy_state_dict = self._policy_w_state_dict.state_dict()
             state_dict = OrderedDict(
                 policy_state_dict=policy_state_dict,
                 env_state_dict=env_state_dict,
@@ -1711,7 +1715,13 @@ class SyncDataCollector(DataCollectorBase):
         if strict or "env_state_dict" in state_dict:
             self.env.load_state_dict(state_dict["env_state_dict"], **kwargs)
         if strict or "policy_state_dict" in state_dict:
-            self.policy.load_state_dict(state_dict["policy_state_dict"], **kwargs)
+            if not hasattr(self, "_policy_w_state_dict"):
+                raise ValueError(
+                    "Underlying policy does not have state_dict to load policy_state_dict into."
+                )
+            self._policy_w_state_dict.load_state_dict(
+                state_dict["policy_state_dict"], **kwargs
+            )
         self._frames = state_dict["frames"]
         self._iter = state_dict["iter"]
 
