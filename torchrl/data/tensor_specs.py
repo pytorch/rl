@@ -4430,12 +4430,14 @@ class Binary(Categorical):
                 raise ValueError(
                     f"'n' must be zero for spec {self.__class__} when using an empty shape"
                 )
-        else:
+        elif n is not None:
             if shape[-1] != n:
                 raise ValueError(
                     f"The last value of the shape must match 'n' for spec {self.__class__}. "
                     f"Got n={n} and shape={shape}."
                 )
+        else:
+            n = shape[-1]
 
         super().__init__(n=2, shape=shape, device=device, dtype=dtype)
         self.encode = self._encode_eager
@@ -4449,7 +4451,7 @@ class Binary(Categorical):
                 f"shape of the {self.__class__.__name__} spec in expand()."
             )
         return self.__class__(
-            n=self.shape[-1] if len(self.shape) > 0 else None,
+            n=shape[-1] if len(shape) > 0 else None,
             shape=shape,
             device=self.device,
             dtype=self.dtype,
@@ -4457,7 +4459,7 @@ class Binary(Categorical):
 
     def _reshape(self, shape):
         return self.__class__(
-            n=self.shape[-1] if len(self.shape) > 0 else None,
+            n=shape[-1] if len(shape) > 0 else None,
             shape=shape,
             device=self.device,
             dtype=self.dtype,
@@ -4470,7 +4472,7 @@ class Binary(Categorical):
             .shape
         )
         return self.__class__(
-            n=self.shape[-1] if len(self.shape) > 0 else None,
+            n=shape[-1] if len(shape) > 0 else None,
             shape=shape,
             device=self.device,
             dtype=self.dtype,
@@ -4481,7 +4483,7 @@ class Binary(Categorical):
         if shape is None:
             return self
         return self.__class__(
-            n=self.shape[-1] if len(self.shape) > 0 else None,
+            n=shape[-1] if len(shape) > 0 else None,
             shape=shape,
             device=self.device,
             dtype=self.dtype,
@@ -4490,7 +4492,7 @@ class Binary(Categorical):
     def unsqueeze(self, dim: int):
         shape = _unsqueezed_shape(self.shape, dim)
         return self.__class__(
-            n=self.shape[-1] if len(self.shape) > 0 else None,
+            n=shape[-1] if len(shape) > 0 else None,
             shape=shape,
             device=self.device,
             dtype=self.dtype,
@@ -4510,7 +4512,7 @@ class Binary(Categorical):
         shape = tuple(s for i, s in enumerate(self.shape) if i != dim)
         return tuple(
             self.__class__(
-                n=self.shape[-1] if len(self.shape) > 0 else None,
+                n=shape[-1] if len(shape) > 0 else None,
                 shape=shape,
                 device=self.device,
                 dtype=self.dtype,

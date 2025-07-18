@@ -3913,6 +3913,7 @@ class TestDynamicSpec:
         disc = Categorical(shape=(-1, 1, 2), n=4)
         moneh = MultiOneHot(shape=(-1, 1, 2, 7), nvec=[3, 4])
         mdisc = MultiCategorical(shape=(-1, 1, 2, 2), nvec=[3, 4])
+        binary = Binary(shape=(-1, 1, 2))
 
         spec = Composite(
             unb=unb,
@@ -3922,6 +3923,7 @@ class TestDynamicSpec:
             disc=disc,
             moneh=moneh,
             mdisc=mdisc,
+            binary=binary,
             shape=(-1, 1, 2),
         )
         assert spec.shape == (-1, 1, 2)
