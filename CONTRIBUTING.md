@@ -32,6 +32,9 @@ If the generation of this artifact in MacOs M1 doesn't work correctly or in the 
 ARCHFLAGS="-arch arm64" python setup.py develop
 ```
 
+In some MacOs devices, the installation of the required libraries errors if the correct version of
+clang is not used. Using `llvm@16` (installable with brew), may fix your issues.
+
 ## Formatting your code
 **Type annotation**
 

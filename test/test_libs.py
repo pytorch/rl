@@ -3453,6 +3453,39 @@ class TestMinari:
         assert sample["data"].shape == torch.Size([32, 8])
         assert sample["next", "data"].shape == torch.Size([32, 8])
 
+    @pytest.mark.parametrize("selected_dataset", ["minigrid/BabyAI-Pickup/optimal-v0"])
+    def test_minari_string_to_tensor(self, selected_dataset):
+        # Define the possible missions
+        colors = ["red", "green", "blue", "purple", "yellow", "grey"]
+        object_types = ["box", "ball", "key"]
+        mission_to_idx = {
+            f"pick up {color} {obj}": i
+            for i, (color, obj) in enumerate(
+                (c, o) for c in colors for o in object_types
+            )
+        }
+        num_missions = len(mission_to_idx)
+
+        def encode_mission_string(mission: bytes) -> torch.Tensor:
+            mission = mission.decode("utf-8")
+            clean_mission = mission.replace(" a", "").replace(" the", "")
+            idx = mission_to_idx.get(clean_mission, -1)
+            if idx == -1:
+                raise ValueError(f"Unknown mission string: {clean_mission}")
+            return torch.nn.functional.one_hot(
+                torch.tensor(idx), num_classes=num_missions
+            ).to(torch.uint8)
+
+        data = MinariExperienceReplay(
+            dataset_id=selected_dataset,
+            batch_size=1,
+            download="force",
+            string_to_tensor_map={"observations/mission": encode_mission_string},
+        )
+        sample = data.sample(batch_size=1)
+        assert isinstance(sample["observation", "mission"], torch.Tensor)
+        assert sample["observation", "mission"].shape == (1, num_missions)
+
 
 @pytest.mark.slow
 class TestRoboset:
