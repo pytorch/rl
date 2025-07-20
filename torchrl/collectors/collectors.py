@@ -416,8 +416,8 @@ class SyncDataCollector(DataCollectorBase):
     """Generic data collector for RL problems. Requires an environment constructor and a policy.
 
     Args:
-        create_env_fn (Callable): a callable that returns an instance of
-            :class:`~torchrl.envs.EnvBase` class.
+        create_env_fn (Callable or EnvBase): a callable that returns an instance of
+            :class:`~torchrl.envs.EnvBase` class, or the env itself.
         policy (Callable): Policy to be executed in the environment.
             Must accept :class:`tensordict.tensordict.TensorDictBase` object as input.
             If ``None`` is provided, the policy used will be a

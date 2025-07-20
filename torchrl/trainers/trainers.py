@@ -29,6 +29,7 @@ from torchrl._utils import (
 from torchrl.collectors.collectors import DataCollectorBase
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.replay_buffers import (
+    PrioritizedSampler,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
@@ -671,6 +672,14 @@ class ReplayBufferTrainer(TrainerHookBase):
         max_dims: Sequence[int] | None = None,
     ) -> None:
         self.replay_buffer = replay_buffer
+        if hasattr(replay_buffer, "update_tensordict_priority"):
+            self._update_priority = self.replay_buffer.update_tensordict_priority
+        else:
+            if isinstance(replay_buffer.sampler, PrioritizedSampler):
+                raise ValueError(
+                    "Prioritized sampler not supported for replay buffer trainer if not within a TensorDictReplayBuffer"
+                )
+            self._update_priority = None
         self.batch_size = batch_size
         self.memmap = memmap
         self.device = device
@@ -702,7 +711,8 @@ class ReplayBufferTrainer(TrainerHookBase):
         return sample.to(self.device) if self.device is not None else sample
 
     def update_priority(self, batch: TensorDictBase) -> None:
-        self.replay_buffer.update_tensordict_priority(batch)
+        if self._update_priority is not None:
+            self._update_priority(batch)
 
     def state_dict(self) -> dict[str, Any]:
         return {

@@ -1,0 +1,162 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from functools import partial
+from typing import Any
+
+from torchrl.trainers.algorithms.configs.common import ConfigBase
+from torchrl.trainers.algorithms.configs.envs import EnvConfig
+
+
+@dataclass
+class DataCollectorConfig(ConfigBase):
+    """Parent class to configure a data collector."""
+
+
+@dataclass
+class SyncDataCollectorConfig(DataCollectorConfig):
+    """A class to configure a synchronous data collector."""
+
+    create_env_fn: ConfigBase = field(
+        default_factory=partial(EnvConfig, _partial_=True)
+    )
+    policy: Any = None
+    policy_factory: Any = None
+    frames_per_batch: int | None = None
+    total_frames: int = -1
+    device: str | None = None
+    storing_device: str | None = None
+    policy_device: str | None = None
+    env_device: str | None = None
+    create_env_kwargs: dict | None = None
+    max_frames_per_traj: int | None = None
+    reset_at_each_iter: bool = False
+    postproc: ConfigBase | None = None
+    split_trajs: bool = False
+    exploration_type: str = "RANDOM"
+    return_same_td: bool = False
+    interruptor: ConfigBase | None = None
+    set_truncated: bool = False
+    use_buffers: bool = False
+    replay_buffer: ConfigBase | None = None
+    extend_buffer: bool = False
+    trust_policy: bool = True
+    compile_policy: Any = None
+    cudagraph_policy: Any = None
+    no_cuda_sync: bool = False
+    _target_: str = "torchrl.collectors.collectors.SyncDataCollector"
+
+    def __post_init__(self):
+        self.create_env_fn._partial_ = True
+        if self.policy_factory is not None:
+            self.policy_factory._partial_ = True
+
+
+@dataclass
+class AsyncDataCollectorConfig(DataCollectorConfig):
+    # Copy the args of aSyncDataCollector here
+    create_env_fn: ConfigBase = field(
+        default_factory=partial(EnvConfig, _partial_=True)
+    )
+    policy: Any = None
+    policy_factory: Any = None
+    frames_per_batch: int | None = None
+    total_frames: int = -1
+    device: str | None = None
+    storing_device: str | None = None
+    policy_device: str | None = None
+    env_device: str | None = None
+    create_env_kwargs: dict | None = None
+    max_frames_per_traj: int | None = None
+    reset_at_each_iter: bool = False
+    postproc: ConfigBase | None = None
+    split_trajs: bool = False
+    exploration_type: str = "RANDOM"
+    set_truncated: bool = False
+    use_buffers: bool = False
+    replay_buffer: ConfigBase | None = None
+    extend_buffer: bool = False
+    trust_policy: bool = True
+    compile_policy: Any = None
+    cudagraph_policy: Any = None
+    no_cuda_sync: bool = False
+    _target_: str = "torchrl.collectors.collectors.aSyncDataCollector"
+
+    def __post_init__(self):
+        self.create_env_fn._partial_ = True
+        if self.policy_factory is not None:
+            self.policy_factory._partial_ = True
+
+
+@dataclass
+class MultiSyncDataCollectorConfig(DataCollectorConfig):
+    # Copy the args of _MultiDataCollector here
+    create_env_fn: list[ConfigBase] | None = None
+    policy: Any = None
+    policy_factory: Any = None
+    frames_per_batch: int | None = None
+    total_frames: int = -1
+    device: str | None = None
+    storing_device: str | None = None
+    policy_device: str | None = None
+    env_device: str | None = None
+    create_env_kwargs: dict | None = None
+    max_frames_per_traj: int | None = None
+    reset_at_each_iter: bool = False
+    postproc: ConfigBase | None = None
+    split_trajs: bool = False
+    exploration_type: str = "RANDOM"
+    set_truncated: bool = False
+    use_buffers: bool = False
+    replay_buffer: ConfigBase | None = None
+    extend_buffer: bool = False
+    trust_policy: bool = True
+    compile_policy: Any = None
+    cudagraph_policy: Any = None
+    no_cuda_sync: bool = False
+    _target_: str = "torchrl.collectors.collectors.MultiSyncDataCollector"
+
+    def __post_init__(self):
+        for env_cfg in self.create_env_fn:
+            env_cfg._partial_ = True
+        if self.policy_factory is not None:
+            self.policy_factory._partial_ = True
+
+
+@dataclass
+class MultiaSyncDataCollectorConfig(DataCollectorConfig):
+    create_env_fn: list[ConfigBase] | None = None
+    policy: Any = None
+    policy_factory: Any = None
+    frames_per_batch: int | None = None
+    total_frames: int = -1
+    device: str | None = None
+    storing_device: str | None = None
+    policy_device: str | None = None
+    env_device: str | None = None
+    create_env_kwargs: dict | None = None
+    max_frames_per_traj: int | None = None
+    reset_at_each_iter: bool = False
+    postproc: ConfigBase | None = None
+    split_trajs: bool = False
+    exploration_type: str = "RANDOM"
+    set_truncated: bool = False
+    use_buffers: bool = False
+    replay_buffer: ConfigBase | None = None
+    extend_buffer: bool = False
+    trust_policy: bool = True
+    compile_policy: Any = None
+    cudagraph_policy: Any = None
+    no_cuda_sync: bool = False
+    _target_: str = "torchrl.collectors.collectors.MultiaSyncDataCollector"
+
+    def __post_init__(self):
+        for env_cfg in self.create_env_fn:
+            env_cfg._partial_ = True
+        if self.policy_factory is not None:
+            self.policy_factory._partial_ = True
