@@ -63,9 +63,19 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
 
 def write_version_file(version):
     version_path = os.path.join(cwd, "torchrl", "version.py")
+
+    # Get PyTorch version during build
+    try:
+        import torch
+
+        pytorch_version = torch.__version__
+    except ImportError:
+        pytorch_version = "unknown"
+
     with open(version_path, "w") as f:
         f.write(f"__version__ = '{version}'\n")
         f.write(f"git_version = {repr(sha)}\n")
+        f.write(f"pytorch_version = '{pytorch_version}'\n")
 
 
 def _get_pytorch_version(is_nightly, is_local):
