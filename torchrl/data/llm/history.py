@@ -82,10 +82,14 @@ _CHAT_TEMPLATES = {
         {{- '<|im_end|>\\n' }}{% endgeneration %}
     {%- elif message.role == "tool" %}
         {%- if (loop.index0 == 0) or (messages[loop.index0 - 1].role != "tool") %}
-            {{- '<|im_start|>user' }}
+            {{- '<|im_start|>tool' }}
         {%- endif %}
         {{- '\\n<tool_response>\\n' }}
-        {{- message.content }}
+        {%- if message.tool_responses %}
+            {{- message.tool_responses }}
+        {%- else %}
+            {{- message.content }}
+        {%- endif %}
         {{- '\\n</tool_response>' }}
         {%- if loop.last or (messages[loop.index0 + 1].role != "tool") %}
             {{- '<|im_end|>\\n' }}
