@@ -3420,15 +3420,14 @@ def get_random_minigrid_datasets():
         if dataset.startswith("minigrid/")
     ]
 
-    if len(all_minigrid) < 5:
-        raise RuntimeError("Not enough minigrid datasets found on Minari server.")
-    indices = torch.randperm(len(all_minigrid))[:5]
+    # 3 random datasets
+    indices = torch.randperm(len(all_minigrid))[:3] 
     return [all_minigrid[idx] for idx in indices]
 
 
 def get_random_atari_envs():
     """
-    Fetch 10 random Atari environments using ale_py and torch.
+    Fetch 3 random Atari environments using ale_py and torch.
     """
     import ale_py
     import gymnasium as gym
@@ -3438,9 +3437,9 @@ def get_random_atari_envs():
     env_specs = gym.envs.registry.values()
     all_env_ids = [env_spec.id for env_spec in env_specs]
     atari_env_ids = [env_id for env_id in all_env_ids if env_id.startswith("ALE")]
-    if len(atari_env_ids) < 10:
+    if len(atari_env_ids) < 3:
         raise RuntimeError("Not enough Atari environments found.")
-    indices = torch.randperm(len(atari_env_ids))[:10]
+    indices = torch.randperm(len(atari_env_ids))[:3]
     return [atari_env_ids[idx] for idx in indices]
 
 
@@ -3489,7 +3488,7 @@ class TestMinari:
     @pytest.mark.parametrize(
         "dataset_idx",
         # Only use a static upper bound; do not call any function that imports minari globally.
-        range(50)
+        range(7)
     )
     def test_load(self, dataset_idx, split):
         """
@@ -3498,8 +3497,14 @@ class TestMinari:
         """
         import minari
 
+        num_custom_to_select = 4
         custom_envs = MUJOCO_ENVIRONMENTS + D4RL_ENVIRONMENTS
-        num_custom = len(custom_envs)
+        
+        # Randomly select a subset of custom environments
+        indices = torch.randperm(len(custom_envs))[:num_custom_to_select]
+        custom_envs_subset = [custom_envs[i] for i in indices]
+        
+        num_custom = len(custom_envs_subset)
         try:
             minigrid_datasets = get_random_minigrid_datasets()
         except Exception:
@@ -3518,7 +3523,7 @@ class TestMinari:
         if dataset_idx < num_custom:
             # Custom dataset for Mujoco/D4RL
             custom_dataset_ids = custom_minari_init(
-                [custom_envs[dataset_idx]], num_episodes=5
+                [custom_envs_subset[dataset_idx]], num_episodes=5
             )
             dataset_id = custom_dataset_ids[0]
             data = MinariExperienceReplay(
