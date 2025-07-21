@@ -406,9 +406,14 @@ def make_continuous_loss(loss_cfg, model, device: torch.device | None = None):
 
 
 def make_discrete_loss(loss_cfg, model, device: torch.device | None = None):
+
+    # Get action space from the model
+    action_space = model.spec["action"]
+
     loss_module = DiscreteCQLLoss(
         model,
         loss_function=loss_cfg.loss_function,
+        action_space="categorical",
         delay_value=True,
     )
     loss_module.make_value_estimator(gamma=loss_cfg.gamma, device=device)

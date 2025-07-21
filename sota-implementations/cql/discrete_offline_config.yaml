@@ -30,7 +30,7 @@ logger:
   eval_iter: 5000         # eval interval in gradient steps
   eval_steps: 1000        # evaluation steps per eval
   mode: online
-  eval_envs: 5
+  eval_envs: 5 # number of evaluation environments
   video: True
 
 # replay buffer

@@ -33,7 +33,7 @@ from utils import (
 
 torch.set_float32_matmul_precision("high")
 
-@hydra.main(version_base="1.1", config_path="", config_name="discrete_offline")
+@hydra.main(version_base="1.1", config_path="", config_name="discrete_offline_config")
 def main(cfg):  # noqa: F821
     device = cfg.optim.device
     if device in ("", None):
@@ -69,10 +69,15 @@ def main(cfg):  # noqa: F821
     replay_buffer = make_offline_discrete_replay_buffer(cfg.replay_buffer)
 
     # Create env
-    train_env, eval_env = make_environment(cfg)
+    train_env, eval_env = make_environment(
+        cfg, train_num_envs=1, eval_num_envs=cfg.logger.eval_envs, logger=logger
+        )
 
     # Create agent
     model, explore_policy = make_discretecql_model(cfg, train_env, eval_env, device)
+
+    del train_env 
+
 
     # Create loss
     loss_module, target_net_updater = make_discrete_loss(cfg.loss, model, device)
@@ -81,19 +86,29 @@ def main(cfg):  # noqa: F821
     # Create optimizers
     optimizer = make_discrete_cql_optimizer(cfg, loss_module) # optimizer for CQL loss
 
-    def update(sampled_tensordict):
-        optimizer.zero_grad(set_to_none=True)
-        loss_dict = loss_module(sampled_tensordict)
+    def update(data):
 
-        q_loss = loss_dict["loss_qvalue"]
-        cql_loss = loss_dict["loss_cql"]
+        # Compute loss components
+        loss_vals = loss_module(data)
+
+        q_loss = loss_vals["loss_qvalue"]
+        cql_loss = loss_vals["loss_cql"]
+
+
+        # Total loss = Q-learning loss + CQL regularization
         loss = q_loss + cql_loss
 
         loss.backward()
         optimizer.step()
+        optimizer.zero_grad(set_to_none=True)
 
+        # Soft update of target Q-network
         target_net_updater.step()
-        return loss.detach(), loss_dict.detach()
+
+        # Detach to avoid keeping computation graph in logging
+        return loss.detach(), loss_vals.detach()
+    
+
 
     compile_mode = None
     if cfg.compile.compile:
