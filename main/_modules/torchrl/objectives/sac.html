@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+b6d2156) &#x25BC</span></a>
+      <a href="../../../../versions.html"><span style="font-size:110%">main (0.9.0+851a041) &#x25BC</span></a>
     </div>
     
 
@@ -1109,6 +1109,102 @@
             <span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_alpha</span> <span class="o">*</span> <span class="n">log_prob</span> <span class="o">-</span> <span class="n">min_q_logprob</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;log_prob&quot;</span><span class="p">:</span> <span class="n">log_prob</span><span class="o">.</span><span class="n">detach</span><span class="p">()}</span>
 
+<div class="viewcode-block" id="SACLoss.actor_loss"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.SACLoss.html#torchrl.objectives.SACLoss.actor_loss">[docs]</a>    <span class="nd">@dispatch</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">actor_loss</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Tensor</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute the actor loss for SAC.</span>
+
+<span class="sd">        This method computes the actor loss which encourages the policy to maximize</span>
+<span class="sd">        the expected Q-value while maintaining high entropy.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tensordict (TensorDictBase): A tensordict containing the data needed for</span>
+<span class="sd">                computing the actor loss. Should contain the observation and other</span>
+<span class="sd">                required keys for the actor network.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A tuple containing:</span>
+<span class="sd">                - The actor loss tensor</span>
+<span class="sd">                - A dictionary with metadata including the log probability of actions</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_actor_loss</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SACLoss.qvalue_loss"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.SACLoss.html#torchrl.objectives.SACLoss.qvalue_loss">[docs]</a>    <span class="nd">@dispatch</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">qvalue_loss</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Tensor</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute the Q-value loss for SAC.</span>
+
+<span class="sd">        This method computes the Q-value loss which trains the Q-networks to estimate</span>
+<span class="sd">        the expected return for state-action pairs.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tensordict (TensorDictBase): A tensordict containing the data needed for</span>
+<span class="sd">                computing the Q-value loss. Should contain the observation, action,</span>
+<span class="sd">                reward, done, and terminated keys.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A tuple containing:</span>
+<span class="sd">                - The Q-value loss tensor</span>
+<span class="sd">                - A dictionary with metadata including the TD error</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_version</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_qvalue_v1_loss</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_qvalue_v2_loss</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SACLoss.value_loss"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.SACLoss.html#torchrl.objectives.SACLoss.value_loss">[docs]</a>    <span class="nd">@dispatch</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">value_loss</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Tensor</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute the value loss for SAC (version 1 only).</span>
+
+<span class="sd">        This method computes the value loss which trains the value network to estimate</span>
+<span class="sd">        the expected return for states. This is only used in SAC version 1.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tensordict (TensorDictBase): A tensordict containing the data needed for</span>
+<span class="sd">                computing the value loss. Should contain the observation and other</span>
+<span class="sd">                required keys for the value network.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A tuple containing:</span>
+<span class="sd">                - The value loss tensor</span>
+<span class="sd">                - An empty dictionary (no metadata for value loss)</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            RuntimeError: If called on SAC version 2 (which doesn&#39;t use a value network)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_version</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Value loss is only available in SAC version 1. &quot;</span>
+                <span class="s2">&quot;SAC version 2 doesn&#39;t use a separate value network.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_value_loss</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SACLoss.alpha_loss"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.SACLoss.html#torchrl.objectives.SACLoss.alpha_loss">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">alpha_loss</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">log_prob</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute the alpha loss for SAC.</span>
+
+<span class="sd">        This method computes the alpha loss which adapts the entropy coefficient</span>
+<span class="sd">        to maintain the target entropy level.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            log_prob (Tensor): The log probability of actions from the actor network.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The alpha loss tensor</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_alpha_loss</span><span class="p">(</span><span class="n">log_prob</span><span class="p">)</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_alpha</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">min_log_alpha</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_log_alpha</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_alpha</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">clamp_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">min_log_alpha</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_log_alpha</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="n">alpha</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_alpha</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">alpha</span>
+
     <span class="nd">@property</span>
     <span class="nd">@_cache_values</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_cached_target_params_actor_value</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -1302,15 +1398,7 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="c1"># placeholder</span>
             <span class="n">alpha_loss</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">log_prob</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">alpha_loss</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_alpha</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">min_log_alpha</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_log_alpha</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">log_alpha</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">clamp_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">min_log_alpha</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_log_alpha</span><span class="p">)</span>
-        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
-            <span class="n">alpha</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_alpha</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span>
-        <span class="k">return</span> <span class="n">alpha</span></div>
+        <span class="k">return</span> <span class="n">alpha_loss</span></div>
 
 
 <div class="viewcode-block" id="DiscreteSACLoss"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.DiscreteSACLoss.html#torchrl.objectives.DiscreteSACLoss">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">DiscreteSACLoss</span><span class="p">(</span><span class="n">LossModule</span><span class="p">):</span>
@@ -1774,6 +1862,48 @@
             <span class="n">target_value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">value_estimator</span><span class="o">.</span><span class="n">value_estimate</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">target_value</span>
 
+<div class="viewcode-block" id="DiscreteSACLoss.actor_loss"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.DiscreteSACLoss.html#torchrl.objectives.DiscreteSACLoss.actor_loss">[docs]</a>    <span class="nd">@dispatch</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">actor_loss</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Tensor</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute the actor loss for discrete SAC.</span>
+
+<span class="sd">        This method computes the actor loss which encourages the policy to maximize</span>
+<span class="sd">        the expected Q-value while maintaining high entropy for discrete actions.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tensordict (TensorDictBase): A tensordict containing the data needed for</span>
+<span class="sd">                computing the actor loss. Should contain the observation and other</span>
+<span class="sd">                required keys for the actor network.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A tuple containing:</span>
+<span class="sd">                - The actor loss tensor</span>
+<span class="sd">                - A dictionary with metadata including the log probability of actions</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_actor_loss</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="DiscreteSACLoss.qvalue_loss"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.DiscreteSACLoss.html#torchrl.objectives.DiscreteSACLoss.qvalue_loss">[docs]</a>    <span class="nd">@dispatch</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">qvalue_loss</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Tensor</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute the Q-value loss for discrete SAC.</span>
+
+<span class="sd">        This method computes the Q-value loss which trains the Q-networks to estimate</span>
+<span class="sd">        the expected return for state-action pairs in discrete action spaces.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tensordict (TensorDictBase): A tensordict containing the data needed for</span>
+<span class="sd">                computing the Q-value loss. Should contain the observation, action,</span>
+<span class="sd">                reward, done, and terminated keys.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A tuple containing:</span>
+<span class="sd">                - The Q-value loss tensor</span>
+<span class="sd">                - A dictionary with metadata including the TD error</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_value_loss</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span></div>
+
     <span class="k">def</span><span class="w"> </span><span class="nf">_value_loss</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Tensor</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]]:</span>
@@ -1848,6 +1978,20 @@
             <span class="c1"># placeholder</span>
             <span class="n">alpha_loss</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">log_prob</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">alpha_loss</span>
+
+<div class="viewcode-block" id="DiscreteSACLoss.alpha_loss"><a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.DiscreteSACLoss.html#torchrl.objectives.DiscreteSACLoss.alpha_loss">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">alpha_loss</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">log_prob</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute the alpha loss for discrete SAC.</span>
+
+<span class="sd">        This method computes the alpha loss which adapts the entropy coefficient</span>
+<span class="sd">        to maintain the target entropy level for discrete actions.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            log_prob (Tensor): The log probability of actions from the actor network.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The alpha loss tensor</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_alpha_loss</span><span class="p">(</span><span class="n">log_prob</span><span class="p">)</span></div>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_alpha</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
