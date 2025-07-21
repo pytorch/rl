@@ -6,8 +6,6 @@ from __future__ import annotations
 
 import functools
 
-import minigrid
-
 import torch.nn
 import torch.optim
 from tensordict.nn import TensorDictModule, TensorDictSequential
@@ -199,8 +197,8 @@ def make_offline_replay_buffer(rb_cfg):
 
 def make_offline_discrete_replay_buffer(rb_cfg):
     import gymnasium as gym
-    from minari import DataCollector
     import minari
+    from minari import DataCollector
 
     # Create custom minari dataset from environment
 
@@ -215,12 +213,12 @@ def make_offline_discrete_replay_buffer(rb_cfg):
             if terminated or truncated:
                 break
 
-    dataset = env.create_dataset(
+    env.create_dataset(
         dataset_id=rb_cfg.dataset,
         algorithm_name="Random-Policy",
         code_permalink="https://github.com/Farama-Foundation/Minari",
         author="Farama",
-        author_email="contact@farama.org"
+        author_email="contact@farama.org",
     )
 
     data = MinariExperienceReplay(
@@ -231,11 +229,12 @@ def make_offline_discrete_replay_buffer(rb_cfg):
         sampler=SamplerWithoutReplacement(drop_last=True),
         prefetch=4,
     )
-    
+
     data.append_transform(DoubleToFloat())
 
     def transform_data(data):
-        data*=1
+        data *= 1
+
     with torch.enable_grad():
         data.append_transform(
             transform_data,
@@ -246,6 +245,7 @@ def make_offline_discrete_replay_buffer(rb_cfg):
 
     minari.delete_dataset(rb_cfg.dataset)
     return data
+
 
 # ====================================================================
 # Model
@@ -408,7 +408,7 @@ def make_continuous_loss(loss_cfg, model, device: torch.device | None = None):
 def make_discrete_loss(loss_cfg, model, device: torch.device | None = None):
 
     # Get action space from the model
-    action_space = model.spec["action"]
+    model.spec["action"]
 
     loss_module = DiscreteCQLLoss(
         model,

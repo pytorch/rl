@@ -3489,7 +3489,7 @@ class TestMinari:
     @pytest.mark.parametrize(
         "dataset_idx",
         # Only use a static upper bound; do not call any function that imports minari globally.
-        range(50)
+        range(50),
     )
     def test_load(self, dataset_idx, split):
         """
@@ -3675,6 +3675,7 @@ class TestMinari:
                 break
 
         minari.delete_dataset(dataset_id="cartpole/test-local-v1")
+
 
 @pytest.mark.slow
 class TestRoboset:

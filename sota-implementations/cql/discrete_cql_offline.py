@@ -12,6 +12,7 @@ The helper functions are coded in the utils.py associated with this script.
 from __future__ import annotations
 
 import warnings
+
 import hydra
 import numpy as np
 import torch
@@ -23,7 +24,6 @@ from torchrl.record.loggers import generate_exp_name, get_logger
 from utils import (
     dump_video,
     log_metrics,
-    make_collector,
     make_discrete_cql_optimizer,
     make_discrete_loss,
     make_discretecql_model,
@@ -32,6 +32,7 @@ from utils import (
 )
 
 torch.set_float32_matmul_precision("high")
+
 
 @hydra.main(version_base="1.1", config_path="", config_name="discrete_offline_config")
 def main(cfg):  # noqa: F821
@@ -64,27 +65,25 @@ def main(cfg):  # noqa: F821
             "The seed in the environment config is deprecated. "
             "Please set the seed in the optim config instead."
         )
-    
+
     # Create replay buffer
     replay_buffer = make_offline_discrete_replay_buffer(cfg.replay_buffer)
 
     # Create env
     train_env, eval_env = make_environment(
         cfg, train_num_envs=1, eval_num_envs=cfg.logger.eval_envs, logger=logger
-        )
+    )
 
     # Create agent
     model, explore_policy = make_discretecql_model(cfg, train_env, eval_env, device)
 
-    del train_env 
-
+    del train_env
 
     # Create loss
     loss_module, target_net_updater = make_discrete_loss(cfg.loss, model, device)
 
-
     # Create optimizers
-    optimizer = make_discrete_cql_optimizer(cfg, loss_module) # optimizer for CQL loss
+    optimizer = make_discrete_cql_optimizer(cfg, loss_module)  # optimizer for CQL loss
 
     def update(data):
 
@@ -93,7 +92,6 @@ def main(cfg):  # noqa: F821
 
         q_loss = loss_vals["loss_qvalue"]
         cql_loss = loss_vals["loss_cql"]
-
 
         # Total loss = Q-learning loss + CQL regularization
         loss = q_loss + cql_loss
@@ -107,8 +105,6 @@ def main(cfg):  # noqa: F821
 
         # Detach to avoid keeping computation graph in logging
         return loss.detach(), loss_vals.detach()
-    
-
 
     compile_mode = None
     if cfg.compile.compile:
@@ -144,17 +140,13 @@ def main(cfg):  # noqa: F821
 
         with timeit("update"):
             torch.compiler.cudagraph_mark_step_begin()
-            i_device = torch.tensor(i, device=device)
-            loss, loss_vals = update(
-                data.to(device)
-            )
+            loss, loss_vals = update(data.to(device))
 
         # log metrics
         metrics_to_log = {
             "loss": loss.cpu(),
             **loss_vals.cpu(),
         }
-
 
         # evaluation
         with timeit("log/eval"):
@@ -163,12 +155,16 @@ def main(cfg):  # noqa: F821
                     ExplorationType.DETERMINISTIC
                 ), torch.no_grad():
                     eval_td = eval_env.rollout(
-                        max_steps=eval_steps, policy=explore_policy, auto_cast_to_device=True
+                        max_steps=eval_steps,
+                        policy=explore_policy,
+                        auto_cast_to_device=True,
                     )
                     eval_env.apply(dump_video)
-                
+
                 # eval_td: matrix of shape: [num_episodes, max_steps, ...]
-                eval_reward = eval_td["next", "reward"].sum(1).mean().item() # mean computed over the sum of rewards for each episode
+                eval_reward = (
+                    eval_td["next", "reward"].sum(1).mean().item()
+                )  # mean computed over the sum of rewards for each episode
                 metrics_to_log["evaluation_reward"] = eval_reward
 
         with timeit("log"):
