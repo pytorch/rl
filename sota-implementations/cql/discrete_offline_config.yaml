@@ -38,7 +38,7 @@ replay_buffer:
   env: CartPole-v1
   dataset: CartPole-v2-random-v1
   batch_size: 128
-  episodes: 1000
+  episodes: 10000
 
 # optimization
 optim:
