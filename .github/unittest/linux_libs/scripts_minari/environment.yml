@@ -21,3 +21,5 @@ dependencies:
     - hydra-core
     - minari[gcs,hdf5,hf]
     - gymnasium<1.0.0
+    - ale-py
+    - gymnasium-robotics
