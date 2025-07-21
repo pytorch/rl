@@ -687,6 +687,102 @@ class SACLoss(LossModule):
             )
         return self._alpha * log_prob - min_q_logprob, {"log_prob": log_prob.detach()}
 
+    @dispatch
+    def actor_loss(
+        self, tensordict: TensorDictBase
+    ) -> tuple[Tensor, dict[str, Tensor]]:
+        """Compute the actor loss for SAC.
+
+        This method computes the actor loss which encourages the policy to maximize
+        the expected Q-value while maintaining high entropy.
+
+        Args:
+            tensordict (TensorDictBase): A tensordict containing the data needed for
+                computing the actor loss. Should contain the observation and other
+                required keys for the actor network.
+
+        Returns:
+            A tuple containing:
+                - The actor loss tensor
+                - A dictionary with metadata including the log probability of actions
+        """
+        return self._actor_loss(tensordict)
+
+    @dispatch
+    def qvalue_loss(
+        self, tensordict: TensorDictBase
+    ) -> tuple[Tensor, dict[str, Tensor]]:
+        """Compute the Q-value loss for SAC.
+
+        This method computes the Q-value loss which trains the Q-networks to estimate
+        the expected return for state-action pairs.
+
+        Args:
+            tensordict (TensorDictBase): A tensordict containing the data needed for
+                computing the Q-value loss. Should contain the observation, action,
+                reward, done, and terminated keys.
+
+        Returns:
+            A tuple containing:
+                - The Q-value loss tensor
+                - A dictionary with metadata including the TD error
+        """
+        if self._version == 1:
+            return self._qvalue_v1_loss(tensordict)
+        else:
+            return self._qvalue_v2_loss(tensordict)
+
+    @dispatch
+    def value_loss(
+        self, tensordict: TensorDictBase
+    ) -> tuple[Tensor, dict[str, Tensor]]:
+        """Compute the value loss for SAC (version 1 only).
+
+        This method computes the value loss which trains the value network to estimate
+        the expected return for states. This is only used in SAC version 1.
+
+        Args:
+            tensordict (TensorDictBase): A tensordict containing the data needed for
+                computing the value loss. Should contain the observation and other
+                required keys for the value network.
+
+        Returns:
+            A tuple containing:
+                - The value loss tensor
+                - An empty dictionary (no metadata for value loss)
+
+        Raises:
+            RuntimeError: If called on SAC version 2 (which doesn't use a value network)
+        """
+        if self._version != 1:
+            raise RuntimeError(
+                "Value loss is only available in SAC version 1. "
+                "SAC version 2 doesn't use a separate value network."
+            )
+        return self._value_loss(tensordict)
+
+    def alpha_loss(self, log_prob: Tensor) -> Tensor:
+        """Compute the alpha loss for SAC.
+
+        This method computes the alpha loss which adapts the entropy coefficient
+        to maintain the target entropy level.
+
+        Args:
+            log_prob (Tensor): The log probability of actions from the actor network.
+
+        Returns:
+            The alpha loss tensor
+        """
+        return self._alpha_loss(log_prob)
+
+    @property
+    def _alpha(self):
+        if self.min_log_alpha is not None or self.max_log_alpha is not None:
+            self.log_alpha.data.clamp_(self.min_log_alpha, self.max_log_alpha)
+        with torch.no_grad():
+            alpha = self.log_alpha.exp()
+        return alpha
+
     @property
     @_cache_values
     def _cached_target_params_actor_value(self):
@@ -881,14 +977,6 @@ class SACLoss(LossModule):
             # placeholder
             alpha_loss = torch.zeros_like(log_prob)
         return alpha_loss
-
-    @property
-    def _alpha(self):
-        if self.min_log_alpha is not None or self.max_log_alpha is not None:
-            self.log_alpha.data.clamp_(self.min_log_alpha, self.max_log_alpha)
-        with torch.no_grad():
-            alpha = self.log_alpha.exp()
-        return alpha
 
 
 class DiscreteSACLoss(LossModule):
@@ -1352,6 +1440,48 @@ class DiscreteSACLoss(LossModule):
             target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
             return target_value
 
+    @dispatch
+    def actor_loss(
+        self, tensordict: TensorDictBase
+    ) -> tuple[Tensor, dict[str, Tensor]]:
+        """Compute the actor loss for discrete SAC.
+
+        This method computes the actor loss which encourages the policy to maximize
+        the expected Q-value while maintaining high entropy for discrete actions.
+
+        Args:
+            tensordict (TensorDictBase): A tensordict containing the data needed for
+                computing the actor loss. Should contain the observation and other
+                required keys for the actor network.
+
+        Returns:
+            A tuple containing:
+                - The actor loss tensor
+                - A dictionary with metadata including the log probability of actions
+        """
+        return self._actor_loss(tensordict)
+
+    @dispatch
+    def qvalue_loss(
+        self, tensordict: TensorDictBase
+    ) -> tuple[Tensor, dict[str, Tensor]]:
+        """Compute the Q-value loss for discrete SAC.
+
+        This method computes the Q-value loss which trains the Q-networks to estimate
+        the expected return for state-action pairs in discrete action spaces.
+
+        Args:
+            tensordict (TensorDictBase): A tensordict containing the data needed for
+                computing the Q-value loss. Should contain the observation, action,
+                reward, done, and terminated keys.
+
+        Returns:
+            A tuple containing:
+                - The Q-value loss tensor
+                - A dictionary with metadata including the TD error
+        """
+        return self._value_loss(tensordict)
+
     def _value_loss(
         self, tensordict: TensorDictBase
     ) -> tuple[Tensor, dict[str, Tensor]]:
@@ -1426,6 +1556,20 @@ class DiscreteSACLoss(LossModule):
             # placeholder
             alpha_loss = torch.zeros_like(log_prob)
         return alpha_loss
+
+    def alpha_loss(self, log_prob: Tensor) -> Tensor:
+        """Compute the alpha loss for discrete SAC.
+
+        This method computes the alpha loss which adapts the entropy coefficient
+        to maintain the target entropy level for discrete actions.
+
+        Args:
+            log_prob (Tensor): The log probability of actions from the actor network.
+
+        Returns:
+            The alpha loss tensor
+        """
+        return self._alpha_loss(log_prob)
 
     @property
     def _alpha(self):
