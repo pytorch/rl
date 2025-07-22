@@ -24,3 +24,6 @@ dependencies:
     - ale-py
     - gymnasium-robotics
     - minari[create]
+    - jax
+    - mujoco               
+    - mujoco-py
