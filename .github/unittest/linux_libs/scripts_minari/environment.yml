@@ -27,3 +27,4 @@ dependencies:
     - jax
     - mujoco               
     - mujoco-py
+    - minigrid

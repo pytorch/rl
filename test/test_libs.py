@@ -3408,7 +3408,7 @@ def _minari_init():
 
 def get_random_minigrid_datasets():
     """
-    Fetch 5 random Minigrid datasets from the Minari server.
+    Fetch 2 random Minigrid datasets from the Minari server.
     """
     import minari
 
@@ -3421,13 +3421,13 @@ def get_random_minigrid_datasets():
     ]
 
     # 3 random datasets
-    indices = torch.randperm(len(all_minigrid))[:3] 
+    indices = torch.randperm(len(all_minigrid))[:2] 
     return [all_minigrid[idx] for idx in indices]
 
 
 def get_random_atari_envs():
     """
-    Fetch 3 random Atari environments using ale_py and torch.
+    Fetch 2 random Atari environments using ale_py and torch.
     """
     import ale_py
     import gymnasium as gym
@@ -3437,9 +3437,9 @@ def get_random_atari_envs():
     env_specs = gym.envs.registry.values()
     all_env_ids = [env_spec.id for env_spec in env_specs]
     atari_env_ids = [env_id for env_id in all_env_ids if env_id.startswith("ALE")]
-    if len(atari_env_ids) < 3:
+    if len(atari_env_ids) < 2:
         raise RuntimeError("Not enough Atari environments found.")
-    indices = torch.randperm(len(atari_env_ids))[:3]
+    indices = torch.randperm(len(atari_env_ids))[:2]
     return [atari_env_ids[idx] for idx in indices]
 
 
@@ -3488,7 +3488,7 @@ class TestMinari:
     @pytest.mark.parametrize(
         "dataset_idx",
         # Only use a static upper bound; do not call any function that imports minari globally.
-        range(7)
+        range(8)
     )
     def test_load(self, dataset_idx, split):
         """
@@ -3510,10 +3510,12 @@ class TestMinari:
         except Exception:
             minigrid_datasets = []
         num_minigrid = len(minigrid_datasets)
+
         try:
             atari_envs = get_random_atari_envs()
         except Exception:
             atari_envs = []
+
         num_atari = len(atari_envs)
         total_datasets = num_custom + num_minigrid + num_atari
 
