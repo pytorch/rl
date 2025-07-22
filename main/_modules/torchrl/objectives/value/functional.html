@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+851a041) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+79e4116) &#x25BC</span></a>
     </div>
     
 
@@ -802,7 +802,7 @@
     <span class="n">reward</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
     <span class="n">done</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
     <span class="n">terminated</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;TD(0) advantage estimate of a trajectory.</span>
 
 <span class="sd">    Also known as bootstrapped Temporal Difference or one-step return.</span>
@@ -842,7 +842,7 @@
     <span class="n">terminated</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">done</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
     <span class="c1"># noqa: D417</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;TD(0) discounted return estimate of a trajectory.</span>
 
@@ -872,8 +872,8 @@
     <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">next_state_value</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">reward</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">terminated</span><span class="o">.</span><span class="n">shape</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">SHAPE_ERR</span><span class="p">)</span>
     <span class="n">not_terminated</span> <span class="o">=</span> <span class="p">(</span><span class="o">~</span><span class="n">terminated</span><span class="p">)</span><span class="o">.</span><span class="n">int</span><span class="p">()</span>
-    <span class="n">advantage</span> <span class="o">=</span> <span class="n">reward</span> <span class="o">+</span> <span class="n">gamma</span> <span class="o">*</span> <span class="n">not_terminated</span> <span class="o">*</span> <span class="n">next_state_value</span>
-    <span class="k">return</span> <span class="n">advantage</span></div>
+    <span class="n">returns</span> <span class="o">=</span> <span class="n">reward</span> <span class="o">+</span> <span class="n">gamma</span> <span class="o">*</span> <span class="n">not_terminated</span> <span class="o">*</span> <span class="n">next_state_value</span>
+    <span class="k">return</span> <span class="n">returns</span></div>
 
 
 <span class="c1">########################################################################</span>
