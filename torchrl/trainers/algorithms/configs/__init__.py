@@ -38,6 +38,12 @@ from torchrl.trainers.algorithms.configs.envs import (
     EnvConfig,
     GymEnvConfig,
 )
+from torchrl.trainers.algorithms.configs.logging import (
+    CSVLoggerConfig,
+    LoggerConfig,
+    TensorboardLoggerConfig,
+    WandbLoggerConfig,
+)
 from torchrl.trainers.algorithms.configs.modules import (
     ConvNetConfig,
     MLPConfig,
@@ -47,11 +53,16 @@ from torchrl.trainers.algorithms.configs.modules import (
     ValueModelConfig,
 )
 from torchrl.trainers.algorithms.configs.objectives import LossConfig, PPOLossConfig
-from torchrl.trainers.algorithms.configs.trainers import PPOConfig, TrainerConfig
+from torchrl.trainers.algorithms.configs.trainers import PPOTrainerConfig, TrainerConfig
+from torchrl.trainers.algorithms.configs.utils import AdamConfig
 
 __all__ = [
     "AsyncDataCollectorConfig",
     "BatchedEnvConfig",
+    "CSVLoggerConfig",
+    "LoggerConfig",
+    "TensorboardLoggerConfig",
+    "WandbLoggerConfig",
     "StorageEnsembleWriterConfig",
     "SamplerWithoutReplacementConfig",
     "SliceSamplerWithoutReplacementConfig",
@@ -69,7 +80,7 @@ __all__ = [
     "ModelConfig",
     "MultiSyncDataCollectorConfig",
     "MultiaSyncDataCollectorConfig",
-    "PPOConfig",
+    "PPOTrainerConfig",
     "PPOLossConfig",
     "PrioritizedSamplerConfig",
     "RandomSamplerConfig",
@@ -77,6 +88,7 @@ __all__ = [
     "RoundRobinWriterConfig",
     "SliceSamplerConfig",
     "StorageEnsembleConfig",
+    "AdamConfig",
     "SyncDataCollectorConfig",
     "TanhNormalModelConfig",
     "TensorDictModuleConfig",
@@ -136,3 +148,16 @@ cs.store(group="collector", name="multi_async", node=MultiaSyncDataCollectorConf
 
 # Trainer configs
 cs.store(group="trainer", name="base", node=TrainerConfig)
+cs.store(group="trainer", name="ppo", node=PPOTrainerConfig)
+
+# Loss configs
+cs.store(group="loss", name="ppo", node=PPOLossConfig)
+
+# Optimizer configs
+cs.store(group="optimizer", name="adam", node=AdamConfig)
+
+# Logger configs
+cs.store(group="logger", name="wandb", node=WandbLoggerConfig)
+cs.store(group="logger", name="tensorboard", node=TensorboardLoggerConfig)
+cs.store(group="logger", name="csv", node=CSVLoggerConfig)
+cs.store(group="logger", name="base", node=LoggerConfig)

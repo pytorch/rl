@@ -50,6 +50,7 @@ class SyncDataCollectorConfig(DataCollectorConfig):
     cudagraph_policy: Any = None
     no_cuda_sync: bool = False
     _target_: str = "torchrl.collectors.collectors.SyncDataCollector"
+    _partial_: bool = False
 
     def __post_init__(self):
         self.create_env_fn._partial_ = True

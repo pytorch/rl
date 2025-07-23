@@ -14,16 +14,16 @@ from torch import optim
 
 from torchrl.collectors.collectors import DataCollectorBase
 
-from torchrl.data.replay_buffers.storages import LazyTensorStorage
-from torchrl.envs.batched_envs import ParallelEnv
 from torchrl.objectives.common import LossModule
 from torchrl.record.loggers import Logger
-from torchrl.trainers.algorithms.configs.collectors import DataCollectorConfig
-from torchrl.trainers.algorithms.configs.data import ReplayBufferConfig
-from torchrl.trainers.algorithms.configs.envs import BatchedEnvConfig, GymEnvConfig
+from torchrl.trainers.algorithms.configs.data import (
+    LazyTensorStorageConfig,
+    ReplayBufferConfig,
+)
+from torchrl.trainers.algorithms.configs.envs import GymEnvConfig
 from torchrl.trainers.algorithms.configs.modules import MLPConfig, TanhNormalModelConfig
 from torchrl.trainers.algorithms.configs.objectives import PPOLossConfig
-from torchrl.trainers.algorithms.configs.trainers import PPOConfig
+from torchrl.trainers.algorithms.configs.utils import AdamConfig
 from torchrl.trainers.trainers import Trainer
 
 try:
@@ -80,61 +80,56 @@ class PPOTrainer(Trainer):
         self.replay_buffer = replay_buffer
 
     @classmethod
-    def from_config(cls, cfg: PPOConfig, **kwargs):
-        return cfg.make()
+    def default_config(cls) -> PPOTrainerConfig:  # type: ignore # noqa: F821
+        """Creates a default config for the PPO trainer.
 
-    @property
-    def default_config(self):
-        inference_batch_size = 1024
+        The task is the Pendulum-v1 environment in Gym, with a 2-layer MLP actor and critic.
 
-        inference_env_cfg = BatchedEnvConfig(
-            batched_env_type=ParallelEnv,
-            env_config=GymEnvConfig(env_name="Pendulum-v1"),
-            num_envs=4,
+        """
+        from torchrl.trainers.algorithms.configs.collectors import (
+            SyncDataCollectorConfig,
         )
-        specs = inference_env_cfg.specs
-        # TODO: maybe an MLPConfig.from_env ?
-        # input /output features
-        in_features = specs[
-            "output_spec", "full_observation_spec", "observation"
-        ].shape[-1]
-        out_features = specs["output_spec", "full_action_spec", "action"].shape[-1]
-        network_config = MLPConfig(
-            in_features=in_features,
-            out_features=2 * out_features,
-            num_cells=[128, 128, 128],
+        from torchrl.trainers.algorithms.configs.modules import TensorDictModuleConfig
+        from torchrl.trainers.algorithms.configs.trainers import PPOTrainerConfig
+
+        env_cfg = GymEnvConfig(env_name="Pendulum-v1")
+        actor_network = TanhNormalModelConfig(
+            network=MLPConfig(in_features=3, out_features=2, depth=2, num_cells=128),
+            in_keys=["observation"],
+            out_keys=["action"],
+            return_log_prob=True,
         )
-
-        inference_policy_config = TanhNormalModelConfig(network_config=network_config)
-
-        rb_config = ReplayBufferConfig(
-            storage=lambda: LazyTensorStorage(max_size=inference_batch_size)
-        )
-
-        collector_cfg = DataCollectorConfig(
-            env_cfg=inference_env_cfg,
-            policy_cfg=inference_policy_config,
-            frames_per_batch=inference_batch_size,
-        )
-
-        critic_network_config = MLPConfig(
-            in_features=in_features,
-            out_features=1,
-            num_cells=[128, 128, 128],
-            as_tensordict_module=True,
+        critic_network = TensorDictModuleConfig(
+            module=MLPConfig(in_features=3, out_features=1, depth=2, num_cells=128),
             in_keys=["observation"],
             out_keys=["state_value"],
         )
-
-        ppo_loss_cfg = PPOLossConfig(
-            # We use the same config for the inference and training policies
-            actor_network_cfg=inference_policy_config,
-            critic_network_cfg=critic_network_config,
+        collector_cfg = SyncDataCollectorConfig(
+            total_frames=1_000_000, frames_per_batch=1000, _partial_=True
         )
-
-        return PPOConfig(
-            loss_cfg=ppo_loss_cfg,
-            collector_cfg=collector_cfg,
-            replay_buffer_cfg=rb_config,
+        loss_cfg = PPOLossConfig(_partial_=True)
+        optimizer_cfg = AdamConfig(_partial_=True)
+        replay_buffer_cfg = ReplayBufferConfig(
+            storage=LazyTensorStorageConfig(max_size=100_000, device="cpu"),
+            batch_size=256,
+        )
+        return PPOTrainerConfig(
+            collector=collector_cfg,
+            total_frames=1_000_000,
+            frame_skip=1,
             optim_steps_per_batch=1,
+            loss_module=loss_cfg,
+            optimizer=optimizer_cfg,
+            logger=None,
+            clip_grad_norm=True,
+            clip_norm=1.0,
+            progress_bar=True,
+            seed=1,
+            save_trainer_interval=10000,
+            log_interval=10000,
+            save_trainer_file=None,
+            replay_buffer=replay_buffer_cfg,
+            create_env_fn=env_cfg,
+            actor_network=actor_network,
+            critic_network=critic_network,
         )

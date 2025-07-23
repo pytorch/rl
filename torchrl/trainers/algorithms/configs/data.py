@@ -201,7 +201,7 @@ class LazyMemmapStorageConfig(ConfigBase):
     _target_: str = "torchrl.data.replay_buffers.LazyMemmapStorage"
     max_size: int | None = None
     device: Any = None
-    ndim: int | None = None
+    ndim: int = 1
     compilable: bool = False
 
 
@@ -210,7 +210,7 @@ class LazyTensorStorageConfig(ConfigBase):
     _target_: str = "torchrl.data.replay_buffers.LazyTensorStorage"
     max_size: int | None = None
     device: Any = None
-    ndim: int | None = None
+    ndim: int = 1
     compilable: bool = False
 
 

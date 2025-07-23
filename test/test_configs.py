@@ -14,7 +14,10 @@ from hydra import initialize_config_dir
 from hydra.utils import instantiate
 from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv
 from torchrl.modules.models.models import MLP
-from torchrl.trainers.algorithms.configs.modules import ActivationConfig, LayerConfig
+from torchrl.trainers.algorithms.configs.modules import (
+    ActivationConfig,
+    LayerConfig,
+)
 
 
 class TestEnvConfigs:
@@ -839,7 +842,7 @@ class TestCollectorsConfig:
         )
 
         # We need an env config and a policy config
-        env_cfg = GymEnvConfig("Pendulum-v1")
+        env_cfg = GymEnvConfig(env_name="Pendulum-v1")
         policy_cfg = TanhNormalModelConfig(
             network=MLPConfig(in_features=3, out_features=2, depth=2, num_cells=32),
             in_keys=["observation"],
@@ -885,6 +888,67 @@ class TestCollectorsConfig:
                 break
         finally:
             collector.shutdown(timeout=10)
+
+
+class TestLossConfigs:
+    @pytest.mark.parametrize("loss_type", ["clip", "kl", "ppo"])
+    def test_ppo_loss_config(self, loss_type):
+        from torchrl.objectives.ppo import ClipPPOLoss, KLPENPPOLoss, PPOLoss
+        from torchrl.trainers.algorithms.configs.modules import (
+            MLPConfig,
+            TanhNormalModelConfig,
+            TensorDictModuleConfig,
+        )
+        from torchrl.trainers.algorithms.configs.objectives import PPOLossConfig
+
+        actor_network = TanhNormalModelConfig(
+            network=MLPConfig(in_features=10, out_features=10, depth=2, num_cells=32),
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+        critic_network = TensorDictModuleConfig(
+            module=MLPConfig(in_features=10, out_features=1, depth=2, num_cells=32),
+            in_keys=["observation"],
+            out_keys=["state_value"],
+        )
+        cfg = PPOLossConfig(
+            actor_network=actor_network,
+            critic_network=critic_network,
+            loss_type=loss_type,
+        )
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.objectives._make_ppo_loss"
+        )
+        loss = instantiate(cfg)
+        assert isinstance(loss, PPOLoss)
+        if loss_type == "clip":
+            assert isinstance(loss, ClipPPOLoss)
+        elif loss_type == "kl":
+            assert isinstance(loss, KLPENPPOLoss)
+
+
+class TestTrainerConfigs:
+    def test_ppo_trainer_config(self):
+        from torchrl.trainers.algorithms.ppo import PPOTrainer
+
+        cfg = PPOTrainer.default_config()
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.trainers._make_ppo_trainer"
+        )
+        assert (
+            cfg.collector._target_ == "torchrl.collectors.collectors.SyncDataCollector"
+        )
+        assert (
+            cfg.loss_module._target_
+            == "torchrl.trainers.algorithms.configs.objectives._make_ppo_loss"
+        )
+        assert cfg.optimizer._target_ == "torch.optim.Adam"
+        assert cfg.logger is None
+        trainer = instantiate(cfg)
+        assert isinstance(trainer, PPOTrainer)
+        trainer.train()
 
 
 class TestHydraParsing:
@@ -950,7 +1014,40 @@ env:
         print(f"Instantiated env (from file): {env_from_file}")
         assert isinstance(env_from_file, GymEnv)
 
+    cfg_ppo = """
+defaults:
+  - trainer: ppo
+  - _self_
 
+trainer:
+  total_frames: 100000
+  frame_skip: 1
+  optim_steps_per_batch: 10
+  collector: sync
+"""
+
+    def test_trainer_parsing_with_file(self, tmpdir):
+        from hydra import compose
+        from hydra.core.global_hydra import GlobalHydra
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.ppo import PPOTrainer
+
+        GlobalHydra.instance().clear()
+        initialize_config_dir(config_dir=str(tmpdir), version_base=None)
+        file = tmpdir / "config.yaml"
+        with open(file, "w") as f:
+            f.write(self.cfg_ppo)
+
+        # Use Hydra's compose to resolve config groups
+        cfg_from_file = compose(
+            config_name="config",
+        )
+
+        # Now we can instantiate the environment
+        print(cfg_from_file)
+        trainer_from_file = instantiate(cfg_from_file.trainer)
+        print(f"Instantiated trainer (from file): {trainer_from_file}")
+        assert isinstance(trainer_from_file, PPOTrainer)
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
