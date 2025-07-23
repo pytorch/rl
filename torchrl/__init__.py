@@ -25,7 +25,22 @@ from ._extension import _init_extension
 try:
     from .version import __version__
 except ImportError:
-    __version__ = None
+    # Fallback: try to read version from version.txt and append git hash
+    try:
+        import os
+        import subprocess
+        version_file = os.path.join(os.path.dirname(__file__), "..", "version.txt")
+        with open(version_file, "r") as f:
+            base_version = f.read().strip()
+        
+        # Try to get git hash
+        try:
+            git_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=os.path.dirname(version_file)).decode("ascii").strip()[:7]
+            __version__ = f"{base_version}+{git_sha}"
+        except Exception:
+            __version__ = base_version
+    except Exception:
+        __version__ = "unknown"
 
 try:
     from torch.compiler import is_dynamo_compiling
