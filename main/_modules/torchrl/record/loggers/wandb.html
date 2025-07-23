@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+5a40c0b) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+4fc5995) &#x25BC</span></a>
     </div>
     
 
@@ -429,7 +429,6 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sequence</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tensor</span>
@@ -469,7 +468,6 @@
 
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="bp">cls</span><span class="o">.</span><span class="n">_prev_video_step</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
@@ -506,25 +504,19 @@
             <span class="s2">&quot;resume&quot;</span><span class="p">:</span> <span class="s2">&quot;allow&quot;</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">}</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_has_imported_wandb</span> <span class="o">=</span> <span class="kc">False</span>
+
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">exp_name</span><span class="o">=</span><span class="n">exp_name</span><span class="p">,</span> <span class="n">log_dir</span><span class="o">=</span><span class="n">save_dir</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">offline</span><span class="p">:</span>
             <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;WANDB_MODE&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;dryrun&quot;</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_has_imported_moviepy</span> <span class="o">=</span> <span class="kc">False</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">_has_imported_omgaconf</span> <span class="o">=</span> <span class="kc">False</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">video_log_counter</span> <span class="o">=</span> <span class="mi">0</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_create_experiment</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">WandbLogger</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_create_experiment</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Creates a wandb experiment.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            exp_name (str): The name of the experiment.</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">            WandbLogger: The wandb experiment logger.</span>
+<span class="sd">            A wandb.Experiment object.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_wandb</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="s2">&quot;Wandb is not installed&quot;</span><span class="p">)</span>
@@ -535,7 +527,9 @@
 
         <span class="k">return</span> <span class="n">wandb</span><span class="o">.</span><span class="n">init</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_wandb_kwargs</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">log_scalar</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">log_scalar</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">commit</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Logs a scalar value to wandb.</span>
 
 <span class="sd">        Args:</span>
@@ -543,11 +537,10 @@
 <span class="sd">            value (float): The value of the scalar.</span>
 <span class="sd">            step (int, optional): The step at which the scalar is logged.</span>
 <span class="sd">                Defaults to None.</span>
+<span class="sd">            commit: If true, data for current step is assumed to be final (and</span>
+<span class="sd">                no further data for this step should be logged).</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">step</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">experiment</span><span class="o">.</span><span class="n">log</span><span class="p">({</span><span class="n">name</span><span class="p">:</span> <span class="n">value</span><span class="p">,</span> <span class="s2">&quot;trainer/step&quot;</span><span class="p">:</span> <span class="n">step</span><span class="p">})</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">experiment</span><span class="o">.</span><span class="n">log</span><span class="p">({</span><span class="n">name</span><span class="p">:</span> <span class="n">value</span><span class="p">})</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">experiment</span><span class="o">.</span><span class="n">log</span><span class="p">({</span><span class="n">name</span><span class="p">:</span> <span class="n">value</span><span class="p">},</span> <span class="n">step</span><span class="o">=</span><span class="n">step</span><span class="p">,</span> <span class="n">commit</span><span class="o">=</span><span class="n">commit</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">log_video</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">video</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Log videos inputs to wandb.</span>
@@ -562,38 +555,10 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">wandb</span>
 
-        <span class="c1"># check for correct format of the video tensor ((N), T, C, H, W)</span>
-        <span class="c1"># check that the color channel (C) is either 1 or 3</span>
-        <span class="k">if</span> <span class="n">video</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">!=</span> <span class="mi">5</span> <span class="ow">or</span> <span class="n">video</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">}:</span>
-            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span>
-                <span class="s2">&quot;Wrong format of the video tensor. Should be ((N), T, C, H, W)&quot;</span>
-            <span class="p">)</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_has_imported_moviepy</span><span class="p">:</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="kn">import</span><span class="w"> </span><span class="nn">moviepy</span>  <span class="c1"># noqa</span>
-
-                <span class="bp">self</span><span class="o">.</span><span class="n">_has_imported_moviepy</span> <span class="o">=</span> <span class="kc">True</span>
-            <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span>
-                    <span class="s2">&quot;moviepy not found, videos cannot be logged with TensorboardLogger&quot;</span>
-                <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">video_log_counter</span> <span class="o">+=</span> <span class="mi">1</span>
         <span class="n">fps</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;fps&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">video_fps</span><span class="p">)</span>
-        <span class="n">step</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;step&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="nb">format</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;format&quot;</span><span class="p">,</span> <span class="s2">&quot;mp4&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">step</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prev_video_step</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prev_video_step</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="s2">&quot;when using step with wandb_logger.log_video, it is expected &quot;</span>
-                <span class="s2">&quot;that the step is equal to the previous step or that value incremented &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;by one. Got step=</span><span class="si">{</span><span class="n">step</span><span class="si">}</span><span class="s2"> but previous value was </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_prev_video_step</span><span class="si">}</span><span class="s2">. &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;The step value will be set to </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_prev_video_step</span><span class="o">+</span><span class="mi">1</span><span class="si">}</span><span class="s2">. This warning will &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;be silenced from now on but the values will keep being incremented.&quot;</span>
-            <span class="p">)</span>
-            <span class="n">step</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prev_video_step</span> <span class="o">+</span> <span class="mi">1</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_prev_video_step</span> <span class="o">=</span> <span class="n">step</span> <span class="k">if</span> <span class="n">step</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prev_video_step</span> <span class="o">+</span> <span class="mi">1</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">experiment</span><span class="o">.</span><span class="n">log</span><span class="p">(</span>
             <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">wandb</span><span class="o">.</span><span class="n">Video</span><span class="p">(</span><span class="n">video</span><span class="p">,</span> <span class="n">fps</span><span class="o">=</span><span class="n">fps</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="nb">format</span><span class="p">)},</span>
-            <span class="c1"># step=step,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span>
 
