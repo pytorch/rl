@@ -26,5 +26,5 @@ dependencies:
     - minari[create]
     - jax
     - mujoco               
-    - mujoco-py
+    - mujoco-py<2.2,>=2.1
     - minigrid
