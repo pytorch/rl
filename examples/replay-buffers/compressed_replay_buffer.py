@@ -10,7 +10,7 @@ import time
 
 import torch
 from tensordict import TensorDict
-from torchrl.data import CompressedStorage, ReplayBuffer
+from torchrl.data import CompressedListStorage, ReplayBuffer
 
 
 def main():
@@ -18,7 +18,7 @@ def main():
 
     # Create a compressed storage with zstd compression
     print("Creating compressed storage...")
-    storage = CompressedStorage(
+    storage = CompressedListStorage(
         max_size=1000,
         compression_level=3,  # zstd compression level (1-22)
         device="cpu",
@@ -48,21 +48,21 @@ def main():
     )
 
     # Measure memory usage before adding data
-    print(f"Original data size: {data.bytes() / 1024 / 1024:.2f} MB")
+    print(f"Original data size: {data.bytes() / 1024 / 1024: .2f} MB")
 
     # Add data to replay buffer
     print("Adding data to replay buffer...")
     start_time = time.time()
     rb.extend(data)
     add_time = time.time() - start_time
-    print(f"Time to add data: {add_time:.3f} seconds")
+    print(f"Time to add data: {add_time: .3f} seconds")
 
     # Sample from replay buffer
     print("Sampling from replay buffer...")
     start_time = time.time()
     sample = rb.sample(32)
     sample_time = time.time() - start_time
-    print(f"Time to sample: {sample_time:.3f} seconds")
+    print(f"Time to sample: {sample_time: .3f} seconds")
 
     # Verify data integrity
     print("\nVerifying data integrity...")
@@ -86,11 +86,11 @@ def main():
         original_size / compressed_size_estimate if compressed_size_estimate > 0 else 1
     )
 
-    print(f"Original size: {original_size / 1024 / 1024:.2f} MB")
+    print(f"Original size: {original_size / 1024 / 1024: .2f} MB")
     print(
-        f"Compressed size (estimate): {compressed_size_estimate / 1024 / 1024:.2f} MB"
+        f"Compressed size (estimate): {compressed_size_estimate / 1024 / 1024: .2f} MB"
     )
-    print(f"Compression ratio: {compression_ratio:.1f}x")
+    print(f"Compression ratio: {compression_ratio: .1f}x")
 
     # Test with different compression levels
     print("\n=== Testing Different Compression Levels ===")
@@ -99,7 +99,7 @@ def main():
         print(f"\nTesting compression level {level}...")
 
         # Create new storage with different compression level
-        test_storage = CompressedStorage(
+        test_storage = CompressedListStorage(
             max_size=100, compression_level=level, device="cpu"
         )
 
@@ -126,12 +126,12 @@ def main():
         test_rb.sample(5)
         decompress_time = time.time() - start_time
 
-        print(f"  Compression time: {compress_time:.3f}s")
-        print(f"  Decompression time: {decompress_time:.3f}s")
+        print(f"  Compression time: {compress_time: .3f}s")
+        print(f"  Decompression time: {decompress_time: .3f}s")
 
         # Estimate compression ratio
         test_ratio = test_data.bytes() / test_storage.bytes()
-        print(f"  Compression ratio: {test_ratio:.1f}x")
+        print(f"  Compression ratio: {test_ratio: .1f}x")
 
     print("\n=== Example Complete ===")
     print(

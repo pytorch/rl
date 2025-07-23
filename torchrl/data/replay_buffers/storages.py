@@ -13,7 +13,7 @@ import warnings
 from collections import OrderedDict
 from copy import copy
 from multiprocessing.context import get_spawning_popen
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Sequence
 
 import numpy as np
 import tensordict
@@ -1648,31 +1648,6 @@ class CompressedListStorage(ListStorage):
         self._storage = state_dict["_storage"]
         self._metadata = state_dict["_metadata"]
 
-    def num_bytes(self):
-        """Return the number of bytes in the storage."""
-
-        def compressed_size_from_list(data: Any) -> int:
-            if data is None:
-                return 0
-            elif isinstance(data, torch.Tensor):
-                return data.numel()
-            elif isinstance(data, (tuple, list, Sequence)):
-                return sum(compressed_size_from_list(item) for item in data)
-            elif isinstance(data, Mapping) or is_tensor_collection(data):
-                return sum(compressed_size_from_list(value) for value in data.values())
-            else:
-                return 0
-
-        compressed_size_estimate = compressed_size_from_list(self._storage)
-        if compressed_size_estimate == 0:
-            if len(self._storage) > 0:
-                raise RuntimeError(
-                    "Compressed storage is not empty but the compressed size is 0. This is a bug."
-                )
-            warnings.warn("Compressed storage is empty, returning 0 bytes.")
-
-        return compressed_size_estimate
-
     def to_bytestream(self, data_to_bytestream: torch.Tensor | np.array | Any) -> bytes:
         """Convert data to a byte stream."""
         if isinstance(data_to_bytestream, torch.Tensor):
@@ -1691,26 +1666,6 @@ class CompressedListStorage(ListStorage):
             byte_stream = bytes(buffer.read())
 
         return byte_stream
-
-    # def to_bytestream(
-    #     self, data_to_bytestream: Union[torch.Tensor, np.array, Any]
-    # ) -> bytes:
-    #     """Convert data to a byte stream."""
-    #     if isinstance(data_to_bytestream, torch.Tensor):
-    #         from safetensors.torch import save
-    #         byte_stream = save({"0": data_to_bytestream})
-
-    #     elif isinstance(data_to_bytestream, np.array):
-    #         from safetensors.numpy import save
-    #         byte_stream = bytes(data_to_bytestream.tobytes())
-
-    #     else:
-    #         buffer = io.BytesIO()
-    #         pickle.dump(data_to_bytestream, buffer)
-    #         buffer.seek(0)
-    #         byte_stream = bytes(buffer.read())
-
-    #     return byte_stream
 
 
 class StorageEnsemble(Storage):
