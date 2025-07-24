@@ -66,10 +66,9 @@ jobs:
         run: |
           rm -r dist || true
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install wheel
-          python3 setup.py bdist_wheel \
-            --python-tag=${{ matrix.python-tag }}
-           find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
+          python3 -mpip install build
+          python3 -m build --wheel
+          find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
       # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
       # pretend that they're manylinux1 compliant so we do the same.
       - name: Upload wheel for the test-wheel job
@@ -229,9 +228,8 @@ jobs:
         shell: bash
         run: |
           rm -r dist || true
-          python3 -mpip install wheel
-          python3 setup.py bdist_wheel \
-            --python-tag=${{ matrix.python-tag }}
+          python3 -mpip install build
+          python3 -m build --wheel
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v4
         with:

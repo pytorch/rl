@@ -7,10 +7,9 @@ script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 export BUILD_TYPE=wheel
 setup_env
 setup_wheel_python
-pip_install numpy pyyaml future ninja "pybind11[global]"
+pip_install numpy pyyaml future ninja "pybind11[global]" build
 pip_install --upgrade setuptools
 setup_pip_pytorch_version
-python setup.py clean
 
 # Copy binaries to be included in the wheel distribution
 if [[ "$(uname)" == Darwin || "$OSTYPE" == "msys" ]]; then
@@ -29,9 +28,9 @@ else
 fi
 
 if [[ "$OSTYPE" == "msys" ]]; then
-    IS_WHEEL=1 "$script_dir/windows/internal/vc_env_helper.bat" python setup.py bdist_wheel
+    IS_WHEEL=1 "$script_dir/windows/internal/vc_env_helper.bat" python -m build --wheel
 else
-    python setup.py bdist_wheel
+    python -m build --wheel
     if [[ "$(uname)" != Darwin ]]; then
       rename "linux_x86_64" "manylinux1_x86_64" dist/*.whl
     fi
