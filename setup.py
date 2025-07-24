@@ -45,8 +45,8 @@ def write_version_file(version):
         f.write(f"__version__ = '{version}'\n")
         f.write(f"git_version = {repr(sha)}\n")
         f.write(f"pytorch_version = '{pytorch_version}'\n")
-    
-    logging.info(f"Version file written successfully")
+
+    logging.info("Version file written successfully")
 
 
 class clean(Command):
@@ -151,7 +151,12 @@ def _main():
         # For regular builds, append git hash for development versions
         try:
             import subprocess
-            git_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=cwd).decode("ascii").strip()[:7]
+
+            git_sha = (
+                subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=cwd)
+                .decode("ascii")
+                .strip()[:7]
+            )
             version = f"{base_version}+{git_sha}"
             logging.info(f"Using development version: {version}")
         except Exception:
@@ -161,15 +166,17 @@ def _main():
     # Always write the version file to ensure it's up to date
     write_version_file(version)
     logging.info(f"Building torchrl-{version}")
-    
+
     # Verify the version file was written correctly
     try:
-        with open(os.path.join(cwd, "torchrl", "version.py"), "r") as f:
+        with open(os.path.join(cwd, "torchrl", "version.py")) as f:
             content = f.read()
             if f"__version__ = '{version}'" in content:
                 logging.info(f"Version file correctly contains: {version}")
             else:
-                logging.error(f"Version file does not contain expected version: {version}")
+                logging.error(
+                    f"Version file does not contain expected version: {version}"
+                )
     except Exception as e:
         logging.error(f"Failed to verify version file: {e}")
 
@@ -178,7 +185,7 @@ def _main():
         package_name = "torchrl-nightly"  # Use torchrl-nightly for PyPI uploads
     else:
         package_name = "torchrl"  # Use torchrl for regular builds and GitHub discovery
-    
+
     setup_kwargs = {
         "name": package_name,
         # Only C++ extension configuration
@@ -193,7 +200,7 @@ def _main():
         },
         "include_package_data": True,
     }
-    
+
     # Handle nightly tensordict dependency override
     if is_nightly:
         setup_kwargs["install_requires"] = [
@@ -207,25 +214,29 @@ def _main():
     # Override pyproject.toml settings for nightly builds
     if is_nightly:
         # Add all the metadata from pyproject.toml but override the name
-        setup_kwargs.update({
-            "description": "A modular, primitive-first, python-first PyTorch library for Reinforcement Learning",
-            "long_description": (Path(__file__).parent / "README.md").read_text(encoding="utf8"),
-            "long_description_content_type": "text/markdown",
-            "author": "torchrl contributors",
-            "author_email": "vmoens@fb.com",
-            "url": "https://github.com/pytorch/rl",
-            "classifiers": [
-                "Programming Language :: Python :: 3.9",
-                "Programming Language :: Python :: 3.10",
-                "Programming Language :: Python :: 3.11",
-                "Programming Language :: Python :: 3.12",
-                "Operating System :: OS Independent",
-                "Development Status :: 4 - Beta",
-                "Intended Audience :: Developers",
-                "Intended Audience :: Science/Research",
-                "Topic :: Scientific/Engineering :: Artificial Intelligence",
-            ],
-        })
+        setup_kwargs.update(
+            {
+                "description": "A modular, primitive-first, python-first PyTorch library for Reinforcement Learning",
+                "long_description": (Path(__file__).parent / "README.md").read_text(
+                    encoding="utf8"
+                ),
+                "long_description_content_type": "text/markdown",
+                "author": "torchrl contributors",
+                "author_email": "vmoens@fb.com",
+                "url": "https://github.com/pytorch/rl",
+                "classifiers": [
+                    "Programming Language :: Python :: 3.9",
+                    "Programming Language :: Python :: 3.10",
+                    "Programming Language :: Python :: 3.11",
+                    "Programming Language :: Python :: 3.12",
+                    "Operating System :: OS Independent",
+                    "Development Status :: 4 - Beta",
+                    "Intended Audience :: Developers",
+                    "Intended Audience :: Science/Research",
+                    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+                ],
+            }
+        )
 
     setup(**setup_kwargs)
 
