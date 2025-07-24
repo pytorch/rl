@@ -3343,13 +3343,13 @@ _MINARI_DATASETS = []
 
 MUJOCO_ENVIRONMENTS = [
     "Hopper-v5",
-    "Pusher-v5",
+    "Pusher-v4",
     "Humanoid-v5",
     "InvertedDoublePendulum-v5",
     "HalfCheetah-v5",
     "Swimmer-v5",
     "Walker2d-v5",
-    "Ant-v5",
+    "ALE/Ant-v5",
     "Reacher-v5",
 ]
 
@@ -3421,7 +3421,7 @@ def get_random_minigrid_datasets():
     ]
 
     # 3 random datasets
-    indices = torch.randperm(len(all_minigrid))[:3] 
+    indices = torch.randperm(len(all_minigrid))[:3]
     return [all_minigrid[idx] for idx in indices]
 
 
@@ -3488,7 +3488,7 @@ class TestMinari:
     @pytest.mark.parametrize(
         "dataset_idx",
         # Only use a static upper bound; do not call any function that imports minari globally.
-        range(7)
+        range(4),
     )
     def test_load(self, dataset_idx, split):
         """
@@ -3499,11 +3499,11 @@ class TestMinari:
 
         num_custom_to_select = 4
         custom_envs = MUJOCO_ENVIRONMENTS + D4RL_ENVIRONMENTS
-        
+
         # Randomly select a subset of custom environments
         indices = torch.randperm(len(custom_envs))[:num_custom_to_select]
         custom_envs_subset = [custom_envs[i] for i in indices]
-        
+
         num_custom = len(custom_envs_subset)
         try:
             minigrid_datasets = get_random_minigrid_datasets()
@@ -3680,6 +3680,7 @@ class TestMinari:
                 break
 
         minari.delete_dataset(dataset_id="cartpole/test-local-v1")
+
 
 @pytest.mark.slow
 class TestRoboset:

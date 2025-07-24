@@ -466,10 +466,7 @@ jobs:
         export BATCHED_PIPE_TIMEOUT=60
         export TD_GET_DEFAULTS_TO_NONE=1
 
-        bash .github/unittest/linux_libs/scripts_minari/setup_env.sh
-        bash .github/unittest/linux_libs/scripts_minari/install.sh
-        bash .github/unittest/linux_libs/scripts_minari/run_test.sh
-        bash .github/unittest/linux_libs/scripts_minari/post_process.sh
+        bash .github/unittest/linux_libs/scripts_minari/run_all.sh
 
   unittests-openx:
     strategy:
