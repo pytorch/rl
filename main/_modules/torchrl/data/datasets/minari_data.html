@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.9.0+8ac73aa) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (2025.7.24+0627e85) &#x25BC</span></a>
     </div>
     
 
@@ -510,6 +510,14 @@
 <span class="sd">            it is assumed that any ``truncated`` or ``terminated`` signal is</span>
 <span class="sd">            equivalent to the end of a trajectory.</span>
 <span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        load_from_local_minari (bool, optional): if ``True``, the dataset will be loaded directly</span>
+<span class="sd">            from the local Minari cache (typically located at ``~/.minari/datasets``),</span>
+<span class="sd">            bypassing any remote download. This is useful when working with custom</span>
+<span class="sd">            Minari datasets previously generated and stored locally, or when network</span>
+<span class="sd">            access should be avoided. If the dataset is not found in the expected</span>
+<span class="sd">            cache directory, a ``FileNotFoundError`` will be raised.</span>
+<span class="sd">            Defaults to ``False``.</span>
+
 
 <span class="sd">    Attributes:</span>
 <span class="sd">        available_datasets: a list of accepted entries to be downloaded.</span>
@@ -589,6 +597,7 @@
         <span class="n">prefetch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">transform</span><span class="p">:</span> <span class="n">torchrl</span><span class="o">.</span><span class="n">envs</span><span class="o">.</span><span class="n">Transform</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># noqa-F821</span>
         <span class="n">split_trajs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">load_from_local_minari</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dataset_id</span> <span class="o">=</span> <span class="n">dataset_id</span>
         <span class="k">if</span> <span class="n">root</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -597,7 +606,13 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="o">=</span> <span class="n">root</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">split_trajs</span> <span class="o">=</span> <span class="n">split_trajs</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">download</span> <span class="o">=</span> <span class="n">download</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">download</span> <span class="o">==</span> <span class="s2">&quot;force&quot;</span> <span class="ow">or</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">download</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_downloaded</span><span class="p">()):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">load_from_local_minari</span> <span class="o">=</span> <span class="n">load_from_local_minari</span>
+
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">download</span> <span class="o">==</span> <span class="s2">&quot;force&quot;</span>
+            <span class="ow">or</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">download</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_downloaded</span><span class="p">())</span>
+            <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_from_local_minari</span>
+        <span class="p">):</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">download</span> <span class="o">==</span> <span class="s2">&quot;force&quot;</span><span class="p">:</span>
                 <span class="k">try</span><span class="p">:</span>
                     <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_path_root</span><span class="p">):</span>
@@ -660,133 +675,184 @@
         <span class="k">if</span> <span class="n">_has_tqdm</span><span class="p">:</span>
             <span class="kn">from</span><span class="w"> </span><span class="nn">tqdm</span><span class="w"> </span><span class="kn">import</span> <span class="n">tqdm</span>
 
-        <span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">tmpdir</span><span class="p">:</span>
-            <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;MINARI_DATASETS_PATH&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tmpdir</span>
-            <span class="n">minari</span><span class="o">.</span><span class="n">download_dataset</span><span class="p">(</span><span class="n">dataset_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset_id</span><span class="p">)</span>
-            <span class="n">parent_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">tmpdir</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataset_id</span> <span class="o">/</span> <span class="s2">&quot;data&quot;</span>
+        <span class="n">prev_minari_datasets_path_save</span> <span class="o">=</span> <span class="n">prev_minari_datasets_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+            <span class="s2">&quot;MINARI_DATASETS_PATH&quot;</span>
+        <span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">prev_minari_datasets_path</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">prev_minari_datasets_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">expanduser</span><span class="p">(</span><span class="s2">&quot;~/.minari/datasets&quot;</span><span class="p">)</span>
+            <span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">tmpdir</span><span class="p">:</span>
 
-            <span class="n">td_data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">()</span>
-            <span class="n">total_steps</span> <span class="o">=</span> <span class="mi">0</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;first read through data to create data structure...&quot;</span><span class="p">)</span>
-            <span class="n">h5_data</span> <span class="o">=</span> <span class="n">PersistentTensorDict</span><span class="o">.</span><span class="n">from_h5</span><span class="p">(</span><span class="n">parent_dir</span> <span class="o">/</span> <span class="s2">&quot;main_data.hdf5&quot;</span><span class="p">)</span>
-            <span class="c1"># populate the tensordict</span>
-            <span class="n">episode_dict</span> <span class="o">=</span> <span class="p">{}</span>
-            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">episode_key</span><span class="p">,</span> <span class="n">episode</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">h5_data</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
-                <span class="n">episode_num</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">episode_key</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="s2">&quot;episode_&quot;</span><span class="p">)</span> <span class="p">:])</span>
-                <span class="n">episode_len</span> <span class="o">=</span> <span class="n">episode</span><span class="p">[</span><span class="s2">&quot;actions&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-                <span class="n">episode_dict</span><span class="p">[</span><span class="n">episode_num</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">episode_key</span><span class="p">,</span> <span class="n">episode_len</span><span class="p">)</span>
-                <span class="c1"># Get the total number of steps for the dataset</span>
-                <span class="n">total_steps</span> <span class="o">+=</span> <span class="n">episode_len</span>
-                <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-                    <span class="n">td_data</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;episode&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
-                    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">episode</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                        <span class="n">match</span> <span class="o">=</span> <span class="n">_NAME_MATCH</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
-                        <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;observations&quot;</span><span class="p">,</span> <span class="s2">&quot;state&quot;</span><span class="p">,</span> <span class="s2">&quot;infos&quot;</span><span class="p">):</span>
-                            <span class="k">if</span> <span class="p">(</span>
-                                <span class="ow">not</span> <span class="n">val</span><span class="o">.</span><span class="n">shape</span>
-                            <span class="p">):</span>  <span class="c1"># no need for this, we don&#39;t need the proper length: or steps != val.shape[0] - 1:</span>
-                                <span class="k">if</span> <span class="n">val</span><span class="o">.</span><span class="n">is_empty</span><span class="p">():</span>
-                                    <span class="k">continue</span>
-                                <span class="n">val</span> <span class="o">=</span> <span class="n">_patch_info</span><span class="p">(</span><span class="n">val</span><span class="p">)</span>
-                            <span class="n">td_data</span><span class="o">.</span><span class="n">set</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">match</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">val</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
-                            <span class="n">td_data</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">match</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">val</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
-                        <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;terminations&quot;</span><span class="p">,</span> <span class="s2">&quot;truncations&quot;</span><span class="p">,</span> <span class="s2">&quot;rewards&quot;</span><span class="p">):</span>
-                            <span class="n">td_data</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">match</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">val</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
-                        <span class="k">else</span><span class="p">:</span>
-                            <span class="n">td_data</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
-                                <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">match</span><span class="p">),</span>
-                                <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">val</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)),</span>
-                            <span class="p">)</span>
+                <span class="n">total_steps</span> <span class="o">=</span> <span class="mi">0</span>
+                <span class="n">td_data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">()</span>
 
-            <span class="c1"># give it the proper size</span>
-            <span class="n">td_data</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">td_data</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;truncated&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="n">td_data</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">]</span>
-            <span class="p">)</span>
-            <span class="k">if</span> <span class="s2">&quot;terminated&quot;</span> <span class="ow">in</span> <span class="n">td_data</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
-                <span class="n">td_data</span><span class="p">[</span><span class="s2">&quot;done&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">td_data</span><span class="p">[</span><span class="s2">&quot;truncated&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="n">td_data</span><span class="p">[</span><span class="s2">&quot;terminated&quot;</span><span class="p">]</span>
-            <span class="n">td_data</span> <span class="o">=</span> <span class="n">td_data</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">total_steps</span><span class="p">)</span>
-            <span class="c1"># save to designated location</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;creating tensordict data in </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">data_path_root</span><span class="si">}</span><span class="s2">: &quot;</span><span class="p">)</span>
-            <span class="n">td_data</span> <span class="o">=</span> <span class="n">td_data</span><span class="o">.</span><span class="n">memmap_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_path_root</span><span class="p">)</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;tensordict structure: </span><span class="si">{</span><span class="n">td_data</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_from_local_minari</span><span class="p">:</span>
+                    <span class="c1"># Load minari dataset from user&#39;s local Minari cache</span>
 
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Reading data from </span><span class="si">{</span><span class="nb">max</span><span class="p">(</span><span class="o">*</span><span class="n">episode_dict</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2"> episodes&quot;</span><span class="p">)</span>
-            <span class="n">index</span> <span class="o">=</span> <span class="mi">0</span>
-            <span class="k">with</span> <span class="n">tqdm</span><span class="p">(</span><span class="n">total</span><span class="o">=</span><span class="n">total_steps</span><span class="p">)</span> <span class="k">if</span> <span class="n">_has_tqdm</span> <span class="k">else</span> <span class="n">nullcontext</span><span class="p">()</span> <span class="k">as</span> <span class="n">pbar</span><span class="p">:</span>
-                <span class="c1"># iterate over episodes and populate the tensordict</span>
-                <span class="k">for</span> <span class="n">episode_num</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">episode_dict</span><span class="p">):</span>
-                    <span class="n">episode_key</span><span class="p">,</span> <span class="n">steps</span> <span class="o">=</span> <span class="n">episode_dict</span><span class="p">[</span><span class="n">episode_num</span><span class="p">]</span>
-                    <span class="n">episode</span> <span class="o">=</span> <span class="n">h5_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">episode_key</span><span class="p">)</span>
-                    <span class="n">idx</span> <span class="o">=</span> <span class="nb">slice</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="p">(</span><span class="n">index</span> <span class="o">+</span> <span class="n">steps</span><span class="p">))</span>
-                    <span class="n">data_view</span> <span class="o">=</span> <span class="n">td_data</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
-                    <span class="n">data_view</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="s2">&quot;episode&quot;</span><span class="p">,</span> <span class="n">episode_num</span><span class="p">)</span>
-                    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">episode</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                        <span class="n">match</span> <span class="o">=</span> <span class="n">_NAME_MATCH</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
-                        <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span>
-                            <span class="s2">&quot;observations&quot;</span><span class="p">,</span>
-                            <span class="s2">&quot;state&quot;</span><span class="p">,</span>
-                            <span class="s2">&quot;infos&quot;</span><span class="p">,</span>
-                        <span class="p">):</span>
-                            <span class="k">if</span> <span class="ow">not</span> <span class="n">val</span><span class="o">.</span><span class="n">shape</span> <span class="ow">or</span> <span class="n">steps</span> <span class="o">!=</span> <span class="n">val</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
-                                <span class="k">if</span> <span class="n">val</span><span class="o">.</span><span class="n">is_empty</span><span class="p">():</span>
-                                    <span class="k">continue</span>
-                                <span class="n">val</span> <span class="o">=</span> <span class="n">_patch_info</span><span class="p">(</span><span class="n">val</span><span class="p">)</span>
-                            <span class="k">if</span> <span class="n">steps</span> <span class="o">!=</span> <span class="n">val</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
-                                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                                    <span class="sa">f</span><span class="s2">&quot;Mismatching number of steps for key </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">: was </span><span class="si">{</span><span class="n">steps</span><span class="si">}</span><span class="s2"> but got </span><span class="si">{</span><span class="n">val</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">.&quot;</span>
-                                <span class="p">)</span>
-                            <span class="n">data_view</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">match</span><span class="p">]</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">val</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
-                            <span class="n">data_view</span><span class="p">[</span><span class="n">match</span><span class="p">]</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">val</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
-                        <span class="k">elif</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;terminations&quot;</span><span class="p">,</span> <span class="s2">&quot;truncations&quot;</span><span class="p">,</span> <span class="s2">&quot;rewards&quot;</span><span class="p">):</span>
-                            <span class="k">if</span> <span class="n">steps</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                                <span class="n">steps</span> <span class="o">=</span> <span class="n">val</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-                            <span class="k">else</span><span class="p">:</span>
-                                <span class="k">if</span> <span class="n">steps</span> <span class="o">!=</span> <span class="n">val</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
-                                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                                        <span class="sa">f</span><span class="s2">&quot;Mismatching number of steps for key </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">: was </span><span class="si">{</span><span class="n">steps</span><span class="si">}</span><span class="s2"> but got </span><span class="si">{</span><span class="n">val</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">.&quot;</span>
-                                    <span class="p">)</span>
-                            <span class="n">data_view</span><span class="p">[</span><span class="n">match</span><span class="p">]</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">val</span><span class="p">)</span>
-                        <span class="k">else</span><span class="p">:</span>
-                            <span class="k">if</span> <span class="n">steps</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                                <span class="n">steps</span> <span class="o">=</span> <span class="n">val</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-                            <span class="k">else</span><span class="p">:</span>
-                                <span class="k">if</span> <span class="n">steps</span> <span class="o">!=</span> <span class="n">val</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
-                                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                                        <span class="sa">f</span><span class="s2">&quot;Mismatching number of steps for key </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">: was </span><span class="si">{</span><span class="n">steps</span><span class="si">}</span><span class="s2"> but got </span><span class="si">{</span><span class="n">val</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">.&quot;</span>
-                                    <span class="p">)</span>
-                            <span class="n">data_view</span><span class="p">[(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">match</span><span class="p">)]</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">val</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span>
-                    <span class="n">data_view</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span>
-                        <span class="n">data_view</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="n">data_view</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;truncated&quot;</span><span class="p">]</span>
+                    <span class="n">parent_dir</span> <span class="o">=</span> <span class="p">(</span>
+                        <span class="n">Path</span><span class="p">(</span><span class="n">prev_minari_datasets_path</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataset_id</span> <span class="o">/</span> <span class="s2">&quot;data&quot;</span>
                     <span class="p">)</span>
-                    <span class="k">if</span> <span class="s2">&quot;done&quot;</span> <span class="ow">in</span> <span class="n">data_view</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
-                        <span class="n">data_view</span><span class="p">[</span><span class="s2">&quot;done&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span>
-                            <span class="n">data_view</span><span class="p">[</span><span class="s2">&quot;terminated&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="n">data_view</span><span class="p">[</span><span class="s2">&quot;truncated&quot;</span><span class="p">]</span>
-                        <span class="p">)</span>
-                    <span class="k">if</span> <span class="n">pbar</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                        <span class="n">pbar</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">steps</span><span class="p">)</span>
-                        <span class="n">pbar</span><span class="o">.</span><span class="n">set_description</span><span class="p">(</span>
-                            <span class="sa">f</span><span class="s2">&quot;index=</span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2"> - episode num </span><span class="si">{</span><span class="n">episode_num</span><span class="si">}</span><span class="s2">&quot;</span>
-                        <span class="p">)</span>
-                    <span class="n">index</span> <span class="o">+=</span> <span class="n">steps</span>
-            <span class="n">h5_data</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
-            <span class="c1"># Add a &quot;done&quot; entry</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">split_trajs</span><span class="p">:</span>
-                <span class="k">with</span> <span class="n">td_data</span><span class="o">.</span><span class="n">unlock_</span><span class="p">():</span>
-                    <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">split_trajectories</span>
+                    <span class="n">h5_path</span> <span class="o">=</span> <span class="n">parent_dir</span> <span class="o">/</span> <span class="s2">&quot;main_data.hdf5&quot;</span>
 
-                    <span class="n">td_data</span> <span class="o">=</span> <span class="n">split_trajectories</span><span class="p">(</span><span class="n">td_data</span><span class="p">)</span><span class="o">.</span><span class="n">memmap_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_path</span><span class="p">)</span>
-            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">metadata_path</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">metadata_file</span><span class="p">:</span>
-                <span class="n">dataset</span> <span class="o">=</span> <span class="n">minari</span><span class="o">.</span><span class="n">load_dataset</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset_id</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">metadata</span> <span class="o">=</span> <span class="n">asdict</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">spec</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;observation_space&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_spec_to_dict</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;observation_space&quot;</span><span class="p">]</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">h5_path</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+                        <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">h5_path</span><span class="si">}</span><span class="s2"> does not exist in local Minari cache!&quot;</span>
+                        <span class="p">)</span>
+
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;loading dataset from local Minari cache at </span><span class="si">{</span><span class="n">h5_path</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+                    <span class="n">h5_data</span> <span class="o">=</span> <span class="n">PersistentTensorDict</span><span class="o">.</span><span class="n">from_h5</span><span class="p">(</span><span class="n">h5_path</span><span class="p">)</span>
+
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># temporarily change the minari cache path</span>
+                    <span class="n">prev_minari_datasets_path_save2</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                        <span class="s2">&quot;MINARI_DATASETS_PATH&quot;</span>
+                    <span class="p">)</span>
+                    <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;MINARI_DATASETS_PATH&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tmpdir</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">minari</span><span class="o">.</span><span class="n">download_dataset</span><span class="p">(</span><span class="n">dataset_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset_id</span><span class="p">)</span>
+                    <span class="k">finally</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="n">prev_minari_datasets_path_save2</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                            <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span>
+                                <span class="s2">&quot;MINARI_DATASETS_PATH&quot;</span>
+                            <span class="p">]</span> <span class="o">=</span> <span class="n">prev_minari_datasets_path_save2</span>
+
+                    <span class="n">parent_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">tmpdir</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataset_id</span> <span class="o">/</span> <span class="s2">&quot;data&quot;</span>
+
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                        <span class="s2">&quot;first read through data to create data structure...&quot;</span>
+                    <span class="p">)</span>
+                    <span class="n">h5_data</span> <span class="o">=</span> <span class="n">PersistentTensorDict</span><span class="o">.</span><span class="n">from_h5</span><span class="p">(</span>
+                        <span class="n">parent_dir</span> <span class="o">/</span> <span class="s2">&quot;main_data.hdf5&quot;</span>
+                    <span class="p">)</span>
+
+                <span class="c1"># populate the tensordict</span>
+                <span class="n">episode_dict</span> <span class="o">=</span> <span class="p">{}</span>
+                <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">episode_key</span><span class="p">,</span> <span class="n">episode</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">h5_data</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
+                    <span class="n">episode_num</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">episode_key</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="s2">&quot;episode_&quot;</span><span class="p">)</span> <span class="p">:])</span>
+                    <span class="n">episode_len</span> <span class="o">=</span> <span class="n">episode</span><span class="p">[</span><span class="s2">&quot;actions&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                    <span class="n">episode_dict</span><span class="p">[</span><span class="n">episode_num</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">episode_key</span><span class="p">,</span> <span class="n">episode_len</span><span class="p">)</span>
+                    <span class="c1"># Get the total number of steps for the dataset</span>
+                    <span class="n">total_steps</span> <span class="o">+=</span> <span class="n">episode_len</span>
+                    <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                        <span class="n">td_data</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;episode&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+                        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">episode</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                            <span class="n">match</span> <span class="o">=</span> <span class="n">_NAME_MATCH</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+                            <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;observations&quot;</span><span class="p">,</span> <span class="s2">&quot;state&quot;</span><span class="p">,</span> <span class="s2">&quot;infos&quot;</span><span class="p">):</span>
+                                <span class="k">if</span> <span class="p">(</span>
+                                    <span class="ow">not</span> <span class="n">val</span><span class="o">.</span><span class="n">shape</span>
+                                <span class="p">):</span>  <span class="c1"># no need for this, we don&#39;t need the proper length: or steps != val.shape[0] - 1:</span>
+                                    <span class="k">if</span> <span class="n">val</span><span class="o">.</span><span class="n">is_empty</span><span class="p">():</span>
+                                        <span class="k">continue</span>
+                                    <span class="n">val</span> <span class="o">=</span> <span class="n">_patch_info</span><span class="p">(</span><span class="n">val</span><span class="p">)</span>
+                                <span class="n">td_data</span><span class="o">.</span><span class="n">set</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">match</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">val</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+                                <span class="n">td_data</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">match</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">val</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+                            <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;terminations&quot;</span><span class="p">,</span> <span class="s2">&quot;truncations&quot;</span><span class="p">,</span> <span class="s2">&quot;rewards&quot;</span><span class="p">):</span>
+                                <span class="n">td_data</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">match</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">val</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+                            <span class="k">else</span><span class="p">:</span>
+                                <span class="n">td_data</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                                    <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">match</span><span class="p">),</span>
+                                    <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">val</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)),</span>
+                                <span class="p">)</span>
+
+                <span class="c1"># give it the proper size</span>
+                <span class="n">td_data</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">td_data</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;truncated&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="n">td_data</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">]</span>
                 <span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;action_space&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_spec_to_dict</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;action_space&quot;</span><span class="p">]</span>
+                <span class="k">if</span> <span class="s2">&quot;terminated&quot;</span> <span class="ow">in</span> <span class="n">td_data</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                    <span class="n">td_data</span><span class="p">[</span><span class="s2">&quot;done&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">td_data</span><span class="p">[</span><span class="s2">&quot;truncated&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="n">td_data</span><span class="p">[</span><span class="s2">&quot;terminated&quot;</span><span class="p">]</span>
+                <span class="n">td_data</span> <span class="o">=</span> <span class="n">td_data</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">total_steps</span><span class="p">)</span>
+                <span class="c1"># save to designated location</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;creating tensordict data in </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">data_path_root</span><span class="si">}</span><span class="s2">: &quot;</span>
                 <span class="p">)</span>
-                <span class="n">json</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span> <span class="n">metadata_file</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_load_and_proc_metadata</span><span class="p">()</span>
-            <span class="k">return</span> <span class="n">td_data</span>
+                <span class="n">td_data</span> <span class="o">=</span> <span class="n">td_data</span><span class="o">.</span><span class="n">memmap_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_path_root</span><span class="p">)</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;tensordict structure: </span><span class="si">{</span><span class="n">td_data</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Reading data from </span><span class="si">{</span><span class="nb">max</span><span class="p">(</span><span class="o">*</span><span class="n">episode_dict</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2"> episodes&quot;</span>
+                <span class="p">)</span>
+                <span class="n">index</span> <span class="o">=</span> <span class="mi">0</span>
+                <span class="k">with</span> <span class="n">tqdm</span><span class="p">(</span><span class="n">total</span><span class="o">=</span><span class="n">total_steps</span><span class="p">)</span> <span class="k">if</span> <span class="n">_has_tqdm</span> <span class="k">else</span> <span class="n">nullcontext</span><span class="p">()</span> <span class="k">as</span> <span class="n">pbar</span><span class="p">:</span>
+                    <span class="c1"># iterate over episodes and populate the tensordict</span>
+                    <span class="k">for</span> <span class="n">episode_num</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">episode_dict</span><span class="p">):</span>
+                        <span class="n">episode_key</span><span class="p">,</span> <span class="n">steps</span> <span class="o">=</span> <span class="n">episode_dict</span><span class="p">[</span><span class="n">episode_num</span><span class="p">]</span>
+                        <span class="n">episode</span> <span class="o">=</span> <span class="n">h5_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">episode_key</span><span class="p">)</span>
+                        <span class="n">idx</span> <span class="o">=</span> <span class="nb">slice</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="p">(</span><span class="n">index</span> <span class="o">+</span> <span class="n">steps</span><span class="p">))</span>
+                        <span class="n">data_view</span> <span class="o">=</span> <span class="n">td_data</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+                        <span class="n">data_view</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="s2">&quot;episode&quot;</span><span class="p">,</span> <span class="n">episode_num</span><span class="p">)</span>
+                        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">episode</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                            <span class="n">match</span> <span class="o">=</span> <span class="n">_NAME_MATCH</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+                            <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span>
+                                <span class="s2">&quot;observations&quot;</span><span class="p">,</span>
+                                <span class="s2">&quot;state&quot;</span><span class="p">,</span>
+                                <span class="s2">&quot;infos&quot;</span><span class="p">,</span>
+                            <span class="p">):</span>
+                                <span class="k">if</span> <span class="ow">not</span> <span class="n">val</span><span class="o">.</span><span class="n">shape</span> <span class="ow">or</span> <span class="n">steps</span> <span class="o">!=</span> <span class="n">val</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
+                                    <span class="k">if</span> <span class="n">val</span><span class="o">.</span><span class="n">is_empty</span><span class="p">():</span>
+                                        <span class="k">continue</span>
+                                    <span class="n">val</span> <span class="o">=</span> <span class="n">_patch_info</span><span class="p">(</span><span class="n">val</span><span class="p">)</span>
+                                <span class="k">if</span> <span class="n">steps</span> <span class="o">!=</span> <span class="n">val</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
+                                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                                        <span class="sa">f</span><span class="s2">&quot;Mismatching number of steps for key </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">: was </span><span class="si">{</span><span class="n">steps</span><span class="si">}</span><span class="s2"> but got </span><span class="si">{</span><span class="n">val</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">.&quot;</span>
+                                    <span class="p">)</span>
+                                <span class="n">data_view</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">match</span><span class="p">]</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">val</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+                                <span class="n">data_view</span><span class="p">[</span><span class="n">match</span><span class="p">]</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">val</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+                            <span class="k">elif</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;terminations&quot;</span><span class="p">,</span> <span class="s2">&quot;truncations&quot;</span><span class="p">,</span> <span class="s2">&quot;rewards&quot;</span><span class="p">):</span>
+                                <span class="k">if</span> <span class="n">steps</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                                    <span class="n">steps</span> <span class="o">=</span> <span class="n">val</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                                <span class="k">else</span><span class="p">:</span>
+                                    <span class="k">if</span> <span class="n">steps</span> <span class="o">!=</span> <span class="n">val</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+                                        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                                            <span class="sa">f</span><span class="s2">&quot;Mismatching number of steps for key </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">: was </span><span class="si">{</span><span class="n">steps</span><span class="si">}</span><span class="s2"> but got </span><span class="si">{</span><span class="n">val</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">.&quot;</span>
+                                        <span class="p">)</span>
+                                <span class="n">data_view</span><span class="p">[</span><span class="n">match</span><span class="p">]</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">val</span><span class="p">)</span>
+                            <span class="k">else</span><span class="p">:</span>
+                                <span class="k">if</span> <span class="n">steps</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                                    <span class="n">steps</span> <span class="o">=</span> <span class="n">val</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                                <span class="k">else</span><span class="p">:</span>
+                                    <span class="k">if</span> <span class="n">steps</span> <span class="o">!=</span> <span class="n">val</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+                                        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                                            <span class="sa">f</span><span class="s2">&quot;Mismatching number of steps for key </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">: was </span><span class="si">{</span><span class="n">steps</span><span class="si">}</span><span class="s2"> but got </span><span class="si">{</span><span class="n">val</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">.&quot;</span>
+                                        <span class="p">)</span>
+                                <span class="n">data_view</span><span class="p">[(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">match</span><span class="p">)]</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">val</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span>
+                        <span class="n">data_view</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span>
+                            <span class="n">data_view</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">]</span>
+                            <span class="o">|</span> <span class="n">data_view</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;truncated&quot;</span><span class="p">]</span>
+                        <span class="p">)</span>
+                        <span class="k">if</span> <span class="s2">&quot;done&quot;</span> <span class="ow">in</span> <span class="n">data_view</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                            <span class="n">data_view</span><span class="p">[</span><span class="s2">&quot;done&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span>
+                                <span class="n">data_view</span><span class="p">[</span><span class="s2">&quot;terminated&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="n">data_view</span><span class="p">[</span><span class="s2">&quot;truncated&quot;</span><span class="p">]</span>
+                            <span class="p">)</span>
+                        <span class="k">if</span> <span class="n">pbar</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                            <span class="n">pbar</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">steps</span><span class="p">)</span>
+                            <span class="n">pbar</span><span class="o">.</span><span class="n">set_description</span><span class="p">(</span>
+                                <span class="sa">f</span><span class="s2">&quot;index=</span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2"> - episode num </span><span class="si">{</span><span class="n">episode_num</span><span class="si">}</span><span class="s2">&quot;</span>
+                            <span class="p">)</span>
+                        <span class="n">index</span> <span class="o">+=</span> <span class="n">steps</span>
+                <span class="n">h5_data</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+                <span class="c1"># Add a &quot;done&quot; entry</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">split_trajs</span><span class="p">:</span>
+                    <span class="k">with</span> <span class="n">td_data</span><span class="o">.</span><span class="n">unlock_</span><span class="p">():</span>
+                        <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">split_trajectories</span>
+
+                        <span class="n">td_data</span> <span class="o">=</span> <span class="n">split_trajectories</span><span class="p">(</span><span class="n">td_data</span><span class="p">)</span><span class="o">.</span><span class="n">memmap_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_path</span><span class="p">)</span>
+                <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">metadata_path</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">metadata_file</span><span class="p">:</span>
+                    <span class="n">dataset</span> <span class="o">=</span> <span class="n">minari</span><span class="o">.</span><span class="n">load_dataset</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset_id</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">metadata</span> <span class="o">=</span> <span class="n">asdict</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">spec</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;observation_space&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_spec_to_dict</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;observation_space&quot;</span><span class="p">]</span>
+                    <span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;action_space&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_spec_to_dict</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;action_space&quot;</span><span class="p">]</span>
+                    <span class="p">)</span>
+                    <span class="n">json</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span> <span class="n">metadata_file</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_load_and_proc_metadata</span><span class="p">()</span>
+                <span class="k">return</span> <span class="n">td_data</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">prev_minari_datasets_path_save</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;MINARI_DATASETS_PATH&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">prev_minari_datasets_path_save</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_make_split</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.collectors.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">split_trajectories</span>
