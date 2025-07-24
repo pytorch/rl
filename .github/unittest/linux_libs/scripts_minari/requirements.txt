@@ -14,7 +14,7 @@ pyyaml
 scipy
 hydra-core
 minari[gcs,hdf5,hf,create]
-gymnasium<1.0.0
+gymnasium>=1.2.0
 ale-py
 gymnasium-robotics
 mujoco 
