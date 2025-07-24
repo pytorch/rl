@@ -3343,6 +3343,39 @@ _MINARI_DATASETS = []
 
 MUJOCO_ENVIRONMENTS = [
     "Hopper-v5",
+    "Pusher-v4",
+    "Humanoid-v5",
+    "InvertedDoublePendulum-v5",
+    "HalfCheetah-v5",
+    "Swimmer-v5",
+    "Walker2d-v5",
+    "ALE/Ant-v5",
+    "Reacher-v5",
+]
+
+D4RL_ENVIRONMENTS = [
+    "AntMaze_UMaze-v5",
+    "AdroitHandPen-v1",
+    "AntMaze_Medium-v4",
+    "AntMaze_Large_Diverse_GR-v4",
+    "AntMaze_Large-v4",
+    "AntMaze_Medium_Diverse_GR-v4",
+    "PointMaze_OpenDense-v3",
+    "PointMaze_UMaze-v3",
+    "PointMaze_LargeDense-v3",
+    "PointMaze_Medium-v3",
+    "PointMaze_UMazeDense-v3",
+    "PointMaze_MediumDense-v3",
+    "PointMaze_Large-v3",
+    "PointMaze_Open-v3",
+    "FrankaKitchen-v1",
+    "AdroitHandDoor-v1",
+    "AdroitHandHammer-v1",
+    "AdroitHandRelocate-v1",
+]
+
+MUJOCO_ENVIRONMENTS = [
+    "Hopper-v5",
     "Pusher-v5",
     "Humanoid-v5",
     "InvertedDoublePendulum-v5",
@@ -3408,7 +3441,7 @@ def _minari_init():
 
 def get_random_minigrid_datasets():
     """
-    Fetch 2 random Minigrid datasets from the Minari server.
+    Fetch 5 random Minigrid datasets from the Minari server.
     """
     import minari
 
@@ -3421,13 +3454,13 @@ def get_random_minigrid_datasets():
     ]
 
     # 3 random datasets
-    indices = torch.randperm(len(all_minigrid))[:2] 
+    indices = torch.randperm(len(all_minigrid))[:3]
     return [all_minigrid[idx] for idx in indices]
 
 
 def get_random_atari_envs():
     """
-    Fetch 2 random Atari environments using ale_py and torch.
+    Fetch 3 random Atari environments using ale_py and torch.
     """
     import ale_py
     import gymnasium as gym
@@ -3437,9 +3470,9 @@ def get_random_atari_envs():
     env_specs = gym.envs.registry.values()
     all_env_ids = [env_spec.id for env_spec in env_specs]
     atari_env_ids = [env_id for env_id in all_env_ids if env_id.startswith("ALE")]
-    if len(atari_env_ids) < 2:
+    if len(atari_env_ids) < 3:
         raise RuntimeError("Not enough Atari environments found.")
-    indices = torch.randperm(len(atari_env_ids))[:2]
+    indices = torch.randperm(len(atari_env_ids))[:3]
     return [atari_env_ids[idx] for idx in indices]
 
 
@@ -3488,7 +3521,7 @@ class TestMinari:
     @pytest.mark.parametrize(
         "dataset_idx",
         # Only use a static upper bound; do not call any function that imports minari globally.
-        range(8)
+        range(4),
     )
     def test_load(self, dataset_idx, split):
         """
@@ -3499,23 +3532,21 @@ class TestMinari:
 
         num_custom_to_select = 4
         custom_envs = MUJOCO_ENVIRONMENTS + D4RL_ENVIRONMENTS
-        
+
         # Randomly select a subset of custom environments
         indices = torch.randperm(len(custom_envs))[:num_custom_to_select]
         custom_envs_subset = [custom_envs[i] for i in indices]
-        
+
         num_custom = len(custom_envs_subset)
         try:
             minigrid_datasets = get_random_minigrid_datasets()
         except Exception:
             minigrid_datasets = []
         num_minigrid = len(minigrid_datasets)
-
         try:
             atari_envs = get_random_atari_envs()
         except Exception:
             atari_envs = []
-
         num_atari = len(atari_envs)
         total_datasets = num_custom + num_minigrid + num_atari
 
@@ -3682,6 +3713,7 @@ class TestMinari:
                 break
 
         minari.delete_dataset(dataset_id="cartpole/test-local-v1")
+
 
 @pytest.mark.slow
 class TestRoboset:

@@ -55,7 +55,6 @@ DEFAULT_RAY_INIT_CONFIG = {
     "log_to_driver": True,
     "namespace": None,
     "runtime_env": None,
-    "storage": None,
 }
 
 DEFAULT_REMOTE_CLASS_CONFIG = {
