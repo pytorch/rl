@@ -287,10 +287,9 @@ class REDQLoss_deprecated(LossModule):
 
     @property
     def alpha(self):
-        # keep alpha is a reasonable range
-        self.log_alpha.data.clamp_(self.min_log_alpha, self.max_log_alpha)
         with torch.no_grad():
-            alpha = self.log_alpha.exp()
+            # keep alpha is a reasonable range
+            alpha = self.log_alpha.clamp(self.min_log_alpha, self.max_log_alpha).exp()
         return alpha
 
     def _set_in_keys(self):
@@ -454,7 +453,9 @@ class REDQLoss_deprecated(LossModule):
             )
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter
-            alpha_loss = -self.log_alpha.exp() * (log_pi.detach() + self.target_entropy)
+            alpha_loss = -self.log_alpha.clamp(
+                self.min_log_alpha, self.max_log_alpha
+            ).exp() * (log_pi.detach() + self.target_entropy)
         else:
             # placeholder
             alpha_loss = torch.zeros_like(log_pi)
