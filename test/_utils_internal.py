@@ -13,6 +13,7 @@ import time
 import unittest
 import warnings
 from functools import wraps
+from typing import Callable
 
 import pytest
 import torch
@@ -214,7 +215,12 @@ def generate_seeds(seed, repeat):
 
 
 # Decorator to retry upon certain Exceptions.
-def retry(ExceptionToCheck, tries=3, delay=3, skip_after_retries=False):
+def retry(
+    ExceptionToCheck: type[Exception],
+    tries: int = 3,
+    delay: int = 3,
+    skip_after_retries: bool = False,
+) -> Callable[[Callable], Callable]:
     def deco_retry(f):
         @wraps(f)
         def f_retry(*args, **kwargs):

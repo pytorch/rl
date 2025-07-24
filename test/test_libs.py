@@ -3408,16 +3408,16 @@ D4RL_ENVIRONMENTS = [
 ]
 
 
-def _minari_init():
+def _minari_init() -> tuple[bool, Exception | None]:
     """Initialize Minari datasets list. Returns True if already initialized."""
     global _MINARI_DATASETS
     if _MINARI_DATASETS and not all(
         isinstance(x, str) and x.isdigit() for x in _MINARI_DATASETS
     ):
-        return True  # Already initialized with real dataset names
+        return True, None  # Already initialized with real dataset names
 
     if not _has_minari or not _has_gymnasium:
-        return False
+        return False, ImportError("Minari or Gymnasium not found")
 
     try:
         import minari
@@ -3434,9 +3434,9 @@ def _minari_init():
 
         assert len(keys) > 5, keys
         _MINARI_DATASETS[:] = keys  # Replace the placeholder values
-        return True
-    except Exception:
-        return False
+        return True, None
+    except Exception as err:
+        return False, err
 
 
 def get_random_minigrid_datasets():
@@ -3607,6 +3607,7 @@ class TestMinari:
         if cleanup_needed:
             minari.delete_dataset(dataset_id=dataset_id)
 
+    @retry(Exception, tries=3, delay=1)
     def test_minari_preproc(self, tmpdir):
         dataset = MinariExperienceReplay(
             "D4RL/pointmaze/large-v2",
@@ -3656,63 +3657,70 @@ class TestMinari:
     @pytest.mark.skipif(
         not _has_minari or not _has_gymnasium, reason="Minari or Gym not available"
     )
-    def test_local_minari_dataset_loading(self):
-        import minari
-        from minari import DataCollector
+    def test_local_minari_dataset_loading(self, tmpdir):
+        MINARI_DATASETS_PATH = os.environ.get("MINARI_DATASETS_PATH")
+        os.environ["MINARI_DATASETS_PATH"] = str(tmpdir)
+        try:
+            import minari
+            from minari import DataCollector
 
-        if not _minari_init():
-            pytest.skip("Failed to initialize Minari datasets")
+            success, err = _minari_init()
+            if not success:
+                pytest.skip(f"Failed to initialize Minari datasets: {err}")
 
-        dataset_id = "cartpole/test-local-v1"
+            dataset_id = "cartpole/test-local-v1"
 
-        # Create dataset using Gym + DataCollector
-        env = gymnasium.make("CartPole-v1")
-        env = DataCollector(env, record_infos=True)
-        for _ in range(50):
-            env.reset(seed=123)
-            while True:
-                action = env.action_space.sample()
-                obs, rew, terminated, truncated, info = env.step(action)
-                if terminated or truncated:
+            # Create dataset using Gym + DataCollector
+            env = gymnasium.make("CartPole-v1")
+            env = DataCollector(env, record_infos=True)
+            for _ in range(50):
+                env.reset(seed=123)
+                while True:
+                    action = env.action_space.sample()
+                    obs, rew, terminated, truncated, info = env.step(action)
+                    if terminated or truncated:
+                        break
+
+            env.create_dataset(
+                dataset_id=dataset_id,
+                algorithm_name="RandomPolicy",
+                code_permalink="https://github.com/Farama-Foundation/Minari",
+                author="Farama",
+                author_email="contact@farama.org",
+                eval_env="CartPole-v1",
+            )
+
+            # Load from local cache
+            data = MinariExperienceReplay(
+                dataset_id=dataset_id,
+                split_trajs=False,
+                batch_size=32,
+                download=False,
+                sampler=SamplerWithoutReplacement(drop_last=True),
+                prefetch=2,
+                load_from_local_minari=True,
+            )
+
+            t0 = time.time()
+            for i, sample in enumerate(data):
+                t1 = time.time()
+                torchrl_logger.info(
+                    f"[Local Minari] Sampling time {1000 * (t1 - t0):4.4f} ms"
+                )
+                assert data.metadata["action_space"].is_in(
+                    sample["action"]
+                ), "Invalid action sample"
+                assert data.metadata["observation_space"].is_in(
+                    sample["observation"]
+                ), "Invalid observation sample"
+                t0 = time.time()
+                if i == 10:
                     break
 
-        env.create_dataset(
-            dataset_id=dataset_id,
-            algorithm_name="RandomPolicy",
-            code_permalink="https://github.com/Farama-Foundation/Minari",
-            author="Farama",
-            author_email="contact@farama.org",
-            eval_env="CartPole-v1",
-        )
-
-        # Load from local cache
-        data = MinariExperienceReplay(
-            dataset_id=dataset_id,
-            split_trajs=False,
-            batch_size=32,
-            download=False,
-            sampler=SamplerWithoutReplacement(drop_last=True),
-            prefetch=2,
-            load_from_local_minari=True,
-        )
-
-        t0 = time.time()
-        for i, sample in enumerate(data):
-            t1 = time.time()
-            torchrl_logger.info(
-                f"[Local Minari] Sampling time {1000 * (t1 - t0):4.4f} ms"
-            )
-            assert data.metadata["action_space"].is_in(
-                sample["action"]
-            ), "Invalid action sample"
-            assert data.metadata["observation_space"].is_in(
-                sample["observation"]
-            ), "Invalid observation sample"
-            t0 = time.time()
-            if i == 10:
-                break
-
-        minari.delete_dataset(dataset_id="cartpole/test-local-v1")
+            minari.delete_dataset(dataset_id="cartpole/test-local-v1")
+        finally:
+            if MINARI_DATASETS_PATH:
+                os.environ["MINARI_DATASETS_PATH"] = MINARI_DATASETS_PATH
 
 
 @pytest.mark.slow

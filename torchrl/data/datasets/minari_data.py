@@ -253,158 +253,184 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
         if _has_tqdm:
             from tqdm import tqdm
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            os.environ["MINARI_DATASETS_PATH"] = tmpdir
+        prev_minari_datasets_path_save = prev_minari_datasets_path = os.environ.get(
+            "MINARI_DATASETS_PATH"
+        )
+        try:
+            if prev_minari_datasets_path is None:
+                prev_minari_datasets_path = os.path.expanduser("~/.minari/datasets")
+            with tempfile.TemporaryDirectory() as tmpdir:
 
-            total_steps = 0
-            td_data = TensorDict()
+                total_steps = 0
+                td_data = TensorDict()
 
-            if self.load_from_local_minari:
-                # Load minari dataset from user's local Minari cache
+                if self.load_from_local_minari:
+                    # Load minari dataset from user's local Minari cache
 
-                minari_cache_dir = os.path.expanduser("~/.minari/datasets")
-                os.environ["MINARI_DATASETS_PATH"] = minari_cache_dir
-                parent_dir = Path(minari_cache_dir) / self.dataset_id / "data"
-                h5_path = parent_dir / "main_data.hdf5"
+                    parent_dir = (
+                        Path(prev_minari_datasets_path) / self.dataset_id / "data"
+                    )
+                    h5_path = parent_dir / "main_data.hdf5"
 
-                if not h5_path.exists():
-                    raise FileNotFoundError(
-                        f"{h5_path} does not exist in local Minari cache!"
+                    if not h5_path.exists():
+                        raise FileNotFoundError(
+                            f"{h5_path} does not exist in local Minari cache!"
+                        )
+
+                    torchrl_logger.info(
+                        f"loading dataset from local Minari cache at {h5_path}"
+                    )
+                    h5_data = PersistentTensorDict.from_h5(h5_path)
+
+                else:
+                    # temporarily change the minari cache path
+                    prev_minari_datasets_path_save2 = os.environ.get(
+                        "MINARI_DATASETS_PATH"
+                    )
+                    os.environ["MINARI_DATASETS_PATH"] = tmpdir
+                    try:
+                        minari.download_dataset(dataset_id=self.dataset_id)
+                    finally:
+                        if prev_minari_datasets_path_save2 is not None:
+                            os.environ[
+                                "MINARI_DATASETS_PATH"
+                            ] = prev_minari_datasets_path_save2
+
+                    parent_dir = Path(tmpdir) / self.dataset_id / "data"
+
+                    torchrl_logger.info(
+                        "first read through data to create data structure..."
+                    )
+                    h5_data = PersistentTensorDict.from_h5(
+                        parent_dir / "main_data.hdf5"
                     )
 
-                torchrl_logger.info(
-                    f"loading dataset from local Minari cache at {h5_path}"
-                )
-                h5_data = PersistentTensorDict.from_h5(h5_path)
-
-            else:
-                minari.download_dataset(dataset_id=self.dataset_id)
-
-                parent_dir = Path(tmpdir) / self.dataset_id / "data"
-
-                torchrl_logger.info(
-                    "first read through data to create data structure..."
-                )
-                h5_data = PersistentTensorDict.from_h5(parent_dir / "main_data.hdf5")
-
-            # populate the tensordict
-            episode_dict = {}
-            for i, (episode_key, episode) in enumerate(h5_data.items()):
-                episode_num = int(episode_key[len("episode_") :])
-                episode_len = episode["actions"].shape[0]
-                episode_dict[episode_num] = (episode_key, episode_len)
-                # Get the total number of steps for the dataset
-                total_steps += episode_len
-                if i == 0:
-                    td_data.set("episode", 0)
-                    for key, val in episode.items():
-                        match = _NAME_MATCH[key]
-                        if key in ("observations", "state", "infos"):
-                            if (
-                                not val.shape
-                            ):  # no need for this, we don't need the proper length: or steps != val.shape[0] - 1:
-                                if val.is_empty():
-                                    continue
-                                val = _patch_info(val)
-                            td_data.set(("next", match), torch.zeros_like(val[0]))
-                            td_data.set(match, torch.zeros_like(val[0]))
-                        if key not in ("terminations", "truncations", "rewards"):
-                            td_data.set(match, torch.zeros_like(val[0]))
-                        else:
-                            td_data.set(
-                                ("next", match),
-                                torch.zeros_like(val[0].unsqueeze(-1)),
-                            )
-
-            # give it the proper size
-            td_data["next", "done"] = (
-                td_data["next", "truncated"] | td_data["next", "terminated"]
-            )
-            if "terminated" in td_data.keys():
-                td_data["done"] = td_data["truncated"] | td_data["terminated"]
-            td_data = td_data.expand(total_steps)
-            # save to designated location
-            torchrl_logger.info(f"creating tensordict data in {self.data_path_root}: ")
-            td_data = td_data.memmap_like(self.data_path_root)
-            torchrl_logger.info(f"tensordict structure: {td_data}")
-
-            torchrl_logger.info(f"Reading data from {max(*episode_dict) + 1} episodes")
-            index = 0
-            with tqdm(total=total_steps) if _has_tqdm else nullcontext() as pbar:
-                # iterate over episodes and populate the tensordict
-                for episode_num in sorted(episode_dict):
-                    episode_key, steps = episode_dict[episode_num]
-                    episode = h5_data.get(episode_key)
-                    idx = slice(index, (index + steps))
-                    data_view = td_data[idx]
-                    data_view.fill_("episode", episode_num)
-                    for key, val in episode.items():
-                        match = _NAME_MATCH[key]
-                        if key in (
-                            "observations",
-                            "state",
-                            "infos",
-                        ):
-                            if not val.shape or steps != val.shape[0] - 1:
-                                if val.is_empty():
-                                    continue
-                                val = _patch_info(val)
-                            if steps != val.shape[0] - 1:
-                                raise RuntimeError(
-                                    f"Mismatching number of steps for key {key}: was {steps} but got {val.shape[0] - 1}."
+                # populate the tensordict
+                episode_dict = {}
+                for i, (episode_key, episode) in enumerate(h5_data.items()):
+                    episode_num = int(episode_key[len("episode_") :])
+                    episode_len = episode["actions"].shape[0]
+                    episode_dict[episode_num] = (episode_key, episode_len)
+                    # Get the total number of steps for the dataset
+                    total_steps += episode_len
+                    if i == 0:
+                        td_data.set("episode", 0)
+                        for key, val in episode.items():
+                            match = _NAME_MATCH[key]
+                            if key in ("observations", "state", "infos"):
+                                if (
+                                    not val.shape
+                                ):  # no need for this, we don't need the proper length: or steps != val.shape[0] - 1:
+                                    if val.is_empty():
+                                        continue
+                                    val = _patch_info(val)
+                                td_data.set(("next", match), torch.zeros_like(val[0]))
+                                td_data.set(match, torch.zeros_like(val[0]))
+                            if key not in ("terminations", "truncations", "rewards"):
+                                td_data.set(match, torch.zeros_like(val[0]))
+                            else:
+                                td_data.set(
+                                    ("next", match),
+                                    torch.zeros_like(val[0].unsqueeze(-1)),
                                 )
-                            data_view["next", match].copy_(val[1:])
-                            data_view[match].copy_(val[:-1])
-                        elif key not in ("terminations", "truncations", "rewards"):
-                            if steps is None:
-                                steps = val.shape[0]
-                            else:
-                                if steps != val.shape[0]:
-                                    raise RuntimeError(
-                                        f"Mismatching number of steps for key {key}: was {steps} but got {val.shape[0]}."
-                                    )
-                            data_view[match].copy_(val)
-                        else:
-                            if steps is None:
-                                steps = val.shape[0]
-                            else:
-                                if steps != val.shape[0]:
-                                    raise RuntimeError(
-                                        f"Mismatching number of steps for key {key}: was {steps} but got {val.shape[0]}."
-                                    )
-                            data_view[("next", match)].copy_(val.unsqueeze(-1))
-                    data_view["next", "done"].copy_(
-                        data_view["next", "terminated"] | data_view["next", "truncated"]
-                    )
-                    if "done" in data_view.keys():
-                        data_view["done"].copy_(
-                            data_view["terminated"] | data_view["truncated"]
-                        )
-                    if pbar is not None:
-                        pbar.update(steps)
-                        pbar.set_description(
-                            f"index={index} - episode num {episode_num}"
-                        )
-                    index += steps
-            h5_data.close()
-            # Add a "done" entry
-            if self.split_trajs:
-                with td_data.unlock_():
-                    from torchrl.collectors.utils import split_trajectories
 
-                    td_data = split_trajectories(td_data).memmap_(self.data_path)
-            with open(self.metadata_path, "w") as metadata_file:
-                dataset = minari.load_dataset(self.dataset_id)
-                self.metadata = asdict(dataset.spec)
-                self.metadata["observation_space"] = _spec_to_dict(
-                    self.metadata["observation_space"]
+                # give it the proper size
+                td_data["next", "done"] = (
+                    td_data["next", "truncated"] | td_data["next", "terminated"]
                 )
-                self.metadata["action_space"] = _spec_to_dict(
-                    self.metadata["action_space"]
+                if "terminated" in td_data.keys():
+                    td_data["done"] = td_data["truncated"] | td_data["terminated"]
+                td_data = td_data.expand(total_steps)
+                # save to designated location
+                torchrl_logger.info(
+                    f"creating tensordict data in {self.data_path_root}: "
                 )
-                json.dump(self.metadata, metadata_file)
-            self._load_and_proc_metadata()
-            return td_data
+                td_data = td_data.memmap_like(self.data_path_root)
+                torchrl_logger.info(f"tensordict structure: {td_data}")
+
+                torchrl_logger.info(
+                    f"Reading data from {max(*episode_dict) + 1} episodes"
+                )
+                index = 0
+                with tqdm(total=total_steps) if _has_tqdm else nullcontext() as pbar:
+                    # iterate over episodes and populate the tensordict
+                    for episode_num in sorted(episode_dict):
+                        episode_key, steps = episode_dict[episode_num]
+                        episode = h5_data.get(episode_key)
+                        idx = slice(index, (index + steps))
+                        data_view = td_data[idx]
+                        data_view.fill_("episode", episode_num)
+                        for key, val in episode.items():
+                            match = _NAME_MATCH[key]
+                            if key in (
+                                "observations",
+                                "state",
+                                "infos",
+                            ):
+                                if not val.shape or steps != val.shape[0] - 1:
+                                    if val.is_empty():
+                                        continue
+                                    val = _patch_info(val)
+                                if steps != val.shape[0] - 1:
+                                    raise RuntimeError(
+                                        f"Mismatching number of steps for key {key}: was {steps} but got {val.shape[0] - 1}."
+                                    )
+                                data_view["next", match].copy_(val[1:])
+                                data_view[match].copy_(val[:-1])
+                            elif key not in ("terminations", "truncations", "rewards"):
+                                if steps is None:
+                                    steps = val.shape[0]
+                                else:
+                                    if steps != val.shape[0]:
+                                        raise RuntimeError(
+                                            f"Mismatching number of steps for key {key}: was {steps} but got {val.shape[0]}."
+                                        )
+                                data_view[match].copy_(val)
+                            else:
+                                if steps is None:
+                                    steps = val.shape[0]
+                                else:
+                                    if steps != val.shape[0]:
+                                        raise RuntimeError(
+                                            f"Mismatching number of steps for key {key}: was {steps} but got {val.shape[0]}."
+                                        )
+                                data_view[("next", match)].copy_(val.unsqueeze(-1))
+                        data_view["next", "done"].copy_(
+                            data_view["next", "terminated"]
+                            | data_view["next", "truncated"]
+                        )
+                        if "done" in data_view.keys():
+                            data_view["done"].copy_(
+                                data_view["terminated"] | data_view["truncated"]
+                            )
+                        if pbar is not None:
+                            pbar.update(steps)
+                            pbar.set_description(
+                                f"index={index} - episode num {episode_num}"
+                            )
+                        index += steps
+                h5_data.close()
+                # Add a "done" entry
+                if self.split_trajs:
+                    with td_data.unlock_():
+                        from torchrl.collectors.utils import split_trajectories
+
+                        td_data = split_trajectories(td_data).memmap_(self.data_path)
+                with open(self.metadata_path, "w") as metadata_file:
+                    dataset = minari.load_dataset(self.dataset_id)
+                    self.metadata = asdict(dataset.spec)
+                    self.metadata["observation_space"] = _spec_to_dict(
+                        self.metadata["observation_space"]
+                    )
+                    self.metadata["action_space"] = _spec_to_dict(
+                        self.metadata["action_space"]
+                    )
+                    json.dump(self.metadata, metadata_file)
+                self._load_and_proc_metadata()
+                return td_data
+        finally:
+            if prev_minari_datasets_path_save is not None:
+                os.environ["MINARI_DATASETS_PATH"] = prev_minari_datasets_path_save
 
     def _make_split(self):
         from torchrl.collectors.utils import split_trajectories
