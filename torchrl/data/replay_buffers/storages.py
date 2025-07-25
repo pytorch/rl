@@ -1394,8 +1394,6 @@ class CompressedListStorage(ListStorage):
     It's particularly useful for storing raw sensory observations like images
     that can be compressed significantly to save memory.
 
-    pytest test/test_rb.py::TestCompressedListStorage::test_compressed_storage_tensor -v
-
     Args:
         max_size (int): size of the storage, i.e. maximum number of elements stored
             in the buffer.
@@ -1648,31 +1646,6 @@ class CompressedListStorage(ListStorage):
         self._storage = state_dict["_storage"]
         self._metadata = state_dict["_metadata"]
 
-    def num_bytes(self):
-        """Return the number of bytes in the storage."""
-
-        def compressed_size_from_list(data: Any) -> int:
-            if data is None:
-                return 0
-            elif isinstance(data, torch.Tensor):
-                return data.numel()
-            elif isinstance(data, (tuple, list, Sequence)):
-                return sum(compressed_size_from_list(item) for item in data)
-            elif isinstance(data, Mapping) or is_tensor_collection(data):
-                return sum(compressed_size_from_list(value) for value in data.values())
-            else:
-                return 0
-
-        compressed_size_estimate = compressed_size_from_list(self._storage)
-        if compressed_size_estimate == 0:
-            if len(self._storage) > 0:
-                raise RuntimeError(
-                    "Compressed storage is not empty but the compressed size is 0. This is a bug."
-                )
-            warnings.warn("Compressed storage is empty, returning 0 bytes.")
-
-        return compressed_size_estimate
-
     def to_bytestream(self, data_to_bytestream: torch.Tensor | np.array | Any) -> bytes:
         """Convert data to a byte stream."""
         if isinstance(data_to_bytestream, torch.Tensor):
@@ -1692,25 +1665,34 @@ class CompressedListStorage(ListStorage):
 
         return byte_stream
 
-    # def to_bytestream(
-    #     self, data_to_bytestream: Union[torch.Tensor, np.array, Any]
-    # ) -> bytes:
-    #     """Convert data to a byte stream."""
-    #     if isinstance(data_to_bytestream, torch.Tensor):
-    #         from safetensors.torch import save
-    #         byte_stream = save({"0": data_to_bytestream})
+    def bytes(self):
+        """Return the number of bytes in the storage."""
 
-    #     elif isinstance(data_to_bytestream, np.array):
-    #         from safetensors.numpy import save
-    #         byte_stream = bytes(data_to_bytestream.tobytes())
+        def compressed_size_from_list(data: Any) -> int:
+            if data is None:
+                return 0
+            elif isinstance(data, (bytes,)):
+                return len(data)
+            elif isinstance(data, (np.ndarray,)):
+                return data.nbytes
+            elif isinstance(data, (torch.Tensor)):
+                return compressed_size_from_list(data.cpu().numpy())
+            elif isinstance(data, (tuple, list, Sequence)):
+                return sum(compressed_size_from_list(item) for item in data)
+            elif isinstance(data, Mapping) or is_tensor_collection(data):
+                return sum(compressed_size_from_list(value) for value in data.values())
+            else:
+                return 0
 
-    #     else:
-    #         buffer = io.BytesIO()
-    #         pickle.dump(data_to_bytestream, buffer)
-    #         buffer.seek(0)
-    #         byte_stream = bytes(buffer.read())
+        compressed_size_estimate = compressed_size_from_list(self._storage)
+        if compressed_size_estimate == 0:
+            if len(self._storage) > 0:
+                raise RuntimeError(
+                    "Compressed storage is not empty but the compressed size is 0. This is a bug."
+                )
+            warnings.warn("Compressed storage is empty, returning 0 bytes.")
 
-    #     return byte_stream
+        return compressed_size_estimate
 
 
 class StorageEnsemble(Storage):
