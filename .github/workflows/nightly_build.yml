@@ -60,6 +60,12 @@ jobs:
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda_support[1] }}
+      - name: Prepare nightly build
+        env:
+          TORCHRL_NIGHTLY: 1
+        run: |
+          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
+          python3 packaging/prepare_nightly_build.py
       - name: Build TorchRL Nightly
         env:
           TORCHRL_NIGHTLY: 1
@@ -227,6 +233,12 @@ jobs:
         shell: bash
         run: |
           python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
+      - name: Prepare nightly build
+        env:
+          TORCHRL_NIGHTLY: 1
+        shell: bash
+        run: |
+          python3 packaging/prepare_nightly_build.py
       - name: Build TorchRL nightly
         env:
           TORCHRL_NIGHTLY: 1
