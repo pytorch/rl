@@ -1394,8 +1394,6 @@ class CompressedListStorage(ListStorage):
     It's particularly useful for storing raw sensory observations like images
     that can be compressed significantly to save memory.
 
-    pytest test/test_rb.py::TestCompressedListStorage::test_compressed_storage_tensor -v
-
     Args:
         max_size (int): size of the storage, i.e. maximum number of elements stored
             in the buffer.

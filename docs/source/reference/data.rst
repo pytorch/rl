@@ -196,24 +196,25 @@ were found from rough benchmarking in https://github.com/pytorch/rl/tree/main/be
 Compressed Storage for Memory Efficiency
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-For applications where memory usage or memory bandwidth is a primary concern, especially when storing or transferring
-large sensory observations like images, audio, or text. The :class:`~torchrl.data.replay_buffers.storages.CompressedListStorage`
-provides significant memory savings through compression.
+For applications where memory usage or memory bandwidth is a primary concern—especially when storing or transferring large sensory observations such as images, audio, or text—the :class:`~torchrl.data.replay_buffers.storages.CompressedListStorage` provides significant memory savings through compression.
 
-The `CompressedListStorage`` compresses data when storing and decompresses when retrieving,
-achieving compression ratios of 2-10x for image data while maintaining full data fidelity.
-It uses zstd compression by default but supports custom compression algorithms.
+**Key features:**
 
-Key features:
-#. **Memory Efficiency**: Achieves significant memory savings through compression
-#. **Data Integrity**: Maintains full data fidelity through lossless compression
-#. **Flexible Compression**: Supports custom compression algorithms or uses zstd by default
-#. **TensorDict Support**: Seamlessly works with TensorDict structures
-#. **Checkpointing**: Full support for saving and loading compressed data
-#. **Batched GPU Compression/Decompression**: Easy integration for replay buffers that sample compressed data from VRAM
+- **Memory Efficiency:** Achieves substantial memory savings via compression.
+- **Data Integrity:** Maintains full data fidelity through lossless compression.
+- **Flexible Compression:** Uses zstd compression by default, with support for custom compression algorithms.
+- **TensorDict Support:** Seamlessly integrates with TensorDict structures.
+- **Checkpointing:** Fully supports saving and loading compressed data.
+- **Batched GPU Compression/Decompression:** Enables efficient replay buffer sampling directly from VRAM.
 
-.. note:: Batched GPU compression relies on `nvidia.nvcomp`, please see example code 
-  `examples/replay-buffers/compressed_gpu_decompressed_gpu_replay_buffer.py <https://github.com/pytorch/rl/blob/main/examples/replay-buffers/compressed_gpu_decompressed_gpu_replay_buffer.py>`_ file for GPU compression GPU decompression, or `examples/replay-buffers/compressed_gpu_decompressed_gpu_replay_buffer.py <https://github.com/pytorch/rl/blob/main/examples/replay-buffers/compressed_cpu_decompressed_gpu_replay_buffer.py>`_ for CPU compression and GPU decompression.
+The `CompressedListStorage` compresses data when storing and decompresses when retrieving, achieving compression ratios of 95x–122x for Atari images while maintaining full data fidelity. 
+We see these results in the Atari Learning Environment (ALE) from a rollout in Pong with a random policy for an episode at each compression level:
+
++-------------------------------+--------+--------+--------+--------+--------+
+| Compression level of zstd     | 1      | 3      | 8      | 12     | 22     |
++===============================+========+========+========+========+========+
+| Compression ratio in ALE Pong | 95x    | 99x    | 106x   | 111x   | 122x   |
++-------------------------------+--------+--------+--------+--------+--------+
 
 Example usage:
 
@@ -253,8 +254,8 @@ For custom compression algorithms:
 
 .. note:: The CompressedListStorage uses `zstd` for python versions of at least 3.14 and defaults to zlib otherwise.
 
-.. note:: An example of how to use the CompressedListStorage is available in the 
-  `examples/replay-buffers/compressed_replay_buffer_example.py <https://github.com/pytorch/rl/blob/main/examples/replay-buffers/compressed_replay_buffer_example.py>`_ file.
+.. note:: Batched GPU compression relies on `nvidia.nvcomp`, please see example code 
+  `examples/replay-buffers/compressed_replay_buffer.py <https://github.com/pytorch/rl/blob/main/examples/replay-buffers/compressed_replay_buffer.py>`_.
 
 Sharing replay buffers across processes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
