@@ -205,30 +205,34 @@ achieving compression ratios of 2-10x for image data while maintaining full data
 It uses zstd compression by default but supports custom compression algorithms.
 
 Key features:
-- **Memory Efficiency**: Achieves significant memory savings through compression
-- **Data Integrity**: Maintains full data fidelity through lossless compression
-- **Flexible Compression**: Supports custom compression algorithms or uses zstd by default
-- **TensorDict Support**: Seamlessly works with TensorDict structures
-- **Checkpointing**: Full support for saving and loading compressed data
+#. **Memory Efficiency**: Achieves significant memory savings through compression
+#. **Data Integrity**: Maintains full data fidelity through lossless compression
+#. **Flexible Compression**: Supports custom compression algorithms or uses zstd by default
+#. **TensorDict Support**: Seamlessly works with TensorDict structures
+#. **Checkpointing**: Full support for saving and loading compressed data
+#. **Batched GPU Compression/Decompression**: Easy integration for replay buffers that sample compressed data from VRAM
+
+.. note:: Batched GPU compression relies on `nvidia.nvcomp`, please see example code 
+  `examples/replay-buffers/compressed_gpu_decompressed_gpu_replay_buffer.py <https://github.com/pytorch/rl/blob/main/examples/replay-buffers/compressed_gpu_decompressed_gpu_replay_buffer.py>`_ file for GPU compression GPU decompression, or `examples/replay-buffers/compressed_gpu_decompressed_gpu_replay_buffer.py <https://github.com/pytorch/rl/blob/main/examples/replay-buffers/compressed_cpu_decompressed_gpu_replay_buffer.py>`_ for CPU compression and GPU decompression.
 
 Example usage:
 
     >>> import torch
     >>> from torchrl.data import ReplayBuffer, CompressedListStorage
     >>> from tensordict import TensorDict
-    >>>
+    >>> 
     >>> # Create a compressed storage for image data
     >>> storage = CompressedListStorage(max_size=1000, compression_level=3)
     >>> rb = ReplayBuffer(storage=storage, batch_size=32)
-    >>>
+    >>> 
     >>> # Add image data
     >>> images = torch.randn(100, 3, 84, 84)  # Atari-like frames
     >>> data = TensorDict({"obs": images}, batch_size=[100])
     >>> rb.extend(data)
-    >>>
+    >>> 
     >>> # Sample data (automatically decompressed)
-    >>> sample = rb.sample(16)
-    >>> print(sample["obs"].shape)  # torch.Size([16, 3, 84, 84])
+    >>> sample = rb.sample(32)
+    >>> print(sample["obs"].shape)  # torch.Size([32, 3, 84, 84])
 
 The compression level can be adjusted from 1 (fast, less compression) to 22 (slow, more compression),
 with level 3 being a good default for most use cases.
@@ -247,8 +251,7 @@ For custom compression algorithms:
     ...     decompression_fn=my_decompress
     ... )
 
-.. note:: The CompressedListStorage requires the `zstandard` library for default compression.
-  Install with: ``pip install zstandard``
+.. note:: The CompressedListStorage uses `zstd` for python versions of at least 3.14 and defaults to zlib otherwise.
 
 .. note:: An example of how to use the CompressedListStorage is available in the 
   `examples/replay-buffers/compressed_replay_buffer_example.py <https://github.com/pytorch/rl/blob/main/examples/replay-buffers/compressed_replay_buffer_example.py>`_ file.

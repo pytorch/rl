@@ -13,7 +13,7 @@ import warnings
 from collections import OrderedDict
 from copy import copy
 from multiprocessing.context import get_spawning_popen
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 import tensordict
@@ -1666,6 +1666,35 @@ class CompressedListStorage(ListStorage):
             byte_stream = bytes(buffer.read())
 
         return byte_stream
+
+    def bytes(self):
+        """Return the number of bytes in the storage."""
+
+        def compressed_size_from_list(data: Any) -> int:
+            if data is None:
+                return 0
+            elif isinstance(data, (bytes,)):
+                return len(data)
+            elif isinstance(data, (np.ndarray,)):
+                return data.nbytes
+            elif isinstance(data, (torch.Tensor)):
+                return compressed_size_from_list(data.cpu().numpy())
+            elif isinstance(data, (tuple, list, Sequence)):
+                return sum(compressed_size_from_list(item) for item in data)
+            elif isinstance(data, Mapping) or is_tensor_collection(data):
+                return sum(compressed_size_from_list(value) for value in data.values())
+            else:
+                return 0
+
+        compressed_size_estimate = compressed_size_from_list(self._storage)
+        if compressed_size_estimate == 0:
+            if len(self._storage) > 0:
+                raise RuntimeError(
+                    "Compressed storage is not empty but the compressed size is 0. This is a bug."
+                )
+            warnings.warn("Compressed storage is empty, returning 0 bytes.")
+
+        return compressed_size_estimate
 
 
 class StorageEnsemble(Storage):
