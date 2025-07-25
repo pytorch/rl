@@ -9,7 +9,7 @@ Additionally, we can batch our decompression on the GPU in one go using the coll
 
 Below are the results of running this example with different compression levels on an Atari rollout of Pong.
 +---------------------+--------+--------+--------+--------+--------+
-| Compressor Level    | 1      | 3      | 8      | 12     | 23     |
+| Compressor Level    | 1      | 3      | 8      | 12     | 22     |
 +=====================+========+========+========+========+========+
 | Compression Ratio   | 95x    | 99x    | 106x   | 111x   | 122x   |
 +---------------------+--------+--------+--------+--------+--------+
