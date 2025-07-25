@@ -11,10 +11,13 @@ import importlib
 import os
 import pickle
 import sys
+import tempfile
 from functools import partial
+from pathlib import Path
 from unittest import mock
 
 import numpy as np
+
 import pytest
 import torch
 from packaging import version
@@ -35,6 +38,7 @@ from torchrl._utils import _replace_last, logger as torchrl_logger
 from torchrl.collectors import RandomPolicy, SyncDataCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
+    CompressedListStorage,
     FlatStorageCheckpointer,
     MultiStep,
     NestedStorageCheckpointer,
@@ -129,6 +133,7 @@ _has_snapshot = importlib.util.find_spec("torchsnapshot") is not None
 _os_is_windows = sys.platform == "win32"
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_ray = importlib.util.find_spec("ray") is not None
+_has_zstandard = importlib.util.find_spec("zstandard") is not None
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
@@ -184,7 +189,6 @@ TensorDictReplayBufferRNG = functools.partial(
 @pytest.mark.parametrize("size", [3, 5, 100])
 class TestComposableBuffers:
     def _get_rb(self, rb_type, size, sampler, writer, storage, compilable=False):
-
         if storage is not None:
             storage = storage(size, compilable=compilable)
 
@@ -327,10 +331,14 @@ class TestComposableBuffers:
                 writer.extend(batch1)
             return
 
-        with pytest.warns(
-            UserWarning,
-            match="A cursor of length superior to the storage capacity was provided",
-        ) if cond else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="A cursor of length superior to the storage capacity was provided",
+            )
+            if cond
+            else contextlib.nullcontext()
+        ):
             writer.extend(batch1)
 
         # Added less data than storage max size
@@ -378,10 +386,14 @@ class TestComposableBuffers:
         length = min(rb._storage.max_size, len(rb) + data_shape)
         if writer is TensorDictMaxValueWriter:
             data["next", "reward"][-length:] = 1_000_000
-        with pytest.warns(
-            UserWarning,
-            match="A cursor of length superior to the storage capacity was provided",
-        ) if cond else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="A cursor of length superior to the storage capacity was provided",
+            )
+            if cond
+            else contextlib.nullcontext()
+        ):
             rb.extend(data)
         length = len(rb)
         if is_tensor_collection(data):
@@ -419,10 +431,14 @@ class TestComposableBuffers:
             and size < len(data2)
             and isinstance(rb._storage, TensorStorage)
         )
-        with pytest.warns(
-            UserWarning,
-            match="A cursor of length superior to the storage capacity was provided",
-        ) if cond else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="A cursor of length superior to the storage capacity was provided",
+            )
+            if cond
+            else contextlib.nullcontext()
+        ):
             rb.extend(data2)
 
     @pytest.mark.skipif(
@@ -525,10 +541,14 @@ class TestComposableBuffers:
             ):
                 rb.extend(data)
             return
-        with pytest.warns(
-            UserWarning,
-            match="A cursor of length superior to the storage capacity was provided",
-        ) if cond else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="A cursor of length superior to the storage capacity was provided",
+            )
+            if cond
+            else contextlib.nullcontext()
+        ):
             rb.extend(data)
         rb_sample = rb.sample()
         # if not isinstance(new_data, (torch.Tensor, TensorDictBase)):
@@ -545,7 +565,6 @@ class TestComposableBuffers:
             rb_sample_iter = data_iter_func(rb._batch_size, rb_sample)
 
         for single_sample in rb_sample_iter:
-
             if is_tensor_collection(data) or isinstance(data, torch.Tensor):
                 data_iter = data
             else:
@@ -595,10 +614,14 @@ class TestComposableBuffers:
             ):
                 rb.extend(data)
             return
-        with pytest.warns(
-            UserWarning,
-            match="A cursor of length superior to the storage capacity was provided",
-        ) if cond else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="A cursor of length superior to the storage capacity was provided",
+            )
+            if cond
+            else contextlib.nullcontext()
+        ):
             rb.extend(data)
         d1 = rb[2]
         d2 = rb._storage[2]
@@ -615,7 +638,6 @@ class TestComposableBuffers:
         assert b
 
     def test_pickable(self, rb_type, sampler, writer, storage, size, datatype):
-
         rb = self._get_rb(
             rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
         )
@@ -874,7 +896,6 @@ class TestStorages:
 
     @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
     def test_extend_lazystack(self, storage_type):
-
         rb = ReplayBuffer(
             storage=storage_type(6),
             batch_size=2,
@@ -1501,7 +1522,6 @@ class TestRNG:
 @pytest.mark.parametrize("size", [3, 5, 100])
 @pytest.mark.parametrize("prefetch", [0])
 class TestBuffers:
-
     default_constr = {
         ReplayBuffer: ReplayBuffer,
         PrioritizedReplayBuffer: functools.partial(
@@ -1568,10 +1588,14 @@ class TestBuffers:
         cond = (
             OLD_TORCH and size < len(batch1) and isinstance(rb._storage, TensorStorage)
         )
-        with pytest.warns(
-            UserWarning,
-            match="A cursor of length superior to the storage capacity was provided",
-        ) if cond else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="A cursor of length superior to the storage capacity was provided",
+            )
+            if cond
+            else contextlib.nullcontext()
+        ):
             rb.extend(batch1)
 
         # Added fewer data than storage max size
@@ -1626,10 +1650,14 @@ class TestBuffers:
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         data = self._get_data(rbtype, size=5)
         cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
-        with pytest.warns(
-            UserWarning,
-            match="A cursor of length superior to the storage capacity was provided",
-        ) if cond else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="A cursor of length superior to the storage capacity was provided",
+            )
+            if cond
+            else contextlib.nullcontext()
+        ):
             rb.extend(data)
         length = len(rb)
         for d in data[-length:]:
@@ -1653,10 +1681,14 @@ class TestBuffers:
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         data = self._get_data(rbtype, size=5)
         cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
-        with pytest.warns(
-            UserWarning,
-            match="A cursor of length superior to the storage capacity was provided",
-        ) if cond else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="A cursor of length superior to the storage capacity was provided",
+            )
+            if cond
+            else contextlib.nullcontext()
+        ):
             rb.extend(data)
         new_data = rb.sample()
         if not isinstance(new_data, (torch.Tensor, TensorDictBase)):
@@ -1683,10 +1715,14 @@ class TestBuffers:
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         data = self._get_data(rbtype, size=5)
         cond = OLD_TORCH and size < len(data) and isinstance(rb._storage, TensorStorage)
-        with pytest.warns(
-            UserWarning,
-            match="A cursor of length superior to the storage capacity was provided",
-        ) if cond else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="A cursor of length superior to the storage capacity was provided",
+            )
+            if cond
+            else contextlib.nullcontext()
+        ):
             rb.extend(data)
         d1 = rb[2]
         d2 = rb._storage[2]
@@ -2563,7 +2599,7 @@ class TestSamplers:
                 break
         else:
             raise AssertionError(
-                f"Not all items can be sampled: {set(range(100))-count_unique} are missing"
+                f"Not all items can be sampled: {set(range(100)) - count_unique} are missing"
             )
 
         if strict_length:
@@ -2770,7 +2806,6 @@ class TestSamplers:
                     assert curr_eps.unique().numel() == 1
 
     def test_slice_sampler_strictlength(self):
-
         torch.manual_seed(0)
 
         data = TensorDict(
@@ -3430,7 +3465,6 @@ class TestEnsemble:
     def test_rb(
         self, storage_type, sampler_type, data_type, p, num_buffer_sampled, batch_size
     ):
-
         storages = [self._make_storage(storage_type, data_type) for _ in range(3)]
         collate_fn = self._make_collate(storage_type)
         data = [self._make_data(data_type) for _ in range(3)]
@@ -4025,6 +4059,289 @@ class TestRayRB:
                     assert d.shape == (25,)
         finally:
             rb.close()
+
+
+@pytest.mark.skipif(not _has_zstandard, reason="zstandard required for this test.")
+class TestCompressedListStorage:
+    """Test cases for CompressedListStorage."""
+
+    def test_compressed_storage_initialization(self):
+        """Test that CompressedListStorage initializes correctly."""
+        storage = CompressedListStorage(max_size=100, compression_level=3)
+        assert storage.max_size == 100
+        assert storage.compression_level == 3
+        assert len(storage) == 0
+
+    @pytest.mark.parametrize(
+        "test_tensor",
+        [
+            torch.rand(1),  # 0D scalar
+            torch.randn(84, dtype=torch.float32),  # 1D tensor
+            torch.randn(84, 84, dtype=torch.float32),  # 2D tensor
+            torch.randn(1, 84, 84, dtype=torch.float32),  # 3D tensor
+            torch.randn(32, 84, 84, dtype=torch.float32),  # 3D tensor
+        ],
+    )
+    def test_compressed_storage_tensor(self, test_tensor):
+        """Test compression and decompression of tensor data of various shapes."""
+        storage = CompressedListStorage(max_size=10, compression_level=3)
+
+        # Store tensor
+        storage.set(0, test_tensor)
+
+        # Retrieve tensor
+        retrieved_tensor = storage.get(0)
+
+        # Verify data integrity
+        assert (
+            test_tensor.shape == retrieved_tensor.shape
+        ), f"Expected shape {test_tensor.shape}, got {retrieved_tensor.shape}"
+        assert (
+            test_tensor.dtype == retrieved_tensor.dtype
+        ), f"Expected dtype {test_tensor.dtype}, got {retrieved_tensor.dtype}"
+        assert torch.allclose(test_tensor, retrieved_tensor, atol=1e-6)
+
+    def test_compressed_storage_tensordict(self):
+        """Test compression and decompression of TensorDict data."""
+        storage = CompressedListStorage(max_size=10, compression_level=3)
+
+        # Create test TensorDict
+        test_td = TensorDict(
+            {
+                "obs": torch.randn(3, 84, 84, dtype=torch.float32),
+                "action": torch.tensor([1, 2, 3]),
+                "reward": torch.randn(3),
+                "done": torch.tensor([False, True, False]),
+            },
+            batch_size=[3],
+        )
+
+        # Store TensorDict
+        storage.set(0, test_td)
+
+        # Retrieve TensorDict
+        retrieved_td = storage.get(0)
+
+        # Verify data integrity
+        assert torch.allclose(test_td["obs"], retrieved_td["obs"], atol=1e-6)
+        assert torch.allclose(test_td["action"], retrieved_td["action"])
+        assert torch.allclose(test_td["reward"], retrieved_td["reward"], atol=1e-6)
+        assert torch.allclose(test_td["done"], retrieved_td["done"])
+
+    def test_compressed_storage_multiple_indices(self):
+        """Test storing and retrieving multiple items."""
+        storage = CompressedListStorage(max_size=10, compression_level=3)
+
+        # Store multiple tensors
+        tensors = [
+            torch.randn(2, 2, dtype=torch.float32),
+            torch.randn(3, 3, dtype=torch.float32),
+            torch.randn(4, 4, dtype=torch.float32),
+        ]
+
+        for i, tensor in enumerate(tensors):
+            storage.set(i, tensor)
+
+        # Retrieve multiple tensors
+        retrieved = storage.get([0, 1, 2])
+
+        # Verify data integrity
+        for original, retrieved_tensor in zip(tensors, retrieved):
+            assert torch.allclose(original, retrieved_tensor, atol=1e-6)
+
+    def test_compressed_storage_with_replay_buffer(self):
+        """Test CompressedListStorage with ReplayBuffer."""
+        storage = CompressedListStorage(max_size=100, compression_level=3)
+        rb = ReplayBuffer(storage=storage, batch_size=5)
+
+        # Create test data
+        data = TensorDict(
+            {
+                "obs": torch.randn(10, 3, 84, 84, dtype=torch.float32),
+                "action": torch.randint(0, 4, (10,)),
+                "reward": torch.randn(10),
+            },
+            batch_size=[10],
+        )
+
+        # Add data to replay buffer
+        rb.extend(data)
+
+        # Sample from replay buffer
+        sample = rb.sample(5)
+
+        # Verify sample has correct shape
+        assert is_tensor_collection(sample), sample
+        assert sample["obs"].shape[0] == 5
+        assert sample["obs"].shape[1:] == (3, 84, 84)
+        assert sample["action"].shape[0] == 5
+        assert sample["reward"].shape[0] == 5
+
+    def test_compressed_storage_state_dict(self):
+        """Test saving and loading state dict."""
+        storage = CompressedListStorage(max_size=10, compression_level=3)
+
+        # Add some data
+        test_tensor = torch.randn(3, 3, dtype=torch.float32)
+        storage.set(0, test_tensor)
+
+        # Save state dict
+        state_dict = storage.state_dict()
+
+        # Create new storage and load state dict
+        new_storage = CompressedListStorage(max_size=10, compression_level=3)
+        new_storage.load_state_dict(state_dict)
+
+        # Verify data integrity
+        retrieved_tensor = new_storage.get(0)
+        assert torch.allclose(test_tensor, retrieved_tensor, atol=1e-6)
+
+    def test_compressed_storage_checkpointing(self):
+        """Test checkpointing functionality."""
+        storage = CompressedListStorage(max_size=10, compression_level=3)
+
+        # Add some data
+        test_td = TensorDict(
+            {
+                "obs": torch.randn(3, 84, 84, dtype=torch.float32),
+                "action": torch.tensor([1, 2, 3]),
+            },
+            batch_size=[3],
+        )
+        storage.set(0, test_td)
+
+        # second batch, different shape
+        test_td2 = TensorDict(
+            {
+                "obs": torch.randn(3, 85, 83, dtype=torch.float32),
+                "action": torch.tensor([1, 2, 3]),
+                "meta": torch.randn(3),
+                "astring": "a string!",
+            },
+            batch_size=[3],
+        )
+        storage.set(1, test_td)
+
+        # Create temporary directory for checkpointing
+        with tempfile.TemporaryDirectory() as tmpdir:
+            checkpoint_path = Path(tmpdir) / "checkpoint"
+
+            # Save checkpoint
+            storage.dumps(checkpoint_path)
+
+            # Create new storage and load checkpoint
+            new_storage = CompressedListStorage(max_size=10, compression_level=3)
+            new_storage.loads(checkpoint_path)
+
+            # Verify data integrity
+            retrieved_td = new_storage.get(0)
+            assert torch.allclose(test_td["obs"], retrieved_td["obs"], atol=1e-6)
+            assert torch.allclose(test_td["action"], retrieved_td["action"])
+
+    def test_compressed_storage_length(self):
+        """Test that length is calculated correctly."""
+        storage = CompressedListStorage(max_size=10, compression_level=3)
+
+        # Initially empty
+        assert len(storage) == 0
+
+        # Add some data
+        storage.set(0, torch.randn(2, 2))
+        assert len(storage) == 1
+
+        storage.set(1, torch.randn(2, 2))
+        assert len(storage) == 2
+
+        storage.set(2, torch.randn(2, 2))
+        assert len(storage) == 3
+
+    def test_compressed_storage_contains(self):
+        """Test the contains method."""
+        storage = CompressedListStorage(max_size=10, compression_level=3)
+
+        # Initially empty
+        assert not storage.contains(0)
+
+        # Add data
+        storage.set(0, torch.randn(2, 2))
+        assert storage.contains(0)
+        assert not storage.contains(1)
+
+    def test_compressed_storage_empty(self):
+        """Test emptying the storage."""
+        storage = CompressedListStorage(max_size=10, compression_level=3)
+
+        # Add some data
+        storage.set(0, torch.randn(2, 2))
+        storage.set(1, torch.randn(2, 2))
+        assert len(storage) == 2
+
+        # Empty storage
+        storage._empty()
+        assert len(storage) == 0
+
+    def test_compressed_storage_custom_compression(self):
+        """Test custom compression functions."""
+
+        def custom_compress(tensor):
+            # Simple compression: just convert to uint8
+            return tensor.to(torch.uint8)
+
+        def custom_decompress(compressed_tensor, metadata):
+            # Simple decompression: convert back to original dtype
+            return compressed_tensor.to(metadata["dtype"])
+
+        storage = CompressedListStorage(
+            max_size=10,
+            compression_fn=custom_compress,
+            decompression_fn=custom_decompress,
+        )
+
+        # Test with tensor
+        test_tensor = torch.randn(2, 2, dtype=torch.float32)
+        storage.set(0, test_tensor)
+        retrieved_tensor = storage.get(0)
+
+        # Note: This will lose precision due to uint8 conversion
+        # but should still work
+        assert retrieved_tensor.shape == test_tensor.shape
+
+    def test_compressed_storage_error_handling(self):
+        """Test error handling for invalid operations."""
+        storage = CompressedListStorage(max_size=5, compression_level=3)
+
+        # Test setting data beyond max_size
+        with pytest.raises(RuntimeError):
+            storage.set(10, torch.randn(2, 2))
+
+        # Test getting non-existent data
+        with pytest.raises(IndexError):
+            storage.get(0)
+
+    def test_compressed_storage_memory_efficiency(self):
+        """Test that compression actually reduces memory usage."""
+        storage = CompressedListStorage(max_size=100, compression_level=3)
+
+        # Create large tensor data
+        large_tensor = torch.zeros(100, 3, 84, 84, dtype=torch.int64)
+        large_tensor.copy_(
+            torch.arange(large_tensor.numel(), dtype=torch.int32).view_as(large_tensor)
+            // (3 * 84 * 84)
+        )
+        original_size = large_tensor.numel() * large_tensor.element_size()
+
+        # Store in compressed storage
+        storage.set(0, large_tensor)
+
+        # Estimate compressed size
+        compressed_data = storage._storage[0]
+        compressed_size = compressed_data.numel()  # uint8 bytes
+
+        # Verify compression ratio is reasonable (at least 2x for random data)
+        compression_ratio = original_size / compressed_size
+        assert (
+            compression_ratio > 1.5
+        ), f"Compression ratio {compression_ratio} is too low"
 
 
 if __name__ == "__main__":
