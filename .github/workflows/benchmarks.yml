@@ -12,6 +12,7 @@ permissions:
   id-token: write
   deployments: write
   contents: write
+  pull-requests: write
 
 concurrency:
   # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
@@ -132,6 +133,21 @@ jobs:
         with:
           name: GPU-benchmark-results
           path: gpu-results
+      - name: Show benchmark results summary
+        run: |
+          echo "=== CPU Benchmark Results ==="
+          if [ -f "cpu-results/output.json" ]; then
+            echo "CPU results found and will be uploaded"
+          else
+            echo "No CPU results found"
+          fi
+          
+          echo "=== GPU Benchmark Results ==="
+          if [ -f "gpu-results/output.json" ]; then
+            echo "GPU results found and will be uploaded"
+          else
+            echo "No GPU results found"
+          fi
       - name: Store CPU benchmark results
         uses: benchmark-action/github-action-benchmark@v1
         with:
@@ -141,7 +157,8 @@ jobs:
           fail-on-alert: true
           alert-threshold: '200%'
           alert-comment-cc-users: '@vmoens'
-          comment-on-alert: true
+          # Disable PR comments to avoid permission issues with PR reviews
+          comment-on-alert: false
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-pages-branch: gh-pages
           auto-push: true
@@ -154,7 +171,10 @@ jobs:
           fail-on-alert: true
           alert-threshold: '200%'
           alert-comment-cc-users: '@vmoens'
-          comment-on-alert: true
+          # Disable PR comments to avoid permission issues with PR reviews
+          comment-on-alert: false
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-pages-branch: gh-pages
           auto-push: true
+          # Use regular comments instead of PR reviews to avoid permission issues
+          comment-style: 'github'
