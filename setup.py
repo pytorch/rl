@@ -199,6 +199,7 @@ def _main():
             "torchrl": ["version.py"],
         },
         "include_package_data": True,
+        "packages": ["torchrl"],
     }
 
     # Handle nightly tensordict dependency override
