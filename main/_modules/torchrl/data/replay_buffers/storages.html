@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (2025.7.24+0627e85) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (2025.7.24+2bd0642) &#x25BC</span></a>
     </div>
     
 
@@ -429,12 +429,13 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">abc</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">textwrap</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedDict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">copy</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">multiprocessing.context</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_spawning_popen</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Sequence</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">tensordict</span>
@@ -454,6 +455,7 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_make_ordinal_device</span><span class="p">,</span> <span class="n">implement_for</span><span class="p">,</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.replay_buffers.checkpointers</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">CompressedListStorageCheckpointer</span><span class="p">,</span>
     <span class="n">ListStorageCheckpointer</span><span class="p">,</span>
     <span class="n">StorageCheckpointerBase</span><span class="p">,</span>
     <span class="n">StorageEnsembleCheckpointer</span><span class="p">,</span>
@@ -700,7 +702,7 @@
                 <span class="k">return</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cursor</span><span class="p">,</span> <span class="nb">slice</span><span class="p">):</span>
                 <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_device</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">cursor</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_set_slice</span><span class="p">(</span><span class="n">cursor</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
                 <span class="k">return</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span>
                 <span class="n">data</span><span class="p">,</span>
@@ -727,7 +729,7 @@
             <span class="k">if</span> <span class="n">cursor</span> <span class="o">&gt;</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                     <span class="s2">&quot;Cannot append data located more than one item away from &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;the storage size: the storage size is </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="si">}</span><span class="s2"> &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;the storage size: the storage size is </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">)</span><span class="si">}</span><span class="s2"> &quot;</span>
                     <span class="sa">f</span><span class="s2">&quot;and the index of the item to be set is </span><span class="si">{</span><span class="n">cursor</span><span class="si">}</span><span class="s2">.&quot;</span>
                 <span class="p">)</span>
             <span class="k">if</span> <span class="n">cursor</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_size</span><span class="p">:</span>
@@ -737,14 +739,24 @@
                     <span class="sa">f</span><span class="s2">&quot;and the index of the item to be set is </span><span class="si">{</span><span class="n">cursor</span><span class="si">}</span><span class="s2">.&quot;</span>
                 <span class="p">)</span>
             <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_device</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">cursor</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">):</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">cursor</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_set_item</span><span class="p">(</span><span class="n">cursor</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_set_item</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cursor</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set a single item in the storage.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">cursor</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">cursor</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_set_slice</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cursor</span><span class="p">:</span> <span class="nb">slice</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set a slice in the storage.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">cursor</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">slice</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="p">(</span><span class="n">INT_CLASSES</span><span class="p">,</span> <span class="nb">slice</span><span class="p">)):</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">INT_CLASSES</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_item</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="nb">slice</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_slice</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
         <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
             <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">index</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
@@ -754,9 +766,22 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="ow">and</span> <span class="n">index</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="s2">&quot;cpu&quot;</span><span class="p">:</span>
                 <span class="n">index</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
-            <span class="k">return</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">index</span><span class="p">]</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_list</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_item</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get a single item from the storage.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_slice</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">slice</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get a slice from the storage.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_list</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get a list of items from the storage.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">index</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the length of the storage.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
@@ -801,15 +826,18 @@
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
             <span class="k">if</span> <span class="n">item</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
                 <span class="n">item</span> <span class="o">+=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">)</span>
-
-            <span class="k">return</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">item</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_contains_int</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
             <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
                 <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">contains</span><span class="p">(</span><span class="n">elt</span><span class="p">)</span> <span class="k">for</span> <span class="n">elt</span> <span class="ow">in</span> <span class="n">item</span><span class="o">.</span><span class="n">tolist</span><span class="p">()],</span>
                 <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span>
                 <span class="n">device</span><span class="o">=</span><span class="n">item</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
             <span class="p">)</span><span class="o">.</span><span class="n">reshape_as</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
-        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">item</span><span class="p">)</span><span class="si">}</span><span class="s2"> is not supported yet.&quot;</span><span class="p">)</span></div>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">item</span><span class="p">)</span><span class="si">}</span><span class="s2"> is not supported yet.&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_contains_int</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if an integer index is contained in the storage.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">item</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="LazyStackStorage"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.LazyStackStorage.html#torchrl.data.replay_buffers.LazyStackStorage">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">LazyStackStorage</span><span class="p">(</span><span class="n">ListStorage</span><span class="p">):</span>
@@ -1294,7 +1322,6 @@
         <span class="o">*</span><span class="p">,</span>
         <span class="n">set_cursor</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="p">):</span>
-
         <span class="k">if</span> <span class="n">set_cursor</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_last_cursor</span> <span class="o">=</span> <span class="n">cursor</span>
 
@@ -1782,6 +1809,332 @@
         <span class="k">return</span> <span class="n">result</span></div>
 
 
+<div class="viewcode-block" id="CompressedListStorage"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.CompressedListStorage.html#torchrl.data.replay_buffers.CompressedListStorage">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">CompressedListStorage</span><span class="p">(</span><span class="n">ListStorage</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A storage that compresses and decompresses data.</span>
+
+<span class="sd">    This storage compresses data when storing and decompresses when retrieving.</span>
+<span class="sd">    It&#39;s particularly useful for storing raw sensory observations like images</span>
+<span class="sd">    that can be compressed significantly to save memory.</span>
+
+<span class="sd">    pytest test/test_rb.py::TestCompressedListStorage::test_compressed_storage_tensor -v</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        max_size (int): size of the storage, i.e. maximum number of elements stored</span>
+<span class="sd">            in the buffer.</span>
+<span class="sd">        compression_fn (callable, optional): function to compress data. Should take</span>
+<span class="sd">            a tensor and return a compressed byte tensor. Defaults to zstd compression.</span>
+<span class="sd">        decompression_fn (callable, optional): function to decompress data. Should take</span>
+<span class="sd">            a compressed byte tensor and return the original tensor. Defaults to zstd decompression.</span>
+<span class="sd">        compression_level (int, optional): compression level (1-22 for zstd) when using the default compression function.</span>
+<span class="sd">            Defaults to 3.</span>
+<span class="sd">        device (torch.device, optional): device where the sampled tensors will be</span>
+<span class="sd">            stored and sent. Default is :obj:`torch.device(&quot;cpu&quot;)`.</span>
+<span class="sd">        compilable (bool, optional): whether the storage is compilable.</span>
+<span class="sd">            If ``True``, the writer cannot be shared between multiple processes.</span>
+<span class="sd">            Defaults to ``False``.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data import CompressedListStorage, ReplayBuffer</span>
+<span class="sd">        &gt;&gt;&gt; from tensordict import TensorDict</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Create a compressed storage for image data</span>
+<span class="sd">        &gt;&gt;&gt; storage = CompressedListStorage(max_size=1000, compression_level=3)</span>
+<span class="sd">        &gt;&gt;&gt; rb = ReplayBuffer(storage=storage, batch_size=5)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Add some image data</span>
+<span class="sd">        &gt;&gt;&gt; images = torch.randn(10, 3, 84, 84)  # Atari-like frames</span>
+<span class="sd">        &gt;&gt;&gt; data = TensorDict({&quot;obs&quot;: images}, batch_size=[10])</span>
+<span class="sd">        &gt;&gt;&gt; rb.extend(data)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Sample and verify data is decompressed correctly</span>
+<span class="sd">        &gt;&gt;&gt; sample = rb.sample(3)</span>
+<span class="sd">        &gt;&gt;&gt; print(sample[&quot;obs&quot;].shape)  # torch.Size([3, 3, 84, 84])</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">_default_checkpointer</span> <span class="o">=</span> <span class="n">CompressedListStorageCheckpointer</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">max_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">compression_fn</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">decompression_fn</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">compression_level</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="s2">&quot;cpu&quot;</span><span class="p">,</span>
+        <span class="n">compilable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">max_size</span><span class="p">,</span> <span class="n">compilable</span><span class="o">=</span><span class="n">compilable</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">compression_level</span> <span class="o">=</span> <span class="n">compression_level</span>
+
+        <span class="c1"># Set up compression functions</span>
+        <span class="k">if</span> <span class="n">compression_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">compression_fn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_default_compression_fn</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">compression_fn</span> <span class="o">=</span> <span class="n">compression_fn</span>
+
+        <span class="k">if</span> <span class="n">decompression_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">decompression_fn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_default_decompression_fn</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">decompression_fn</span> <span class="o">=</span> <span class="n">decompression_fn</span>
+
+        <span class="c1"># Store compressed data and metadata</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># Store shape, dtype, device info for each item</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_default_compression_fn</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Default compression using zstd.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">sys</span><span class="o">.</span><span class="n">version_info</span> <span class="o">&gt;=</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">14</span><span class="p">):</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">compression</span><span class="w"> </span><span class="kn">import</span> <span class="n">zstd</span>
+
+            <span class="n">compressor_fn</span> <span class="o">=</span> <span class="n">zstd</span><span class="o">.</span><span class="n">compress</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">zlib</span>
+
+            <span class="n">compressor_fn</span> <span class="o">=</span> <span class="n">zlib</span><span class="o">.</span><span class="n">compress</span>
+
+        <span class="c1"># Convert tensor to bytes</span>
+        <span class="n">tensor_bytes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_bytestream</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span>
+
+        <span class="c1"># Compress with zstd</span>
+        <span class="n">compressed_bytes</span> <span class="o">=</span> <span class="n">compressor_fn</span><span class="p">(</span><span class="n">tensor_bytes</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">compression_level</span><span class="p">)</span>
+
+        <span class="c1"># Convert to tensor</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">frombuffer</span><span class="p">(</span><span class="nb">bytearray</span><span class="p">(</span><span class="n">compressed_bytes</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_default_decompression_fn</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">compressed_tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">metadata</span><span class="p">:</span> <span class="nb">dict</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Default decompression using zstd.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">sys</span><span class="o">.</span><span class="n">version_info</span> <span class="o">&gt;=</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">14</span><span class="p">):</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">compression</span><span class="w"> </span><span class="kn">import</span> <span class="n">zstd</span>
+
+            <span class="n">decompressor_fn</span> <span class="o">=</span> <span class="n">zstd</span><span class="o">.</span><span class="n">decompress</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">zlib</span>
+
+            <span class="n">decompressor_fn</span> <span class="o">=</span> <span class="n">zlib</span><span class="o">.</span><span class="n">decompress</span>
+
+        <span class="c1"># Convert tensor to bytes</span>
+        <span class="n">compressed_bytes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_bytestream</span><span class="p">(</span><span class="n">compressed_tensor</span><span class="o">.</span><span class="n">cpu</span><span class="p">())</span>
+
+        <span class="c1"># Decompress with zstd</span>
+        <span class="n">decompressed_bytes</span> <span class="o">=</span> <span class="n">decompressor_fn</span><span class="p">(</span><span class="n">compressed_bytes</span><span class="p">)</span>
+
+        <span class="c1"># Convert back to tensor</span>
+        <span class="n">tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">frombuffer</span><span class="p">(</span>
+            <span class="nb">bytearray</span><span class="p">(</span><span class="n">decompressed_bytes</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;dtype&quot;</span><span class="p">]</span>
+        <span class="p">)</span>
+        <span class="n">tensor</span> <span class="o">=</span> <span class="n">tensor</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;shape&quot;</span><span class="p">])</span>
+        <span class="n">tensor</span> <span class="o">=</span> <span class="n">tensor</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;device&quot;</span><span class="p">])</span>
+
+        <span class="k">return</span> <span class="n">tensor</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_compress_item</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compress a single item and return compressed data with metadata.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">metadata</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;tensor&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;shape&quot;</span><span class="p">:</span> <span class="n">item</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+                <span class="s2">&quot;dtype&quot;</span><span class="p">:</span> <span class="n">item</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+                <span class="s2">&quot;device&quot;</span><span class="p">:</span> <span class="n">item</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="p">}</span>
+            <span class="n">compressed</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compression_fn</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">item</span><span class="p">):</span>
+            <span class="c1"># For TensorDict, compress each tensor field</span>
+            <span class="n">compressed_fields</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="n">metadata</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;tensordict&quot;</span><span class="p">,</span> <span class="s2">&quot;fields&quot;</span><span class="p">:</span> <span class="p">{}}</span>
+
+            <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">item</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                    <span class="n">compressed_fields</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compression_fn</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+                    <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;fields&quot;</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;tensor&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;shape&quot;</span><span class="p">:</span> <span class="n">value</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+                        <span class="s2">&quot;dtype&quot;</span><span class="p">:</span> <span class="n">value</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+                        <span class="s2">&quot;device&quot;</span><span class="p">:</span> <span class="n">value</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                    <span class="p">}</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># For non-tensor data, store as-is</span>
+                    <span class="n">compressed_fields</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+                    <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;fields&quot;</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;non_tensor&quot;</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="n">value</span><span class="p">}</span>
+
+            <span class="n">compressed</span> <span class="o">=</span> <span class="n">compressed_fields</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># For other types, store as-is</span>
+            <span class="n">compressed</span> <span class="o">=</span> <span class="n">item</span>
+            <span class="n">metadata</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;other&quot;</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="n">item</span><span class="p">}</span>
+
+        <span class="k">return</span> <span class="n">compressed</span><span class="p">,</span> <span class="n">metadata</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_decompress_item</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">compressed_data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Decompress a single item using its metadata.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;tensor&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">decompression_fn</span><span class="p">(</span><span class="n">compressed_data</span><span class="p">,</span> <span class="n">metadata</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;tensordict&quot;</span><span class="p">:</span>
+            <span class="c1"># Reconstruct TensorDict</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({},</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;batch_size&quot;</span><span class="p">,</span> <span class="p">[]))</span>
+
+            <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">field_metadata</span> <span class="ow">in</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;fields&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">field_metadata</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;non_tensor&quot;</span><span class="p">:</span>
+                    <span class="n">result</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">field_metadata</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># Decompress tensor field</span>
+                    <span class="n">result</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">decompression_fn</span><span class="p">(</span>
+                        <span class="n">compressed_data</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="n">field_metadata</span>
+                    <span class="p">)</span>
+
+            <span class="k">return</span> <span class="n">result</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Return as-is for other types</span>
+            <span class="k">return</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_set_item</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cursor</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set a single item in the compressed storage.&quot;&quot;&quot;</span>
+        <span class="c1"># Ensure we have enough space</span>
+        <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">cursor</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+
+        <span class="c1"># Compress and store</span>
+        <span class="n">compressed_data</span><span class="p">,</span> <span class="n">metadata</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compress_item</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">cursor</span><span class="p">]</span> <span class="o">=</span> <span class="n">compressed_data</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span><span class="p">[</span><span class="n">cursor</span><span class="p">]</span> <span class="o">=</span> <span class="n">metadata</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_set_slice</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cursor</span><span class="p">:</span> <span class="nb">slice</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set a slice in the compressed storage.&quot;&quot;&quot;</span>
+        <span class="c1"># Handle slice assignment</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="s2">&quot;__iter__&quot;</span><span class="p">):</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="p">[</span><span class="n">data</span><span class="p">]</span>
+        <span class="n">start</span><span class="p">,</span> <span class="n">stop</span><span class="p">,</span> <span class="n">step</span> <span class="o">=</span> <span class="n">cursor</span><span class="o">.</span><span class="n">indices</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">))</span>
+        <span class="n">indices</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">stop</span><span class="p">,</span> <span class="n">step</span><span class="p">))</span>
+
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">indices</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_set_item</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_item</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get a single item from the compressed storage.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">index</span> <span class="o">&gt;=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">)</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">IndexError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Index </span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2"> out of bounds or not set&quot;</span><span class="p">)</span>
+
+        <span class="n">compressed_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
+        <span class="n">metadata</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_decompress_item</span><span class="p">(</span><span class="n">compressed_data</span><span class="p">,</span> <span class="n">metadata</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_slice</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">slice</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get a slice from the compressed storage.&quot;&quot;&quot;</span>
+        <span class="n">start</span><span class="p">,</span> <span class="n">stop</span><span class="p">,</span> <span class="n">step</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">indices</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">))</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">stop</span><span class="p">,</span> <span class="n">step</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_item</span><span class="p">(</span><span class="n">i</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">results</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_list</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get a list of items from the compressed storage.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="ow">and</span> <span class="n">index</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="s2">&quot;cpu&quot;</span><span class="p">:</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+
+        <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">index</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="o">&gt;=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">)</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">IndexError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Index </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> out of bounds or not set&quot;</span><span class="p">)</span>
+            <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_item</span><span class="p">(</span><span class="n">i</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">results</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the length of the compressed storage.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">([</span><span class="n">item</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span> <span class="k">if</span> <span class="n">item</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">])</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_contains_int</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if an integer index is contained in the compressed storage.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">item</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">item</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_empty</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Empty the storage.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span> <span class="o">=</span> <span class="p">[]</span>
+
+<div class="viewcode-block" id="CompressedListStorage.state_dict"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.CompressedListStorage.html#torchrl.data.replay_buffers.CompressedListStorage.state_dict">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Save the storage state.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;_storage&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">,</span>
+            <span class="s2">&quot;_metadata&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span><span class="p">,</span>
+        <span class="p">}</span></div>
+
+<div class="viewcode-block" id="CompressedListStorage.load_state_dict"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.CompressedListStorage.html#torchrl.data.replay_buffers.CompressedListStorage.load_state_dict">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load the storage state.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;_storage&quot;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;_metadata&quot;</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="CompressedListStorage.num_bytes"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.CompressedListStorage.html#torchrl.data.replay_buffers.CompressedListStorage.num_bytes">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">num_bytes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the number of bytes in the storage.&quot;&quot;&quot;</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">compressed_size_from_list</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="mi">0</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">data</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="p">(</span><span class="nb">tuple</span><span class="p">,</span> <span class="nb">list</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">)):</span>
+                <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span><span class="n">compressed_size_from_list</span><span class="p">(</span><span class="n">item</span><span class="p">)</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">data</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">)</span> <span class="ow">or</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
+                <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span><span class="n">compressed_size_from_list</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="mi">0</span>
+
+        <span class="n">compressed_size_estimate</span> <span class="o">=</span> <span class="n">compressed_size_from_list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">compressed_size_estimate</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;Compressed storage is not empty but the compressed size is 0. This is a bug.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;Compressed storage is empty, returning 0 bytes.&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">compressed_size_estimate</span></div>
+
+<div class="viewcode-block" id="CompressedListStorage.to_bytestream"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.CompressedListStorage.html#torchrl.data.replay_buffers.CompressedListStorage.to_bytestream">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">to_bytestream</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data_to_bytestream</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span> <span class="o">|</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert data to a byte stream.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data_to_bytestream</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">byte_stream</span> <span class="o">=</span> <span class="n">data_to_bytestream</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span><span class="o">.</span><span class="n">tobytes</span><span class="p">()</span>
+
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data_to_bytestream</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">):</span>
+            <span class="n">byte_stream</span> <span class="o">=</span> <span class="nb">bytes</span><span class="p">(</span><span class="n">data_to_bytestream</span><span class="o">.</span><span class="n">tobytes</span><span class="p">())</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">io</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">pickle</span>
+
+            <span class="n">buffer</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">()</span>
+            <span class="n">pickle</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">data_to_bytestream</span><span class="p">,</span> <span class="n">buffer</span><span class="p">)</span>
+            <span class="n">buffer</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">byte_stream</span> <span class="o">=</span> <span class="nb">bytes</span><span class="p">(</span><span class="n">buffer</span><span class="o">.</span><span class="n">read</span><span class="p">())</span>
+
+        <span class="k">return</span> <span class="n">byte_stream</span></div></div>
+
+    <span class="c1"># def to_bytestream(</span>
+    <span class="c1">#     self, data_to_bytestream: Union[torch.Tensor, np.array, Any]</span>
+    <span class="c1"># ) -&gt; bytes:</span>
+    <span class="c1">#     &quot;&quot;&quot;Convert data to a byte stream.&quot;&quot;&quot;</span>
+    <span class="c1">#     if isinstance(data_to_bytestream, torch.Tensor):</span>
+    <span class="c1">#         from safetensors.torch import save</span>
+    <span class="c1">#         byte_stream = save({&quot;0&quot;: data_to_bytestream})</span>
+
+    <span class="c1">#     elif isinstance(data_to_bytestream, np.array):</span>
+    <span class="c1">#         from safetensors.numpy import save</span>
+    <span class="c1">#         byte_stream = bytes(data_to_bytestream.tobytes())</span>
+
+    <span class="c1">#     else:</span>
+    <span class="c1">#         buffer = io.BytesIO()</span>
+    <span class="c1">#         pickle.dump(data_to_bytestream, buffer)</span>
+    <span class="c1">#         buffer.seek(0)</span>
+    <span class="c1">#         byte_stream = bytes(buffer.read())</span>
+
+    <span class="c1">#     return byte_stream</span>
+
+
 <div class="viewcode-block" id="StorageEnsemble"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.StorageEnsemble.html#torchrl.data.replay_buffers.StorageEnsemble">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">StorageEnsemble</span><span class="p">(</span><span class="n">Storage</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;An ensemble of storages.</span>
 
@@ -1817,7 +2170,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_transforms</span> <span class="o">=</span> <span class="n">transforms</span>
         <span class="k">if</span> <span class="n">transforms</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">transforms</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">storages</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
-                <span class="s2">&quot;transforms must have the same length as the storages &quot;</span> <span class="s2">&quot;provided.&quot;</span>
+                <span class="s2">&quot;transforms must have the same length as the storages provided.&quot;</span>
             <span class="p">)</span>
 
     <span class="nd">@property</span>
@@ -1841,7 +2194,7 @@
         <span class="n">buffer_ids</span> <span class="o">=</span> <span class="n">item</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;buffer_ids&quot;</span><span class="p">)</span>
         <span class="n">index</span> <span class="o">=</span> <span class="n">item</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;index&quot;</span><span class="p">)</span>
         <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="p">(</span><span class="n">buffer_id</span><span class="p">,</span> <span class="n">sample</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">buffer_ids</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">buffer_id</span><span class="p">,</span> <span class="n">sample</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">buffer_ids</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
             <span class="n">buffer_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_convert_id</span><span class="p">(</span><span class="n">buffer_id</span><span class="p">)</span>
             <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">buffer_id</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_storage</span><span class="p">(</span><span class="n">buffer_id</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">sample</span><span class="p">)))</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transforms</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -1989,9 +2342,11 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_get_default_collate</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">_is_tensordict</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">LazyStackStorage</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">TensorStorage</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="p">(</span><span class="n">LazyStackStorage</span><span class="p">,</span> <span class="n">TensorStorage</span><span class="p">)):</span>
         <span class="k">return</span> <span class="n">_collate_id</span>
-    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">ListStorage</span><span class="p">):</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">CompressedListStorage</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">lazy_stack</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="p">(</span><span class="n">ListStorage</span><span class="p">,</span> <span class="n">StorageEnsemble</span><span class="p">)):</span>
         <span class="k">return</span> <span class="n">_stack_anything</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>

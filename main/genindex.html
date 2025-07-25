@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../versions.html"><span style="font-size:110%">main (2025.7.24+0627e85) &#x25BC</span></a>
+      <a href="../versions.html"><span style="font-size:110%">main (2025.7.24+2bd0642) &#x25BC</span></a>
     </div>
     
 
@@ -1278,9 +1278,11 @@
 </li>
       <li><a href="reference/generated/torchrl.data.datasets.AtariDQNExperienceReplay.html#torchrl.data.datasets.AtariDQNExperienceReplay">AtariDQNExperienceReplay (class in torchrl.data.datasets)</a>
 </li>
-      <li><a href="reference/generated/torchrl.data.replay_buffers.LazyMemmapStorage.html#torchrl.data.replay_buffers.LazyMemmapStorage.attach">attach() (torchrl.data.replay_buffers.LazyMemmapStorage method)</a>
+      <li><a href="reference/generated/torchrl.data.replay_buffers.CompressedListStorage.html#torchrl.data.replay_buffers.CompressedListStorage.attach">attach() (torchrl.data.replay_buffers.CompressedListStorage method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.data.replay_buffers.LazyMemmapStorage.html#torchrl.data.replay_buffers.LazyMemmapStorage.attach">(torchrl.data.replay_buffers.LazyMemmapStorage method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.replay_buffers.LazyStackStorage.html#torchrl.data.replay_buffers.LazyStackStorage.attach">(torchrl.data.replay_buffers.LazyStackStorage method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.replay_buffers.LazyTensorStorage.html#torchrl.data.replay_buffers.LazyTensorStorage.attach">(torchrl.data.replay_buffers.LazyTensorStorage method)</a>
@@ -2356,6 +2358,10 @@
 </li>
       <li><a href="reference/generated/torchrl.data.CompositeSpec.html#torchrl.data.CompositeSpec">CompositeSpec (class in torchrl.data)</a>
 </li>
+      <li><a href="reference/generated/torchrl.data.replay_buffers.CompressedListStorage.html#torchrl.data.replay_buffers.CompressedListStorage">CompressedListStorage (class in torchrl.data.replay_buffers)</a>
+</li>
+      <li><a href="reference/generated/torchrl.data.replay_buffers.CompressedListStorageCheckpointer.html#torchrl.data.replay_buffers.CompressedListStorageCheckpointer">CompressedListStorageCheckpointer (class in torchrl.data.replay_buffers)</a>
+</li>
       <li><a href="reference/generated/torchrl.envs.transforms.ConditionalPolicySwitch.html#torchrl.envs.transforms.ConditionalPolicySwitch">ConditionalPolicySwitch (class in torchrl.envs.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.ConditionalSkip.html#torchrl.envs.transforms.ConditionalSkip">ConditionalSkip (class in torchrl.envs.transforms)</a>
@@ -3399,6 +3405,8 @@
 </li>
         <li><a href="reference/generated/torchrl.data.RemoteTensorDictReplayBuffer.html#torchrl.data.RemoteTensorDictReplayBuffer.dump">(torchrl.data.RemoteTensorDictReplayBuffer method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.replay_buffers.CompressedListStorage.html#torchrl.data.replay_buffers.CompressedListStorage.dump">(torchrl.data.replay_buffers.CompressedListStorage method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.replay_buffers.LazyMemmapStorage.html#torchrl.data.replay_buffers.LazyMemmapStorage.dump">(torchrl.data.replay_buffers.LazyMemmapStorage method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.replay_buffers.LazyStackStorage.html#torchrl.data.replay_buffers.LazyStackStorage.dump">(torchrl.data.replay_buffers.LazyStackStorage method)</a>
@@ -3444,6 +3452,8 @@
         <li><a href="reference/generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer.dumps">(torchrl.data.RayReplayBuffer method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.RemoteTensorDictReplayBuffer.html#torchrl.data.RemoteTensorDictReplayBuffer.dumps">(torchrl.data.RemoteTensorDictReplayBuffer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.replay_buffers.CompressedListStorageCheckpointer.html#torchrl.data.replay_buffers.CompressedListStorageCheckpointer.dumps">(torchrl.data.replay_buffers.CompressedListStorageCheckpointer method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.replay_buffers.ReplayBufferEnsemble.html#torchrl.data.replay_buffers.ReplayBufferEnsemble.dumps">(torchrl.data.replay_buffers.ReplayBufferEnsemble method)</a>
 </li>
@@ -6559,6 +6569,8 @@
 </li>
         <li><a href="reference/generated/torchrl.data.RemoteTensorDictReplayBuffer.html#torchrl.data.RemoteTensorDictReplayBuffer.load">(torchrl.data.RemoteTensorDictReplayBuffer method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.replay_buffers.CompressedListStorage.html#torchrl.data.replay_buffers.CompressedListStorage.load">(torchrl.data.replay_buffers.CompressedListStorage method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.replay_buffers.LazyMemmapStorage.html#torchrl.data.replay_buffers.LazyMemmapStorage.load">(torchrl.data.replay_buffers.LazyMemmapStorage method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.replay_buffers.LazyStackStorage.html#torchrl.data.replay_buffers.LazyStackStorage.load">(torchrl.data.replay_buffers.LazyStackStorage method)</a>
@@ -6703,6 +6715,8 @@
 </li>
         <li><a href="reference/generated/torchrl.data.RandomProjectionHash.html#torchrl.data.RandomProjectionHash.load_state_dict">(torchrl.data.RandomProjectionHash method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.replay_buffers.CompressedListStorage.html#torchrl.data.replay_buffers.CompressedListStorage.load_state_dict">(torchrl.data.replay_buffers.CompressedListStorage method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.RewardData.html#torchrl.data.RewardData.load_state_dict">(torchrl.data.RewardData method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.SipHash.html#torchrl.data.SipHash.load_state_dict">(torchrl.data.SipHash method)</a>
@@ -6832,6 +6846,8 @@
         <li><a href="reference/generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer.loads">(torchrl.data.RayReplayBuffer method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.RemoteTensorDictReplayBuffer.html#torchrl.data.RemoteTensorDictReplayBuffer.loads">(torchrl.data.RemoteTensorDictReplayBuffer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.replay_buffers.CompressedListStorageCheckpointer.html#torchrl.data.replay_buffers.CompressedListStorageCheckpointer.loads">(torchrl.data.replay_buffers.CompressedListStorageCheckpointer method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.replay_buffers.ReplayBufferEnsemble.html#torchrl.data.replay_buffers.ReplayBufferEnsemble.loads">(torchrl.data.replay_buffers.ReplayBufferEnsemble method)</a>
 </li>
@@ -8157,6 +8173,8 @@
       <li><a href="reference/generated/torchrl.data.NonTensorSpec.html#torchrl.data.NonTensorSpec">NonTensorSpec (class in torchrl.data)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.NoopResetEnv.html#torchrl.envs.transforms.NoopResetEnv">NoopResetEnv (class in torchrl.envs.transforms)</a>
+</li>
+      <li><a href="reference/generated/torchrl.data.replay_buffers.CompressedListStorage.html#torchrl.data.replay_buffers.CompressedListStorage.num_bytes">num_bytes() (torchrl.data.replay_buffers.CompressedListStorage method)</a>
 </li>
       <li><a href="reference/generated/torchrl.data.Tree.html#torchrl.data.Tree.num_children">num_children (torchrl.data.Tree property)</a>
 </li>
@@ -11191,6 +11209,8 @@
 </li>
         <li><a href="reference/generated/torchrl.data.RemoteTensorDictReplayBuffer.html#torchrl.data.RemoteTensorDictReplayBuffer.save">(torchrl.data.RemoteTensorDictReplayBuffer method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.replay_buffers.CompressedListStorage.html#torchrl.data.replay_buffers.CompressedListStorage.save">(torchrl.data.replay_buffers.CompressedListStorage method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.replay_buffers.LazyMemmapStorage.html#torchrl.data.replay_buffers.LazyMemmapStorage.save">(torchrl.data.replay_buffers.LazyMemmapStorage method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.replay_buffers.LazyStackStorage.html#torchrl.data.replay_buffers.LazyStackStorage.save">(torchrl.data.replay_buffers.LazyStackStorage method)</a>
@@ -12099,6 +12119,8 @@
 </li>
         <li><a href="reference/generated/torchrl.data.RandomProjectionHash.html#torchrl.data.RandomProjectionHash.state_dict">(torchrl.data.RandomProjectionHash method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.replay_buffers.CompressedListStorage.html#torchrl.data.replay_buffers.CompressedListStorage.state_dict">(torchrl.data.replay_buffers.CompressedListStorage method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.RewardData.html#torchrl.data.RewardData.state_dict">(torchrl.data.RewardData method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.SipHash.html#torchrl.data.SipHash.state_dict">(torchrl.data.SipHash method)</a>
@@ -12750,6 +12772,8 @@
         <li><a href="reference/generated/torchrl.objectives.llm.SFTLoss.html#torchrl.objectives.llm.SFTLoss.to">(torchrl.objectives.llm.SFTLoss method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.data.replay_buffers.CompressedListStorage.html#torchrl.data.replay_buffers.CompressedListStorage.to_bytestream">to_bytestream() (torchrl.data.replay_buffers.CompressedListStorage method)</a>
+</li>
       <li><a href="reference/generated/torchrl.data.Binary.html#torchrl.data.Binary.to_categorical">to_categorical() (torchrl.data.Binary method)</a>
 
       <ul>

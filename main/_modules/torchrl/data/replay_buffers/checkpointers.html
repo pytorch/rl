@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (2025.7.24+0627e85) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (2025.7.24+2bd0642) &#x25BC</span></a>
     </div>
     
 
@@ -428,6 +428,7 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">abc</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 
@@ -435,11 +436,14 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">is_tensor_collection</span><span class="p">,</span>
+    <span class="n">lazy_stack</span><span class="p">,</span>
     <span class="n">NonTensorData</span><span class="p">,</span>
     <span class="n">PersistentTensorDict</span><span class="p">,</span>
     <span class="n">TensorDict</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.memmap</span><span class="w"> </span><span class="kn">import</span> <span class="n">MemoryMappedTensor</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_zip_strict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torch.utils._pytree</span><span class="w"> </span><span class="kn">import</span> <span class="n">tree_map</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_STRDTYPE2DTYPE</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.data.replay_buffers.utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
@@ -488,6 +492,211 @@
         <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
             <span class="s2">&quot;ListStorage doesn&#39;t support serialization via `dumps` - `loads` API.&quot;</span>
         <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="CompressedListStorageCheckpointer"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.CompressedListStorageCheckpointer.html#torchrl.data.replay_buffers.CompressedListStorageCheckpointer">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">CompressedListStorageCheckpointer</span><span class="p">(</span><span class="n">StorageCheckpointerBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A storage checkpointer for CompressedListStorage.</span>
+
+<span class="sd">    This checkpointer saves compressed data and metadata using memory-mapped storage</span>
+<span class="sd">    for efficient disk I/O and memory usage.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="CompressedListStorageCheckpointer.dumps"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.CompressedListStorageCheckpointer.html#torchrl.data.replay_buffers.CompressedListStorageCheckpointer.dumps">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">dumps</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">storage</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Save compressed storage to disk using memory-mapped storage.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            storage: The CompressedListStorage instance to save</span>
+<span class="sd">            path: Directory path where to save the storage</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+        <span class="n">path</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="s2">&quot;_storage&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">storage</span><span class="o">.</span><span class="n">_storage</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Cannot save an empty or non-initialized CompressedListStorage.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Get state dict from storage</span>
+        <span class="n">state_dict</span> <span class="o">=</span> <span class="n">storage</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+        <span class="n">compressed_data</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;_storage&quot;</span><span class="p">]</span>
+        <span class="n">metadata</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;_metadata&quot;</span><span class="p">]</span>
+
+        <span class="c1"># Create a temporary directory for processing</span>
+        <span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">tmp_dir</span><span class="p">:</span>
+            <span class="n">tmp_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">tmp_dir</span><span class="p">)</span>
+
+            <span class="c1"># Process compressed data for memmap storage</span>
+            <span class="n">processed_data</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">compressed_data</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">item</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">processed_data</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+                    <span class="k">continue</span>
+
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                    <span class="c1"># For tensor data, create a TensorDict with the tensor</span>
+                    <span class="n">processed_item</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="n">item</span><span class="p">},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span>
+                <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+                    <span class="c1"># For dict data (tensordict fields), convert to TensorDict</span>
+                    <span class="n">processed_item</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># For other types, wrap in TensorDict</span>
+                    <span class="n">processed_item</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="n">item</span><span class="p">},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span>
+
+                <span class="n">processed_data</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">processed_item</span><span class="p">)</span>
+
+            <span class="c1"># Stack all non-None items into a single TensorDict for memmap</span>
+            <span class="n">non_none_data</span> <span class="o">=</span> <span class="p">[</span><span class="n">item</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">processed_data</span> <span class="k">if</span> <span class="n">item</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">non_none_data</span><span class="p">:</span>
+                <span class="c1"># Use lazy_stack to handle heterogeneous structures</span>
+                <span class="n">stacked_data</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="n">non_none_data</span><span class="p">)</span>
+
+                <span class="c1"># Save to memmap</span>
+                <span class="n">stacked_data</span><span class="o">.</span><span class="n">memmap_</span><span class="p">(</span><span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">&quot;compressed_data&quot;</span><span class="p">)</span>
+
+                <span class="c1"># Create index mapping for None values</span>
+                <span class="n">data_indices</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="n">current_idx</span> <span class="o">=</span> <span class="mi">0</span>
+                <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">processed_data</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">item</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="n">data_indices</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">data_indices</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">current_idx</span><span class="p">)</span>
+                        <span class="n">current_idx</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># No data to save</span>
+                <span class="n">data_indices</span> <span class="o">=</span> <span class="p">[]</span>
+
+            <span class="c1"># Process metadata for JSON serialization</span>
+            <span class="k">def</span><span class="w"> </span><span class="nf">is_leaf</span><span class="p">(</span><span class="n">item</span><span class="p">):</span>
+                <span class="k">return</span> <span class="nb">isinstance</span><span class="p">(</span>
+                    <span class="n">item</span><span class="p">,</span>
+                    <span class="p">(</span>
+                        <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">,</span>
+                        <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+                        <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                        <span class="nb">str</span><span class="p">,</span>
+                        <span class="nb">int</span><span class="p">,</span>
+                        <span class="nb">float</span><span class="p">,</span>
+                        <span class="nb">bool</span><span class="p">,</span>
+                        <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+                        <span class="n">NonTensorData</span><span class="p">,</span>
+                    <span class="p">),</span>
+                <span class="p">)</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">map_to_json_serializable</span><span class="p">(</span><span class="n">item</span><span class="p">):</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">):</span>
+                    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;__type__&quot;</span><span class="p">:</span> <span class="s2">&quot;torch.Size&quot;</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">item</span><span class="p">)}</span>
+                <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">):</span>
+                    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;__type__&quot;</span><span class="p">:</span> <span class="s2">&quot;torch.dtype&quot;</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">item</span><span class="p">)}</span>
+                <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">):</span>
+                    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;__type__&quot;</span><span class="p">:</span> <span class="s2">&quot;torch.device&quot;</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">item</span><span class="p">)}</span>
+                <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;__type__&quot;</span><span class="p">:</span> <span class="s2">&quot;torch.Tensor&quot;</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="n">item</span><span class="o">.</span><span class="n">tolist</span><span class="p">()}</span>
+                <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">NonTensorData</span><span class="p">):</span>
+                    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;__type__&quot;</span><span class="p">:</span> <span class="s2">&quot;NonTensorData&quot;</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="n">item</span><span class="o">.</span><span class="n">data</span><span class="p">}</span>
+                <span class="k">return</span> <span class="n">item</span>
+
+            <span class="n">serializable_metadata</span> <span class="o">=</span> <span class="n">tree_map</span><span class="p">(</span>
+                <span class="n">map_to_json_serializable</span><span class="p">,</span> <span class="n">metadata</span><span class="p">,</span> <span class="n">is_leaf</span><span class="o">=</span><span class="n">is_leaf</span>
+            <span class="p">)</span>
+
+            <span class="c1"># Save metadata and indices</span>
+            <span class="n">metadata_file</span> <span class="o">=</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">&quot;metadata.json&quot;</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">metadata_file</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">json</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">serializable_metadata</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+
+            <span class="n">indices_file</span> <span class="o">=</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">&quot;data_indices.json&quot;</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">indices_file</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">json</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">data_indices</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+
+            <span class="c1"># Copy all files from temp directory to final destination</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">shutil</span>
+
+            <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">tmp_path</span><span class="o">.</span><span class="n">iterdir</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">item</span><span class="o">.</span><span class="n">is_file</span><span class="p">():</span>
+                    <span class="n">shutil</span><span class="o">.</span><span class="n">copy2</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">path</span> <span class="o">/</span> <span class="n">item</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="n">item</span><span class="o">.</span><span class="n">is_dir</span><span class="p">():</span>
+                    <span class="n">shutil</span><span class="o">.</span><span class="n">copytree</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">path</span> <span class="o">/</span> <span class="n">item</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">dirs_exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CompressedListStorageCheckpointer.loads"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.CompressedListStorageCheckpointer.html#torchrl.data.replay_buffers.CompressedListStorageCheckpointer.loads">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">loads</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">storage</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load compressed storage from disk.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            storage: The CompressedListStorage instance to load into</span>
+<span class="sd">            path: Directory path where the storage was saved</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+
+        <span class="c1"># Load metadata</span>
+        <span class="n">metadata_file</span> <span class="o">=</span> <span class="n">path</span> <span class="o">/</span> <span class="s2">&quot;metadata.json&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">metadata_file</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Metadata file not found at </span><span class="si">{</span><span class="n">metadata_file</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">metadata_file</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">serializable_metadata</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+
+        <span class="c1"># Load data indices</span>
+        <span class="n">indices_file</span> <span class="o">=</span> <span class="n">path</span> <span class="o">/</span> <span class="s2">&quot;data_indices.json&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">indices_file</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Data indices file not found at </span><span class="si">{</span><span class="n">indices_file</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">indices_file</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">data_indices</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+
+        <span class="c1"># Convert serializable metadata back to original format</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">is_leaf</span><span class="p">(</span><span class="n">item</span><span class="p">):</span>
+            <span class="k">return</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="s2">&quot;__type__&quot;</span> <span class="ow">in</span> <span class="n">item</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">map_from_json_serializable</span><span class="p">(</span><span class="n">item</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="s2">&quot;__type__&quot;</span> <span class="ow">in</span> <span class="n">item</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;__type__&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;torch.Size&quot;</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">])</span>
+                <span class="k">elif</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;__type__&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;torch.dtype&quot;</span><span class="p">:</span>
+                    <span class="c1"># Handle torch.dtype conversion</span>
+                    <span class="n">dtype_str</span> <span class="o">=</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">]</span>
+                    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">torch</span><span class="p">,</span> <span class="n">dtype_str</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;torch.&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)):</span>
+                        <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">torch</span><span class="p">,</span> <span class="n">dtype_str</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;torch.&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">))</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="c1"># Handle cases like &#39;torch.float32&#39; -&gt; torch.float32</span>
+                        <span class="k">return</span> <span class="nb">eval</span><span class="p">(</span><span class="n">dtype_str</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;__type__&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;torch.device&quot;</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">])</span>
+                <span class="k">elif</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;__type__&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;torch.Tensor&quot;</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">])</span>
+                <span class="k">elif</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;__type__&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;NonTensorData&quot;</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">NonTensorData</span><span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">])</span>
+            <span class="k">return</span> <span class="n">item</span>
+
+        <span class="n">metadata</span> <span class="o">=</span> <span class="n">tree_map</span><span class="p">(</span>
+            <span class="n">map_from_json_serializable</span><span class="p">,</span> <span class="n">serializable_metadata</span><span class="p">,</span> <span class="n">is_leaf</span><span class="o">=</span><span class="n">is_leaf</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Load compressed data from memmap</span>
+        <span class="n">compressed_data</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">memmap_path</span> <span class="o">=</span> <span class="n">path</span> <span class="o">/</span> <span class="s2">&quot;compressed_data&quot;</span>
+
+        <span class="k">if</span> <span class="n">memmap_path</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+            <span class="c1"># Load the memmapped data</span>
+            <span class="n">stacked_data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="n">memmap_path</span><span class="p">)</span>
+            <span class="n">compressed_data</span> <span class="o">=</span> <span class="n">stacked_data</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">compressed_data</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">data_indices</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Length of compressed data (</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">compressed_data</span><span class="p">)</span><span class="si">}</span><span class="s2">) does not match length of data indices (</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">data_indices</span><span class="p">)</span><span class="si">}</span><span class="s2">)&quot;</span>
+                <span class="p">)</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">mtdt</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">_zip_strict</span><span class="p">(</span><span class="n">compressed_data</span><span class="p">,</span> <span class="n">metadata</span><span class="p">)):</span>
+                <span class="k">if</span> <span class="n">mtdt</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;tensor&quot;</span><span class="p">:</span>
+                    <span class="n">compressed_data</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">compressed_data</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># No data to load</span>
+            <span class="n">compressed_data</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">data_indices</span><span class="p">)</span>
+
+        <span class="c1"># Load into storage</span>
+        <span class="n">storage</span><span class="o">.</span><span class="n">_storage</span> <span class="o">=</span> <span class="n">compressed_data</span>
+        <span class="n">storage</span><span class="o">.</span><span class="n">_metadata</span> <span class="o">=</span> <span class="n">metadata</span></div></div>
 
 
 <div class="viewcode-block" id="TensorStorageCheckpointer"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.TensorStorageCheckpointer.html#torchrl.data.replay_buffers.TensorStorageCheckpointer">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">TensorStorageCheckpointer</span><span class="p">(</span><span class="n">StorageCheckpointerBase</span><span class="p">):</span>
