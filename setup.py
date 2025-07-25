@@ -180,7 +180,7 @@ def _main():
     except Exception as e:
         logging.error(f"Failed to verify version file: {e}")
 
-        # Handle package name for nightly builds
+    # Handle package name for nightly builds
     if is_nightly:
         package_name = "torchrl-nightly"  # Use torchrl-nightly for PyPI uploads
     else:

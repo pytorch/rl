@@ -66,8 +66,8 @@ jobs:
         run: |
           rm -r dist || true
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install build
-          python3 -m build --wheel
+          python3 -mpip install wheel
+          python3 setup.py bdist_wheel
           find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
       # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
       # pretend that they're manylinux1 compliant so we do the same.
@@ -141,6 +141,11 @@ jobs:
           rm -rf torchrl/
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python3 -c "import torchrl; print(torchrl.__version__)"
+      - name: Verify nightly version format
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: |
+          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
+          python3 scripts/verify_nightly_version.py
       - name: Run tests
         run: |
           set -e
@@ -213,7 +218,7 @@ jobs:
         ]
     steps:
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python_version[1] }}
       - name: Checkout torchrl
@@ -228,8 +233,8 @@ jobs:
         shell: bash
         run: |
           rm -r dist || true
-          python3 -mpip install build
-          python3 -m build --wheel
+          python3 -mpip install wheel
+          python3 setup.py bdist_wheel
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v4
         with:
@@ -297,6 +302,11 @@ jobs:
           # Avoid ambiguity of "import torchrl" by deleting the source files.
           rm -rf torchrl/
           python3 -c "import torchrl; print(torchrl.__version__)"
+      - name: Verify nightly version format
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          python3 scripts/verify_nightly_version.py
       - name: Run tests
         shell: bash
         run: |
