@@ -58,7 +58,10 @@ jobs:
           apt-get upgrade -y
           apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip wget libglfw3-dev libgles2-mesa-dev libglew-dev sudo git cmake libz-dev libpython3.10-dev
       - name: Setup git
-        run: git config --global --add safe.directory /__w/rl/rl
+        run: |
+          git config --global --add safe.directory /__w/rl/rl
+          git config --global user.name "github-action-benchmark"
+          git config --global user.email "github@users.noreply.github.com"
       - name: setup Path
         run: |
           echo /usr/local/bin >> $GITHUB_PATH
@@ -92,15 +95,62 @@ jobs:
           export COMPOSITE_LP_AGGREGATE=0
           export TD_GET_DEFAULTS_TO_NONE=1
           python3 -m pytest -vvv --rank 0 --benchmark-json output.json --ignore test_collectors_benchmark.py
-      - name: Store benchmark results
-        uses: benchmark-action/github-action-benchmark@v1
-        if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
-        env:
-          GIT_WORK_TREE: /__w/rl/rl
+
+      # Upload benchmark results for main branch, manual dispatch, or PRs with 'benchmarks/upload' label
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'benchmarks/upload')) }}
         with:
-          name: ${{ matrix.device }} Benchmark Results
+          name: ${{ matrix.device }}-benchmark-results
+          path: benchmarks/output.json
+
+  # Upload benchmark results to gh-pages branch (only for main, manual dispatch, or PRs with 'benchmarks/upload' label)
+  benchmark-upload:
+    name: Upload benchmark results
+    runs-on: ubuntu-latest
+    needs: benchmark
+    if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'benchmarks/upload')) }}
+    steps:
+      - name: Show upload trigger reason
+        run: |
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            echo "Uploading benchmarks because this is the main branch"
+          elif [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "Uploading benchmarks because of manual workflow dispatch"
+          elif [ "${{ github.event_name }}" == "pull_request" ]; then
+            echo "Uploading benchmarks because PR has 'benchmarks/upload' label"
+          fi
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Download CPU benchmark results
+        uses: actions/download-artifact@v4
+        with:
+          name: CPU-benchmark-results
+          path: cpu-results
+      - name: Download GPU benchmark results
+        uses: actions/download-artifact@v4
+        with:
+          name: GPU-benchmark-results
+          path: gpu-results
+      - name: Store CPU benchmark results
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: CPU Benchmark Results
           tool: 'pytest'
-          output-file-path: benchmarks/output.json
+          output-file-path: cpu-results/output.json
+          fail-on-alert: true
+          alert-threshold: '200%'
+          alert-comment-cc-users: '@vmoens'
+          comment-on-alert: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gh-pages-branch: gh-pages
+          auto-push: true
+      - name: Store GPU benchmark results
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: GPU Benchmark Results
+          tool: 'pytest'
+          output-file-path: gpu-results/output.json
           fail-on-alert: true
           alert-threshold: '200%'
           alert-comment-cc-users: '@vmoens'
