@@ -972,7 +972,8 @@ such as `apt`, `apt-get`, `conda` or `yum` but NOT `pip`, as well as `pip instal
 
 One can also build the wheels to distribute to co-workers using
 ```bash
-python setup.py bdist_wheel
+pip install build
+python -m build --wheel
 ```
 Your wheels will be stored there `./dist/torchrl<name>.whl` and installable via
 ```bash
