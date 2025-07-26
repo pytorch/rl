@@ -1211,7 +1211,6 @@ but got an object of type {type(transform)}."""
         if tensordict is not None:
             # We must avoid modifying the original tensordict so a shallow copy is necessary.
             # We just select the input data and reset signal, which is all we need.
-            self.transform.transform_input_spec(self.base_env.input_spec.unlock_())
             tensordict = tensordict.select(
                 *self.reset_keys, *self.state_spec.keys(True, True), strict=False
             )
@@ -10748,10 +10747,6 @@ class LineariseRewards(Transform):
                     f"Expected weights to be a unidimensional tensor. Got {weights.ndim} dimension."
                 )
 
-            # Avoids switching from reward to costs.
-            if (weights < 0).any():
-                raise ValueError(f"Expected all weights to be >0. Got {weights}.")
-
             self.register_buffer("weights", weights)
         else:
             self.weights = None
@@ -10781,13 +10776,18 @@ class LineariseRewards(Transform):
             reward_spec.shape = torch.Size([*batch_size, 1])
             return reward_spec
 
-        # The lines below are correct only if all weights are positive.
-        low = (weights * reward_spec.space.low).sum(dim=-1, keepdim=True)
-        high = (weights * reward_spec.space.high).sum(dim=-1, keepdim=True)
+        weights_pos = weights.clamp(min=0)
+        weights_neg = weights.clamp(max=0)
+
+        low_pos = (weights_pos * reward_spec.space.low).sum(dim=-1, keepdim=True)
+        low_neg = (weights_neg * reward_spec.space.high).sum(dim=-1, keepdim=True)
+
+        high_pos = (weights_pos * reward_spec.space.high).sum(dim=-1, keepdim=True)
+        high_neg = (weights_neg * reward_spec.space.low).sum(dim=-1, keepdim=True)
 
         return BoundedContinuous(
-            low=low,
-            high=high,
+            low=low_pos + low_neg,
+            high=high_pos + high_neg,
             device=reward_spec.device,
             dtype=reward_spec.dtype,
         )
@@ -11192,6 +11192,9 @@ class Timer(Transform):
         self.last_inv_time = None
         self.last_call_time = None
         self.last_reset_time = None
+        self.time_step_key = self.out_keys[0]
+        self.time_policy_key = self.out_keys[1]
+        self.time_reset_key = self.out_keys[2]
 
     def _reset_env_preprocess(self, tensordict: TensorDictBase) -> TensorDictBase:
         self.last_reset_time = self.last_inv_time = time.time()
@@ -11219,13 +11222,17 @@ class Timer(Transform):
             time_elapsed = torch.tensor(
                 current_time - self.last_reset_time, device=tensordict.device
             )
-            self._maybe_expand_and_set(self.out_keys[2], time_elapsed, tensordict_reset)
             self._maybe_expand_and_set(
-                self.out_keys[0], time_elapsed * 0, tensordict_reset
+                self.time_reset_key, time_elapsed, tensordict_reset
+            )
+            self._maybe_expand_and_set(
+                self.time_step_key, time_elapsed * 0, tensordict_reset
             )
         self.last_call_time = current_time
         # Placeholder
-        self._maybe_expand_and_set(self.out_keys[1], time_elapsed * 0, tensordict_reset)
+        self._maybe_expand_and_set(
+            self.time_policy_key, time_elapsed * 0, tensordict_reset
+        )
         return tensordict_reset
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -11234,7 +11241,7 @@ class Timer(Transform):
             time_elapsed = torch.tensor(
                 current_time - self.last_call_time, device=tensordict.device
             )
-            self._maybe_expand_and_set(self.out_keys[1], time_elapsed, tensordict)
+            self._maybe_expand_and_set(self.time_policy_key, time_elapsed, tensordict)
         self.last_inv_time = current_time
         return tensordict
 
@@ -11246,23 +11253,25 @@ class Timer(Transform):
             time_elapsed = torch.tensor(
                 current_time - self.last_inv_time, device=tensordict.device
             )
-            self._maybe_expand_and_set(self.out_keys[0], time_elapsed, next_tensordict)
             self._maybe_expand_and_set(
-                self.out_keys[2], time_elapsed * 0, next_tensordict
+                self.time_step_key, time_elapsed, next_tensordict
+            )
+            self._maybe_expand_and_set(
+                self.time_reset_key, time_elapsed * 0, next_tensordict
             )
         self.last_call_time = current_time
         # presumbly no need to worry about batch size incongruencies here
-        next_tensordict.set(self.out_keys[1], tensordict.get(self.out_keys[1]))
+        next_tensordict.set(self.time_policy_key, tensordict.get(self.time_policy_key))
         return next_tensordict
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        observation_spec[self.out_keys[0]] = Unbounded(
+        observation_spec[self.time_step_key] = Unbounded(
             shape=observation_spec.shape, device=observation_spec.device
         )
-        observation_spec[self.out_keys[1]] = Unbounded(
+        observation_spec[self.time_policy_key] = Unbounded(
             shape=observation_spec.shape, device=observation_spec.device
         )
-        observation_spec[self.out_keys[2]] = Unbounded(
+        observation_spec[self.time_reset_key] = Unbounded(
             shape=observation_spec.shape, device=observation_spec.device
         )
         return observation_spec

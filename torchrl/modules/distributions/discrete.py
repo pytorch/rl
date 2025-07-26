@@ -352,7 +352,7 @@ class MaskedCategorical(D.Categorical):
                 logits = self.logits
                 if logits.ndim > 2:
                     # Bring channels in 2nd dim
-                    logits = logits.transpose(-1, 1)
+                    logits = logits.permute(0, -1, *range(1, logits.ndim - 1))
                 original_value_shape = None
                 if logits.ndim == 1 and value.ndim >= 1:
                     if value.ndim >= 2:
