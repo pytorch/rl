@@ -7,6 +7,7 @@ from __future__ import annotations
 import ale_py  # noqa: F401
 
 import numpy as np
+import torch
 import torch.nn
 import torch.optim
 from tensordict.nn import TensorDictModule
@@ -44,6 +45,20 @@ from torchrl.record import VideoRecorder
 # ====================================================================
 # Environment utils
 # --------------------------------------------------------------------
+
+
+class SharedAdam(torch.optim.Adam):
+    def __init__(self, params, **kwargs):
+        super().__init__(params, **kwargs)
+        for group in self.param_groups:
+            for p in group["params"]:
+                state = self.state[p]
+                state["step"] = torch.zeros(1)
+                state["exp_avg"] = torch.zeros_like(p.data)
+                state["exp_avg_sq"] = torch.zeros_like(p.data)
+                state["exp_avg"].share_memory_()
+                state["exp_avg_sq"].share_memory_()
+                state["step"].share_memory_()
 
 
 def make_base_env(

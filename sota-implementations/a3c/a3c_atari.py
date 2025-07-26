@@ -15,24 +15,9 @@ from torchrl.objectives import A2CLoss
 from torchrl.objectives.value.advantages import GAE
 
 from torchrl.record.loggers import generate_exp_name, get_logger
-from utils_atari import make_parallel_env, make_ppo_models
-
+from utils_atari import make_parallel_env, make_ppo_models, SharedAdam
 
 torch.set_float32_matmul_precision("high")
-
-
-class SharedAdam(torch.optim.Adam):
-    def __init__(self, params, **kwargs):
-        super().__init__(params, **kwargs)
-        for group in self.param_groups:
-            for p in group["params"]:
-                state = self.state[p]
-                state["step"] = torch.zeros(1)
-                state["exp_avg"] = torch.zeros_like(p.data)
-                state["exp_avg_sq"] = torch.zeros_like(p.data)
-                state["exp_avg"].share_memory_()
-                state["exp_avg_sq"].share_memory_()
-                state["step"].share_memory_()
 
 
 class A3CWorker(mp.Process):
