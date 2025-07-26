@@ -28,7 +28,7 @@ class DummyStrDataLoader:
             return {"text": self.generate_random_string()}
         else:
             return {
-                "text": [self.generate_random_string() for _ in range(self.batch_size)]
+                "query": [self.generate_random_string() for _ in range(self.batch_size)]
             }
 
 

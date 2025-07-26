@@ -577,9 +577,17 @@ class _StreamingStorage(Storage):
             )
         import datasets
 
-        dataset = datasets.load_dataset(
-            self.repo, self.dataset_id, streaming=True, split=self.split
-        )
+        try:
+            dataset = datasets.load_dataset(
+                self.repo, self.dataset_id, streaming=True, split=self.split
+            )
+        except Exception as e:
+            if "Dataset scripts are no longer supported" in str(e):
+                raise RuntimeError(
+                    f"Failed to load dataset {self.dataset_id}. Your version of `datasets` is too new - please downgrade to <4.0.0."
+                ) from e
+            raise e
+
         if self.shuffle:
             dataset = dataset.shuffle()
         self.dataset = dataset

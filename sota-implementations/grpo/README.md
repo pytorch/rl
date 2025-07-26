@@ -134,6 +134,20 @@ The async mode offers better performance by:
 - Better throughput
 - More flexible buffer management
 
+### Running GRPO on More Than One Node with SLURM
+
+GRPO can be run across more than one node using SLURM, enabling distributed training for moderately scaled workloads.
+
+Two scripts are provided for launching multi-node runs:
+
+- `grpo-sync-multi-node.sbatch`: SLURM job script that launches sync GRPO across multiple nodes using Ray.
+- `grpo-async-multi-node.sbatch`: SLURM job script that launches async GRPO across multiple nodes using Ray.
+
+Example Usage:
+
+```bash
+sbatch sota-implementations/grpo/grpo-sync-multi-node.sbatch
+
 ### KL Divergences in PPO: Reference vs Inference
 
 KL divergence is a key regularization term in policy optimization algorithms like PPO and in LLM post-training. It measures how much the updated policy diverges from a baseline or reference policy, helping to prevent the new policy from drifting too far and ensuring stable learning.

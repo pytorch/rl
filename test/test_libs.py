@@ -8,7 +8,9 @@ import collections
 import functools
 import gc
 import importlib.util
+import os
 import urllib.error
+
 
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
 
@@ -19,7 +21,6 @@ if _has_isaac:
     from torchrl.envs.libs.isaacgym import IsaacGymEnv
 import argparse
 import importlib
-import os
 
 import time
 import urllib
@@ -133,6 +134,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import (
         _make_multithreaded_env,
         CARTPOLE_VERSIONED,
+        CLIFFWALKING_VERSIONED,
         get_available_devices,
         get_default_devices,
         HALFCHEETAH_VERSIONED,
@@ -146,6 +148,7 @@ else:
     from _utils_internal import (
         _make_multithreaded_env,
         CARTPOLE_VERSIONED,
+        CLIFFWALKING_VERSIONED,
         get_available_devices,
         get_default_devices,
         HALFCHEETAH_VERSIONED,
@@ -1028,11 +1031,15 @@ class TestGym:
 
     def _test_one_hot_and_categorical(self):
         # tests that one-hot and categorical work ok when an integer is expected as action
-        cliff_walking = GymEnv("CliffWalking-v0", categorical_action_encoding=True)
+        cliff_walking = GymEnv(
+            CLIFFWALKING_VERSIONED(), categorical_action_encoding=True
+        )
         cliff_walking.rollout(10)
         check_env_specs(cliff_walking)
 
-        cliff_walking = GymEnv("CliffWalking-v0", categorical_action_encoding=False)
+        cliff_walking = GymEnv(
+            CLIFFWALKING_VERSIONED(), categorical_action_encoding=False
+        )
         cliff_walking.rollout(10)
         check_env_specs(cliff_walking)
 
@@ -2408,6 +2415,28 @@ class TestEnvPool:
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("envname", ["fast"])
 class TestBrax:
+    @pytest.fixture(autouse=True)
+    def _setup_jax(self):
+        """Configure JAX for proper GPU initialization."""
+        import os
+
+        import jax
+
+        # Set JAX environment variables for better GPU handling
+        os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+        os.environ.setdefault("XLA_PYTHON_CLIENT_ALLOCATOR", "platform")
+        os.environ.setdefault("TF_FORCE_GPU_ALLOW_GROWTH", "true")
+
+        # Try to initialize JAX with GPU, fallback to CPU if it fails
+        try:
+            jax.devices()
+        except Exception:
+            # Fallback to CPU
+            os.environ["JAX_PLATFORM_NAME"] = "cpu"
+            jax.config.update("jax_platform_name", "cpu")
+
+        yield
+
     @pytest.mark.parametrize("requires_grad", [False, True])
     def test_brax_constructor(self, envname, requires_grad, device):
         env0 = BraxEnv(envname, requires_grad=requires_grad, device=device)
@@ -2538,6 +2567,75 @@ class TestBrax:
         check_env_specs(env)
         tensordict = env.rollout(3)
         assert tensordict.shape == torch.Size([n, *batch_size, 3])
+
+    def test_brax_memory_leak(self, envname, device):
+        """Test memory usage with different cache clearing strategies."""
+        import psutil
+
+        process = psutil.Process(os.getpid())
+        env = BraxEnv(
+            envname,
+            batch_size=[10],
+            requires_grad=True,
+            device=device,
+        )
+        env.clear_cache()
+        gc.collect()
+        env.set_seed(0)
+        next_td = env.reset()
+        num_steps = 200
+        policy = TensorDictModule(
+            torch.nn.Linear(
+                env.observation_spec[env.observation_keys[0]].shape[-1],
+                env.action_spec.shape[-1],
+                device=device,
+            ),
+            in_keys=env.observation_keys[:1],
+            out_keys=["action"],
+        )
+        initial_memory = process.memory_info().rss / 1024 / 1024  # MB
+        for i in range(num_steps):
+            policy(next_td)
+            out_td, next_td = env.step_and_maybe_reset(next_td)
+            if i % 50 == 0:
+                loss = out_td["next", "observation"].sum()
+                loss.backward()
+                next_td = next_td.detach().clone()
+            # gc.collect()
+        final_memory = process.memory_info().rss / 1024 / 1024  # MB
+        memory_increase = final_memory - initial_memory
+        assert (
+            memory_increase < 100
+        ), f"Memory leak with automatic clearing: {memory_increase:.2f} MB"
+
+    def test_brax_cache_clearing(self, envname, device):
+        env = BraxEnv(envname, batch_size=[1], requires_grad=True, device=device)
+        env.clear_cache()
+        for _ in range(5):
+            env.clear_cache()
+
+    @pytest.mark.parametrize("freq", [10, None, False])
+    def test_brax_automatic_cache_clearing_parameter(self, envname, device, freq):
+        env = BraxEnv(
+            envname,
+            batch_size=[1],
+            requires_grad=True,
+            device=device,
+            cache_clear_frequency=freq,
+        )
+        if freq is False:
+            assert env._cache_clear_frequency is False
+        elif freq is None:
+            assert env._cache_clear_frequency == 20  # Default value
+        else:
+            assert env._cache_clear_frequency == freq
+        env.set_seed(0)
+        next_td = env.reset()
+        for i in range(10):
+            action = env.action_spec.rand()
+            next_td["action"] = action
+            out_td, next_td = env.step_and_maybe_reset(next_td)
+            assert env._step_count == i + 1
 
 
 @pytest.mark.skipif(not _has_vmas, reason="vmas not installed")
@@ -3243,38 +3341,258 @@ class TestD4RL:
 
 _MINARI_DATASETS = []
 
+MUJOCO_ENVIRONMENTS = [
+    "Hopper-v5",
+    "Pusher-v4",
+    "Humanoid-v5",
+    "InvertedDoublePendulum-v5",
+    "HalfCheetah-v5",
+    "Swimmer-v5",
+    "Walker2d-v5",
+    "ALE/Ant-v5",
+    "Reacher-v5",
+]
 
-def _minari_selected_datasets():
-    if not _has_minari or not _has_gymnasium:
-        return
+D4RL_ENVIRONMENTS = [
+    "AntMaze_UMaze-v5",
+    "AdroitHandPen-v1",
+    "AntMaze_Medium-v4",
+    "AntMaze_Large_Diverse_GR-v4",
+    "AntMaze_Large-v4",
+    "AntMaze_Medium_Diverse_GR-v4",
+    "PointMaze_OpenDense-v3",
+    "PointMaze_UMaze-v3",
+    "PointMaze_LargeDense-v3",
+    "PointMaze_Medium-v3",
+    "PointMaze_UMazeDense-v3",
+    "PointMaze_MediumDense-v3",
+    "PointMaze_Large-v3",
+    "PointMaze_Open-v3",
+    "FrankaKitchen-v1",
+    "AdroitHandDoor-v1",
+    "AdroitHandHammer-v1",
+    "AdroitHandRelocate-v1",
+]
+
+MUJOCO_ENVIRONMENTS = [
+    "Hopper-v5",
+    "Pusher-v5",
+    "Humanoid-v5",
+    "InvertedDoublePendulum-v5",
+    "HalfCheetah-v5",
+    "Swimmer-v5",
+    "Walker2d-v5",
+    "Ant-v5",
+    "Reacher-v5",
+]
+
+D4RL_ENVIRONMENTS = [
+    "AntMaze_UMaze-v5",
+    "AdroitHandPen-v1",
+    "AntMaze_Medium-v4",
+    "AntMaze_Large_Diverse_GR-v4",
+    "AntMaze_Large-v4",
+    "AntMaze_Medium_Diverse_GR-v4",
+    "PointMaze_OpenDense-v3",
+    "PointMaze_UMaze-v3",
+    "PointMaze_LargeDense-v3",
+    "PointMaze_Medium-v3",
+    "PointMaze_UMazeDense-v3",
+    "PointMaze_MediumDense-v3",
+    "PointMaze_Large-v3",
+    "PointMaze_Open-v3",
+    "FrankaKitchen-v1",
+    "AdroitHandDoor-v1",
+    "AdroitHandHammer-v1",
+    "AdroitHandRelocate-v1",
+]
+
+
+def _minari_init() -> tuple[bool, Exception | None]:
+    """Initialize Minari datasets list. Returns True if already initialized."""
     global _MINARI_DATASETS
+    if _MINARI_DATASETS and not all(
+        isinstance(x, str) and x.isdigit() for x in _MINARI_DATASETS
+    ):
+        return True, None  # Already initialized with real dataset names
+
+    if not _has_minari or not _has_gymnasium:
+        return False, ImportError("Minari or Gymnasium not found")
+
+    try:
+        import minari
+
+        torch.manual_seed(0)
+
+        total_keys = sorted(
+            minari.list_remote_datasets(
+                latest_version=True, compatible_minari_version=True
+            )
+        )
+        indices = torch.randperm(len(total_keys))[:20]
+        keys = [total_keys[idx] for idx in indices]
+
+        assert len(keys) > 5, keys
+        _MINARI_DATASETS[:] = keys  # Replace the placeholder values
+        return True, None
+    except Exception as err:
+        return False, err
+
+
+def get_random_minigrid_datasets():
+    """
+    Fetch 5 random Minigrid datasets from the Minari server.
+    """
     import minari
 
-    torch.manual_seed(0)
+    all_minigrid = [
+        dataset
+        for dataset in minari.list_remote_datasets(
+            latest_version=True, compatible_minari_version=True
+        ).keys()
+        if dataset.startswith("minigrid/")
+    ]
 
-    total_keys = sorted(
-        minari.list_remote_datasets(latest_version=True, compatible_minari_version=True)
-    )
-    indices = torch.randperm(len(total_keys))[:20]
-    keys = [total_keys[idx] for idx in indices]
-
-    assert len(keys) > 5, keys
-    _MINARI_DATASETS += keys
+    # 3 random datasets
+    indices = torch.randperm(len(all_minigrid))[:3]
+    return [all_minigrid[idx] for idx in indices]
 
 
-_minari_selected_datasets()
+def get_random_atari_envs():
+    """
+    Fetch 3 random Atari environments using ale_py and torch.
+    """
+    import ale_py
+    import gymnasium as gym
+
+    gym.register_envs(ale_py)
+
+    env_specs = gym.envs.registry.values()
+    all_env_ids = [env_spec.id for env_spec in env_specs]
+    atari_env_ids = [env_id for env_id in all_env_ids if env_id.startswith("ALE")]
+    if len(atari_env_ids) < 3:
+        raise RuntimeError("Not enough Atari environments found.")
+    indices = torch.randperm(len(atari_env_ids))[:3]
+    return [atari_env_ids[idx] for idx in indices]
+
+
+def custom_minari_init(custom_envs, num_episodes=5):
+    """
+    Initialize custom Minari datasets for the given environments.
+    """
+    import gymnasium
+    import gymnasium_robotics
+    from minari import DataCollector
+
+    gymnasium.register_envs(gymnasium_robotics)
+
+    custom_dataset_ids = []
+    for env_id in custom_envs:
+        dataset_id = f"{env_id.lower()}/test-custom-local-v1"
+        env = gymnasium.make(env_id)
+        collector = DataCollector(env)
+
+        for ep in range(num_episodes):
+            collector.reset(seed=123 + ep)
+
+            while True:
+                action = collector.action_space.sample()
+                _, _, terminated, truncated, _ = collector.step(action)
+                if terminated or truncated:
+                    break
+
+        collector.create_dataset(
+            dataset_id=dataset_id,
+            algorithm_name="RandomPolicy",
+            code_permalink="https://github.com/Farama-Foundation/Minari",
+            author="Farama",
+            author_email="contact@farama.org",
+            eval_env=env_id,
+        )
+        custom_dataset_ids.append(dataset_id)
+
+    return custom_dataset_ids
 
 
 @pytest.mark.skipif(not _has_minari or not _has_gymnasium, reason="Minari not found")
 @pytest.mark.slow
 class TestMinari:
     @pytest.mark.parametrize("split", [False, True])
-    @pytest.mark.parametrize("selected_dataset", _MINARI_DATASETS)
-    def test_load(self, selected_dataset, split):
-        torchrl_logger.info(f"dataset {selected_dataset}")
-        data = MinariExperienceReplay(
-            selected_dataset, batch_size=32, split_trajs=split
-        )
+    @pytest.mark.parametrize(
+        "dataset_idx",
+        # Only use a static upper bound; do not call any function that imports minari globally.
+        range(4),
+    )
+    def test_load(self, dataset_idx, split):
+        """
+        Test loading from custom datasets for Mujoco and D4RL,
+        Minari remote datasets for Minigrid, and random Atari environments.
+        """
+        import minari
+
+        num_custom_to_select = 4
+        custom_envs = MUJOCO_ENVIRONMENTS + D4RL_ENVIRONMENTS
+
+        # Randomly select a subset of custom environments
+        indices = torch.randperm(len(custom_envs))[:num_custom_to_select]
+        custom_envs_subset = [custom_envs[i] for i in indices]
+
+        num_custom = len(custom_envs_subset)
+        try:
+            minigrid_datasets = get_random_minigrid_datasets()
+        except Exception:
+            minigrid_datasets = []
+        num_minigrid = len(minigrid_datasets)
+        try:
+            atari_envs = get_random_atari_envs()
+        except Exception:
+            atari_envs = []
+        num_atari = len(atari_envs)
+        total_datasets = num_custom + num_minigrid + num_atari
+
+        if dataset_idx >= total_datasets:
+            pytest.skip("Index out of range for available datasets")
+
+        if dataset_idx < num_custom:
+            # Custom dataset for Mujoco/D4RL
+            custom_dataset_ids = custom_minari_init(
+                [custom_envs_subset[dataset_idx]], num_episodes=5
+            )
+            dataset_id = custom_dataset_ids[0]
+            data = MinariExperienceReplay(
+                dataset_id=dataset_id,
+                split_trajs=split,
+                batch_size=32,
+                load_from_local_minari=True,
+            )
+            cleanup_needed = True
+
+        elif dataset_idx < num_custom + num_minigrid:
+            # Minigrid datasets from Minari server
+            minigrid_idx = dataset_idx - num_custom
+            dataset_id = minigrid_datasets[minigrid_idx]
+            data = MinariExperienceReplay(
+                dataset_id=dataset_id,
+                batch_size=32,
+                split_trajs=split,
+                download="force",
+            )
+            cleanup_needed = False
+
+        else:
+            # Atari environment datasets
+            atari_idx = dataset_idx - num_custom - num_minigrid
+            env_id = atari_envs[atari_idx]
+            custom_dataset_ids = custom_minari_init([env_id], num_episodes=5)
+            dataset_id = custom_dataset_ids[0]
+            data = MinariExperienceReplay(
+                dataset_id=dataset_id,
+                split_trajs=split,
+                batch_size=32,
+                load_from_local_minari=True,
+            )
+            cleanup_needed = True
+
         t0 = time.time()
         for i, sample in enumerate(data):
             t1 = time.time()
@@ -3285,6 +3603,11 @@ class TestMinari:
             if i == 10:
                 break
 
+        # Clean up custom datasets after running local dataset tests
+        if cleanup_needed:
+            minari.delete_dataset(dataset_id=dataset_id)
+
+    @retry(Exception, tries=3, delay=1)
     def test_minari_preproc(self, tmpdir):
         dataset = MinariExperienceReplay(
             "D4RL/pointmaze/large-v2",
@@ -3330,6 +3653,74 @@ class TestMinari:
         assert len(dataset) == 100
         assert sample["data"].shape == torch.Size([32, 8])
         assert sample["next", "data"].shape == torch.Size([32, 8])
+
+    @pytest.mark.skipif(
+        not _has_minari or not _has_gymnasium, reason="Minari or Gym not available"
+    )
+    def test_local_minari_dataset_loading(self, tmpdir):
+        MINARI_DATASETS_PATH = os.environ.get("MINARI_DATASETS_PATH")
+        os.environ["MINARI_DATASETS_PATH"] = str(tmpdir)
+        try:
+            import minari
+            from minari import DataCollector
+
+            success, err = _minari_init()
+            if not success:
+                pytest.skip(f"Failed to initialize Minari datasets: {err}")
+
+            dataset_id = "cartpole/test-local-v1"
+
+            # Create dataset using Gym + DataCollector
+            env = gymnasium.make("CartPole-v1")
+            env = DataCollector(env, record_infos=True)
+            for _ in range(50):
+                env.reset(seed=123)
+                while True:
+                    action = env.action_space.sample()
+                    obs, rew, terminated, truncated, info = env.step(action)
+                    if terminated or truncated:
+                        break
+
+            env.create_dataset(
+                dataset_id=dataset_id,
+                algorithm_name="RandomPolicy",
+                code_permalink="https://github.com/Farama-Foundation/Minari",
+                author="Farama",
+                author_email="contact@farama.org",
+                eval_env="CartPole-v1",
+            )
+
+            # Load from local cache
+            data = MinariExperienceReplay(
+                dataset_id=dataset_id,
+                split_trajs=False,
+                batch_size=32,
+                download=False,
+                sampler=SamplerWithoutReplacement(drop_last=True),
+                prefetch=2,
+                load_from_local_minari=True,
+            )
+
+            t0 = time.time()
+            for i, sample in enumerate(data):
+                t1 = time.time()
+                torchrl_logger.info(
+                    f"[Local Minari] Sampling time {1000 * (t1 - t0):4.4f} ms"
+                )
+                assert data.metadata["action_space"].is_in(
+                    sample["action"]
+                ), "Invalid action sample"
+                assert data.metadata["observation_space"].is_in(
+                    sample["observation"]
+                ), "Invalid observation sample"
+                t0 = time.time()
+                if i == 10:
+                    break
+
+            minari.delete_dataset(dataset_id="cartpole/test-local-v1")
+        finally:
+            if MINARI_DATASETS_PATH:
+                os.environ["MINARI_DATASETS_PATH"] = MINARI_DATASETS_PATH
 
 
 @pytest.mark.slow

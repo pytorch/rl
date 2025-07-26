@@ -13,7 +13,7 @@ import re
 from contextlib import contextmanager
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TYPE_CHECKING
 
 import numpy as np
 
@@ -25,6 +25,10 @@ from torchrl._utils import logger as torchrl_logger
 from torchrl.data import Choice, Composite, NonTensor
 from torchrl.data.llm import History
 from torchrl.envs import ConditionalSkip, GymWrapper, Transform, TransformedEnv
+
+if TYPE_CHECKING:
+    import mlgym
+    import transformers
 
 # Inv transforms:
 #  Transforms to apply prior to pass the model output to the env

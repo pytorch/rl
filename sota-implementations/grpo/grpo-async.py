@@ -15,7 +15,7 @@ import hydra
 
 from torchrl import torchrl_logger
 from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
-from torchrl.data.llm.chat import History
+from torchrl.data.llm.history import History
 from torchrl.record.loggers.wandb import WandbLogger
 
 try:
@@ -30,9 +30,9 @@ import tqdm
 from grpo_utils import (
     compute_device_allocation,
     get_inference_model,
-    get_ref_model,
-    get_tokenizer,
     get_train_model,
+    log_training_metrics,
+    make_env,
     make_weight_updater,
 )
 from omegaconf import DictConfig
@@ -49,8 +49,6 @@ from torchrl._utils import timeit
 from torchrl.collectors.llm import RayLLMCollector
 from torchrl.data import LazyStackStorage, ReplayBuffer
 from torchrl.data.replay_buffers.ray_buffer import RayReplayBuffer
-from torchrl.envs.llm import GSM8KEnv, KLRewardTransform
-from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
 from torchrl.objectives.llm.grpo import GRPOLoss, MCAdvantage
 
 
@@ -70,56 +68,6 @@ def setup_environment() -> None:
     # Ensure CUDA is using the correct dtype
     if torch.cuda.is_available():
         torch.cuda.set_device("cuda:0")
-
-
-def make_env(cfg: DictConfig, devices: list[int] | None = None):
-    """Create the environment with proper device allocation.
-
-    Args:
-        cfg: The configuration object
-
-    Returns:
-        The configured environment
-    """
-    # Create reference model with proper device allocation
-    # For the collector actor, we want inference_model devices first, then ref_model devices
-    train_tokenizer = get_tokenizer(cfg)
-
-    # Get device information
-    num_inf_devices = cfg.inference_model.num_devices
-    num_ref_devices = cfg.ref_model.num_devices
-    num_inf_devices + num_ref_devices
-
-    # Create a new config with adjusted device assignments
-    ref_cfg = DictConfig(dict(cfg))
-    ref_model = get_ref_model(ref_cfg, train_tokenizer, devices=devices)
-
-    # Setup environment
-    if cfg.env.dataset == "gsm8k":
-        env = GSM8KEnv(
-            repeats=cfg.env.repeats,
-            tokenizer=train_tokenizer,
-            num_envs=cfg.env.num_envs,
-        )
-    else:  # ifeval
-        env = IFEvalEnv(
-            repeats=cfg.env.repeats,
-            tokenizer=train_tokenizer,
-            num_envs=cfg.env.num_envs,
-        )
-
-    # Pass device directly to KLRewardTransform - Since, for Ray, the local device is always 0
-    # we can just use 0 here.
-    device = torch.device("cuda:0")
-    env = env.append_transform(
-        KLRewardTransform(
-            actor=ref_model,
-            coef=cfg.train.kl_to_ref_coeff,
-            add_to_reward=not cfg.train.kl_coef_in_loss,
-            device=device,
-        )
-    )
-    return env
 
 
 def train(
@@ -150,8 +98,13 @@ def train(
         kl_to_ref_coeff=cfg.train.kl_to_ref_coeff if cfg.train.kl_coef_in_loss else 0.0,
         kl_to_inference_coeff=cfg.train.kl_to_inference_coeff,
         entropy_coeff=cfg.train.entropy_coeff,
+        # use prompt/response masking for regular training, and assistant masking for reasoning
+        masking_strategy="rlhf" if cfg.env.reasoning else "sft",
         device=train_device,
     )
+    if cfg.env.reasoning:
+        # TODO: this is clunky, we should find a way to do this more naturally
+        loss_fn.set_keys(sample_log_prob=("next", "log_probs", "full"))
     if cfg.model.compile:
         loss_fn = torch.compile(loss_fn)
 
@@ -159,8 +112,11 @@ def train(
     model_metadata = vLLMUpdater.get_model_metadata(policy_training)
 
     # Create weight updater with remote LLM
+    ray_managed_externally = os.environ.get("RAY_CLUSTER_MANAGED_EXTERNALLY")
     weight_updater: vLLMUpdater = make_weight_updater(
-        master_address="localhost",  # Since we're running locally
+        master_address="localhost"
+        if not ray_managed_externally
+        else ray.util.get_node_ip_address(),
         master_port=None,  # Will auto-assign an open port
         model_metadata=model_metadata,
         vllm_tp_size=cfg.inference_model.num_devices
@@ -219,12 +175,14 @@ def train(
     torchrl_logger.info(f"Total steps: {total_steps}")
 
     pbar = tqdm.tqdm(total=total_steps)
-    metrics = {}  # Initialize metrics dict
     grad_norm = 0.0  # Initialize grad_norm
     data_read_count = 0
     start_time = time.time()
 
     for step in range(total_steps):
+        if not collector.is_running():
+            torchrl_logger.info("Collector stopped, stopping training")
+            break
         pbar.update(1)
         pbar.set_description(f"Step {step}, writes: {replay_buffer.write_count}")
 
@@ -233,7 +191,7 @@ def train(
             batch = replay_buffer.sample(cfg.train.optim_batch_size).to(train_device)
             # For logging purposes, we get the last element of the history
             # and convert it to a string
-            history: History = batch.view(-1)[0]["next", "history"]
+            history: History = batch.view(-1)[0]["history", "full"]
             history_str: list[str] | str = history.apply_chat_template(
                 tokenizer=train_tokenizer
             )
@@ -284,70 +242,19 @@ def train(
 
         # Update metrics
         if (step % cfg.train.logging_frequency) == 0:
-            with torch.no_grad():
-                rb_content = replay_buffer[:]
-                batch_policy_version = batch["next", "policy_version"].view(-1).min()
-                batch_policy_age = collector.policy_version - batch_policy_version
-                metrics = {
-                    "reward from buffer": float(
-                        torch.cat(
-                            rb_content.get(("next", "reward"), as_list=True)
-                        ).mean()
-                    ),
-                    "kl_penalty (inference to ref) from buffer": float(
-                        torch.cat(
-                            rb_content.get(("next", "kl_penalty"), as_list=True)
-                        ).mean()
-                    ),
-                    "seq_length from buffer": float(
-                        torch.tensor(
-                            [
-                                t.numel()
-                                for t in rb_content.get("tokens_response", as_list=True)
-                            ],
-                            dtype=torch.float,
-                        ).mean()
-                    ),
-                    "ESS, from loss": float(loss.ESS),
-                    "loss_objective, from loss": float(loss.loss_objective),
-                    "clip_fraction, from loss": float(loss.clip_fraction),
-                    "kl_approx (train to inference), from loss": float(loss.kl_approx),
-                    "kl_to_inference (train to inference - differentiable), from loss": float(
-                        loss.kl_to_inference.mean()
-                    ),
-                    "kl_to_ref, from loss": float(loss.kl_to_ref.mean()),
-                    "loss_kl_to_inference, from loss": float(
-                        loss.loss_kl_to_inference.mean()
-                    ),
-                    "loss_kl_to_ref, from loss": float(loss.loss_kl_to_ref.mean()),
-                    "entropy loss, from loss": float(loss.loss_entropy.mean()),
-                    "grad_norm": float(grad_norm)
-                    if step % cfg.train.gradient_accumulation_steps == 0
-                    else metrics.get("grad_norm", 0.0),
-                    "write_count, from buffer": int(replay_buffer.write_count),
-                    # how many gradient steps per write
-                    "gradient_step_throughput (gradient step per write)": float(
-                        step / replay_buffer.write_count
-                    ),
-                    # how many optim steps per write
-                    "optim_step_throughput (optim step per write)": float(
-                        (step // cfg.train.gradient_accumulation_steps)
-                        / replay_buffer.write_count
-                    ),
-                    "data_read_count (total)": data_read_count,
-                    "current_policy_version (collector)": collector.policy_version,
-                    # FIXME: Assume batch is a single trajectory
-                    # FIXME: The addition of the transform after the env instantiation + _shuttle creation
-                    #  is messed up - we need the next data
-                    "batch_policy_version (sampled batch)": batch_policy_version,
-                    "batch_policy_age (sampled batch)": batch_policy_age,
-                    "throughput (steps per second)": float(
-                        step / (time.time() - start_time)
-                    ),
-                }
-                for name, value in metrics.items():
-                    wandb_logger.log_scalar(name, value)
-                wandb_logger.log_str("history", history_str, step=step)
+            log_training_metrics(
+                wandb_logger=wandb_logger,
+                replay_buffer=replay_buffer,
+                batch=batch,
+                loss=loss,
+                grad_norm=grad_norm,
+                global_step=step,
+                data_read_count=data_read_count,
+                collector=collector,
+                start_time=start_time,
+                gradient_accumulation_steps=cfg.train.gradient_accumulation_steps,
+                history_str=history_str,
+            )
 
         # Update policy weights
         if step % cfg.train.weight_update_frequency == 0:
@@ -422,7 +329,11 @@ def main(cfg):
                 ray_init_config["runtime_env"]["env_vars"]
             )
         torchrl_logger.info(f"Ray init config: {ray_init_config=}")
-        ray.init(**ray_init_config)
+        ray_managed_externally = os.environ.get("RAY_CLUSTER_MANAGED_EXTERNALLY")
+        if ray_managed_externally:
+            ray.init(address="auto")
+        else:
+            ray.init(**ray_init_config)
 
     # Check if num_devices is set
     if cfg.inference_model.num_devices is None:
@@ -442,20 +353,25 @@ def main(cfg):
     train_handler_config = dict(cfg.ray.train_handler_config)
 
     inference_policy = get_inference_model(
-        cfg, devices=device_config["inference_model_devices"]
+        cfg,
+        devices=device_config["inference_model_devices"],
     )
     torchrl_logger.info(f"Inference policy: {inference_policy}")
 
     torchrl_logger.info(f"Starting replay buffer with {replay_buffer_config=}")
+    if cfg.train.optim_batch_size % cfg.train.gradient_accumulation_steps != 0:
+        raise ValueError(
+            "optim_batch_size must be divisible by gradient_accumulation_steps"
+        )
     rb = RayReplayBuffer(
         storage=partial(
             LazyStackStorage,
             cfg.train.buffer_size
             if cfg.train.buffer_size
-            else cfg.train.dialog_turns_per_batch,
+            else cfg.env.repeats * cfg.env.num_envs,
         ),
         transform_factory=partial(MCAdvantage, grpo_size=cfg.env.repeats),
-        batch_size=cfg.train.optim_batch_size,
+        batch_size=cfg.train.optim_batch_size // cfg.train.gradient_accumulation_steps,
         remote_config=replay_buffer_config,
     )
     torchrl_logger.info(f"Replay buffer: {rb}")
@@ -479,6 +395,8 @@ def main(cfg):
         weight_updater=None,  # We'll create this after getting the remote LLM
         track_policy_version=True,
         remote_config=collector_config,
+        yield_only_last_steps=cfg.env.reasoning,
+        verbose=False,
     )
     # Ensure collector is initialized by calling a method that will block until ready
     ray.get(collector._collector.is_initialized.remote())

@@ -13,6 +13,10 @@ env:
   num_envs: 4
   # Number of times to repeat the same prompt for GRPO. This does not affect the GPU memory usage.
   repeats: 16
+  # Whether to use the reasoning prompt
+  reasoning: false
+  # Maximum number of dialog turns per episode.
+  max_steps: 2
 
 # Base model configuration
 model:
@@ -33,6 +37,8 @@ train:
   total_dialog_turns: 100_000
 
   # Number of steps in each batch. Higher values will cause the inference step to be slower, but won't use more GPU memory.
+  #  If multi-turn, the actual number available may be lower as the buffer will only write trajectories which prompts have been
+  #  repeated `env.repeats` times.
   dialog_turns_per_batch: 64
 
   # Number of gradient accumulation steps. Higher values will use less GPU memory (comparing with bigger batches and lower gradient_accumulation_steps), 
@@ -43,18 +49,22 @@ train:
   checkpoint_frequency: 100  # Save checkpoint every N steps/batches
 
   # Batch size for optimization. Higher values will use more GPU memory.
-  optim_batch_size: 2
+  optim_batch_size: 4
 
   # Whether to include the KL coefficient in the loss function. Alternatively, the KL ref-to-train will be added to the reward.
-  kl_coef_in_loss: false 
+  kl_coef_in_loss: false
 
   # KL coefficients for the KL divergence to the reference and inference policies
-  kl_to_ref_coeff: 1e-1
-  kl_to_inference_coeff: 1e-1
-  entropy_coeff: 0.01
+  kl_to_ref_coeff: 1.0
+  kl_to_inference_coeff: 0.0
+  entropy_coeff: 0.001
   
   # Fields used only by grpo-async.py / grpo-sync.py
   logging_frequency: 1  # Log metrics every N steps - here at each optimization step
+
+  # Whether to empty the replay buffer at the end of training epochs (sync only). Guarantees that data
+  # is used only once.
+  empty_replay_buffer: true
 
 # Training model configuration
 train_model:

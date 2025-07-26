@@ -280,6 +280,7 @@ class TestWandbLogger:
                 value=scalar_value,
                 name=scalar_name,
                 step=steps[i] if steps else None,
+                commit=True,
             )
 
         assert wandb_logger.experiment.summary["foo"] == values[-1].item()
@@ -315,9 +316,8 @@ class TestWandbLogger:
         assert video_4fps_size > video_16fps_size, (video_4fps_size, video_16fps_size)
 
         # check that we catch the error in case the format of the tensor is wrong
-        video_wrong_format = torch.zeros(64, 2, 32, 32)
-        video_wrong_format = video_wrong_format[None, :]
-        with pytest.raises(Exception):
+        video_wrong_format = torch.zeros(2, 32, 32)
+        with pytest.raises(ValueError, match="Video must be at least"):
             wandb_logger.log_video(
                 name="foo",
                 video=video_wrong_format,

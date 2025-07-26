@@ -56,7 +56,6 @@ from torchrl.collectors.weight_update import (
     WeightUpdaterBase,
 )
 from torchrl.data import ReplayBuffer
-from torchrl.data.tensor_specs import TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import _do_nothing, EnvBase
 from torchrl.envs.env_creator import EnvCreator
@@ -176,7 +175,6 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
     def _get_policy_and_device(
         self,
         policy: Callable[[Any], Any] | None = None,
-        observation_spec: TensorSpec = None,
         policy_device: Any = NO_DEFAULT,
         env_maker: Any | None = None,
         env_maker_kwargs: dict[str, Any] | None = None,
@@ -187,7 +185,6 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
 
         Args:
             policy (TensorDictModule, optional): a policy to be used
-            observation_spec (TensorSpec, optional): spec of the observations
             policy_device (torch.device, optional): the device where the policy should be placed.
                 Defaults to self.policy_device
             env_maker (a callable or a batched env, optional): the env_maker function for this device/policy pair.
@@ -201,7 +198,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             env = getattr(self, "env", None)
             policy = _make_compatible_policy(
                 policy,
-                observation_spec,
+                getattr(env, "observation_spec", None),
                 env=env,
                 env_maker=env_maker,
                 env_maker_kwargs=env_maker_kwargs,
@@ -638,10 +635,10 @@ class SyncDataCollector(DataCollectorBase):
         policy_factory: Callable[[], Callable] | None = None,
         frames_per_batch: int,
         total_frames: int = -1,
-        device: DEVICE_TYPING = None,
-        storing_device: DEVICE_TYPING = None,
-        policy_device: DEVICE_TYPING = None,
-        env_device: DEVICE_TYPING = None,
+        device: DEVICE_TYPING | None = None,
+        storing_device: DEVICE_TYPING | None = None,
+        policy_device: DEVICE_TYPING | None = None,
+        env_device: DEVICE_TYPING | None = None,
         create_env_kwargs: dict[str, Any] | None = None,
         max_frames_per_traj: int | None = None,
         init_random_frames: int | None = None,
@@ -689,6 +686,10 @@ class SyncDataCollector(DataCollectorBase):
                 policy = RandomPolicy(env.full_action_spec)
         elif policy_factory is not None:
             raise TypeError("policy_factory cannot be used with policy argument.")
+        # If the underlying policy has a state_dict, we keep a reference to the policy and
+        # do all policy weight saving/loading through it
+        if hasattr(policy, "state_dict"):
+            self._policy_w_state_dict = policy
 
         if trust_policy is None:
             trust_policy = isinstance(policy, (RandomPolicy, CudaGraphModule))
@@ -800,9 +801,13 @@ class SyncDataCollector(DataCollectorBase):
         self.reset_when_done = reset_when_done
         self.n_env = self.env.batch_size.numel()
 
+        if hasattr(policy, "register_collector"):
+            policy.register_collector(self)
+        if hasattr(self.env, "register_collector"):
+            self.env.register_collector(self)
+
         (self.policy, self.get_weights_fn,) = self._get_policy_and_device(
             policy=policy,
-            observation_spec=self.env.observation_spec,
         )
         if isinstance(self.policy, nn.Module):
             self.policy_weights = TensorDict.from_module(
@@ -1271,7 +1276,8 @@ class SyncDataCollector(DataCollectorBase):
                     self.replay_buffer.extend(tensordict_out)
                     if self.verbose:
                         torchrl_logger.info(
-                            f"Collector: Added {tensordict_out.numel()} frames to replay buffer. Yielding."
+                            f"Collector: Added {tensordict_out.numel()} frames to replay buffer. "
+                            "Buffer write count: {self.replay_buffer.write_count}. Yielding."
                         )
                     yield
                 else:
@@ -1356,7 +1362,7 @@ class SyncDataCollector(DataCollectorBase):
         """
         if self.replay_buffer is None:
             raise RuntimeError("Replay buffer must be defined for execution.")
-        if not hasattr(self, "_thread") or not self._thread.is_alive():
+        if not self.is_running():
             self._stop = False
             self._thread = threading.Thread(target=self._run_iterator)
             self._thread.daemon = (
@@ -1368,6 +1374,9 @@ class SyncDataCollector(DataCollectorBase):
         for _ in self:
             if self._stop:
                 return
+
+    def is_running(self):
+        return hasattr(self, "_thread") and self._thread.is_alive()
 
     def async_shutdown(
         self, timeout: float | None = None, close_env: bool = True
@@ -1681,8 +1690,8 @@ class SyncDataCollector(DataCollectorBase):
         else:
             env_state_dict = OrderedDict()
 
-        if hasattr(self.policy, "state_dict"):
-            policy_state_dict = self.policy.state_dict()
+        if hasattr(self, "_policy_w_state_dict"):
+            policy_state_dict = self._policy_w_state_dict.state_dict()
             state_dict = OrderedDict(
                 policy_state_dict=policy_state_dict,
                 env_state_dict=env_state_dict,
@@ -1706,7 +1715,13 @@ class SyncDataCollector(DataCollectorBase):
         if strict or "env_state_dict" in state_dict:
             self.env.load_state_dict(state_dict["env_state_dict"], **kwargs)
         if strict or "policy_state_dict" in state_dict:
-            self.policy.load_state_dict(state_dict["policy_state_dict"], **kwargs)
+            if not hasattr(self, "_policy_w_state_dict"):
+                raise ValueError(
+                    "Underlying policy does not have state_dict to load policy_state_dict into."
+                )
+            self._policy_w_state_dict.load_state_dict(
+                state_dict["policy_state_dict"], **kwargs
+            )
         self._frames = state_dict["frames"]
         self._iter = state_dict["iter"]
 

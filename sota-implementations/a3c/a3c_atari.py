@@ -9,6 +9,7 @@ import torch.multiprocessing as mp
 import torch.nn as nn
 import torch.optim
 import tqdm
+from tensordict import from_module
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.objectives import A2CLoss
@@ -17,11 +18,14 @@ from torchrl.objectives.value.advantages import GAE
 from torchrl.record.loggers import generate_exp_name, get_logger
 from utils_atari import make_parallel_env, make_ppo_models, SharedAdam
 
+
 torch.set_float32_matmul_precision("high")
 
 
 class A3CWorker(mp.Process):
-    def __init__(self, name, cfg, global_actor, global_critic, optimizer, logger=None):
+    def __init__(
+        self, name, cfg, global_actor, global_critic, optimizer, use_logger=False
+    ):
         super().__init__()
         self.name = name
         self.cfg = cfg
@@ -40,8 +44,24 @@ class A3CWorker(mp.Process):
 
         self.global_actor = global_actor
         self.global_critic = global_critic
-        self.local_actor = deepcopy(global_actor)
-        self.local_critic = deepcopy(global_critic)
+        self.local_actor = self.copy_model(global_actor)
+        self.local_critic = self.copy_model(global_critic)
+
+        logger = None
+        if use_logger and cfg.logger.backend:
+            exp_name = generate_exp_name(
+                "A3C", f"{cfg.logger.exp_name}_{cfg.env.env_name}"
+            )
+            logger = get_logger(
+                cfg.logger.backend,
+                logger_name="a3c",
+                experiment_name=exp_name,
+                wandb_kwargs={
+                    "config": dict(cfg),
+                    "project": cfg.logger.project_name,
+                    "group": cfg.logger.group_name,
+                },
+            )
 
         self.logger = logger
 
@@ -63,6 +83,21 @@ class A3CWorker(mp.Process):
 
         self.adv_module.set_keys(done="end-of-life", terminated="end-of-life")
         self.loss_module.set_keys(done="end-of-life", terminated="end-of-life")
+
+    def copy_model(self, model):
+        td_params = from_module(model)
+        td_new_params = td_params.data.clone()
+        td_new_params = td_new_params.apply(
+            lambda p0, p1: torch.nn.Parameter(p0)
+            if isinstance(p1, torch.nn.Parameter)
+            else p0,
+            td_params,
+        )
+        with td_params.data.to("meta").to_module(model):
+            # we don't copy any param here
+            new_model = deepcopy(model)
+        td_new_params.to_module(new_model)
+        return new_model
 
     def update(self, batch, max_grad_norm=None):
         if max_grad_norm is None:
@@ -169,7 +204,7 @@ class A3CWorker(mp.Process):
 
             # Logging only on the first worker in the dashboard.
             # Alternatively, you can use a distributed logger, or aggregate metrics from all workers.
-            if self.logger and self.name == "worker_0":
+            if self.logger:
                 for key, value in metrics_to_log.items():
                     self.logger.log_scalar(key, value, collected_frames)
         collector.shutdown()
@@ -187,24 +222,15 @@ def main(cfg: DictConfig):  # noqa: F821
 
     num_workers = cfg.multiprocessing.num_workers
 
-    if num_workers is None:
-        num_workers = mp.cpu_count()
-    logger = None
-    if cfg.logger.backend:
-        exp_name = generate_exp_name("A3C", f"{cfg.logger.exp_name}_{cfg.env.env_name}")
-        logger = get_logger(
-            cfg.logger.backend,
-            logger_name="a3c",
-            experiment_name=exp_name,
-            wandb_kwargs={
-                "config": dict(cfg),
-                "project": cfg.logger.project_name,
-                "group": cfg.logger.group_name,
-            },
-        )
-
     workers = [
-        A3CWorker(f"worker_{i}", cfg, global_actor, global_critic, optimizer, logger)
+        A3CWorker(
+            f"worker_{i}",
+            cfg,
+            global_actor,
+            global_critic,
+            optimizer,
+            use_logger=i == 0,
+        )
         for i in range(num_workers)
     ]
     [w.start() for w in workers]

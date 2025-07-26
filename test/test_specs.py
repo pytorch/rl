@@ -1134,6 +1134,9 @@ class TestEquality:
         )
         assert ts != ts_other
 
+    def test_equality_binary_empty_shape(self):
+        assert Binary(shape=()) == Binary(shape=()).clone()
+
     @pytest.mark.parametrize("nvec", [[3], [3, 4], [3, 4, 5]])
     def test_equality_multi_onehot(self, nvec):
         device = "cpu"
@@ -3259,7 +3262,8 @@ class TestLazyStackedComposite:
                     dtype=torch.float32,
                     domain=continuous),
                 device=cpu,
-                shape=torch.Size([3])),
+                shape=torch.Size([3]),
+                data_cls=None),
         1 ->
             lidar: BoundedContinuous(
                 shape=torch.Size([20]),
@@ -3279,7 +3283,8 @@ class TestLazyStackedComposite:
                     dtype=torch.float32,
                     domain=continuous),
                 device=cpu,
-                shape=torch.Size([3])),
+                shape=torch.Size([3]),
+                data_cls=None),
         2 ->
             individual_2_obs: Composite(
                 individual_1_obs_0: UnboundedContinuous(
@@ -3291,7 +3296,8 @@ class TestLazyStackedComposite:
                     dtype=torch.float32,
                     domain=continuous),
                 device=cpu,
-                shape=torch.Size([3]))}},
+                shape=torch.Size([3]),
+                data_cls=None)}},
     device=cpu,
     shape={torch.Size((3,))},
     stack_dim={c.stack_dim})"""
@@ -3907,6 +3913,7 @@ class TestDynamicSpec:
         disc = Categorical(shape=(-1, 1, 2), n=4)
         moneh = MultiOneHot(shape=(-1, 1, 2, 7), nvec=[3, 4])
         mdisc = MultiCategorical(shape=(-1, 1, 2, 2), nvec=[3, 4])
+        binary = Binary(shape=(-1, 1, 2))
 
         spec = Composite(
             unb=unb,
@@ -3916,6 +3923,7 @@ class TestDynamicSpec:
             disc=disc,
             moneh=moneh,
             mdisc=mdisc,
+            binary=binary,
             shape=(-1, 1, 2),
         )
         assert spec.shape == (-1, 1, 2)
@@ -3937,6 +3945,16 @@ class TestNonTensor:
         assert nts.one((2,)).data == "example_data"
         assert nts.rand((2,)).data == "example_data"
         assert nts.zero((2,)).data == "example_data"
+
+    def test_feature_dims(self):
+        nts = NonTensor(shape=(3, 4), example_data="example_data")
+        assert nts.feature_dims == 2
+        nts = NonTensor(shape=(3, 4), example_data="example_data", feature_dims=1)
+        assert nts.feature_dims == 1
+        assert isinstance(nts.zeros(), NonTensorStack)
+        assert isinstance(nts.zeros(2), NonTensorStack)
+        assert isinstance(nts.zeros()[0], NonTensorData)
+        assert nts.rand((2,)).shape == (2, 3, 4)
 
     def test_example_data_ineq(self):
         nts0 = NonTensor(shape=(3, 4), example_data="example_data")

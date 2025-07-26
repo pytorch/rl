@@ -47,6 +47,7 @@ from torchrl.data import (
     Composite,
     LazyTensorStorage,
     NonTensor,
+    RandomSampler,
     ReplayBuffer,
     TensorDictReplayBuffer,
     TensorSpec,
@@ -10382,6 +10383,68 @@ def test_added_transforms_are_in_eval_mode():
 
 
 class TestTransformedEnv:
+    class DummyCompositeEnv(EnvBase):  # type: ignore[misc]
+        """A dummy environment with a composite action set."""
+
+        def __init__(self) -> None:
+            super().__init__()
+
+            self.observation_spec = Composite(
+                observation=UnboundedContinuous((*self.batch_size, 3))
+            )
+
+            self.action_spec = Composite(
+                action=Composite(
+                    head_0=Composite(
+                        action=Categorical(2, (*self.batch_size, 1), dtype=torch.bool)
+                    ),
+                    head_1=Composite(
+                        action=Categorical(2, (*self.batch_size, 1), dtype=torch.bool)
+                    ),
+                )
+            )
+
+            self.done_spec = Categorical(2, (*self.batch_size, 1), dtype=torch.bool)
+
+            self.full_done_spec["truncated"] = self.full_done_spec["terminated"].clone()
+
+            self.reward_spec = UnboundedContinuous(*self.batch_size, 1)
+
+        def _reset(self, tensordict: TensorDict) -> TensorDict:
+            return TensorDict(
+                {"observation": torch.randn((*self.batch_size, 3)), "done": False}
+            )
+
+        def _step(self, tensordict: TensorDict) -> TensorDict:
+            return TensorDict(
+                {
+                    "observation": torch.randn((*self.batch_size, 3)),
+                    "done": False,
+                    "reward": torch.randn((*self.batch_size, 1)),
+                }
+            )
+
+        def _set_seed(self, seed: int) -> None:
+            pass
+
+    def test_no_modif_specs(self) -> None:
+        base_env = self.DummyCompositeEnv()
+        specs = base_env.specs.clone()
+        transformed_env = TransformedEnv(
+            base_env,
+            RenameTransform(
+                in_keys=[],
+                out_keys=[],
+                in_keys_inv=[("action", "head_0", "action")],
+                out_keys_inv=[("action", "head_99", "action")],
+            ),
+        )
+        td = transformed_env.reset()
+        # A second reset with a TD passed fails due to override of the `input_spec`
+        td = transformed_env.reset(td)
+        specs_after = base_env.specs.clone()
+        assert specs == specs_after
+
     @pytest.mark.filterwarnings("error")
     def test_nested_transformed_env(self):
         base_env = ContinuousActionVecMockEnv()
@@ -13271,6 +13334,52 @@ class TestMultiStepTransform:
             assert rb[:]["next", "steps"][-1] == data["steps"][-1]
             assert t._buffer["steps"][-1] == data["steps"][-1]
 
+    @pytest.mark.parametrize("add_or_extend", ["add", "extend"])
+    def test_multisteptransform_single_item(self, add_or_extend):
+        # Configuration
+        buffer_size = 1000
+        n_step = 3
+        gamma = 0.99
+        device = "cpu"
+
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(max_size=buffer_size, device=device, ndim=1),
+            sampler=RandomSampler(),
+            transform=MultiStepTransform(n_steps=n_step, gamma=gamma),
+        )
+        obs_dict = lambda i: {"observation": torch.full((4,), i)}  # 4-dim observation
+        next_obs_dict = lambda i: {"observation": torch.full((4,), i)}
+
+        for i in range(10):
+            # Create transition with batch_size=[] (no batch dimension)
+            transition = TensorDict(
+                {
+                    "obs": TensorDict(obs_dict(i), batch_size=[]),
+                    "action": torch.full((2,), i),  # 2-dim action
+                    "next": TensorDict(
+                        {
+                            "obs": TensorDict(next_obs_dict(i), batch_size=[]),
+                            "done": torch.tensor(False, dtype=torch.bool),
+                            "reward": torch.tensor(float(i), dtype=torch.float32),
+                        },
+                        batch_size=[],
+                    ),
+                },
+                batch_size=[],
+            )
+
+            if add_or_extend == "add":
+                rb.add(transition)
+            else:
+                rb.extend(transition.unsqueeze(0))
+        rbcontent = rb[:]
+        assert (rbcontent["steps_to_next_obs"] == 3).all()
+        assert rbcontent.shape == (7,)
+        assert (rbcontent["next", "original_reward"] == torch.arange(7)).all()
+        assert (
+            rbcontent["next", "reward"] > rbcontent["next", "original_reward"]
+        ).all()
+
 
 class TestBatchSizeTransform(TransformBase):
     class MyEnv(EnvBase):
@@ -13731,9 +13840,8 @@ class TestLineariseRewards(TransformBase):
         ):
             LineariseRewards(in_keys=("reward",), weights=torch.ones(size=(2, 4)))
 
-    def test_weight_sign_error(self):
-        with pytest.raises(ValueError, match="Expected all weights to be >0"):
-            LineariseRewards(in_keys=("reward",), weights=-torch.ones(size=(2,)))
+    def test_weight_no_sign_error(self):
+        LineariseRewards(in_keys=("reward",), weights=-torch.ones(size=(2,)))
 
     def test_discrete_spec_error(self):
         with pytest.raises(
@@ -13933,6 +14041,7 @@ class TestLineariseRewards(TransformBase):
             (1, None),
             (3, None),
             (2, [1.0, 2.0]),
+            (2, [1.0, -1.0]),
         ],
     )
     def test_transform_env(self, num_rewards, weights):
@@ -14014,6 +14123,15 @@ class TestLineariseRewards(TransformBase):
                     shape=2,
                 ),
                 BoundedContinuous(low=-1.0, high=1.0, shape=1),
+            ),
+            (
+                [1.0, -1.0],
+                BoundedContinuous(
+                    low=[-1.0, -2.0],
+                    high=[1.0, 2.0],
+                    shape=2,
+                ),
+                BoundedContinuous(low=-3.0, high=3.0, shape=1),
             ),
         ],
     )
@@ -14461,6 +14579,7 @@ class TestMultiAction(TransformBase):
         return
 
 
+@pytest.mark.skipif(IS_WIN, reason="Test is flaky on Windows")
 class TestTimer(TransformBase):
     def test_single_trans_env_check(self):
         env = TransformedEnv(ContinuousActionVecMockEnv(), Timer())

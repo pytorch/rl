@@ -36,6 +36,7 @@ import tensordict
 import torch
 from tensordict import (
     is_tensor_collection,
+    lazy_stack,
     LazyStackedTensorDict,
     NonTensorData,
     NonTensorStack,
@@ -2747,6 +2748,13 @@ class NonTensor(TensorSpec):
         batched (bool, optional): Indicates whether the data is batched. If `True`, the `rand`, `zero`, and `one` methods
             will generate data with an additional batch dimension, stacking copies of the `example_data` across this dimension.
             Defaults to `False`.
+            Exclusive with `feature_dims`.
+        feature_dims (int, optional): The number of dimensions that are features.
+            The feature dimensions are the trailing dimensions that are not batch dimensions.
+            Every feature dimension is included in a single NonTensorData object, whereas these
+            are stacked across the batch dimension.
+            Exclusive with `batched`.
+            Defaults to `None` (all if batched=False, none if batched=True).
         **kwargs: Additional keyword arguments passed to the parent class.
 
     .. seealso:: :class:`~torchrl.data.Choice` which allows to randomly choose among different specs when calling
@@ -2773,7 +2781,8 @@ class NonTensor(TensorSpec):
         device: DEVICE_TYPING | None = None,
         dtype: torch.dtype | None = None,
         example_data: Any = None,
-        batched: bool = False,
+        batched: bool | None = None,
+        feature_dims: int | None = None,
         **kwargs,
     ):
         if isinstance(shape, int):
@@ -2784,7 +2793,17 @@ class NonTensor(TensorSpec):
             shape=shape, space=None, device=device, dtype=dtype, domain=domain, **kwargs
         )
         self.example_data = example_data
+        if batched is None and feature_dims is None:
+            batched = False
+            feature_dims = len(self.shape)
+        elif batched is None and feature_dims is not None:
+            batched = False
+        elif batched is not None and feature_dims is not None:
+            raise ValueError("Cannot specify both batched and feature_dims.")
+        else:
+            feature_dims = 0 if batched else len(self.shape)
         self.batched = batched
+        self.feature_dims = feature_dims
         self.encode = self._encode_eager
 
     def __repr__(self):
@@ -2835,7 +2854,7 @@ class NonTensor(TensorSpec):
             device=dest_device,
             dtype=None,
             example_data=self.example_data,
-            batched=self.batched,
+            feature_dims=self.feature_dims,
         )
 
     def clone(self) -> NonTensor:
@@ -2844,29 +2863,32 @@ class NonTensor(TensorSpec):
             device=self.device,
             dtype=self.dtype,
             example_data=self.example_data,
-            batched=self.batched,
+            feature_dims=self.feature_dims,
         )
 
     def rand(self, shape=None):
         if shape is None:
             shape = ()
         if self.batched:
-            with set_capture_non_tensor_stack(False):
-                val = NonTensorData(
-                    data=self.example_data,
-                    batch_size=(),
-                    device=self.device,
-                )
-                shape = (*shape, *self._safe_shape)
-                if shape:
-                    for i in shape:
-                        val = torch.stack([val.copy() for _ in range(i)], -1)
-                return val
-        return NonTensorData(
-            data=self.example_data,
-            batch_size=(*shape, *self._safe_shape),
-            device=self.device,
-        )
+            # feature dim is None
+            feature_dims = 0
+        else:
+            feature_dims = self.feature_dims
+        if isinstance(shape, int):
+            shape = _size([shape])
+        total_shape = (*shape, *self._safe_shape)
+        batch_shape = total_shape[:-feature_dims]
+        feature_shape = total_shape[-feature_dims:]
+        with set_capture_non_tensor_stack(False):
+            val = NonTensorData(
+                data=self.example_data,
+                batch_size=feature_shape,
+                device=self.device,
+            )
+            if batch_shape:
+                for i in reversed(batch_shape):
+                    val = lazy_stack([val.copy() for _ in range(i)])
+            return val
 
     def zero(self, shape=None):
         return self.rand(shape=shape)
@@ -2877,10 +2899,18 @@ class NonTensor(TensorSpec):
     def is_in(self, val: Any) -> bool:
         if not isinstance(val, torch.Tensor) and not is_tensor_collection(val):
             return True
-        shape = torch.broadcast_shapes(self._safe_shape, val.shape)
+        # Since we don't really share Nontensor across processes, it's ok to modify the shape
+        # We do this when the shape has been determined by a single sample gathered
+        # from a dataloader, but shapes of the non-tensor may actually vary.
+        if any(v < 0 for v in val.shape):
+            self.shape = torch.Size(
+                (self.shape[i] if s >= 0 else -1 for i, s in enumerate(val.shape))
+            )
+        _safe_val_shape = torch.Size(s if s >= 0 else 1 for s in val.shape)
+        shape = torch.broadcast_shapes(self._safe_shape, _safe_val_shape)
         return (
             is_non_tensor(val)
-            and val.shape == shape
+            and _safe_val_shape == shape
             # We relax constrains on device as they're hard to enforce for non-tensor
             #  tensordicts and pointless
             # and val.device == self.device
@@ -2904,18 +2934,20 @@ class NonTensor(TensorSpec):
             device=self.device,
             dtype=None,
             example_data=self.example_data,
-            batched=self.batched,
+            feature_dims=self.feature_dims,
         )
 
     def unsqueeze(self, dim: int) -> NonTensor:
         unsq = super().unsqueeze(dim=dim)
         unsq.example_data = self.example_data
+        unsq.feature_dims = self.feature_dims
         unsq.batched = self.batched
         return unsq
 
     def squeeze(self, dim: int | None = None) -> NonTensor:
         sq = super().squeeze(dim=dim)
         sq.example_data = self.example_data
+        sq.feature_dims = self.feature_dims
         sq.batched = self.batched
         return sq
 
@@ -2925,7 +2957,7 @@ class NonTensor(TensorSpec):
             device=self.device,
             dtype=self.dtype,
             example_data=self.example_data,
-            batched=self.batched,
+            feature_dims=self.feature_dims,
         )
 
     def _unflatten(self, dim, sizes):
@@ -2935,7 +2967,7 @@ class NonTensor(TensorSpec):
             device=self.device,
             dtype=self.dtype,
             example_data=self.example_data,
-            batched=self.batched,
+            feature_dims=self.feature_dims,
         )
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
@@ -2946,7 +2978,7 @@ class NonTensor(TensorSpec):
             device=self.device,
             dtype=self.dtype,
             example_data=self.example_data,
-            batched=self.batched,
+            feature_dims=self.feature_dims,
         )
 
     def unbind(self, dim: int = 0):
@@ -2964,7 +2996,7 @@ class NonTensor(TensorSpec):
                 device=self.device,
                 dtype=self.dtype,
                 example_data=self.example_data,
-                batched=self.batched,
+                feature_dims=self.feature_dims,
             )
             for i in range(self.shape[dim])
         )
@@ -2980,7 +3012,24 @@ class NonTensor(TensorSpec):
         *,
         ignore_device: bool = False,
     ) -> torch.Tensor | TensorDictBase:
-        return NonTensorData(val, device=self.device, batch_size=self.shape)
+        if self.batched:
+            # feature dim is None
+            feature_dims = 0
+        else:
+            feature_dims = self.feature_dims
+        total_shape = self._safe_shape
+        batch_shape = total_shape[:-feature_dims]
+        feature_shape = total_shape[-feature_dims:]
+        result = NonTensorData(
+            val,
+            device=self.device,
+            batch_size=feature_shape,
+        )
+        if not batch_shape:
+            return result
+        for i in reversed(batch_shape):
+            result = lazy_stack([result.copy() for _ in range(i)])
+        return result
 
 
 class _UnboundedMeta(abc.ABCMeta):
@@ -4381,12 +4430,14 @@ class Binary(Categorical):
                 raise ValueError(
                     f"'n' must be zero for spec {self.__class__} when using an empty shape"
                 )
-        else:
+        elif n is not None:
             if shape[-1] != n:
                 raise ValueError(
                     f"The last value of the shape must match 'n' for spec {self.__class__}. "
                     f"Got n={n} and shape={shape}."
                 )
+        else:
+            n = shape[-1]
 
         super().__init__(n=2, shape=shape, device=device, dtype=dtype)
         self.encode = self._encode_eager
@@ -4400,12 +4451,18 @@ class Binary(Categorical):
                 f"shape of the {self.__class__.__name__} spec in expand()."
             )
         return self.__class__(
-            n=self.shape[-1], shape=shape, device=self.device, dtype=self.dtype
+            n=shape[-1] if len(shape) > 0 else None,
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
         )
 
     def _reshape(self, shape):
         return self.__class__(
-            n=self.shape[-1], shape=shape, device=self.device, dtype=self.dtype
+            n=shape[-1] if len(shape) > 0 else None,
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
         )
 
     def _unflatten(self, dim, sizes):
@@ -4415,7 +4472,10 @@ class Binary(Categorical):
             .shape
         )
         return self.__class__(
-            n=self.shape[-1], shape=shape, device=self.device, dtype=self.dtype
+            n=shape[-1] if len(shape) > 0 else None,
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
         )
 
     def squeeze(self, dim=None):
@@ -4423,13 +4483,19 @@ class Binary(Categorical):
         if shape is None:
             return self
         return self.__class__(
-            n=self.shape[-1], shape=shape, device=self.device, dtype=self.dtype
+            n=shape[-1] if len(shape) > 0 else None,
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
         )
 
     def unsqueeze(self, dim: int):
         shape = _unsqueezed_shape(self.shape, dim)
         return self.__class__(
-            n=self.shape[-1], shape=shape, device=self.device, dtype=self.dtype
+            n=shape[-1] if len(shape) > 0 else None,
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
         )
 
     def unbind(self, dim: int = 0):
@@ -4446,7 +4512,10 @@ class Binary(Categorical):
         shape = tuple(s for i, s in enumerate(self.shape) if i != dim)
         return tuple(
             self.__class__(
-                n=self.shape[-1], shape=shape, device=self.device, dtype=self.dtype
+                n=shape[-1] if len(shape) > 0 else None,
+                shape=shape,
+                device=self.device,
+                dtype=self.dtype,
             )
             for i in range(self.shape[dim])
         )
@@ -4463,12 +4532,15 @@ class Binary(Categorical):
         if dest_device == self.device and dest_dtype == self.dtype:
             return self
         return self.__class__(
-            n=self.shape[-1], shape=self.shape, device=dest_device, dtype=dest_dtype
+            n=self.shape[-1] if len(self.shape) > 0 else None,
+            shape=self.shape,
+            device=dest_device,
+            dtype=dest_dtype,
         )
 
     def clone(self) -> Binary:
         return self.__class__(
-            n=self.shape[-1],
+            n=self.shape[-1] if len(self.shape) > 0 else None,
             shape=self.shape,
             device=self.device,
             dtype=self.dtype,
@@ -4479,6 +4551,8 @@ class Binary(Categorical):
 
         The last dimension of the spec (length n of the binary vector) cannot be indexed.
         """
+        if not len(self.shape):
+            raise ValueError("Cannot index a Binary spec with an empty shape")
         indexed_shape = _shape_indexing(self.shape[:-1], idx)
         return self.__class__(
             n=self.shape[-1],
@@ -4969,6 +5043,9 @@ class Composite(TensorSpec):
             to the batch-size of the corresponding tensordicts.
         data_cls (type, optional): the tensordict subclass (TensorDict, TensorClass, tensorclass...) that should be
             enforced in the env. Defaults to ``None``.
+        step_mdp_static (bool, optional): whether the spec is static under step_mdp. Defaults to ``False``.
+            Defining a `Composite` as a step_mdp_static spec will make it so that the entire related TensorDict/TensorClass
+            instance is copied during calls to `step_mdp` - and not updated in-place.
 
     Examples:
         >>> pixels_spec = Bounded(
@@ -5044,6 +5121,7 @@ class Composite(TensorSpec):
         shape: tuple | torch.Size | None = None,
         device: torch.device | None = None,
         data_cls: type | None = None,
+        step_mdp_static: bool = False,
         **kwargs,
     ):
         # For compatibility with TensorDict
@@ -5057,6 +5135,7 @@ class Composite(TensorSpec):
             shape = _size(())
         self._shape = _size(shape)
         self._specs = {}
+        self.step_mdp_static = step_mdp_static
 
         _device = (
             _make_ordinal_device(torch.device(device)) if device is not None else device
@@ -5479,8 +5558,10 @@ class Composite(TensorSpec):
         sub_str = [
             indent(f"{k}: {str(item)}", 4 * " ") for k, item in self._specs.items()
         ]
+        if len(sub_str) == 0:
+            return f"{self.__class__.__name__}(device={self._device}, shape={self.shape}, data_cls={self.data_cls})"
         sub_str = ",\n".join(sub_str)
-        return f"Composite(\n{sub_str},\n    device={self._device},\n    shape={self.shape})"
+        return f"{self.__class__.__name__}(\n{sub_str},\n    device={self._device},\n    shape={self.shape},\n    data_cls={self.data_cls})"
 
     def type_check(
         self,
@@ -5548,6 +5629,7 @@ class Composite(TensorSpec):
         leaves_only: bool = False,
         *,
         is_leaf: Callable[[type], bool] | None = None,
+        step_mdp_static_only: bool = False,
     ) -> _CompositeSpecKeysView:  # noqa: D417
         """Keys of the Composite.
 
@@ -5568,6 +5650,8 @@ class Composite(TensorSpec):
             is_leaf (callable, optional): reads a type and returns a boolean indicating if that type
                 should be seen as a leaf. By default, all non-Composite nodes are considered as
                 leaves.
+            step_mdp_static_only (bool, optional): if ``True``, only keys that are static under step_mdp will be returned.
+                Default is ``False``.
 
         """
         return _CompositeSpecItemsView(
@@ -5575,6 +5659,7 @@ class Composite(TensorSpec):
             include_nested=include_nested,
             leaves_only=leaves_only,
             is_leaf=is_leaf,
+            step_mdp_static_only=step_mdp_static_only,
         )._keys()
 
     def items(
@@ -5583,6 +5668,7 @@ class Composite(TensorSpec):
         leaves_only: bool = False,
         *,
         is_leaf: Callable[[type], bool] | None = None,
+        step_mdp_static_only: bool = False,
     ) -> _CompositeSpecItemsView:  # noqa: D417
         """Items of the Composite.
 
@@ -5601,12 +5687,15 @@ class Composite(TensorSpec):
             is_leaf (callable, optional): reads a type and returns a boolean indicating if that type
                 should be seen as a leaf. By default, all non-Composite nodes are considered as
                 leaves.
+            step_mdp_static_only (bool, optional): if ``True``, only keys that are static under step_mdp will be returned.
+                Default is ``False``.
         """
         return _CompositeSpecItemsView(
             self,
             include_nested=include_nested,
             leaves_only=leaves_only,
             is_leaf=is_leaf,
+            step_mdp_static_only=step_mdp_static_only,
         )
 
     def values(
@@ -5615,6 +5704,7 @@ class Composite(TensorSpec):
         leaves_only: bool = False,
         *,
         is_leaf: Callable[[type], bool] | None = None,
+        step_mdp_static_only: bool = False,
     ) -> _CompositeSpecValuesView:  # noqa: D417
         """Values of the Composite.
 
@@ -5633,24 +5723,31 @@ class Composite(TensorSpec):
             is_leaf (callable, optional): reads a type and returns a boolean indicating if that type
                 should be seen as a leaf. By default, all non-Composite nodes are considered as
                 leaves.
+            step_mdp_static_only (bool, optional): if ``True``, only keys that are static under step_mdp will be returned.
+                Default is ``False``.
         """
         return _CompositeSpecItemsView(
             self,
             include_nested=include_nested,
             leaves_only=leaves_only,
             is_leaf=is_leaf,
+            step_mdp_static_only=step_mdp_static_only,
         )._values()
 
-    def _reshape(self, shape):
+    def _reshape(self, shape: torch.Size) -> Composite:
         _specs = {
             key: val.reshape((*shape, *val.shape[self.ndimension() :]))
             for key, val in self._specs.items()
         }
         return self.__class__(
-            _specs, shape=shape, device=self.device, data_cls=self.data_cls
+            _specs,
+            shape=shape,
+            device=self.device,
+            data_cls=self.data_cls,
+            step_mdp_static=self.step_mdp_static,
         )
 
-    def _unflatten(self, dim, sizes):
+    def _unflatten(self, dim: int, sizes: tuple[int, ...]) -> Composite:
         shape = torch.zeros(self.shape, device="meta").unflatten(dim, sizes).shape
         return self._reshape(shape)
 
@@ -5669,7 +5766,11 @@ class Composite(TensorSpec):
                     continue
                 kwargs[key] = value.to(dest)
             return self.__class__(
-                **kwargs, device=self.device, shape=self.shape, data_cls=self.data_cls
+                **kwargs,
+                device=self.device,
+                shape=self.shape,
+                data_cls=self.data_cls,
+                step_mdp_static=self.step_mdp_static,
             )
         if not isinstance(dest, (str, int, torch.device)):
             raise ValueError(
@@ -5687,7 +5788,11 @@ class Composite(TensorSpec):
                 continue
             kwargs[key] = value.to(dest)
         return self.__class__(
-            **kwargs, device=_device, shape=self.shape, data_cls=self.data_cls
+            **kwargs,
+            device=_device,
+            shape=self.shape,
+            data_cls=self.data_cls,
+            step_mdp_static=self.step_mdp_static,
         )
 
     def clone(self) -> Composite:
@@ -5707,6 +5812,7 @@ class Composite(TensorSpec):
             device=device,
             shape=self.shape,
             data_cls=self.data_cls,
+            step_mdp_static=self.step_mdp_static,
         )
 
     def cardinality(self) -> int:
@@ -5754,7 +5860,7 @@ class Composite(TensorSpec):
             samples = cls.from_dict({}, batch_size=self.shape, device=self.device)
         return samples
 
-    def empty(self):
+    def empty(self) -> Composite:
         """Create a spec like self, but with no entries."""
         try:
             device = self.device
@@ -5765,6 +5871,7 @@ class Composite(TensorSpec):
             device=device,
             shape=self.shape,
             data_cls=self.data_cls,
+            step_mdp_static=self.step_mdp_static,
         )
 
     def to_numpy(self, val: TensorDict, safe: bool | None = None) -> dict:
@@ -5793,7 +5900,7 @@ class Composite(TensorSpec):
             device=device,
         )
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         return (
             type(self) == type(other)
             and self.shape == other.shape
@@ -5828,7 +5935,7 @@ class Composite(TensorSpec):
             self[key] = item
         return self
 
-    def expand(self, *shape):
+    def expand(self, *shape: tuple[int, ...] | torch.Size) -> Composite:
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
@@ -5851,10 +5958,11 @@ class Composite(TensorSpec):
             shape=shape,
             device=device,
             data_cls=self.data_cls,
+            step_mdp_static=self.step_mdp_static,
         )
         return out
 
-    def squeeze(self, dim: int | None = None):
+    def squeeze(self, dim: int | None = None) -> Composite:
         if dim is not None:
             if dim < 0:
                 dim += len(self.shape)
@@ -5873,6 +5981,7 @@ class Composite(TensorSpec):
                 shape=shape,
                 device=device,
                 data_cls=self.data_cls,
+                step_mdp_static=self.step_mdp_static,
             )
 
         if self.shape.count(1) == 0:
@@ -5884,7 +5993,7 @@ class Composite(TensorSpec):
         out = self.squeeze(self.shape.index(1))
         return out.squeeze()
 
-    def unsqueeze(self, dim: int):
+    def unsqueeze(self, dim: int) -> Composite:
         if dim < 0:
             dim += len(self.shape) + 1
 
@@ -5903,9 +6012,10 @@ class Composite(TensorSpec):
             shape=shape,
             device=device,
             data_cls=self.data_cls,
+            step_mdp_static=self.step_mdp_static,
         )
 
-    def unbind(self, dim: int = 0):
+    def unbind(self, dim: int = 0) -> tuple[Composite, ...]:
         orig_dim = dim
         if dim < 0:
             dim = len(self.shape) + dim
@@ -5921,6 +6031,7 @@ class Composite(TensorSpec):
                 shape=shape,
                 device=self.device,
                 data_cls=self.data_cls,
+                step_mdp_static=self.step_mdp_static,
             )
             for i in range(self.shape[dim])
         )
@@ -5937,14 +6048,14 @@ class Composite(TensorSpec):
         else:
             self.unlock_()
 
-    def __getstate__(self):
+    def __getstate__(self) -> dict:
         result = self.__dict__.copy()
         __lock_parents_weakrefs = result.pop("__lock_parents_weakrefs", None)
         if __lock_parents_weakrefs is not None:
             result["_lock_recurse"] = True
         return result
 
-    def __setstate__(self, state):
+    def __setstate__(self, state: dict) -> None:
         _lock_recurse = state.pop("_lock_recurse", False)
         for key, value in state.items():
             setattr(self, key, value)
@@ -5953,8 +6064,12 @@ class Composite(TensorSpec):
             self.lock_(recurse=_lock_recurse)
 
     def _propagate_lock(
-        self, *, recurse: bool, lock_parents_weakrefs=None, is_compiling
-    ):
+        self,
+        *,
+        recurse: bool,
+        lock_parents_weakrefs: list[weakref.ref] | None = None,
+        is_compiling: bool,
+    ) -> None:
         """Registers the parent composite that handles the lock."""
         self._is_locked = True
         if lock_parents_weakrefs is not None:
@@ -5984,7 +6099,7 @@ class Composite(TensorSpec):
                     )
 
     @property
-    def _lock_parents_weakrefs(self):
+    def _lock_parents_weakrefs(self) -> list[weakref.ref]:
         _lock_parents_weakrefs = self.__dict__.get("__lock_parents_weakrefs")
         if _lock_parents_weakrefs is None:
             self.__dict__["__lock_parents_weakrefs"] = []
@@ -5992,10 +6107,10 @@ class Composite(TensorSpec):
         return _lock_parents_weakrefs
 
     @_lock_parents_weakrefs.setter
-    def _lock_parents_weakrefs(self, value: list):
+    def _lock_parents_weakrefs(self, value: list[weakref.ref]) -> None:
         self.__dict__["__lock_parents_weakrefs"] = value
 
-    def lock_(self, recurse: bool | None = None) -> T:
+    def lock_(self, recurse: bool | None = None) -> None:
         """Locks the Composite and prevents modification of its content.
 
         The recurse argument control whether the lock will be propagated to sub-specs.
@@ -6045,7 +6160,7 @@ class Composite(TensorSpec):
         self._propagate_lock(recurse=recurse, is_compiling=is_comp)
         return self
 
-    def _propagate_unlock(self, recurse: bool):
+    def _propagate_unlock(self, recurse: bool) -> list[Composite]:
         # if we end up here, we can clear the graph associated with this td
         self._is_locked = False
 
@@ -6061,7 +6176,7 @@ class Composite(TensorSpec):
             return sub_specs
         return []
 
-    def _check_unlock(self, first_attempt=True):
+    def _check_unlock(self, first_attempt: bool = True) -> None:
         if not first_attempt:
             gc.collect()
         obj = None
@@ -6208,12 +6323,14 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
         leaves_only: bool = False,
         *,
         is_leaf: Callable[[type], bool] | None = None,
+        step_mdp_static_only: bool = False,
     ) -> _CompositeSpecKeysView:
         return _CompositeSpecItemsView(
             self,
             include_nested=include_nested,
             leaves_only=leaves_only,
             is_leaf=is_leaf,
+            step_mdp_static_only=step_mdp_static_only,
         )._keys()
 
     def items(
@@ -6222,6 +6339,7 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
         leaves_only: bool = False,
         *,
         is_leaf: Callable[[type], bool] | None = None,
+        step_mdp_static_only: bool = False,
     ) -> _CompositeSpecItemsView:
         return list(
             _CompositeSpecItemsView(
@@ -6229,6 +6347,7 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
                 include_nested=include_nested,
                 leaves_only=leaves_only,
                 is_leaf=is_leaf,
+                step_mdp_static_only=step_mdp_static_only,
             )
         )
 
@@ -6238,12 +6357,14 @@ class StackedComposite(_LazyStackedMixin[Composite], Composite):
         leaves_only: bool = False,
         *,
         is_leaf: Callable[[type], bool] | None = None,
+        step_mdp_static_only: bool = False,
     ) -> _CompositeSpecValuesView:
         return _CompositeSpecItemsView(
             self,
             include_nested=include_nested,
             leaves_only=leaves_only,
             is_leaf=is_leaf,
+            step_mdp_static_only=step_mdp_static_only,
         )._values()
 
     def project(self, val: TensorDictBase) -> TensorDictBase:
@@ -6634,15 +6755,17 @@ class _CompositeSpecItemsView:
     def __init__(
         self,
         composite: Composite,
-        include_nested,
-        leaves_only,
+        include_nested: bool,
+        leaves_only: bool,
         *,
-        is_leaf,
+        is_leaf: Callable[[type], bool] | None,
+        step_mdp_static_only: bool = False,
     ):
         self.composite = composite
         self.leaves_only = leaves_only
         self.include_nested = include_nested
         self.is_leaf = is_leaf
+        self.step_mdp_static_only = step_mdp_static_only
 
     def __iter__(self):
         from tensordict.base import _NESTED_TENSORS_AS_LISTS
@@ -6662,23 +6785,29 @@ class _CompositeSpecItemsView:
                     include_nested=True,
                     leaves_only=self.leaves_only,
                     is_leaf=is_leaf,
+                    step_mdp_static_only=self.step_mdp_static_only,
                 ):
                     if not isinstance(subkey, tuple):
                         subkey = (subkey,)
                     yield (key, *subkey), subitem
-            if not self.leaves_only and not _is_leaf(type(item)):
-                yield (key, item)
-            elif not self.leaves_only or _is_leaf(type(item)):
-                yield key, item
-
-        for key, item in self._get_composite_items(is_leaf):
-            if is_leaf is _NESTED_TENSORS_AS_LISTS and isinstance(
-                item, _LazyStackedMixin
+            if (
+                (self.step_mdp_static_only and getattr(item, "step_mdp_static", False))
+                or (not self.leaves_only and not _is_leaf(type(item)))
+                or (not self.leaves_only or _is_leaf(type(item)))
             ):
-                for (i, spec) in enumerate(item._specs):
-                    yield from _iter_from_item(unravel_key((key, str(i))), spec)
-            else:
-                yield from _iter_from_item(key, item)
+                yield (key, item)
+
+        if not self.step_mdp_static_only or not getattr(
+            self.composite, "step_mdp_static", False
+        ):
+            for key, item in self._get_composite_items(is_leaf):
+                if is_leaf is _NESTED_TENSORS_AS_LISTS and isinstance(
+                    item, _LazyStackedMixin
+                ):
+                    for (i, spec) in enumerate(item._specs):
+                        yield from _iter_from_item(unravel_key((key, str(i))), spec)
+                else:
+                    yield from _iter_from_item(key, item)
 
     def _get_composite_items(self, is_leaf):
 

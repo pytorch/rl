@@ -5,7 +5,7 @@ train:
   
   # Number of epochs to train for, every time a batch is collected. Per se, not directly used in async - aside from computing the total number of steps.
   epochs: 1
-  # The buffer size can be controlled in async mode
+  # The buffer size is overwritten in async mode.
   buffer_size: 128
   # Update policy weights every N steps - can be set to any positive integer in async mode
   weight_update_frequency: 10

@@ -13,6 +13,7 @@ import time
 import unittest
 import warnings
 from functools import wraps
+from typing import Callable
 
 import pytest
 import torch
@@ -53,6 +54,8 @@ if IS_WIN:
 else:
     mp_ctx = "fork"
 
+PYTHON_3_9 = sys.version_info.major == 3 and sys.version_info.minor <= 9
+
 
 def CARTPOLE_VERSIONED():
     # load gym
@@ -82,6 +85,12 @@ def PONG_VERSIONED():
         return _PONG_VERSIONED
 
 
+def CLIFFWALKING_VERSIONED():
+    if gym_backend() is not None:
+        _set_gym_environments()
+        return _CLIFFWALKING_VERSIONED
+
+
 def BREAKOUT_VERSIONED():
     # load gym
     # Gymnasium says that the ale_py behavior changes from 1.0
@@ -104,46 +113,50 @@ def PENDULUM_VERSIONED():
 
 
 def _set_gym_environments():
-    global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED, _BREAKOUT_VERSIONED
+    global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED, _BREAKOUT_VERSIONED, _CLIFFWALKING_VERSIONED
 
     _CARTPOLE_VERSIONED = None
     _HALFCHEETAH_VERSIONED = None
     _PENDULUM_VERSIONED = None
     _PONG_VERSIONED = None
     _BREAKOUT_VERSIONED = None
+    _CLIFFWALKING_VERSIONED = None
 
 
 @implement_for("gym", None, "0.21.0")
 def _set_gym_environments():  # noqa: F811
-    global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED, _BREAKOUT_VERSIONED
+    global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED, _BREAKOUT_VERSIONED, _CLIFFWALKING_VERSIONED
 
     _CARTPOLE_VERSIONED = "CartPole-v0"
     _HALFCHEETAH_VERSIONED = "HalfCheetah-v2"
     _PENDULUM_VERSIONED = "Pendulum-v0"
     _PONG_VERSIONED = "Pong-v4"
     _BREAKOUT_VERSIONED = "Breakout-v4"
+    _CLIFFWALKING_VERSIONED = "CliffWalking-v0"
 
 
 @implement_for("gym", "0.21.0", None)
 def _set_gym_environments():  # noqa: F811
-    global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED, _BREAKOUT_VERSIONED
+    global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED, _BREAKOUT_VERSIONED, _CLIFFWALKING_VERSIONED
 
     _CARTPOLE_VERSIONED = "CartPole-v1"
     _HALFCHEETAH_VERSIONED = "HalfCheetah-v4"
     _PENDULUM_VERSIONED = "Pendulum-v1"
     _PONG_VERSIONED = "ALE/Pong-v5"
     _BREAKOUT_VERSIONED = "ALE/Breakout-v5"
+    _CLIFFWALKING_VERSIONED = "CliffWalking-v0"
 
 
 @implement_for("gymnasium", None, "1.0.0")
 def _set_gym_environments():  # noqa: F811
-    global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED, _BREAKOUT_VERSIONED
+    global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED, _BREAKOUT_VERSIONED, _CLIFFWALKING_VERSIONED
 
     _CARTPOLE_VERSIONED = "CartPole-v1"
     _HALFCHEETAH_VERSIONED = "HalfCheetah-v4"
     _PENDULUM_VERSIONED = "Pendulum-v1"
     _PONG_VERSIONED = "ALE/Pong-v5"
     _BREAKOUT_VERSIONED = "ALE/Breakout-v5"
+    _CLIFFWALKING_VERSIONED = "CliffWalking-v0"
 
 
 @implement_for("gymnasium", "1.0.0", "1.1.0")
@@ -153,13 +166,14 @@ def _set_gym_environments():  # noqa: F811
 
 @implement_for("gymnasium", "1.1.0")
 def _set_gym_environments():  # noqa: F811
-    global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED, _BREAKOUT_VERSIONED
+    global _CARTPOLE_VERSIONED, _HALFCHEETAH_VERSIONED, _PENDULUM_VERSIONED, _PONG_VERSIONED, _BREAKOUT_VERSIONED, _CLIFFWALKING_VERSIONED
 
     _CARTPOLE_VERSIONED = "CartPole-v1"
     _HALFCHEETAH_VERSIONED = "HalfCheetah-v5"
     _PENDULUM_VERSIONED = "Pendulum-v1"
     _PONG_VERSIONED = "ALE/Pong-v5"
     _BREAKOUT_VERSIONED = "ALE/Breakout-v5"
+    _CLIFFWALKING_VERSIONED = "CliffWalking-v1" if not PYTHON_3_9 else "CliffWalking-v0"
 
 
 if _has_gym:
@@ -201,7 +215,12 @@ def generate_seeds(seed, repeat):
 
 
 # Decorator to retry upon certain Exceptions.
-def retry(ExceptionToCheck, tries=3, delay=3, skip_after_retries=False):
+def retry(
+    ExceptionToCheck: type[Exception],
+    tries: int = 3,
+    delay: int = 3,
+    skip_after_retries: bool = False,
+) -> Callable[[Callable], Callable]:
     def deco_retry(f):
         @wraps(f)
         def f_retry(*args, **kwargs):

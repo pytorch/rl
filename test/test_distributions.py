@@ -31,7 +31,10 @@ from torchrl.modules.distributions import (
     TanhDelta,
 )
 from torchrl.modules.distributions.continuous import SafeTanhTransform
-from torchrl.modules.distributions.discrete import _generate_ordinal_logits
+from torchrl.modules.distributions.discrete import (
+    _generate_ordinal_logits,
+    LLMMaskedCategorical,
+)
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import get_default_devices
@@ -388,8 +391,8 @@ class TestMaskedCategorical:
 
     @pytest.mark.parametrize("neg_inf", [-float(10.0), -float("inf")])
     @pytest.mark.parametrize("device", get_default_devices())
-    @pytest.mark.parametrize("sparse", [True, False])
-    @pytest.mark.parametrize("logits", [True, False])
+    @pytest.mark.parametrize("sparse", [True, False], ids=["sparse", "dense"])
+    @pytest.mark.parametrize("logits", [True, False], ids=["logits", "probs"])
     def test_construction(self, neg_inf, sparse, logits, device):
         torch.manual_seed(0)
         logits_vals = torch.randn(4, device=device) / 100  # almost equal probabilities
@@ -550,6 +553,54 @@ class TestMaskedCategorical:
         if ndim == 3:
             data = data.unsqueeze(0)
         torch.testing.assert_close(dist.log_prob(data), dist_ce.log_prob(data))
+
+    def test_cross_entropy_random(self):
+        torch.manual_seed(0)
+        logits = torch.randn(4)
+        probs = F.softmax(logits, dim=-1)
+        mask = torch.tensor([True, False, True, True])
+        indices = torch.tensor([0, 2, 3])
+        ref_probs = probs.masked_fill(~mask, 0.0)
+        ref_probs /= ref_probs.sum(dim=-1, keepdim=True)
+
+        dist0 = MaskedCategorical(
+            logits=logits,
+            indices=indices,
+            use_cross_entropy=True,
+        )
+        dist1 = MaskedCategorical(
+            logits=logits,
+            indices=indices,
+            use_cross_entropy=False,
+        )
+        r = dist0.sample()
+        lp0 = dist0.log_prob(r)
+        lp1 = dist1.log_prob(r)
+        torch.testing.assert_close(lp0, lp1)
+
+    def test_crossentropy_batch(self) -> None:
+        batch_size = (
+            2,
+            3,
+            4,
+        )  # typical tensor shape [N, T, A] ie, (batch_size, sequence_length, num_agents)
+
+        masks = torch.tensor([[True, False, True, False, True]], dtype=torch.bool)
+        logits = torch.randn((5,)).expand(
+            *batch_size, -1
+        )  # has shape [N, T, A, num_actions] during train
+        action = torch.tensor(0, dtype=torch.long).expand(
+            *batch_size
+        )  # has shape [N, T, A] during train
+
+        fixed_cat = MaskedCategorical(
+            logits=logits, mask=masks, use_cross_entropy=False
+        )
+        lp0 = fixed_cat.log_prob(action)
+
+        cat = MaskedCategorical(logits=logits, mask=masks, use_cross_entropy=True)
+        lp1 = cat.log_prob(action)
+        torch.testing.assert_close(lp0, lp1)
 
 
 class TestOneHotCategorical:
@@ -747,6 +798,1037 @@ class TestMaskedOneHotCategorical:
         assert s.shape[-1] == 100
         s[s.detach().bool()].sum().backward()
         assert logits.grad is not None and logits.grad.norm() > 0
+
+
+class TestLLMMaskedCategorical:
+    """Test the LLM-optimized masked categorical distribution."""
+
+    @pytest.mark.parametrize("batch_dims", [0, 1, 2])
+    def test_construction_position_level_batch_dims(self, batch_dims):
+        """Test basic construction and properties with position-level masking for different batch dimensions."""
+        torch.manual_seed(0)
+
+        # Create shapes with different batch dimensions
+        if batch_dims == 0:
+            logits = torch.randn(3, 4)  # [T=3, C=4]
+            mask = torch.ones(3, dtype=torch.bool)  # [T=3]
+            mask[:1] = False  # mask first position
+        elif batch_dims == 1:
+            logits = torch.randn(2, 3, 4)  # [B=2, T=3, C=4]
+            mask = torch.ones(2, 3, dtype=torch.bool)  # [B=2, T=3]
+            mask[0, :1] = False  # mask first position of first sequence
+        else:  # batch_dims == 2
+            logits = torch.randn(2, 3, 4, 5)  # [B1=2, B2=3, T=4, C=5]
+            mask = torch.ones(2, 3, 4, dtype=torch.bool)  # [B1=2, B2=3, T=4]
+            mask[0, 0, :1] = False  # mask first position of first sequence
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+
+        # Check properties
+        assert dist.mask.shape == mask.shape
+        assert torch.equal(dist.mask, mask)
+        assert dist.logits.shape == logits.shape
+        assert torch.equal(dist.logits, logits)
+        assert dist.ignore_index == -100
+        assert dist.position_level_masking
+
+        # Check that masked logits are created lazily
+        assert not dist._masked_logits
+        assert not dist._masked_dist
+
+        # Access masked logits to trigger creation
+        masked_logits = dist.masked_logits
+        assert dist._masked_logits is not None
+        assert masked_logits.shape == logits.shape
+
+        # Check that masked positions have large negative values
+        large_neg = torch.finfo(logits.dtype).min
+        if batch_dims == 0:
+            assert (masked_logits[:1] == large_neg).all()
+            assert (masked_logits[1:] != large_neg).all()
+        elif batch_dims == 1:
+            assert (masked_logits[0, :1] == large_neg).all()
+            assert (masked_logits[0, 1:] != large_neg).all()
+        else:  # batch_dims == 2
+            assert (masked_logits[0, 0, :1] == large_neg).all()
+            assert (masked_logits[0, 0, 1:] != large_neg).all()
+
+    @pytest.mark.parametrize("batch_dims", [0, 1, 2])
+    def test_construction_token_level_batch_dims(self, batch_dims):
+        """Test basic construction and properties with token-level masking for different batch dimensions."""
+        torch.manual_seed(0)
+
+        # Create shapes with different batch dimensions
+        if batch_dims == 0:
+            logits = torch.randn(3, 4)  # [T=3, C=4]
+            mask = torch.ones(3, 4, dtype=torch.bool)  # [T=3, C=4]
+            mask[:1, :2] = False  # mask first 2 tokens for first position
+        elif batch_dims == 1:
+            logits = torch.randn(2, 3, 4)  # [B=2, T=3, C=4]
+            mask = torch.ones(2, 3, 4, dtype=torch.bool)  # [B=2, T=3, C=4]
+            mask[
+                0, :1, :2
+            ] = False  # mask first 2 tokens for first position of first sequence
+        else:  # batch_dims == 2
+            logits = torch.randn(2, 3, 4, 5)  # [B1=2, B2=3, T=4, C=5]
+            mask = torch.ones(2, 3, 4, 5, dtype=torch.bool)  # [B1=2, B2=3, T=4, C=5]
+            mask[
+                0, 0, :1, :2
+            ] = False  # mask first 2 tokens for first position of first sequence
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+
+        # Check properties
+        assert dist.mask.shape == mask.shape
+        assert torch.equal(dist.mask, mask)
+        assert dist.logits.shape == logits.shape
+        assert torch.equal(dist.logits, logits)
+        assert dist.ignore_index == -100
+        assert not dist.position_level_masking
+
+        # Check that masked logits are created lazily
+        assert dist._masked_logits is None
+        assert dist._masked_dist is None
+
+        # Access masked logits to trigger creation
+        masked_logits = dist.masked_logits
+        assert dist._masked_logits is not None
+        assert masked_logits.shape == logits.shape
+
+        # Check that masked tokens have large negative values
+        large_neg = torch.finfo(logits.dtype).min
+        if batch_dims == 0:
+            assert (masked_logits[:1, :2] == large_neg).all()
+            assert (masked_logits[:1, 2:] != large_neg).all()
+        elif batch_dims == 1:
+            assert (masked_logits[0, :1, :2] == large_neg).all()
+            assert (masked_logits[0, :1, 2:] != large_neg).all()
+        else:  # batch_dims == 2
+            assert (masked_logits[0, 0, :1, :2] == large_neg).all()
+            assert (masked_logits[0, 0, :1, 2:] != large_neg).all()
+
+    @pytest.mark.parametrize("batch_dims", [0, 1, 2])
+    def test_log_prob_efficiency_position_level_batch_dims(self, batch_dims):
+        """Test that log_prob uses ignore_index approach efficiently with position-level masking for different batch dimensions."""
+        torch.manual_seed(0)
+
+        # Create shapes with different batch dimensions
+        if batch_dims == 0:
+            logits = torch.randn(3, 4, requires_grad=True)  # [T=3, C=4]
+            mask = torch.ones(3, dtype=torch.bool)  # [T=3]
+            mask[:1] = False  # mask first position
+            target_tokens = torch.randint(0, 4, (3,))  # [T=3]
+            target_tokens[~mask] = -100  # set masked positions to ignore_index
+        elif batch_dims == 1:
+            logits = torch.randn(2, 3, 4, requires_grad=True)  # [B=2, T=3, C=4]
+            mask = torch.ones(2, 3, dtype=torch.bool)  # [B=2, T=3]
+            mask[0, :1] = False  # mask first position
+            target_tokens = torch.randint(0, 4, (2, 3))  # [B=2, T=3]
+            target_tokens[~mask] = -100  # set masked positions to ignore_index
+        else:  # batch_dims == 2
+            logits = torch.randn(
+                2, 3, 4, 5, requires_grad=True
+            )  # [B1=2, B2=3, T=4, C=5]
+            mask = torch.ones(2, 3, 4, dtype=torch.bool)  # [B1=2, B2=3, T=4]
+            mask[0, 0, :1] = False  # mask first position
+            target_tokens = torch.randint(0, 5, (2, 3, 4))  # [B1=2, B2=3, T=4]
+            target_tokens[~mask] = -100  # set masked positions to ignore_index
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+
+        # Compute log probabilities
+        log_probs = dist.log_prob(target_tokens)
+
+        # Check shapes
+        assert log_probs.shape == target_tokens.shape
+
+        # Check that masked positions have zero log probability
+        assert (log_probs[~mask] == 0.0).all()
+
+        # Check that valid positions have finite log probabilities
+        assert torch.isfinite(log_probs[mask]).all()
+
+        # Test backward pass
+        loss = -log_probs.sum()
+        loss.backward()
+        assert logits.grad is not None
+
+    @pytest.mark.parametrize("batch_dims", [0, 1, 2])
+    def test_log_prob_efficiency_token_level_batch_dims(self, batch_dims):
+        """Test that log_prob uses ignore_index approach efficiently with token-level masking for different batch dimensions."""
+        torch.manual_seed(0)
+
+        # Create shapes with different batch dimensions
+        if batch_dims == 0:
+            logits = torch.randn(3, 4, requires_grad=True)  # [T=3, C=4]
+            mask = torch.ones(3, 4, dtype=torch.bool)  # [T=3, C=4]
+            mask[:1, :2] = False  # mask first 2 tokens for first position
+            # Create target tokens that are guaranteed to be valid at their positions
+            target_tokens = torch.tensor(
+                [2, 1, 3]
+            )  # Use tokens that are valid at their positions
+            position_mask = mask.any(
+                dim=-1
+            )  # True if any token is valid at this position
+            target_tokens[~position_mask] = -100
+        elif batch_dims == 1:
+            logits = torch.randn(2, 3, 4, requires_grad=True)  # [B=2, T=3, C=4]
+            mask = torch.ones(2, 3, 4, dtype=torch.bool)  # [B=2, T=3, C=4]
+            mask[0, :1, :2] = False  # mask first 2 tokens for first position
+            # Create target tokens that are guaranteed to be valid at their positions
+            target_tokens = torch.tensor(
+                [[2, 1, 1], [3, 2, 0]]
+            )  # Use tokens that are valid at their positions
+            position_mask = mask.any(
+                dim=-1
+            )  # True if any token is valid at this position
+            target_tokens[~position_mask] = -100
+        else:  # batch_dims == 2
+            logits = torch.randn(
+                2, 3, 4, 5, requires_grad=True
+            )  # [B1=2, B2=3, T=4, C=5]
+            mask = torch.ones(2, 3, 4, 5, dtype=torch.bool)  # [B1=2, B2=3, T=4, C=5]
+            mask[0, 0, :1, :2] = False  # mask first 2 tokens for first position
+            # Create target tokens that are guaranteed to be valid at their positions
+            target_tokens = torch.tensor(
+                [
+                    [[2, 1, 1, 3], [3, 2, 0, 1], [4, 0, 2, 3]],
+                    [[1, 3, 4, 0], [2, 1, 3, 4], [0, 2, 1, 3]],
+                ]
+            )  # Use tokens that are valid at their positions
+            position_mask = mask.any(
+                dim=-1
+            )  # True if any token is valid at this position
+            target_tokens[~position_mask] = -100
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+
+        # Compute log probabilities
+        log_probs = dist.log_prob(target_tokens)
+
+        # Check shapes
+        assert log_probs.shape == target_tokens.shape
+
+        # Check that masked positions have -inf log probability
+        assert (log_probs[~position_mask] == float("-inf")).all()
+
+        # Check that valid positions have finite log probabilities
+        assert torch.isfinite(log_probs[position_mask]).all()
+
+        # Test backward pass
+        loss = -log_probs.sum()
+        loss.backward()
+        assert logits.grad is not None
+
+    @pytest.mark.parametrize("batch_dims", [0, 1, 2])
+    def test_sampling_correctness_batch_dims(self, batch_dims):
+        """Test that sampling works correctly for different batch dimensions."""
+        torch.manual_seed(0)
+
+        # Create shapes with different batch dimensions
+        if batch_dims == 0:
+            logits = torch.randn(3, 4)  # [T=3, C=4]
+            mask = torch.ones(3, dtype=torch.bool)  # [T=3]
+            mask[:1] = False  # mask first position
+            expected_sample_shape = (3,)
+        elif batch_dims == 1:
+            logits = torch.randn(2, 3, 4)  # [B=2, T=3, C=4]
+            mask = torch.ones(2, 3, dtype=torch.bool)  # [B=2, T=3]
+            mask[0, :1] = False  # mask first position
+            expected_sample_shape = (2, 3)
+        else:  # batch_dims == 2
+            logits = torch.randn(2, 3, 4, 5)  # [B1=2, B2=3, T=4, C=5]
+            mask = torch.ones(2, 3, 4, dtype=torch.bool)  # [B1=2, B2=3, T=4]
+            mask[0, 0, :1] = False  # mask first position
+            expected_sample_shape = (2, 3, 4)
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+
+        # Sample multiple times
+        num_samples = 1000
+        samples = dist.sample((num_samples,))
+
+        # Check shapes
+        expected_shape = (num_samples,) + expected_sample_shape
+        assert samples.shape == expected_shape
+
+        # Check that valid positions are sampled within valid range
+        vocab_size = logits.shape[-1]
+        assert (samples >= 0).all()
+        assert (samples < vocab_size).all()
+
+        # Check that sampling respects the mask (masked positions should have
+        # very low probability of being sampled, but not impossible)
+        # We'll just check that the distribution is valid for a single sample
+        single_sample = samples[0]
+        assert torch.isfinite(dist.log_prob(single_sample)).all()
+
+    @pytest.mark.parametrize("batch_dims", [0, 1, 2])
+    def test_mode_correctness_batch_dims(self, batch_dims):
+        """Test that mode computation works correctly for different batch dimensions."""
+        torch.manual_seed(0)
+
+        # Create shapes with different batch dimensions
+        if batch_dims == 0:
+            logits = torch.randn(3, 4)  # [T=3, C=4]
+            mask = torch.ones(3, dtype=torch.bool)  # [T=3]
+            mask[:1] = False  # mask first position
+            expected_mode_shape = (3,)
+        elif batch_dims == 1:
+            logits = torch.randn(2, 3, 4)  # [B=2, T=3, C=4]
+            mask = torch.ones(2, 3, dtype=torch.bool)  # [B=2, T=3]
+            mask[0, :1] = False  # mask first position
+            expected_mode_shape = (2, 3)
+        else:  # batch_dims == 2
+            logits = torch.randn(2, 3, 4, 5)  # [B1=2, B2=3, T=4, C=5]
+            mask = torch.ones(2, 3, 4, dtype=torch.bool)  # [B1=2, B2=3, T=4]
+            mask[0, 0, :1] = False  # mask first position
+            expected_mode_shape = (2, 3, 4)
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+
+        mode = dist.mode
+
+        # Check shapes
+        assert mode.shape == expected_mode_shape
+
+        # Check that mode values are valid indices
+        vocab_size = logits.shape[-1]
+        assert (mode >= 0).all()
+        assert (mode < vocab_size).all()
+
+        # Check that mode matches the argmax of masked logits
+        masked_logits = dist.masked_logits
+        expected_mode = masked_logits.argmax(dim=-1)
+        torch.testing.assert_close(mode, expected_mode)
+
+    @pytest.mark.parametrize("batch_dims", [0, 1, 2])
+    def test_entropy_correctness_batch_dims(self, batch_dims):
+        """Test that entropy computation works correctly for different batch dimensions."""
+        torch.manual_seed(0)
+
+        # Create shapes with different batch dimensions
+        if batch_dims == 0:
+            logits = torch.randn(3, 4)  # [T=3, C=4]
+            mask = torch.ones(3, dtype=torch.bool)  # [T=3]
+            mask[:1] = False  # mask first position
+            expected_entropy_shape = (3,)
+        elif batch_dims == 1:
+            logits = torch.randn(2, 3, 4)  # [B=2, T=3, C=4]
+            mask = torch.ones(2, 3, dtype=torch.bool)  # [B=2, T=3]
+            mask[0, :1] = False  # mask first position
+            expected_entropy_shape = (2, 3)
+        else:  # batch_dims == 2
+            logits = torch.randn(2, 3, 4, 5)  # [B1=2, B2=3, T=4, C=5]
+            mask = torch.ones(2, 3, 4, dtype=torch.bool)  # [B1=2, B2=3, T=4]
+            mask[0, 0, :1] = False  # mask first position
+            expected_entropy_shape = (2, 3, 4)
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+
+        entropy = dist.entropy()
+
+        # Check shapes
+        assert entropy.shape == expected_entropy_shape
+
+        # Check that entropy is finite for valid positions
+        assert torch.isfinite(entropy[mask]).all()
+
+        # Check that entropy is reasonable (positive for valid positions)
+        assert (entropy[mask] >= 0).all()
+
+    def test_construction_position_level(self):
+        """Test basic construction and properties with position-level masking."""
+        torch.manual_seed(0)
+        logits = torch.randn(2, 3, 4)  # batch=2, seq=3, vocab=4
+        mask = torch.ones(2, 3, dtype=torch.bool)
+        mask[0, :1] = False  # mask first position of first sequence
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+
+        # Check properties
+        assert dist.mask.shape == mask.shape
+        assert torch.equal(dist.mask, mask)
+        assert dist.logits.shape == logits.shape
+        assert torch.equal(dist.logits, logits)
+        assert dist.ignore_index == -100
+        assert dist.position_level_masking
+
+        # Check that masked logits are created lazily
+        assert not dist._masked_logits
+        assert not dist._masked_dist
+
+        # Access masked logits to trigger creation
+        masked_logits = dist.masked_logits
+        assert dist._masked_logits is not None
+        assert masked_logits.shape == logits.shape
+
+        # Check that masked positions have large negative values
+        large_neg = torch.finfo(logits.dtype).min
+        assert (masked_logits[0, :1] == large_neg).all()
+        assert (masked_logits[0, 1:] != large_neg).all()
+
+    def test_construction_token_level(self):
+        """Test basic construction and properties with token-level masking."""
+        torch.manual_seed(0)
+        logits = torch.randn(2, 3, 4)  # batch=2, seq=3, vocab=4
+        mask = torch.ones(2, 3, 4, dtype=torch.bool)
+        mask[
+            0, :1, :2
+        ] = False  # mask first 2 tokens for first position of first sequence
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+
+        # Check properties
+        assert dist.mask.shape == mask.shape
+        assert torch.equal(dist.mask, mask)
+        assert dist.logits.shape == logits.shape
+        assert torch.equal(dist.logits, logits)
+        assert dist.ignore_index == -100
+        assert not dist.position_level_masking
+
+        # Check that masked logits are created lazily
+        assert not dist._masked_logits
+        assert not dist._masked_dist
+
+        # Access masked logits to trigger creation
+        masked_logits = dist.masked_logits
+        assert dist._masked_logits is not None
+        assert masked_logits.shape == logits.shape
+
+        # Check that masked tokens have large negative values
+        large_neg = torch.finfo(logits.dtype).min
+        assert (masked_logits[0, :1, :2] == large_neg).all()
+        assert (masked_logits[0, :1, 2:] != large_neg).all()
+
+    def test_log_prob_efficiency_position_level(self):
+        """Test that log_prob uses ignore_index approach efficiently with position-level masking."""
+        torch.manual_seed(0)
+        logits = torch.randn(2, 3, 4, requires_grad=True)
+        mask = torch.ones(2, 3, dtype=torch.bool)
+        mask[0, :1] = False  # mask first position
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+
+        # Create target tokens with ignore_index for masked positions
+        target_tokens = torch.randint(0, 4, (2, 3))
+        target_tokens[~mask] = -100  # set masked positions to ignore_index
+
+        # Compute log probabilities
+        log_probs = dist.log_prob(target_tokens)
+
+        # Check shapes
+        assert log_probs.shape == target_tokens.shape
+
+        # Check that masked positions have zero log probability
+        assert (log_probs[~mask] == 0.0).all()
+
+        # Check that valid positions have finite log probabilities
+        assert torch.isfinite(log_probs[mask]).all()
+
+        # Test backward pass
+        loss = -log_probs.sum()
+        loss.backward()
+        assert logits.grad is not None
+
+    def test_log_prob_efficiency_token_level(self):
+        """Test that log_prob uses ignore_index approach efficiently with token-level masking."""
+        torch.manual_seed(0)
+        logits = torch.randn(2, 3, 4, requires_grad=True)
+        mask = torch.ones(2, 3, 4, dtype=torch.bool)
+        mask[0, :1, :2] = False  # mask first 2 tokens for first position
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+
+        # Create target tokens with ignore_index for masked positions
+        target_tokens = torch.randint(0, 4, (2, 3))
+        position_mask = mask.any(dim=-1)  # True if any token is valid at this position
+        target_tokens[~position_mask] = -100
+
+        # Compute log probabilities
+        log_probs = dist.log_prob(target_tokens)
+
+        # Check shapes
+        assert log_probs.shape == target_tokens.shape
+
+        # Check that masked positions have -inf log probability
+        assert (log_probs[~position_mask] == float("-inf")).all()
+
+        # Check that valid positions have finite log probabilities
+        assert torch.isfinite(log_probs[position_mask]).all()
+
+        # Test backward pass
+        loss = -log_probs.sum()
+        loss.backward()
+        assert logits.grad is not None
+
+    def test_sampling_correctness_position_level(self):
+        """Test that sampling works correctly with position-level masking."""
+        torch.manual_seed(0)
+        logits = torch.randn(2, 3, 4)
+        mask = torch.ones(2, 3, dtype=torch.bool)
+        mask[0, :1] = False  # mask first position
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+
+        # Sample multiple times
+        num_samples = 1000
+        samples = dist.sample((num_samples,))
+
+        # Check shapes
+        assert samples.shape == (num_samples, 2, 3)
+
+        # Check that valid positions are sampled within valid range
+        assert (samples >= 0).all()
+        assert (samples < 4).all()
+
+        # Check that sampling respects the mask (masked positions should have
+        # very low probability of being sampled, but not impossible)
+        # We'll just check that the distribution is valid for a single sample
+        single_sample = samples[0]
+        assert torch.isfinite(dist.log_prob(single_sample)).all()
+
+    def test_sampling_correctness_token_level(self):
+        """Test that sampling works correctly with token-level masking."""
+        torch.manual_seed(0)
+        logits = torch.randn(2, 3, 4)
+        mask = torch.ones(2, 3, 4, dtype=torch.bool)
+        mask[0, :1, :2] = False  # mask first 2 tokens for first position
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+
+        # Sample multiple times
+        num_samples = 1000
+        samples = dist.sample((num_samples,))
+
+        # Check shapes
+        assert samples.shape == (num_samples, 2, 3)
+
+        # Check that valid positions are sampled within valid range
+        assert (samples >= 0).all()
+        assert (samples < 4).all()
+
+        # Check that sampling respects the mask (masked tokens should have
+        # very low probability of being sampled, but not impossible)
+        # We'll just check that the distribution is valid for a single sample
+        single_sample = samples[0]
+        assert torch.isfinite(dist.log_prob(single_sample)).all()
+
+    def test_mode_correctness_position_level(self):
+        """Test that mode computation works correctly with position-level masking."""
+        torch.manual_seed(0)
+        logits = torch.randn(2, 3, 4)
+        mask = torch.ones(2, 3, dtype=torch.bool)
+        mask[0, :1] = False
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+
+        mode = dist.mode
+
+        # Check shapes
+        assert mode.shape == (2, 3)
+
+        # Check that mode values are valid indices
+        assert (mode >= 0).all()
+        assert (mode < 4).all()
+
+        # Check that mode matches the argmax of masked logits
+        masked_logits = dist.masked_logits
+        expected_mode = masked_logits.argmax(dim=-1)
+        torch.testing.assert_close(mode, expected_mode)
+
+    def test_mode_correctness_token_level(self):
+        """Test that mode computation works correctly with token-level masking."""
+        torch.manual_seed(0)
+        logits = torch.randn(2, 3, 4)
+        mask = torch.ones(2, 3, 4, dtype=torch.bool)
+        mask[0, :1, :2] = False
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+
+        mode = dist.mode
+
+        # Check shapes
+        assert mode.shape == (2, 3)
+
+        # Check that mode values are valid indices
+        assert (mode >= 0).all()
+        assert (mode < 4).all()
+
+        # Check that mode matches the argmax of masked logits
+        masked_logits = dist.masked_logits
+        expected_mode = masked_logits.argmax(dim=-1)
+        torch.testing.assert_close(mode, expected_mode)
+
+    def test_entropy_correctness_position_level(self):
+        """Test that entropy computation works correctly with position-level masking."""
+        torch.manual_seed(0)
+        logits = torch.randn(2, 3, 4)
+        mask = torch.ones(2, 3, dtype=torch.bool)
+        mask[0, :1] = False
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+
+        entropy = dist.entropy()
+
+        # Check shapes
+        assert entropy.shape == (2, 3)
+
+        # Check that entropy is finite for valid positions
+        assert torch.isfinite(entropy[mask]).all()
+
+        # Check that entropy is reasonable (positive for valid positions)
+        assert (entropy[mask] >= 0).all()
+
+    def test_entropy_correctness_token_level(self):
+        """Test that entropy computation works correctly with token-level masking."""
+        torch.manual_seed(0)
+        logits = torch.randn(2, 3, 4)
+        mask = torch.ones(2, 3, 4, dtype=torch.bool)
+        mask[0, :1, :2] = False
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+
+        entropy = dist.entropy()
+
+        # Check shapes
+        assert entropy.shape == (2, 3)
+
+        # Check that entropy is finite for valid positions
+        position_mask = mask.any(dim=-1)  # True if any token is valid at this position
+        assert torch.isfinite(entropy[position_mask]).all()
+
+        # Check that entropy is reasonable (positive for valid positions)
+        assert (entropy[position_mask] >= 0).all()
+
+    def test_clear_cache(self):
+        """Test that cache clearing works correctly."""
+        torch.manual_seed(0)
+        logits = torch.randn(2, 3, 4)
+        mask = torch.ones(2, 3, dtype=torch.bool)
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+
+        # Access masked logits to populate cache
+        _ = dist.masked_logits
+        _ = dist.masked_dist
+
+        # Check that cache is populated
+        assert dist._masked_logits is not None
+        assert dist._masked_dist is not None
+
+        # Clear cache
+        dist.clear_cache()
+
+        # Check that cache is cleared
+        assert dist._masked_logits is None
+        assert dist._masked_dist is None
+
+    def test_ignore_index_variations_position_level(self):
+        """Test with different ignore_index values for position-level masking."""
+        torch.manual_seed(0)
+        logits = torch.randn(2, 3, 4)
+        mask = torch.ones(2, 3, dtype=torch.bool)
+        mask[0, :1] = False
+
+        # Test with different ignore_index values
+        for ignore_idx in [-100, -1, 999]:
+            dist = LLMMaskedCategorical(
+                logits=logits, mask=mask, ignore_index=ignore_idx
+            )
+
+            target_tokens = torch.randint(0, 4, (2, 3))
+            target_tokens[~mask] = ignore_idx
+
+            log_probs = dist.log_prob(target_tokens)
+
+            # Check that ignored positions have zero log probability
+            assert (log_probs[~mask] == 0.0).all()
+
+            # Check that valid positions have finite log probabilities
+            assert torch.isfinite(log_probs[mask]).all()
+
+    def test_ignore_index_variations_token_level(self):
+        """Test with different ignore_index values for token-level masking."""
+        torch.manual_seed(0)
+        logits = torch.randn(2, 3, 4)
+        mask = torch.ones(2, 3, 4, dtype=torch.bool)
+        mask[0, :1, :2] = False
+
+        # Test with different ignore_index values
+        for ignore_idx in [-100, -1, 999]:
+            dist = LLMMaskedCategorical(
+                logits=logits, mask=mask, ignore_index=ignore_idx
+            )
+
+            # Create target tokens that respect the token-level masking
+            target_tokens = torch.randint(0, 4, (2, 3))
+
+            # For token-level masking, we need to ensure we only use valid tokens
+            # at each position. Let's create a more controlled test
+            target_tokens = torch.tensor(
+                [[2, 1, 1], [3, 2, 0]]
+            )  # Use tokens that are valid at their positions
+
+            position_mask = mask.any(
+                dim=-1
+            )  # True if any token is valid at this position
+            target_tokens[~position_mask] = ignore_idx
+
+            log_probs = dist.log_prob(target_tokens)
+
+            # Check that ignored positions have -inf log probability
+            assert (log_probs[~position_mask] == float("-inf")).all()
+
+            # Check that valid positions have finite log probabilities
+            assert torch.isfinite(log_probs[position_mask]).all()
+
+    def test_large_vocabulary_position_level(self):
+        """Test with large vocabulary size to ensure scalability for position-level masking."""
+        torch.manual_seed(0)
+        vocab_size = 50000  # Large vocabulary like in LLMs
+        logits = torch.randn(2, 10, vocab_size)
+        mask = torch.ones(2, 10, dtype=torch.bool)
+        mask[0, :3] = False  # mask first 3 positions of first sequence
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+
+        # Test log_prob
+        target_tokens = torch.randint(0, vocab_size, (2, 10))
+        target_tokens[~mask] = -100
+
+        log_probs = dist.log_prob(target_tokens)
+        assert log_probs.shape == (2, 10)
+        assert (log_probs[~mask] == 0.0).all()
+        assert torch.isfinite(log_probs[mask]).all()
+
+        # Test sampling
+        samples = dist.sample()
+        assert samples.shape == (2, 10)
+        assert (samples >= 0).all()
+        assert (samples < vocab_size).all()
+
+        # Test mode
+        mode = dist.mode
+        assert mode.shape == (2, 10)
+        assert (mode >= 0).all()
+        assert (mode < vocab_size).all()
+
+    def test_large_vocabulary_token_level(self):
+        """Test with large vocabulary size to ensure scalability for token-level masking."""
+        torch.manual_seed(0)
+        vocab_size = 50000  # Large vocabulary like in LLMs
+        logits = torch.randn(2, 10, vocab_size)
+        mask = torch.ones(2, 10, vocab_size, dtype=torch.bool)
+        mask[
+            0, :3, :1000
+        ] = False  # mask first 1000 tokens for first 3 positions of first sequence
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+
+        # Test log_prob
+        target_tokens = torch.randint(0, vocab_size, (2, 10))
+        position_mask = mask.any(dim=-1)  # True if any token is valid at this position
+        target_tokens[~position_mask] = -100
+
+        log_probs = dist.log_prob(target_tokens)
+        assert log_probs.shape == (2, 10)
+        assert (log_probs[~position_mask] == 0.0).all()
+        assert torch.isfinite(log_probs[position_mask]).all()
+
+        # Test sampling
+        samples = dist.sample()
+        assert samples.shape == (2, 10)
+        assert (samples >= 0).all()
+        assert (samples < vocab_size).all()
+
+        # Test mode
+        mode = dist.mode
+        assert mode.shape == (2, 10)
+        assert (mode >= 0).all()
+        assert (mode < vocab_size).all()
+
+    def test_error_handling(self):
+        """Test error handling for invalid inputs."""
+        torch.manual_seed(0)
+        logits = torch.randn(2, 3, 4)
+
+        # Test with mismatched shapes
+        with pytest.raises(ValueError):
+            LLMMaskedCategorical(logits=logits, mask=torch.ones(3, 4, dtype=torch.bool))
+
+        # Test with invalid ignore_index (should be fine since we don't validate this)
+        # The current implementation doesn't validate ignore_index, so this should work
+        dist = LLMMaskedCategorical(
+            logits=logits, mask=torch.ones(2, 3, dtype=torch.bool), ignore_index=5
+        )
+        assert dist.ignore_index == 5
+
+    def test_log_prob_masked_tokens(self):
+        """Test that log_prob returns -inf for masked tokens with token-level masking."""
+        torch.manual_seed(0)
+        logits = torch.randn(2, 3, 4)
+        mask = torch.ones(2, 3, 4, dtype=torch.bool)
+
+        # Mask specific tokens
+        mask[0, 0, 1] = False  # Mask token 1 at position (0, 0)
+        mask[1, 1, 2] = False  # Mask token 2 at position (1, 1)
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+
+        # Test with masked tokens
+        target_tokens = torch.tensor(
+            [[0, 1, 2], [3, 2, 1]]
+        )  # token 1 at (0,1) and token 2 at (1,1) are masked
+
+        log_probs = dist.log_prob(target_tokens)
+
+        # Check that masked tokens have -inf log probability
+        assert log_probs[1, 1].item() == torch.finfo().min  # token 2 at (1,1) is masked
+
+        # Check that unmasked tokens have finite log probability
+        assert torch.isfinite(log_probs[0, 0]).all()  # token 0 at (0,0) is not masked
+        assert torch.isfinite(
+            log_probs[0, 1]
+        ).all()  # token 1 at (0,1) is not masked (masked at (0,0) but not at (0,1))
+        assert torch.isfinite(log_probs[0, 2]).all()  # token 2 at (0,2) is not masked
+        assert torch.isfinite(log_probs[1, 0]).all()  # token 3 at (1,0) is not masked
+        assert torch.isfinite(log_probs[1, 2]).all()  # token 1 at (1,2) is not masked
+
+        # Test with ignore_index
+        target_tokens_with_ignore = torch.tensor([[0, -100, 2], [3, -100, 1]])
+        log_probs_ignore = dist.log_prob(target_tokens_with_ignore)
+
+        # Check that ignore_index positions have zero log probability
+        assert log_probs_ignore[0, 1] == 0.0
+        assert log_probs_ignore[1, 1] == 0.0
+
+        # Check that other positions have finite log probability
+        assert torch.isfinite(log_probs_ignore[0, 0]).all()
+        assert torch.isfinite(log_probs_ignore[0, 2]).all()
+        assert torch.isfinite(log_probs_ignore[1, 0]).all()
+        assert torch.isfinite(log_probs_ignore[1, 2]).all()
+
+    def test_entropy_comprehensive_position_level(self):
+        """Comprehensive test for entropy with position-level masking."""
+        torch.manual_seed(0)
+
+        # Test case 1: Simple case with some positions masked
+        logits = torch.randn(2, 3, 4)
+        mask = torch.ones(2, 3, dtype=torch.bool)
+        mask[0, :1] = False  # mask first position of first sequence
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+        entropy = dist.entropy()
+
+        # Check shapes
+        assert entropy.shape == (2, 3)
+
+        # Check that entropy is finite for valid positions
+        assert torch.isfinite(entropy[mask]).all()
+
+        # Check that entropy is reasonable (positive for valid positions)
+        assert (entropy[mask] >= 0).all()
+
+        # Test case 2: All positions valid
+        logits2 = torch.randn(2, 3, 4)
+        mask2 = torch.ones(2, 3, dtype=torch.bool)
+
+        dist2 = LLMMaskedCategorical(logits=logits2, mask=mask2, ignore_index=-100)
+        entropy2 = dist2.entropy()
+
+        assert entropy2.shape == (2, 3)
+        assert torch.isfinite(entropy2).all()
+        assert (entropy2 >= 0).all()
+
+        # Test case 3: All positions masked
+        logits3 = torch.randn(2, 3, 4)
+        mask3 = torch.zeros(2, 3, dtype=torch.bool)
+
+        dist3 = LLMMaskedCategorical(logits=logits3, mask=mask3, ignore_index=-100)
+        entropy3 = dist3.entropy()
+
+        assert entropy3.shape == (2, 3)
+        # Entropy should be 0 for all masked positions
+        assert (entropy3 == 0.0).all()
+
+    def test_entropy_comprehensive_token_level(self):
+        """Comprehensive test for entropy with token-level masking."""
+        torch.manual_seed(0)
+
+        # Test case 1: Some tokens masked at some positions
+        logits = torch.randn(2, 3, 4)
+        mask = torch.ones(2, 3, 4, dtype=torch.bool)
+        mask[
+            0, :1, :2
+        ] = False  # mask first 2 tokens for first position of first sequence
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+        entropy = dist.entropy()
+
+        # Check shapes
+        assert entropy.shape == (2, 3)
+
+        # Check that entropy is finite for positions with valid tokens
+        position_mask = mask.any(dim=-1)
+        assert torch.isfinite(entropy[position_mask]).all()
+
+        # Check that entropy is reasonable (positive for valid positions)
+        assert (entropy[position_mask] >= 0).all()
+
+        # Test case 2: All tokens valid
+        logits2 = torch.randn(2, 3, 4)
+        mask2 = torch.ones(2, 3, 4, dtype=torch.bool)
+
+        dist2 = LLMMaskedCategorical(logits=logits2, mask=mask2, ignore_index=-100)
+        entropy2 = dist2.entropy()
+
+        assert entropy2.shape == (2, 3)
+        assert torch.isfinite(entropy2).all()
+        assert (entropy2 >= 0).all()
+
+        # Test case 3: Some positions with no valid tokens
+        logits3 = torch.randn(2, 3, 4)
+        mask3 = torch.ones(2, 3, 4, dtype=torch.bool)
+        mask3[0, 1, :] = False  # mask all tokens at position (0, 1)
+
+        dist3 = LLMMaskedCategorical(logits=logits3, mask=mask3, ignore_index=-100)
+        entropy3 = dist3.entropy()
+
+        assert entropy3.shape == (2, 3)
+        # Entropy should be 0 for position with no valid tokens
+        assert entropy3[0, 1] == 0.0
+        # Other positions should have finite entropy
+        assert torch.isfinite(entropy3[0, 0]).all()
+        assert torch.isfinite(entropy3[0, 2]).all()
+        assert torch.isfinite(entropy3[1, :]).all()
+
+    def test_entropy_gradient_position_level(self):
+        """Test that entropy is differentiable with position-level masking."""
+        torch.manual_seed(0)
+        logits = torch.randn(2, 3, 4, requires_grad=True)
+        mask = torch.ones(2, 3, dtype=torch.bool)
+        mask[0, :1] = False
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+        entropy = dist.entropy()
+
+        # Compute loss and backward pass
+        loss = entropy.sum()
+        loss.backward()
+
+        # Check that gradients exist and are finite
+        assert logits.grad is not None
+        assert torch.isfinite(logits.grad).all()
+
+    def test_entropy_gradient_token_level(self):
+        """Test that entropy is differentiable with token-level masking."""
+        torch.manual_seed(0)
+        logits = torch.randn(2, 3, 4, requires_grad=True)
+        mask = torch.ones(2, 3, 4, dtype=torch.bool)
+        mask[0, :1, :2] = False
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+        entropy = dist.entropy()
+
+        # Compute loss and backward pass
+        loss = entropy.sum()
+        loss.backward()
+
+        # Check that gradients exist and are finite
+        assert logits.grad is not None
+        assert torch.isfinite(logits.grad).all()
+
+    def test_entropy_consistency_with_sampling(self):
+        """Test that entropy is consistent with sampling behavior."""
+        torch.manual_seed(0)
+        logits = torch.randn(2, 3, 4)
+        mask = torch.ones(2, 3, dtype=torch.bool)
+        mask[0, :1] = False
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+
+        # Get entropy
+        entropy = dist.entropy()
+
+        # Sample many times and compute empirical entropy
+        num_samples = 10000
+        samples = dist.sample((num_samples,))
+
+        # Compute empirical entropy for valid positions
+        empirical_entropy = torch.zeros_like(entropy)
+        for i in range(2):
+            for j in range(3):
+                if mask[i, j]:
+                    # Count occurrences of each token
+                    token_counts = torch.bincount(samples[:, i, j], minlength=4)
+                    probs = token_counts.float() / num_samples
+                    # Compute empirical entropy: -sum(p * log(p)) where p > 0
+                    log_probs = torch.log(
+                        probs + 1e-10
+                    )  # Add small epsilon to avoid log(0)
+                    empirical_entropy[i, j] = -(probs * log_probs).sum()
+
+        # Check that theoretical and empirical entropy are reasonably close
+        # (within 0.5 for this number of samples)
+        assert torch.allclose(entropy[mask], empirical_entropy[mask], atol=0.5)
+
+    def test_entropy_edge_cases(self):
+        """Test entropy with edge cases."""
+        torch.manual_seed(0)
+
+        # Test case 1: Single token vocabulary
+        logits = torch.randn(2, 3, 1)
+        mask = torch.ones(2, 3, dtype=torch.bool)
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+        entropy = dist.entropy()
+
+        # With single token, entropy should be 0
+        assert (entropy == 0.0).all()
+
+        # Test case 2: Very large logits (should still work)
+        logits2 = torch.randn(2, 3, 4) * 1000
+        mask2 = torch.ones(2, 3, dtype=torch.bool)
+
+        dist2 = LLMMaskedCategorical(logits=logits2, mask=mask2, ignore_index=-100)
+        entropy2 = dist2.entropy()
+
+        assert torch.isfinite(entropy2).all()
+        assert (entropy2 >= 0).all()
+
+        # Test case 3: Very small logits (should still work)
+        logits3 = torch.randn(2, 3, 4) * 0.001
+        mask3 = torch.ones(2, 3, dtype=torch.bool)
+
+        dist3 = LLMMaskedCategorical(logits=logits3, mask=mask3, ignore_index=-100)
+        entropy3 = dist3.entropy()
+
+        assert torch.isfinite(entropy3).all()
+        assert (entropy3 >= 0).all()
+
+    def test_entropy_large_vocabulary(self):
+        """Test entropy with large vocabulary size."""
+        torch.manual_seed(0)
+        vocab_size = 10000
+        logits = torch.randn(2, 10, vocab_size)
+        mask = torch.ones(2, 10, dtype=torch.bool)
+        mask[0, :3] = False  # mask first 3 positions of first sequence
+
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+        entropy = dist.entropy()
+
+        # Check shapes
+        assert entropy.shape == (2, 10)
+
+        # Check that entropy is finite for valid positions
+        assert torch.isfinite(entropy[mask]).all()
+
+        # Check that entropy is reasonable (positive for valid positions)
+        assert (entropy[mask] >= 0).all()
+
+        # With large vocabulary, entropy should be reasonably high for uniform-like distributions
+        # but this depends on the specific logits, so we just check it's finite and positive
 
 
 class TestOrdinal:

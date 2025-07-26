@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import warnings
 
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, TYPE_CHECKING
 
 import torch
 
@@ -35,6 +35,9 @@ from torchrl.data.tensor_specs import (
 from torchrl.envs import EnvBase
 from torchrl.envs.utils import _StepMDP
 from torchrl.modules.utils.utils import _unpad_tensors
+
+if TYPE_CHECKING:
+    import transformers
 
 
 class LLMEnv(EnvBase):
@@ -119,6 +122,7 @@ class LLMEnv(EnvBase):
         as_llm_data: bool = False,
         eos_token_id: int | None = None,
     ) -> None:
+        self._warn_deprecated()
         self.as_llm_data = as_llm_data
         if token_key is None:
             token_key = self._DEFAULT_TOKEN_KEY
@@ -256,6 +260,13 @@ class LLMEnv(EnvBase):
             )
 
     @classmethod
+    def _warn_deprecated(cls):
+        warnings.warn(
+            "LLMEnv is deprecated. Please use ChatEnv instead.",
+            category=DeprecationWarning,
+        )
+
+    @classmethod
     def from_dataloader(
         cls,
         dataloader: DataLoader,
@@ -346,6 +357,8 @@ class LLMEnv(EnvBase):
         Returns:
             LLMEnv: The created LLMEnv instance.
         """
+        cls._warn_deprecated()
+
         from torchrl.envs.llm import DataLoadingPrimer, Tokenizer
 
         if str_key is None:

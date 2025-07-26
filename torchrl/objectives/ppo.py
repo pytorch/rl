@@ -102,13 +102,13 @@ class PPOLoss(LossModule):
             Defaults to ``1``.
         entropy_coeff: scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.
             * **Scalar**: one value applied to the summed entropy of every action head.
-            * **Mapping** ``{head_name: coef}`` gives an individual coefficient for each action-head's entropy.
+            * **Mapping** ``{head_name: coeff}`` gives an individual coefficient for each action-head's entropy.
             Defaults to ``0.01``.
         log_explained_variance (bool, optional): if ``True``, the explained variance of the critic
             predictions w.r.t. value targets will be computed and logged as ``"explained_variance"``.
             This can help monitor critic quality during training. Best possible score is 1.0, lower values are worse. Defaults to ``True``.
-        critic_coef (scalar, optional): critic loss multiplier when computing the total
-            loss. Defaults to ``1.0``. Set ``critic_coef`` to ``None`` to exclude the value
+        critic_coeff (scalar, optional): critic loss multiplier when computing the total
+            loss. Defaults to ``1.0``. Set ``critic_coeff`` to ``None`` to exclude the value
             loss from the forward outputs.
         loss_critic_type (str, optional): loss function for the value discrepancy.
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
@@ -239,7 +239,7 @@ class PPOLoss(LossModule):
     the expected keyword arguments are:
     ``["action", "sample_log_prob", "next_reward", "next_done", "next_terminated"]`` + in_keys of the actor and value network.
     The return value is a tuple of tensors in the following order:
-    ``["loss_objective"]`` + ``["entropy", "loss_entropy"]`` if entropy_bonus is set + ``"loss_critic"`` if critic_coef is not ``None``.
+    ``["loss_objective"]`` + ``["entropy", "loss_entropy"]`` if entropy_bonus is set + ``"loss_critic"`` if critic_coeff is not ``None``.
     The output keys can also be filtered using :meth:`PPOLoss.select_out_keys` method.
 
     Examples:
@@ -351,9 +351,9 @@ class PPOLoss(LossModule):
         *,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
-        entropy_coeff: float | Mapping[str, float] = 0.01,
+        entropy_coeff: float | Mapping[str, float] | None = None,
         log_explained_variance: bool = True,
-        critic_coef: float | None = None,
+        critic_coeff: float | None = None,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
         normalize_advantage_exclude_dims: tuple[int] = (),
@@ -377,13 +377,23 @@ class PPOLoss(LossModule):
             critic_network = critic
             del critic
 
-        if critic_coef is None and critic_network is not None:
-            critic_coef = 1.0
-        elif critic_coef in (None, 0) and critic_network is not None:
-            critic_coef = None
+        # Handle deprecated critic_coef argument
+        if "critic_coef" in kwargs:
+            if critic_coeff is not None:
+                raise ValueError("Cannot specify both 'critic_coef' and 'critic_coeff'")
+            warnings.warn(
+                "'critic_coef' is deprecated and will be removed in torchrl v0.11. Please use 'critic_coeff' instead.",
+                DeprecationWarning,
+            )
+            critic_coeff = kwargs.pop("critic_coef")
+
+        if critic_coeff is None and critic_network is not None:
+            critic_coeff = 1.0
+        elif critic_coeff in (None, 0) and critic_network is not None:
+            critic_coeff = None
 
         if actor_network is None or (
-            critic_network is None and critic_coef not in (None, 0.0)
+            critic_network is None and critic_coeff not in (None, 0.0)
         ):
             raise TypeError(
                 "Missing positional arguments actor_network or critic_network."
@@ -431,13 +441,21 @@ class PPOLoss(LossModule):
                     torch, "get_default_device", lambda: torch.device("cpu")
                 )()
 
-        # Handle deprecated entropy_coeff argument
-        if "entropy_coeff" in kwargs:
+        # Handle deprecated entropy_coef argument
+        if "entropy_coef" in kwargs:
+            if entropy_coeff is not None:  # Check if entropy_coeff was explicitly set
+                raise ValueError(
+                    "Cannot specify both 'entropy_coef' and 'entropy_coeff'"
+                )
             warnings.warn(
-                "'entropy_coeff' is deprecated and will be removed in torchrl v0.11. Please use 'entropy_coeff' instead.",
+                "'entropy_coef' is deprecated and will be removed in torchrl v0.11. Please use 'entropy_coeff' instead.",
                 DeprecationWarning,
             )
-            entropy_coeff = kwargs.pop("entropy_coeff")
+            entropy_coeff = kwargs.pop("entropy_coef")
+
+        # Set default value if None
+        if entropy_coeff is None:
+            entropy_coeff = 0.01
 
         if isinstance(entropy_coeff, Mapping):
             # Store the mapping for per-head coefficients
@@ -457,13 +475,13 @@ class PPOLoss(LossModule):
             self._entropy_coeff_map = None
         else:
             raise TypeError("entropy_coeff must be a float or a Mapping[str, float]")
-        if critic_coef is not None:
+        if critic_coeff is not None:
             self.register_buffer(
-                "critic_coef", torch.tensor(critic_coef, device=device)
+                "critic_coeff", torch.tensor(critic_coeff, device=device)
             )
         else:
-            self.critic_coef = None
-        self._has_critic = bool(self.critic_coef is not None and self.critic_coef > 0)
+            self.critic_coeff = None
+        self._has_critic = bool(self.critic_coeff is not None and self.critic_coeff > 0)
         self.loss_critic_type = loss_critic_type
         self.normalize_advantage = normalize_advantage
         self.normalize_advantage_exclude_dims = normalize_advantage_exclude_dims
@@ -609,7 +627,6 @@ class PPOLoss(LossModule):
                 self.actor_network
             ) if self.functional else contextlib.nullcontext():
                 dist = self.actor_network.get_dist(tensordict)
-
             is_composite = isinstance(dist, CompositeDistribution)
 
             if is_composite:
@@ -693,7 +710,7 @@ class PPOLoss(LossModule):
     def loss_critic(
         self, tensordict: TensorDictBase
     ) -> tuple[torch.Tensor | TensorDict, ...]:
-        """Returns the critic loss multiplied by ``critic_coef``, if it is not ``None``."""
+        """Returns the critic loss multiplied by ``critic_coeff``, if it is not ``None``."""
         # TODO: if the advantage is gathered by forward, this introduces an
         # overhead that we could easily reduce.
         if self.separate_losses:
@@ -767,7 +784,7 @@ class PPOLoss(LossModule):
             "target_critic_network_params",
         )
         if self._has_critic:
-            return self.critic_coef * loss_value, clip_fraction, explained_variance
+            return self.critic_coeff * loss_value, clip_fraction, explained_variance
         return loss_value, clip_fraction, explained_variance
 
     @property
@@ -955,10 +972,10 @@ class ClipPPOLoss(PPOLoss):
             Defaults to ``1``.
         entropy_coeff: (scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.
             * **Scalar**: one value applied to the summed entropy of every action head.
-            * **Mapping** ``{head_name: coef}`` gives an individual coefficient for each action-head's entropy.
+            * **Mapping** ``{head_name: coeff}`` gives an individual coefficient for each action-head's entropy.
             Defaults to ``0.01``.
-        critic_coef (scalar, optional): critic loss multiplier when computing the total
-            loss. Defaults to ``1.0``. Set ``critic_coef`` to ``None`` to exclude the value
+        critic_coeff (scalar, optional): critic loss multiplier when computing the total
+            loss. Defaults to ``1.0``. Set ``critic_coeff`` to ``None`` to exclude the value
             loss from the forward outputs.
         loss_critic_type (str, optional): loss function for the value discrepancy.
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
@@ -1058,8 +1075,8 @@ class ClipPPOLoss(PPOLoss):
         clip_epsilon: float = 0.2,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
-        entropy_coeff: float | Mapping[str, float] = 0.01,
-        critic_coef: float | None = None,
+        entropy_coeff: float | Mapping[str, float] | None = None,
+        critic_coeff: float | None = None,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
         normalize_advantage_exclude_dims: tuple[int] = (),
@@ -1080,7 +1097,7 @@ class ClipPPOLoss(PPOLoss):
             entropy_bonus=entropy_bonus,
             samples_mc_entropy=samples_mc_entropy,
             entropy_coeff=entropy_coeff,
-            critic_coef=critic_coef,
+            critic_coeff=critic_coeff,
             loss_critic_type=loss_critic_type,
             normalize_advantage=normalize_advantage,
             normalize_advantage_exclude_dims=normalize_advantage_exclude_dims,
@@ -1248,9 +1265,9 @@ class KLPENPPOLoss(PPOLoss):
             Defaults to ``1``.
         entropy_coeff: scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.
             * **Scalar**: one value applied to the summed entropy of every action head.
-            * **Mapping** ``{head_name: coef}`` gives an individual coefficient for each action-head's entropy.
+            * **Mapping** ``{head_name: coeff}`` gives an individual coefficient for each action-head's entropy.
             Defaults to ``0.01``.
-        critic_coef (scalar, optional): critic loss multiplier when computing the total
+        critic_coeff (scalar, optional): critic loss multiplier when computing the total
             loss. Defaults to ``1.0``.
         loss_critic_type (str, optional): loss function for the value discrepancy.
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
@@ -1352,8 +1369,8 @@ class KLPENPPOLoss(PPOLoss):
         samples_mc_kl: int = 1,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
-        entropy_coeff: float | Mapping[str, float] = 0.01,
-        critic_coef: float | None = None,
+        entropy_coeff: float | Mapping[str, float] | None = None,
+        critic_coeff: float | None = None,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
         normalize_advantage_exclude_dims: tuple[int] = (),
@@ -1370,7 +1387,7 @@ class KLPENPPOLoss(PPOLoss):
             entropy_bonus=entropy_bonus,
             samples_mc_entropy=samples_mc_entropy,
             entropy_coeff=entropy_coeff,
-            critic_coef=critic_coef,
+            critic_coeff=critic_coeff,
             loss_critic_type=loss_critic_type,
             normalize_advantage=normalize_advantage,
             normalize_advantage_exclude_dims=normalize_advantage_exclude_dims,
