@@ -7,12 +7,11 @@ import pickle
 
 import pytest
 import torch
+
 try:
     from safetensors.torch import save
 except ImportError:
     save = None
-
-from torchrl.data import CompressedListStorage
 
 
 class TestCompressedStorageBenchmark:
@@ -142,4 +141,4 @@ class TestCompressedStorageBenchmark:
         data = self.make_compressible_mock_data(1).get("observations")
 
         # Run the actual benchmark
-        benchmark(serialize_fn, data) 
+        benchmark(serialize_fn, data)

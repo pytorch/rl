@@ -35,4 +35,3 @@ dependencies:
     - transformers
     - ninja
     - timm
-    - safetensors
