@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.10.0+fbfd8a8) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.10.0+f6bb8cc) &#x25BC</span></a>
     </div>
     
 
@@ -1816,8 +1816,6 @@
 <span class="sd">    It&#39;s particularly useful for storing raw sensory observations like images</span>
 <span class="sd">    that can be compressed significantly to save memory.</span>
 
-<span class="sd">    pytest test/test_rb.py::TestCompressedListStorage::test_compressed_storage_tensor -v</span>
-
 <span class="sd">    Args:</span>
 <span class="sd">        max_size (int): size of the storage, i.e. maximum number of elements stored</span>
 <span class="sd">            in the buffer.</span>
@@ -2070,31 +2068,6 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;_storage&quot;</span><span class="p">]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="s2">&quot;_metadata&quot;</span><span class="p">]</span></div>
 
-<div class="viewcode-block" id="CompressedListStorage.num_bytes"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.CompressedListStorage.html#torchrl.data.replay_buffers.CompressedListStorage.num_bytes">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">num_bytes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the number of bytes in the storage.&quot;&quot;&quot;</span>
-
-        <span class="k">def</span><span class="w"> </span><span class="nf">compressed_size_from_list</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">return</span> <span class="mi">0</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
-                <span class="k">return</span> <span class="n">data</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="p">(</span><span class="nb">tuple</span><span class="p">,</span> <span class="nb">list</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">)):</span>
-                <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span><span class="n">compressed_size_from_list</span><span class="p">(</span><span class="n">item</span><span class="p">)</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">data</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">)</span> <span class="ow">or</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
-                <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span><span class="n">compressed_size_from_list</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="k">return</span> <span class="mi">0</span>
-
-        <span class="n">compressed_size_estimate</span> <span class="o">=</span> <span class="n">compressed_size_from_list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">compressed_size_estimate</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                    <span class="s2">&quot;Compressed storage is not empty but the compressed size is 0. This is a bug.&quot;</span>
-                <span class="p">)</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;Compressed storage is empty, returning 0 bytes.&quot;</span><span class="p">)</span>
-
-        <span class="k">return</span> <span class="n">compressed_size_estimate</span></div>
-
 <div class="viewcode-block" id="CompressedListStorage.to_bytestream"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.CompressedListStorage.html#torchrl.data.replay_buffers.CompressedListStorage.to_bytestream">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">to_bytestream</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data_to_bytestream</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span> <span class="o">|</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert data to a byte stream.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data_to_bytestream</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
@@ -2112,27 +2085,36 @@
             <span class="n">buffer</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
             <span class="n">byte_stream</span> <span class="o">=</span> <span class="nb">bytes</span><span class="p">(</span><span class="n">buffer</span><span class="o">.</span><span class="n">read</span><span class="p">())</span>
 
-        <span class="k">return</span> <span class="n">byte_stream</span></div></div>
+        <span class="k">return</span> <span class="n">byte_stream</span></div>
 
-    <span class="c1"># def to_bytestream(</span>
-    <span class="c1">#     self, data_to_bytestream: Union[torch.Tensor, np.array, Any]</span>
-    <span class="c1"># ) -&gt; bytes:</span>
-    <span class="c1">#     &quot;&quot;&quot;Convert data to a byte stream.&quot;&quot;&quot;</span>
-    <span class="c1">#     if isinstance(data_to_bytestream, torch.Tensor):</span>
-    <span class="c1">#         from safetensors.torch import save</span>
-    <span class="c1">#         byte_stream = save({&quot;0&quot;: data_to_bytestream})</span>
+<div class="viewcode-block" id="CompressedListStorage.bytes"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.CompressedListStorage.html#torchrl.data.replay_buffers.CompressedListStorage.bytes">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">bytes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the number of bytes in the storage.&quot;&quot;&quot;</span>
 
-    <span class="c1">#     elif isinstance(data_to_bytestream, np.array):</span>
-    <span class="c1">#         from safetensors.numpy import save</span>
-    <span class="c1">#         byte_stream = bytes(data_to_bytestream.tobytes())</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">compressed_size_from_list</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="mi">0</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="p">(</span><span class="nb">bytes</span><span class="p">,)):</span>
+                <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,)):</span>
+                <span class="k">return</span> <span class="n">data</span><span class="o">.</span><span class="n">nbytes</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)):</span>
+                <span class="k">return</span> <span class="n">compressed_size_from_list</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">())</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="p">(</span><span class="nb">tuple</span><span class="p">,</span> <span class="nb">list</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">)):</span>
+                <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span><span class="n">compressed_size_from_list</span><span class="p">(</span><span class="n">item</span><span class="p">)</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">data</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">)</span> <span class="ow">or</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
+                <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span><span class="n">compressed_size_from_list</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="mi">0</span>
 
-    <span class="c1">#     else:</span>
-    <span class="c1">#         buffer = io.BytesIO()</span>
-    <span class="c1">#         pickle.dump(data_to_bytestream, buffer)</span>
-    <span class="c1">#         buffer.seek(0)</span>
-    <span class="c1">#         byte_stream = bytes(buffer.read())</span>
+        <span class="n">compressed_size_estimate</span> <span class="o">=</span> <span class="n">compressed_size_from_list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">compressed_size_estimate</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;Compressed storage is not empty but the compressed size is 0. This is a bug.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;Compressed storage is empty, returning 0 bytes.&quot;</span><span class="p">)</span>
 
-    <span class="c1">#     return byte_stream</span>
+        <span class="k">return</span> <span class="n">compressed_size_estimate</span></div></div>
 
 
 <div class="viewcode-block" id="StorageEnsemble"><a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.StorageEnsemble.html#torchrl.data.replay_buffers.StorageEnsemble">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">StorageEnsemble</span><span class="p">(</span><span class="n">Storage</span><span class="p">):</span>

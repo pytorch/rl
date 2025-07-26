@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.10.0+fbfd8a8) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.10.0+f6bb8cc) &#x25BC</span></a>
     </div>
     
 
@@ -437,7 +437,6 @@
 <p>This storage compresses data when storing and decompresses when retrieving.
 It’s particularly useful for storing raw sensory observations like images
 that can be compressed significantly to save memory.</p>
-<p>pytest test/test_rb.py::TestCompressedListStorage::test_compressed_storage_tensor -v</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -492,6 +491,12 @@ is shared with other buffers (eg. Priority Samplers).</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.replay_buffers.CompressedListStorage.bytes">
+<span class="sig-name descname"><span class="pre">bytes</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/storages.html#CompressedListStorage.bytes"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.replay_buffers.CompressedListStorage.bytes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the number of bytes in the storage.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrl.data.replay_buffers.CompressedListStorage.dump">
 <span class="sig-name descname"><span class="pre">dump</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.replay_buffers.CompressedListStorage.dump" title="Permalink to this definition">¶</a></dt>
 <dd><p>Alias for <code class="xref py py-meth docutils literal notranslate"><span class="pre">dumps()</span></code>.</p>
@@ -507,12 +512,6 @@ is shared with other buffers (eg. Priority Samplers).</p>
 <dt class="sig sig-object py" id="torchrl.data.replay_buffers.CompressedListStorage.load_state_dict">
 <span class="sig-name descname"><span class="pre">load_state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/storages.html#CompressedListStorage.load_state_dict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.replay_buffers.CompressedListStorage.load_state_dict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Load the storage state.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.data.replay_buffers.CompressedListStorage.num_bytes">
-<span class="sig-name descname"><span class="pre">num_bytes</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/storages.html#CompressedListStorage.num_bytes"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.replay_buffers.CompressedListStorage.num_bytes" title="Permalink to this definition">¶</a></dt>
-<dd><p>Return the number of bytes in the storage.</p>
 </dd></dl>
 
 <dl class="py method">
