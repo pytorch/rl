@@ -96,14 +96,6 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
             cache directory, a ``FileNotFoundError`` will be raised.
             Defaults to ``False``.
 
-        load_from_local_minari (bool, optional): if ``True``, the dataset will be loaded directly
-            from the local Minari cache (typically located at ``~/.minari/datasets``),
-            bypassing any remote download. This is useful when working with custom
-            Minari datasets previously generated and stored locally, or when network
-            access should be avoided. If the dataset is not found in the expected
-            cache directory, a ``FileNotFoundError`` will be raised.
-            Defaults to ``False``.
-
 
     Attributes:
         available_datasets: a list of accepted entries to be downloaded.
@@ -184,7 +176,6 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
         transform: torchrl.envs.Transform | None = None,  # noqa-F821
         split_trajs: bool = False,
         load_from_local_minari: bool = False,
-        load_from_local_minari: bool = False,
     ):
         self.dataset_id = dataset_id
         if root is None:
@@ -193,13 +184,6 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
         self.root = root
         self.split_trajs = split_trajs
         self.download = download
-        self.load_from_local_minari = load_from_local_minari
-
-        if (
-            self.download == "force"
-            or (self.download and not self._is_downloaded())
-            or self.load_from_local_minari
-        ):
         self.load_from_local_minari = load_from_local_minari
 
         if (
