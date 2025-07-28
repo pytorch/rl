@@ -18,7 +18,6 @@ import numpy as np
 import torch
 from tensordict import MemoryMappedTensor, TensorDict
 from tensordict.utils import NestedKey
-
 from torch.utils._pytree import tree_map
 from torchrl._extension import EXTENSION_WARNING
 from torchrl._utils import _replace_last, logger
@@ -33,7 +32,7 @@ try:
         SumSegmentTreeFp64,
     )
 except ImportError:
-    warnings.warn(EXTENSION_WARNING)
+    logger.warning(EXTENSION_WARNING)
 
 _EMPTY_STORAGE_ERROR = "Cannot sample from an empty storage."
 
