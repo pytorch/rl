@@ -144,6 +144,8 @@ using the following components:
     :template: rl_template.rst
 
 
+    CompressedListStorage
+    CompressedListStorageCheckpointer
     FlatStorageCheckpointer
     H5StorageCheckpointer
     ImmutableDatasetWriter
@@ -190,6 +192,70 @@ were found from rough benchmarking in https://github.com/pytorch/rl/tree/main/be
 +-------------------------------+-----------+
 | :class:`LazyMemmapStorage`    | 3.44x     |
 +-------------------------------+-----------+
+
+Compressed Storage for Memory Efficiency
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For applications where memory usage or memory bandwidth is a primary concern—especially when storing or transferring large sensory observations such as images, audio, or text—the :class:`~torchrl.data.replay_buffers.storages.CompressedListStorage` provides significant memory savings through compression.
+
+**Key features:**
+
+- **Memory Efficiency:** Achieves substantial memory savings via compression.
+- **Data Integrity:** Maintains full data fidelity through lossless compression.
+- **Flexible Compression:** Uses zstd compression by default, with support for custom compression algorithms.
+- **TensorDict Support:** Seamlessly integrates with TensorDict structures.
+- **Checkpointing:** Fully supports saving and loading compressed data.
+- **Batched GPU Compression/Decompression:** Enables efficient replay buffer sampling directly from VRAM.
+
+The `CompressedListStorage` compresses data when storing and decompresses when retrieving, achieving compression ratios of 95x–122x for Atari images while maintaining full data fidelity. 
+We see these results in the Atari Learning Environment (ALE) from a rollout in Pong with a random policy for an episode at each compression level:
+
++-------------------------------+--------+--------+--------+--------+--------+
+| Compression level of zstd     | 1      | 3      | 8      | 12     | 22     |
++===============================+========+========+========+========+========+
+| Compression ratio in ALE Pong | 95x    | 99x    | 106x   | 111x   | 122x   |
++-------------------------------+--------+--------+--------+--------+--------+
+
+Example usage:
+
+    >>> import torch
+    >>> from torchrl.data import ReplayBuffer, CompressedListStorage
+    >>> from tensordict import TensorDict
+    >>> 
+    >>> # Create a compressed storage for image data
+    >>> storage = CompressedListStorage(max_size=1000, compression_level=3)
+    >>> rb = ReplayBuffer(storage=storage, batch_size=32)
+    >>> 
+    >>> # Add image data
+    >>> images = torch.randn(100, 3, 84, 84)  # Atari-like frames
+    >>> data = TensorDict({"obs": images}, batch_size=[100])
+    >>> rb.extend(data)
+    >>> 
+    >>> # Sample data (automatically decompressed)
+    >>> sample = rb.sample(32)
+    >>> print(sample["obs"].shape)  # torch.Size([32, 3, 84, 84])
+
+The compression level can be adjusted from 1 (fast, less compression) to 22 (slow, more compression),
+with level 3 being a good default for most use cases.
+
+For custom compression algorithms:
+
+    >>> def my_compress(tensor):
+    ...     return tensor.to(torch.uint8)  # Simple example
+    >>>
+    >>> def my_decompress(compressed_tensor, metadata):
+    ...     return compressed_tensor.to(metadata["dtype"])
+    >>>
+    >>> storage = CompressedListStorage(
+    ...     max_size=1000,
+    ...     compression_fn=my_compress,
+    ...     decompression_fn=my_decompress
+    ... )
+
+.. note:: The CompressedListStorage uses `zstd` for python versions of at least 3.14 and defaults to zlib otherwise.
+
+.. note:: Batched GPU compression relies on `nvidia.nvcomp`, please see example code 
+  `examples/replay-buffers/compressed_replay_buffer.py <https://github.com/pytorch/rl/blob/main/examples/replay-buffers/compressed_replay_buffer.py>`_.
 
 Sharing replay buffers across processes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

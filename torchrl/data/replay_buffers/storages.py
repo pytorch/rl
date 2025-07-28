@@ -7,12 +7,13 @@ from __future__ import annotations
 import abc
 import logging
 import os
+import sys
 import textwrap
 import warnings
 from collections import OrderedDict
 from copy import copy
 from multiprocessing.context import get_spawning_popen
-from typing import Any, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 import tensordict
@@ -32,6 +33,7 @@ from torch.utils._pytree import tree_flatten, tree_map, tree_unflatten
 
 from torchrl._utils import _make_ordinal_device, implement_for, logger as torchrl_logger
 from torchrl.data.replay_buffers.checkpointers import (
+    CompressedListStorageCheckpointer,
     ListStorageCheckpointer,
     StorageCheckpointerBase,
     StorageEnsembleCheckpointer,
@@ -278,7 +280,7 @@ class ListStorage(Storage):
                 return
             if isinstance(cursor, slice):
                 data = self._to_device(data)
-                self._storage[cursor] = data
+                self._set_slice(cursor, data)
                 return
             if isinstance(
                 data,
@@ -305,7 +307,7 @@ class ListStorage(Storage):
             if cursor > len(self._storage):
                 raise RuntimeError(
                     "Cannot append data located more than one item away from "
-                    f"the storage size: the storage size is {len(self)} "
+                    f"the storage size: the storage size is {len(self._storage)} "
                     f"and the index of the item to be set is {cursor}."
                 )
             if cursor >= self.max_size:
@@ -315,14 +317,24 @@ class ListStorage(Storage):
                     f"and the index of the item to be set is {cursor}."
                 )
             data = self._to_device(data)
-            if cursor == len(self._storage):
-                self._storage.append(data)
-            else:
-                self._storage[cursor] = data
+            self._set_item(cursor, data)
+
+    def _set_item(self, cursor: int, data: Any) -> None:
+        """Set a single item in the storage."""
+        if cursor == len(self._storage):
+            self._storage.append(data)
+        else:
+            self._storage[cursor] = data
+
+    def _set_slice(self, cursor: slice, data: Any) -> None:
+        """Set a slice in the storage."""
+        self._storage[cursor] = data
 
     def get(self, index: int | Sequence[int] | slice) -> Any:
-        if isinstance(index, (INT_CLASSES, slice)):
-            return self._storage[index]
+        if isinstance(index, INT_CLASSES):
+            return self._get_item(index)
+        elif isinstance(index, slice):
+            return self._get_slice(index)
         elif isinstance(index, tuple):
             if len(index) > 1:
                 raise RuntimeError(
@@ -332,9 +344,22 @@ class ListStorage(Storage):
         else:
             if isinstance(index, torch.Tensor) and index.device.type != "cpu":
                 index = index.cpu().tolist()
-            return [self._storage[i] for i in index]
+            return self._get_list(index)
+
+    def _get_item(self, index: int) -> Any:
+        """Get a single item from the storage."""
+        return self._storage[index]
+
+    def _get_slice(self, index: slice) -> Any:
+        """Get a slice from the storage."""
+        return self._storage[index]
+
+    def _get_list(self, index: list) -> list:
+        """Get a list of items from the storage."""
+        return [self._storage[i] for i in index]
 
     def __len__(self):
+        """Get the length of the storage."""
         return len(self._storage)
 
     def state_dict(self) -> dict[str, Any]:
@@ -379,8 +404,7 @@ class ListStorage(Storage):
         if isinstance(item, int):
             if item < 0:
                 item += len(self._storage)
-
-            return 0 <= item < len(self._storage)
+            return self._contains_int(item)
         if isinstance(item, torch.Tensor):
             return torch.tensor(
                 [self.contains(elt) for elt in item.tolist()],
@@ -388,6 +412,10 @@ class ListStorage(Storage):
                 device=item.device,
             ).reshape_as(item)
         raise NotImplementedError(f"type {type(item)} is not supported yet.")
+
+    def _contains_int(self, item: int) -> bool:
+        """Check if an integer index is contained in the storage."""
+        return 0 <= item < len(self._storage)
 
 
 class LazyStackStorage(ListStorage):
@@ -872,7 +900,6 @@ class TensorStorage(Storage):
         *,
         set_cursor: bool = True,
     ):
-
         if set_cursor:
             self._last_cursor = cursor
 
@@ -1360,6 +1387,314 @@ class LazyMemmapStorage(LazyTensorStorage):
         return result
 
 
+class CompressedListStorage(ListStorage):
+    """A storage that compresses and decompresses data.
+
+    This storage compresses data when storing and decompresses when retrieving.
+    It's particularly useful for storing raw sensory observations like images
+    that can be compressed significantly to save memory.
+
+    Args:
+        max_size (int): size of the storage, i.e. maximum number of elements stored
+            in the buffer.
+        compression_fn (callable, optional): function to compress data. Should take
+            a tensor and return a compressed byte tensor. Defaults to zstd compression.
+        decompression_fn (callable, optional): function to decompress data. Should take
+            a compressed byte tensor and return the original tensor. Defaults to zstd decompression.
+        compression_level (int, optional): compression level (1-22 for zstd) when using the default compression function.
+            Defaults to 3.
+        device (torch.device, optional): device where the sampled tensors will be
+            stored and sent. Default is :obj:`torch.device("cpu")`.
+        compilable (bool, optional): whether the storage is compilable.
+            If ``True``, the writer cannot be shared between multiple processes.
+            Defaults to ``False``.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.data import CompressedListStorage, ReplayBuffer
+        >>> from tensordict import TensorDict
+        >>>
+        >>> # Create a compressed storage for image data
+        >>> storage = CompressedListStorage(max_size=1000, compression_level=3)
+        >>> rb = ReplayBuffer(storage=storage, batch_size=5)
+        >>>
+        >>> # Add some image data
+        >>> images = torch.randn(10, 3, 84, 84)  # Atari-like frames
+        >>> data = TensorDict({"obs": images}, batch_size=[10])
+        >>> rb.extend(data)
+        >>>
+        >>> # Sample and verify data is decompressed correctly
+        >>> sample = rb.sample(3)
+        >>> print(sample["obs"].shape)  # torch.Size([3, 3, 84, 84])
+
+    """
+
+    _default_checkpointer = CompressedListStorageCheckpointer
+
+    def __init__(
+        self,
+        max_size: int,
+        *,
+        compression_fn: Callable | None = None,
+        decompression_fn: Callable | None = None,
+        compression_level: int = 3,
+        device: torch.device = "cpu",
+        compilable: bool = False,
+    ):
+        super().__init__(max_size, compilable=compilable, device=device)
+        self.compression_level = compression_level
+
+        # Set up compression functions
+        if compression_fn is None:
+            self.compression_fn = self._default_compression_fn
+        else:
+            self.compression_fn = compression_fn
+
+        if decompression_fn is None:
+            self.decompression_fn = self._default_decompression_fn
+        else:
+            self.decompression_fn = decompression_fn
+
+        # Store compressed data and metadata
+        self._storage = []
+        self._metadata = []  # Store shape, dtype, device info for each item
+
+    def _default_compression_fn(self, tensor: torch.Tensor) -> torch.Tensor:
+        """Default compression using zstd."""
+        if sys.version_info >= (3, 14):
+            from compression import zstd
+
+            compressor_fn = zstd.compress
+
+        else:
+            import zlib
+
+            compressor_fn = zlib.compress
+
+        # Convert tensor to bytes
+        tensor_bytes = self.to_bytestream(tensor)
+
+        # Compress with zstd
+        compressed_bytes = compressor_fn(tensor_bytes, level=self.compression_level)
+
+        # Convert to tensor
+        return torch.frombuffer(bytearray(compressed_bytes), dtype=torch.uint8)
+
+    def _default_decompression_fn(
+        self, compressed_tensor: torch.Tensor, metadata: dict
+    ) -> torch.Tensor:
+        """Default decompression using zstd."""
+        if sys.version_info >= (3, 14):
+            from compression import zstd
+
+            decompressor_fn = zstd.decompress
+
+        else:
+            import zlib
+
+            decompressor_fn = zlib.decompress
+
+        # Convert tensor to bytes
+        compressed_bytes = self.to_bytestream(compressed_tensor.cpu())
+
+        # Decompress with zstd
+        decompressed_bytes = decompressor_fn(compressed_bytes)
+
+        # Convert back to tensor
+        tensor = torch.frombuffer(
+            bytearray(decompressed_bytes), dtype=metadata["dtype"]
+        )
+        tensor = tensor.reshape(metadata["shape"])
+        tensor = tensor.to(metadata["device"])
+
+        return tensor
+
+    def _compress_item(self, item: Any) -> tuple[torch.Tensor, dict]:
+        """Compress a single item and return compressed data with metadata."""
+        if isinstance(item, torch.Tensor):
+            metadata = {
+                "type": "tensor",
+                "shape": item.shape,
+                "dtype": item.dtype,
+                "device": item.device,
+            }
+            compressed = self.compression_fn(item)
+        elif is_tensor_collection(item):
+            # For TensorDict, compress each tensor field
+            compressed_fields = {}
+            metadata = {"type": "tensordict", "fields": {}}
+
+            for key, value in item.items():
+                if isinstance(value, torch.Tensor):
+                    compressed_fields[key] = self.compression_fn(value)
+                    metadata["fields"][key] = {
+                        "type": "tensor",
+                        "shape": value.shape,
+                        "dtype": value.dtype,
+                        "device": value.device,
+                    }
+                else:
+                    # For non-tensor data, store as-is
+                    compressed_fields[key] = value
+                    metadata["fields"][key] = {"type": "non_tensor", "value": value}
+
+            compressed = compressed_fields
+        else:
+            # For other types, store as-is
+            compressed = item
+            metadata = {"type": "other", "value": item}
+
+        return compressed, metadata
+
+    def _decompress_item(self, compressed_data: Any, metadata: dict) -> Any:
+        """Decompress a single item using its metadata."""
+        if metadata["type"] == "tensor":
+            return self.decompression_fn(compressed_data, metadata)
+        elif metadata["type"] == "tensordict":
+            # Reconstruct TensorDict
+            result = TensorDict({}, batch_size=metadata.get("batch_size", []))
+
+            for key, field_metadata in metadata["fields"].items():
+                if field_metadata["type"] == "non_tensor":
+                    result[key] = field_metadata["value"]
+                else:
+                    # Decompress tensor field
+                    result[key] = self.decompression_fn(
+                        compressed_data[key], field_metadata
+                    )
+
+            return result
+        else:
+            # Return as-is for other types
+            return metadata["value"]
+
+    def _set_item(self, cursor: int, data: Any) -> None:
+        """Set a single item in the compressed storage."""
+        # Ensure we have enough space
+        while len(self._storage) <= cursor:
+            self._storage.append(None)
+            self._metadata.append(None)
+
+        # Compress and store
+        compressed_data, metadata = self._compress_item(data)
+        self._storage[cursor] = compressed_data
+        self._metadata[cursor] = metadata
+
+    def _set_slice(self, cursor: slice, data: Any) -> None:
+        """Set a slice in the compressed storage."""
+        # Handle slice assignment
+        if not hasattr(data, "__iter__"):
+            data = [data]
+        start, stop, step = cursor.indices(len(self._storage))
+        indices = list(range(start, stop, step))
+
+        for i, value in zip(indices, data):
+            self._set_item(i, value)
+
+    def _get_item(self, index: int) -> Any:
+        """Get a single item from the compressed storage."""
+        if index >= len(self._storage) or self._storage[index] is None:
+            raise IndexError(f"Index {index} out of bounds or not set")
+
+        compressed_data = self._storage[index]
+        metadata = self._metadata[index]
+        return self._decompress_item(compressed_data, metadata)
+
+    def _get_slice(self, index: slice) -> list:
+        """Get a slice from the compressed storage."""
+        start, stop, step = index.indices(len(self._storage))
+        results = []
+        for i in range(start, stop, step):
+            if i < len(self._storage) and self._storage[i] is not None:
+                results.append(self._get_item(i))
+        return results
+
+    def _get_list(self, index: list) -> list:
+        """Get a list of items from the compressed storage."""
+        if isinstance(index, torch.Tensor) and index.device.type != "cpu":
+            index = index.cpu().tolist()
+
+        results = []
+        for i in index:
+            if i >= len(self._storage) or self._storage[i] is None:
+                raise IndexError(f"Index {i} out of bounds or not set")
+            results.append(self._get_item(i))
+        return results
+
+    def __len__(self) -> int:
+        """Get the length of the compressed storage."""
+        return len([item for item in self._storage if item is not None])
+
+    def _contains_int(self, item: int) -> bool:
+        """Check if an integer index is contained in the compressed storage."""
+        return 0 <= item < len(self._storage) and self._storage[item] is not None
+
+    def _empty(self):
+        """Empty the storage."""
+        self._storage = []
+        self._metadata = []
+
+    def state_dict(self) -> dict[str, Any]:
+        """Save the storage state."""
+        return {
+            "_storage": self._storage,
+            "_metadata": self._metadata,
+        }
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        """Load the storage state."""
+        self._storage = state_dict["_storage"]
+        self._metadata = state_dict["_metadata"]
+
+    def to_bytestream(self, data_to_bytestream: torch.Tensor | np.array | Any) -> bytes:
+        """Convert data to a byte stream."""
+        if isinstance(data_to_bytestream, torch.Tensor):
+            byte_stream = data_to_bytestream.cpu().numpy().tobytes()
+
+        elif isinstance(data_to_bytestream, np.array):
+            byte_stream = bytes(data_to_bytestream.tobytes())
+
+        else:
+            import io
+            import pickle
+
+            buffer = io.BytesIO()
+            pickle.dump(data_to_bytestream, buffer)
+            buffer.seek(0)
+            byte_stream = bytes(buffer.read())
+
+        return byte_stream
+
+    def bytes(self):
+        """Return the number of bytes in the storage."""
+
+        def compressed_size_from_list(data: Any) -> int:
+            if data is None:
+                return 0
+            elif isinstance(data, (bytes,)):
+                return len(data)
+            elif isinstance(data, (np.ndarray,)):
+                return data.nbytes
+            elif isinstance(data, (torch.Tensor)):
+                return compressed_size_from_list(data.cpu().numpy())
+            elif isinstance(data, (tuple, list, Sequence)):
+                return sum(compressed_size_from_list(item) for item in data)
+            elif isinstance(data, Mapping) or is_tensor_collection(data):
+                return sum(compressed_size_from_list(value) for value in data.values())
+            else:
+                return 0
+
+        compressed_size_estimate = compressed_size_from_list(self._storage)
+        if compressed_size_estimate == 0:
+            if len(self._storage) > 0:
+                raise RuntimeError(
+                    "Compressed storage is not empty but the compressed size is 0. This is a bug."
+                )
+            warnings.warn("Compressed storage is empty, returning 0 bytes.")
+
+        return compressed_size_estimate
+
+
 class StorageEnsemble(Storage):
     """An ensemble of storages.
 
@@ -1395,7 +1730,7 @@ class StorageEnsemble(Storage):
         self._transforms = transforms
         if transforms is not None and len(transforms) != len(storages):
             raise TypeError(
-                "transforms must have the same length as the storages " "provided."
+                "transforms must have the same length as the storages provided."
             )
 
     @property
@@ -1419,7 +1754,7 @@ class StorageEnsemble(Storage):
         buffer_ids = item.get("buffer_ids")
         index = item.get("index")
         results = []
-        for (buffer_id, sample) in zip(buffer_ids, index):
+        for buffer_id, sample in zip(buffer_ids, index):
             buffer_id = self._convert_id(buffer_id)
             results.append((buffer_id, self._get_storage(buffer_id).get(sample)))
         if self._transforms is not None:
@@ -1567,9 +1902,11 @@ def _collate_id(x):
 
 
 def _get_default_collate(storage, _is_tensordict=False):
-    if isinstance(storage, LazyStackStorage) or isinstance(storage, TensorStorage):
+    if isinstance(storage, (LazyStackStorage, TensorStorage)):
         return _collate_id
-    elif isinstance(storage, ListStorage):
+    elif isinstance(storage, CompressedListStorage):
+        return lazy_stack
+    elif isinstance(storage, (ListStorage, StorageEnsemble)):
         return _stack_anything
     else:
         raise NotImplementedError(

@@ -12,107 +12,12 @@ concurrency:
 
 jobs:
 
-  benchmark_cpu:
-    name: CPU Pytest benchmark
-    runs-on: linux.4xlarge
-    defaults:
-      run:
-        shell: bash -l {0}
-    container:
-      image: nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
-      options: --cpus all
-    steps:
-      - name: Set GITHUB_BRANCH environment variable
-        run: |
-          if [ "${{ github.event_name }}" == "push" ]; then
-            export GITHUB_BRANCH=${{ github.event.branch }}
-          elif [ "${{ github.event_name }}" == "pull_request" ]; then
-            export GITHUB_BRANCH=${{ github.event.pull_request.head.ref }}
-          else
-            echo "Unsupported event type"
-            exit 1
-          fi
-          echo "GITHUB_BRANCH=$GITHUB_BRANCH" >> $GITHUB_ENV
-      - name: Who triggered this?
-        run: |
-          echo "Action triggered by ${{ github.event.pull_request.html_url }}"
-      - name: Check ldd --version
-        run: ldd --version
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 50 # this is to make sure we obtain the target base commit
-      - name: Python Setup
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-      - name: Setup Environment
-        run: |
-          export TZ=Europe/London
-          export DEBIAN_FRONTEND=noninteractive  # tzdata bug
-          apt-get update -y
-          apt-get install software-properties-common cmake -y
-          add-apt-repository ppa:git-core/candidate -y
-          apt-get update -y
-          apt-get upgrade -y
-          apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip wget libglfw3-dev libgles2-mesa-dev libglew-dev sudo git cmake libz-dev libpython3.10-dev
-      - name: Setup git
-        run: git config --global --add safe.directory /__w/rl/rl
-      - name: setup Path
-        run: |
-          echo /usr/local/bin >> $GITHUB_PATH
-      - name: Setup benchmarks
-        run: |
-          echo "BASE_SHA=$(echo ${{ github.event.pull_request.base.sha }} | cut -c1-8)" >> $GITHUB_ENV
-          echo "HEAD_SHA=$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-8)" >> $GITHUB_ENV
-          echo "BASELINE_JSON=$(mktemp)" >> $GITHUB_ENV
-          echo "CONTENDER_JSON=$(mktemp)" >> $GITHUB_ENV
-          echo "PR_COMMENT=$(mktemp)" >>  $GITHUB_ENV
-      - name: Run
-        run: |
-          python3.10 -m venv --system-site-packages ./py310
-          source ./py310/bin/activate
-          export PYTHON_INCLUDE_DIR=/usr/include/python3.10
-
-          python3.10 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu128 -U
-          python3.10 -m pip install ninja pytest pytest-benchmark mujoco dm_control "gym[accept-rom-license,atari]"
-          python3.10 -m pip install "pybind11[global]"
-          python3.10 -m pip install git+https://github.com/pytorch/tensordict 
-          python3.10 setup.py develop
-          # python3.10 -m pip install git+https://github.com/pytorch/rl@$GITHUB_BRANCH
-
-          # test import
-          python3 -c """import torch
-          assert torch.cuda.device_count()
-          """
-
-          cd benchmarks/
-          export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
-          export COMPOSITE_LP_AGGREGATE=0
-          export CUDA_VISIBLE_DEVICES=
-          export TD_GET_DEFAULTS_TO_NONE=1
-          RUN_BENCHMARK="python3 -m pytest -vvv --rank 0 --ignore test_collectors_benchmark.py --benchmark-json "
-          git checkout ${{ github.event.pull_request.base.sha }}
-          $RUN_BENCHMARK ${{ env.BASELINE_JSON }}
-          git checkout ${{ github.event.pull_request.head.sha }}
-          $RUN_BENCHMARK ${{ env.CONTENDER_JSON }}
-      - name: Publish results
-        uses: apbard/pytest-benchmark-commenter@v3
-        env:
-          GIT_WORK_TREE: /__w/rl/rl
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          benchmark-file: ${{ env.CONTENDER_JSON }}
-          comparison-benchmark-file: ${{ env.BASELINE_JSON }}
-          benchmark-metrics: 'name,max,mean,ops'
-          comparison-benchmark-metric: 'ops'
-          comparison-higher-is-better: true
-          comparison-threshold: 5
-          benchmark-title: 'Result of CPU Benchmark Tests'
-
-  benchmark_gpu:
-    name: GPU Pytest benchmark
+  benchmark:
+    name: ${{ matrix.device }} Pytest benchmark
     runs-on: linux.g5.4xlarge.nvidia.gpu
+    strategy:
+      matrix:
+        device: [CPU, GPU]
     defaults:
       run:
         shell: bash -l {0}
@@ -171,11 +76,13 @@ jobs:
           python3.10 -m venv --system-site-packages ./py310
           source ./py310/bin/activate
           export PYTHON_INCLUDE_DIR=/usr/include/python3.10
+          ${{ matrix.device == 'CPU' && 'export CUDA_VISIBLE_DEVICES=' || '' }}
 
           python3.10 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu128 -U
           python3.10 -m pip install ninja pytest pytest-benchmark mujoco dm_control "gym[accept-rom-license,atari]"
           python3.10 -m pip install "pybind11[global]"
           python3.10 -m pip install git+https://github.com/pytorch/tensordict 
+          python3.10 -m pip install safetensors tqdm pandas numpy matplotlib
           python3.10 setup.py develop
           # python3.10 -m pip install git+https://github.com/pytorch/rl@$GITHUB_BRANCH
 
@@ -205,4 +112,4 @@ jobs:
           comparison-benchmark-metric: 'ops'
           comparison-higher-is-better: true
           comparison-threshold: 5
-          benchmark-title: 'Result of GPU Benchmark Tests'
+          benchmark-title: 'Result of ${{ matrix.device }} Benchmark Tests'
