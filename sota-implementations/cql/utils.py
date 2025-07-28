@@ -232,18 +232,9 @@ def make_offline_discrete_replay_buffer(rb_cfg):
 
     data.append_transform(DoubleToFloat())
 
-    def transform_data(data):
-        data *= 1
-
-    with torch.enable_grad():
-        data.append_transform(
-            transform_data,
-            invert=True,
-        )
-
     # Clean up
-
     minari.delete_dataset(rb_cfg.dataset)
+    
     return data
 
 
@@ -406,7 +397,6 @@ def make_continuous_loss(loss_cfg, model, device: torch.device | None = None):
 
 
 def make_discrete_loss(loss_cfg, model, device: torch.device | None = None):
-
 
     loss_module = DiscreteCQLLoss(
         model,
