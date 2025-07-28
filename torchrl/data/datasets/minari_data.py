@@ -266,6 +266,8 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
                                 if val.is_empty():
                                     continue
                                 val = _patch_info(val)
+                            # TODO: This is bad. torch.zeros_like should assign zeros even for NonTensorData values.
+                            #       Instead, right now it only creates a copy of the original val[0]
                             td_data.set(("next", match), torch.zeros_like(val[0]))
                             td_data.set(match, torch.zeros_like(val[0]))
                         if key not in ("terminations", "truncations", "rewards"):
@@ -282,6 +284,11 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
             )
             if "terminated" in td_data.keys():
                 td_data["done"] = td_data["truncated"] | td_data["terminated"]
+            # TODO: THIS IS EXTREMELY WRONG! expand() takes the initial td_data["observation", "mission"]
+            #       and, instead of expanding the original 109 length numpy array to 56806 of total_steps,
+            #       it creates a td_data["observation", "mission"] of 56806 where each element is the first
+            #       episode of 109 steps, ie, each td_data["observation", "mission"][i] is the same 109 length
+            #       numpy array.
             td_data = td_data.expand(total_steps)
             # save to designated location
             torchrl_logger.info(f"creating tensordict data in {self.data_path_root}: ")
@@ -314,6 +321,10 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
                                     f"Mismatching number of steps for key {key}: was {steps} but got {val.shape[0] - 1}."
                                 )
                             data_view["next", match].copy_(val[1:])
+                            # TODO: The copy_ of NonTensorData fails absolutely. Instead of copying the values in
+                            #       val, the previous 109 mission values stored in a numpy array get copied into a list
+                            #       of 82 elements, each of which was the initial 109 size numpy array. The correct val
+                            #       values get lost from here on.
                             data_view[match].copy_(val[:-1])
                         elif key not in ("terminations", "truncations", "rewards"):
                             if steps is None:
