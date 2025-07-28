@@ -23,7 +23,7 @@ logger:
 # replay buffer
 replay_buffer:
   dataset: mujoco/hopper/expert-v0
-  batch_size: 128
+  batch_size: 256
 
 # optimization
 optim:
@@ -31,7 +31,7 @@ optim:
   actor_lr: 3e-4
   critic_lr: 3e-4
   weight_decay: 0.0
-  gradient_steps: 100_000
+  gradient_steps: 1_000_000
   policy_eval_start: 40_000
 
 # policy and model
