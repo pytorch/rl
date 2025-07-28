@@ -11,7 +11,6 @@ import os.path
 import sys
 import time
 import unittest
-import warnings
 from functools import wraps
 from typing import Callable
 
@@ -24,6 +23,7 @@ from torch import nn, vmap
 
 from torchrl._utils import (
     implement_for,
+    logger,
     logger as torchrl_logger,
     RL_WARNINGS,
     seed_generator,
@@ -792,7 +792,7 @@ def _call_value_nets(
             )
         else:
             if RL_WARNINGS:
-                warnings.warn(
+                logger.warning(
                     "Got a tensordict without a time-marked dimension, assuming time is along the last dimension. "
                     "This warning can be turned off by setting the environment variable RL_WARNINGS to False."
                 )

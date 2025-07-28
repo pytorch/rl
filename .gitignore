@@ -14,7 +14,7 @@ __pycache__/
 .installed.cfg
 MANIFEST
 build/
-data/
+./data/
 develop-eggs/
 dist/
 downloads/
