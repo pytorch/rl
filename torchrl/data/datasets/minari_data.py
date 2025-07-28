@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Callable
 
 import torch
-from tensordict import PersistentTensorDict, TensorDict, is_non_tensor
+from tensordict import is_non_tensor, PersistentTensorDict, TensorDict
 from torchrl._utils import KeyDependentDefaultDict, logger as torchrl_logger
 from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 from torchrl.data.datasets.utils import _get_root_dir
