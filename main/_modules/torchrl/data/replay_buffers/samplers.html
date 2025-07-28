@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.10.0+93fcb02) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.10.0+c226646) &#x25BC</span></a>
     </div>
     
 
@@ -440,7 +440,6 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">MemoryMappedTensor</span><span class="p">,</span> <span class="n">TensorDict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">NestedKey</span>
-
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch.utils._pytree</span><span class="w"> </span><span class="kn">import</span> <span class="n">tree_map</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._extension</span><span class="w"> </span><span class="kn">import</span> <span class="n">EXTENSION_WARNING</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_replace_last</span><span class="p">,</span> <span class="n">logger</span>
@@ -455,7 +454,7 @@
         <span class="n">SumSegmentTreeFp64</span><span class="p">,</span>
     <span class="p">)</span>
 <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-    <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">EXTENSION_WARNING</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="n">EXTENSION_WARNING</span><span class="p">)</span>
 
 <span class="n">_EMPTY_STORAGE_ERROR</span> <span class="o">=</span> <span class="s2">&quot;Cannot sample from an empty storage.&quot;</span>
 

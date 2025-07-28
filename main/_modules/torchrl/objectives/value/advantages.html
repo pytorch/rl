@@ -286,7 +286,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.10.0+93fcb02) &#x25BC</span></a>
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.10.0+c226646) &#x25BC</span></a>
     </div>
     
 
@@ -449,7 +449,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">NestedKey</span><span class="p">,</span> <span class="n">unravel_key</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tensor</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">RL_WARNINGS</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrl._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span><span class="p">,</span> <span class="n">RL_WARNINGS</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.envs.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">step_mdp</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">torchrl.objectives.utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">_maybe_get_or_select</span><span class="p">,</span>
@@ -874,7 +874,7 @@
                 <span class="n">ndim</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">names</span><span class="p">)</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="s2">&quot;time&quot;</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
             <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">RL_WARNINGS</span><span class="p">:</span>
-                    <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
                         <span class="s2">&quot;Got a tensordict without a time-marked dimension, assuming time is along the last dimension. &quot;</span>
                         <span class="s2">&quot;This warning can be turned off by setting the environment variable RL_WARNINGS to False.&quot;</span>
                     <span class="p">)</span>
