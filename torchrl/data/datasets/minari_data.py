@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Callable
 
 import torch
-from tensordict import PersistentTensorDict, TensorDict
+from tensordict import PersistentTensorDict, TensorDict, is_non_tensor
 from torchrl._utils import KeyDependentDefaultDict, logger as torchrl_logger
 from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 from torchrl.data.datasets.utils import _get_root_dir
@@ -339,6 +339,8 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
                                 ):  # no need for this, we don't need the proper length: or steps != val.shape[0] - 1:
                                     if val.is_empty():
                                         continue
+                                    if is_non_tensor(val):
+                                        continue
                                     val = _patch_info(val)
                                 td_data.set(("next", match), torch.zeros_like(val[0]))
                                 td_data.set(match, torch.zeros_like(val[0]))
@@ -385,6 +387,8 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
                             ):
                                 if not val.shape or steps != val.shape[0] - 1:
                                     if val.is_empty():
+                                        continue
+                                    if is_non_tensor(val):
                                         continue
                                     val = _patch_info(val)
                                 if steps != val.shape[0] - 1:
