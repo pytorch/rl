@@ -234,7 +234,7 @@ def make_offline_discrete_replay_buffer(rb_cfg):
 
     # Clean up
     minari.delete_dataset(rb_cfg.dataset)
-    
+
     return data
 
 

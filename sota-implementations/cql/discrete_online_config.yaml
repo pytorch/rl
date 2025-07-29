@@ -30,7 +30,7 @@ logger:
   eval_steps: 200
   mode: online
   eval_iter: 1000
-  video: True
+  video: False
 
 # Buffer
 replay_buffer:
