@@ -20,6 +20,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Operating System :: OS Independent",
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -110,6 +111,7 @@ exclude = [
 
 [tool.setuptools.package-data]
 "*" = ["*.txt", "*.md"]
+"torchrl" = ["csrc/*.h"]
 
 [tool.usort]
 first_party_detection = false

@@ -60,20 +60,14 @@ jobs:
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda_support[1] }}
-      - name: Prepare nightly build
-        env:
-          TORCHRL_NIGHTLY: 1
-        run: |
-          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 packaging/prepare_nightly_build.py
       - name: Build TorchRL Nightly
         env:
           TORCHRL_NIGHTLY: 1
         run: |
           rm -r dist || true
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install wheel
-          python3 setup.py bdist_wheel
+          python3 -mpip install build wheel
+          ./build_nightly.sh
           find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
       # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
       # pretend that they're manylinux1 compliant so we do the same.
@@ -233,20 +227,14 @@ jobs:
         shell: bash
         run: |
           python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
-      - name: Prepare nightly build
-        env:
-          TORCHRL_NIGHTLY: 1
-        shell: bash
-        run: |
-          python3 packaging/prepare_nightly_build.py
       - name: Build TorchRL nightly
         env:
           TORCHRL_NIGHTLY: 1
         shell: bash
         run: |
           rm -r dist || true
-          python3 -mpip install wheel
-          python3 setup.py bdist_wheel
+          python3 -mpip install build wheel
+          ./build_nightly.sh
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v4
         with:
