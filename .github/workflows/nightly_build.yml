@@ -112,14 +112,8 @@ jobs:
           python3 -mpip install --upgrade pip
       - name: Install tensordict
         run: |
-          if [[ "$OSTYPE" == "darwin"* ]]; then
-            brew install cmake
-          else
-            sudo apt-get update
-            sudo apt-get install -y cmake
-          fi
-          python3 -mpip install "pybind11[global]"
-          python3 -mpip install git+https://github.com/pytorch/tensordict.git
+          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
+          python3 -mpip install tensordict-nightly
       - name: Install test dependencies
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
@@ -278,15 +272,7 @@ jobs:
       - name: Install tensordict
         shell: bash
         run: |
-          if ! choco -v &> /dev/null; then
-            powershell -NoProfile -InputFormat None -ExecutionPolicy Bypass -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))"
-          fi
-          # Install cmake using Chocolatey
-          choco install cmake -y
-          # Install necessary Python packages
-          python -m pip install --upgrade pip
-          python -m pip install "pybind11[global]"
-          python3 -mpip install git+https://github.com/pytorch/tensordict.git
+          python3 -mpip install tensordict-nightly
       - name: Download built wheels
         uses: actions/download-artifact@v4
         with:

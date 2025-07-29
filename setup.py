@@ -1,35 +1,72 @@
-import os
-import sys
 import glob
 import logging
-from pathlib import Path
+import os
+import sys
+
 from setuptools import setup
 from torch.utils.cpp_extension import BuildExtension, CppExtension
 
-def get_extensions():
-    extension = CppExtension
+logger = logging.getLogger(__name__)
 
+
+def get_extensions():
+    """Build C++ extensions with platform-specific compiler flags.
+
+    This function configures the C++ extension build process with appropriate
+    compiler flags for different platforms:
+    - Windows (MSVC): Uses /O2, /std:c++17, /EHsc flags
+    - Unix-like (GCC/Clang): Uses -O3, -std=c++17, -fdiagnostics-color=always flags
+
+    Returns:
+        list: List of CppExtension objects to be built
+    """
+    extension = CppExtension
     extra_link_args = []
-    extra_compile_args = {
-        "cxx": [
-            "-O3",
-            "-std=c++17",
-            "-fdiagnostics-color=always",
-        ]
-    }
-    debug_mode = os.getenv("DEBUG", "0") == "1"
-    if debug_mode:
-        logging.info("Compiling in debug mode")
+
+    # Platform-specific compiler flags
+    if sys.platform == "win32":
+        # MSVC flags for Windows
         extra_compile_args = {
             "cxx": [
-                "-O0",
-                "-fno-inline",
-                "-g",
+                "/O2",  # Optimization level 2 (equivalent to -O3)
+                "/std:c++17",  # C++17 standard
+                "/EHsc",  # Exception handling model
+            ]
+        }
+        debug_mode = os.getenv("DEBUG", "0") == "1"
+        if debug_mode:
+            logging.info("Compiling in debug mode")
+            extra_compile_args = {
+                "cxx": [
+                    "/Od",  # No optimization (equivalent to -O0)
+                    "/Zi",  # Generate debug info
+                    "/std:c++17",  # C++17 standard
+                    "/EHsc",  # Exception handling model
+                ]
+            }
+            extra_link_args = ["/DEBUG"]
+    else:
+        # GCC/Clang flags for Unix-like systems
+        extra_compile_args = {
+            "cxx": [
+                "-O3",
                 "-std=c++17",
                 "-fdiagnostics-color=always",
             ]
         }
-        extra_link_args = ["-O0", "-g"]
+        debug_mode = os.getenv("DEBUG", "0") == "1"
+        if debug_mode:
+            logging.info("Compiling in debug mode")
+            extra_compile_args = {
+                "cxx": [
+                    "-O0",
+                    "-fno-inline",
+                    "-g",
+                    "-std=c++17",
+                    "-fdiagnostics-color=always",
+                ]
+            }
+            extra_link_args = ["-O0", "-g"]
 
     extensions_dir = "torchrl/csrc"
 
@@ -53,13 +90,22 @@ def get_extensions():
 
     return ext_modules
 
+
 def main():
+    """Main setup function for building TorchRL with C++ extensions."""
     setup_kwargs = {
         "ext_modules": get_extensions(),
         "cmdclass": {"build_ext": BuildExtension.with_options()},
+        "packages": ["torchrl"],
+        "package_data": {
+            "torchrl": ["version.py"],
+        },
+        "include_package_data": True,
+        "zip_safe": False,
     }
-    
+
     setup(**setup_kwargs)
+
 
 if __name__ == "__main__":
     main()

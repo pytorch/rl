@@ -40,6 +40,28 @@ echo "$(date +%Y.%m.%d)" > version.txt
 
 # Build the package
 echo "Building nightly package..."
-python -m build
+echo "Python version: $(python --version)"
+echo "Platform: $(python -c 'import sys; print(sys.platform)')"
+
+# Install build dependencies
+echo "Installing build dependencies..."
+# Use setuptools 65.3.0 for Python <= 3.10 (fixes compatibility issues)
+# Use latest setuptools for Python 3.11+
+# 
+# Rationale:
+# - Python 3.9/3.10: setuptools 65.3.0 is more stable and fixes version detection issues
+#   that cause "0.0.0+unknown" version strings in nightly builds
+# - Python 3.11+: Newer setuptools versions are required for proper functionality
+#   with the latest Python features and build system changes
+PYTHON_VERSION=$(python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+if python -c "import sys; exit(0 if sys.version_info < (3, 11) else 1)"; then
+    echo "Using setuptools 65.3.0 for Python $PYTHON_VERSION (compatibility mode)"
+    python -m pip install wheel setuptools==65.3.0
+else
+    echo "Using latest setuptools for Python $PYTHON_VERSION (modern mode)"
+    python -m pip install wheel setuptools
+fi
+
+python setup.py bdist_wheel
 
 echo "Nightly build completed successfully!" 
