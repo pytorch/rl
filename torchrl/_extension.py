@@ -48,7 +48,7 @@ if _is_nightly(__version__):
         " - make sure ninja and cmake were installed\n"
         " - make sure you ran `python setup.py clean && python setup.py develop` and that no error was raised\n"
         " - make sure the version of PyTorch you are using matches the one that was present in your virtual env during "
-        f"setup. This package was built with PyTorch {pytorch_version}."
+        f"setup. This package was built with PyTorch {pytorch_version}. You can deactivate this warning by setting the environment variable `RL_WARNINGS=0`."
     )
 
 else:
@@ -59,5 +59,6 @@ else:
         "prioritized replay buffers can only be used with the PyTorch version they were built against. "
         f"This package was built with PyTorch {pytorch_version}. "
         "Workarounds include: (1) upgrading/downgrading PyTorch or TorchRL to compatible versions, "
-        "or (2) making a local install using `pip install git+https://github.com/pytorch/rl.git@<version>`."
+        "or (2) making a local install using `pip install git+https://github.com/pytorch/rl.git@<version>`. "
+        "You can deactivate this warning by setting the environment variable `RL_WARNINGS=0`."
     )

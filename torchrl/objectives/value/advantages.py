@@ -27,7 +27,7 @@ from tensordict.nn.probabilistic import interaction_type
 from tensordict.utils import NestedKey, unravel_key
 from torch import Tensor
 
-from torchrl._utils import RL_WARNINGS
+from torchrl._utils import logger, RL_WARNINGS
 from torchrl.envs.utils import step_mdp
 from torchrl.objectives.utils import (
     _maybe_get_or_select,
@@ -452,7 +452,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 ndim = list(data.names).index("time") + 1
             except ValueError:
                 if RL_WARNINGS:
-                    warnings.warn(
+                    logger.warning(
                         "Got a tensordict without a time-marked dimension, assuming time is along the last dimension. "
                         "This warning can be turned off by setting the environment variable RL_WARNINGS to False."
                     )

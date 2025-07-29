@@ -8,7 +8,7 @@ import contextlib
 
 from contextlib import nullcontext
 from copy import copy
-from typing import Literal
+from typing import Any, Literal
 
 import torch
 from tensordict import (
@@ -39,8 +39,18 @@ from torchrl.modules.utils.utils import _unpad_tensors
 class TransformersWrapper(LLMWrapperBase):
     """A wrapper class for Hugging Face Transformers models, providing a consistent interface for text generation and log probability computation.
 
-    This class is a subclass of :class:`~torchrl.modules.llm.policies.LLMWrapperBase` and provides a unified API for handling different input modalities
-    (history, text, tokens) with consistent output structure using :class:`~tensordict.TensorClass` objects.
+    Packing vs Padding:
+        - Packing (`pad_model_input=False`):
+            * More memory efficient for variable-length sequences.
+            * Not all models support packed input (requires custom attention masks and position ids).
+            * May be less compatible with some HuggingFace models or custom architectures.
+        - Padding (`pad_model_input=True`):
+            * Universally supported by all models.
+            * Wastes memory for short sequences in a batch.
+            * Simpler, but less efficient for highly variable-length data.
+        - If unsure, use padding for maximum compatibility. Use packing for large batches of variable-length data and when your model supports it.
+
+    Additional error handling is provided for empty and overlong sequences.
 
     Args:
         model (transformers.AutoModelForCausalLM | str): The Hugging Face Transformers model to wrap.
@@ -65,8 +75,16 @@ class TransformersWrapper(LLMWrapperBase):
         return_log_probs (bool, optional): Whether to return log probabilities. Defaults to `False`.
         generate_kwargs (dict | None, optional): Additional arguments to pass to the model's generate method. Defaults to `None`.
         tokenizer_kwargs (dict | None, optional): Additional arguments to pass to the tokenizer. Defaults to `None`.
-        pad_output (bool, optional): Whether to pad the output sequences to a uniform length. Transformers require `pad_output=True`, and the output
-            sequences will be padded and represented as tensors. Defaults to `False`.
+        pad_output (bool, optional): Whether to pad the output sequences to a uniform length. This does not impact the underlying padding
+            during call to the model. To use padding or packing during the model `forward` call, see `pad_model_input`.
+            Defaults to `False`.
+        pad_model_input (bool, optional): Whether to pad the model input sequences to a uniform length.
+            If `False`, packing will be used instead. Packing is generally more memory efficient than padding,
+            but this feature may not work with all models.
+            `pad_model_input` can only be used when `generate=False`.
+            This does not impact the padding of the model output - one may ask for padded output though `pad_output=True` while the model
+            is called with `pad_model_input=False`.
+            Defaults to `True`.
         inplace (Literal[True, False, "empty"] | None, optional): Determines how the module should handle in-place operations. Defaults to `True`.
         device (torch.device | None, optional): The device to use for computation. Defaults to `None`.
         layout (torch.layout | None, optional): The layout to use for the output tensors when `pad_output=False`. Defaults to `torch.strided`.
@@ -157,6 +175,7 @@ class TransformersWrapper(LLMWrapperBase):
         generate_kwargs: dict | None = None,
         tokenizer_kwargs: dict | None = None,
         pad_output: bool = False,
+        pad_model_input: bool | None = None,
         inplace: Literal[True, False, "empty"] | None = None,
         device: torch.device | None = None,
         layout: torch.layout | None = None,
@@ -192,6 +211,10 @@ class TransformersWrapper(LLMWrapperBase):
         self.input_mode = input_mode
         self.attention_mask_key = attention_mask_key
         self.generate = generate
+        if pad_model_input is not None and generate:
+            raise ValueError("pad_model_input is not supported when generate=True.")
+        pad_model_input = pad_model_input if pad_model_input is not None else True
+        self.pad_model_input = pad_model_input
 
         # Auto-determine what to return based on input mode
         self.return_history = input_mode in ("history",)
@@ -980,49 +1003,93 @@ class TransformersWrapper(LLMWrapperBase):
         """Compute log-probs from history tokens."""
         pad_val = self.tokenizer.pad_token_id
 
-        # unfortunately HF wants us to use padded tensors
-        tokens_full_padded = response_tokens.get(
-            "input_ids",
-            as_padded_tensor=True,
-            padding_side="left",
-            padding_value=pad_val,
-        )
-        if not isinstance(tokens_full_padded, torch.Tensor):
-            raise ValueError(
-                f"Expected Tensor for tokens_full_padded, got {type(tokens_full_padded)}"
-            )
-        attention_mask_full_padded = response_tokens.get(
-            "attention_mask",
-            as_padded_tensor=True,
-            padding_side="left",
-            padding_value=0,
-        )
-        if not isinstance(attention_mask_full_padded, torch.Tensor):
-            raise ValueError(
-                f"Expected Tensor for attention_mask_full_padded, got {type(attention_mask_full_padded)}"
-            )
-
         if cfg is not None:
             kwargs = copy(self.generate_kwargs)
             kwargs["generation_config"] = cfg
         else:
             kwargs = self.generate_kwargs
 
-        tokens_out_struct = self.model(
-            tokens_full_padded, attention_mask=attention_mask_full_padded, **kwargs
-        )
+        # non-packed forward pass
+        if self.pad_model_input:
+            # unfortunately HF wants us to use padded tensors
+            tokens_full_padded = response_tokens.get(
+                "input_ids",
+                as_padded_tensor=True,
+                padding_side="left",
+                padding_value=pad_val,
+            )
+            if not isinstance(tokens_full_padded, torch.Tensor):
+                raise ValueError(
+                    f"Expected Tensor for tokens_full_padded, got {type(tokens_full_padded)}"
+                )
+            attention_mask_full_padded = response_tokens.get(
+                "attention_mask",
+                as_padded_tensor=True,
+                padding_side="left",
+                padding_value=0,
+            )
+            if not isinstance(attention_mask_full_padded, torch.Tensor):
+                raise ValueError(
+                    f"Expected Tensor for attention_mask_full_padded, got {type(attention_mask_full_padded)}"
+                )
 
-        (
-            log_probs_full_padded,
-            logits_full_padded,
-        ) = self._compute_log_probs_from_model_output(
-            tokens_out_struct,
-            tokens_full_padded,
-            attention_mask_full_padded,
-            pad_val,
-            logits_only=logits_only,
-        )
-
+            (
+                log_probs_full_padded,
+                logits_full_padded,
+            ) = self._model_forward_with_padded_sequences(
+                tokens_full_padded,
+                attention_mask_full_padded,
+                pad_val=pad_val,
+                logits_only=logits_only,
+                **kwargs,
+            )
+        else:
+            # unfortunately HF wants us to use padded tensors
+            tokens_full_unpadded = response_tokens.get(
+                "input_ids",
+                as_nested_tensor=True,
+                layout=torch.jagged,
+            )
+            attention_mask_full_unpadded = response_tokens.get(
+                "attention_mask",
+                as_nested_tensor=True,
+                layout=torch.jagged,
+            )
+            (
+                log_probs_full_unpadded,
+                logits_full_unpadded,
+            ) = self._model_forward_with_packed_sequences(
+                # TODO: no padding if we don't need to
+                tokens_full_unpadded,
+                attention_mask_full_unpadded,
+                pad=False,
+                logits_only=logits_only,
+                **kwargs,
+            )
+            tokens_full_padded = pad_sequence(
+                tokens_full_unpadded.unbind(0),
+                batch_first=True,
+                padding_value=pad_val,
+                padding_side="left",
+            )
+            attention_mask_full_padded = pad_sequence(
+                attention_mask_full_unpadded.unbind(0),
+                batch_first=True,
+                padding_value=0,
+                padding_side="left",
+            )
+            log_probs_full_padded = pad_sequence(
+                log_probs_full_unpadded.unbind(0),
+                batch_first=True,
+                padding_value=0.0,
+                padding_side="left",
+            )
+            logits_full_padded = pad_sequence(
+                logits_full_unpadded.unbind(0),
+                batch_first=True,
+                padding_value=0.0,
+                padding_side="left",
+            )
         # Build output TensorClass objects
         text_obj = Text._from_tensordict(
             TensorDict(batch_size=out.batch_size).to_lazystack(0)
@@ -1168,34 +1235,74 @@ class TransformersWrapper(LLMWrapperBase):
             .to_lazystack(0)
             .update(dict(tokens_in))
         )
-        input_ids_full_padded = tokens_in.get(
-            "input_ids",
-            as_padded_tensor=True,
-            padding_side="left",
-            padding_value=self.padding_value,
-        )
-        attention_mask_full_padded = tokens_in.get(
-            "attention_mask",
-            as_padded_tensor=True,
-            padding_side="left",
-            padding_value=0,
-        )
+        pad_val = self.padding_value
 
-        tokens_out_struct = self.model(
-            input_ids_full_padded, attention_mask=attention_mask_full_padded, **kwargs
-        )
+        if self.pad_model_input:
+            tokens_full_padded = tokens_in.get(
+                "input_ids",
+                as_padded_tensor=True,
+                padding_side="left",
+                padding_value=pad_val,
+            )
+            attention_mask_full_padded = tokens_in.get(
+                "attention_mask",
+                as_padded_tensor=True,
+                padding_side="left",
+                padding_value=0,
+            )
 
-        # Compute log-probs for the input tokens
-        (
-            log_probs_full_padded,
-            logits_full_padded,
-        ) = self._compute_log_probs_from_model_output(
-            tokens_out_struct,
-            input_ids_full_padded,
-            attention_mask_full_padded,
-            self.tokenizer.pad_token_id,
-            logits_only=logits_only,
-        )
+            (
+                log_probs_full_padded,
+                logits_full_padded,
+            ) = self._model_forward_with_padded_sequences(
+                tokens_full_padded,
+                attention_mask_full_padded,
+                pad_val=pad_val,
+                logits_only=logits_only,
+                **kwargs,
+            )
+        else:
+            # packed forward pass
+            tokens_full_unpadded = tokens_in.get(
+                "input_ids",
+                as_nested_tensor=True,
+                layout=torch.jagged,
+            )
+            attention_mask_full_unpadded = tokens_in.get(
+                "attention_mask",
+                as_nested_tensor=True,
+                layout=torch.jagged,
+            )
+            (
+                log_probs_full_unpadded,
+                logits_full_unpadded,
+            ) = self._model_forward_with_packed_sequences(
+                tokens_full_unpadded, attention_mask_full_unpadded, pad=False, **kwargs
+            )
+            tokens_full_padded = pad_sequence(
+                tokens_full_unpadded.unbind(0),
+                batch_first=True,
+                padding_value=pad_val,
+                padding_side="left",
+            )
+            attention_mask_full_padded = pad_sequence(
+                attention_mask_full_unpadded.unbind(0),
+                batch_first=True,
+                padding_value=0,
+                padding_side="left",
+            )
+            log_probs_full_padded = pad_sequence(
+                log_probs_full_unpadded.unbind(0),
+                batch_first=True,
+                padding_value=0.0,
+                padding_side="left",
+            )
+            logits_full_padded = pad_sequence(
+                logits_full_unpadded.unbind(0),
+                batch_first=True,
+                padding_value=0.0,
+                padding_side="left",
+            )
 
         # Build output TensorClass objects
         text_obj = Text._from_tensordict(
@@ -1210,10 +1317,10 @@ class TransformersWrapper(LLMWrapperBase):
             TensorDict(batch_size=out.batch_size).to_lazystack(0)
         )
         if self.pad_output:
-            tokens_obj.full = input_ids_full_padded
+            tokens_obj.full = tokens_full_padded
         else:
             input_ids_full_unpadded = _unpad_tensors(
-                input_ids_full_padded, attention_mask_full_padded, as_nested=False
+                tokens_full_padded, attention_mask_full_padded, as_nested=False
             )
             tokens_obj.full = input_ids_full_unpadded
         tokens_obj.response = None
@@ -1460,50 +1567,109 @@ class TransformersWrapper(LLMWrapperBase):
 
         pad_val = self.tokenizer.pad_token_id
 
-        input_ids_full_padded = td.get(
-            self.input_key,
-            as_padded_tensor=True,
-            padding_side="left",
-            padding_value=pad_val,
-        )
-        # Attention mask: try first the regular entry, then the key provided in the constructor, finally fallback on eager attention mask
-        attention_mask_full_padded = td.get(
-            ("masks", "all_attention_mask"),
-            as_padded_tensor=True,
-            padding_side="left",
-            padding_value=False,
-        )
-        if attention_mask_full_padded is None:
-            attention_mask_full_padded = td.get(
-                self.attention_mask_key,
-                as_padded_tensor=True,
-                padding_side="left",
-                padding_value=False,
-            )
-            if attention_mask_full_padded is None:
-                attention_mask_full_padded = input_ids_full_padded != pad_val
-
         if cfg is not None:
             kwargs = copy(self.generate_kwargs)
             kwargs["generation_config"] = cfg
         else:
             kwargs = self.generate_kwargs
 
-        tokens_out_struct = self.model(
-            input_ids_full_padded, attention_mask=attention_mask_full_padded, **kwargs
-        )
+        if self.pad_model_input:
+            tokens_full_padded = td.get(
+                self.input_key,
+                as_padded_tensor=True,
+                padding_side="left",
+                padding_value=pad_val,
+            )
+            # Attention mask: try first the regular entry, then the key provided in the constructor, finally fallback on eager attention mask
+            attention_mask_full_padded = td.get(
+                ("masks", "all_attention_mask"),
+                as_padded_tensor=True,
+                padding_side="left",
+                padding_value=False,
+            )
+            if attention_mask_full_padded is None:
+                attention_mask_full_padded = td.get(
+                    self.attention_mask_key,
+                    as_padded_tensor=True,
+                    padding_side="left",
+                    padding_value=False,
+                )
+                if attention_mask_full_padded is None:
+                    attention_mask_full_padded = tokens_full_padded != pad_val
 
-        # Compute log-probs for the input tokens
-        (
-            log_probs_full_padded,
-            logits_full_padded,
-        ) = self._compute_log_probs_from_model_output(
-            tokens_out_struct,
-            input_ids_full_padded,
-            attention_mask_full_padded,
-            self.tokenizer.pad_token_id,
-            logits_only=logits_only,
-        )
+            (
+                log_probs_full_padded,
+                logits_full_padded,
+            ) = self._model_forward_with_padded_sequences(
+                tokens_full_padded,
+                attention_mask_full_padded,
+                pad_val=pad_val,
+                logits_only=logits_only,
+                **kwargs,
+            )
+        else:
+            # packed forward pass
+            # unfortunately HF wants us to use padded tensors
+            tokens_full_unpadded = td.get(
+                self.input_key,
+                as_nested_tensor=True,
+                layout=torch.jagged,
+            )
+            if tokens_full_unpadded is None:
+                raise ValueError(
+                    f"Expected '{self.input_key}' key for tokens input mode, but found keys: {list(td.keys())}"
+                )
+            # Attention mask: try first the regular entry, then the key provided in the constructor, finally fallback on eager attention mask
+            attention_mask_full_unpadded = td.get(
+                ("masks", "all_attention_mask"),
+                as_nested_tensor=True,
+                layout=torch.jagged,
+            )
+            if attention_mask_full_unpadded is None:
+                attention_mask_full_unpadded = td.get(
+                    self.attention_mask_key,
+                    as_nested_tensor=True,
+                    layout=torch.jagged,
+                )
+                if attention_mask_full_unpadded is None:
+                    # does this even work?
+                    attention_mask_full_unpadded = tokens_full_unpadded != pad_val
+
+            (
+                log_probs_full_unpadded,
+                logits_full_unpadded,
+            ) = self._model_forward_with_packed_sequences(
+                # TODO: no padding if we don't need to
+                tokens_full_unpadded,
+                attention_mask_full_unpadded,
+                pad=False,
+                logits_only=logits_only,
+                **kwargs,
+            )
+            tokens_full_padded = pad_sequence(
+                tokens_full_unpadded.unbind(0),
+                batch_first=True,
+                padding_value=pad_val,
+                padding_side="left",
+            )
+            attention_mask_full_padded = pad_sequence(
+                attention_mask_full_unpadded.unbind(0),
+                batch_first=True,
+                padding_value=0,
+                padding_side="left",
+            )
+            log_probs_full_padded = pad_sequence(
+                log_probs_full_unpadded.unbind(0),
+                batch_first=True,
+                padding_value=0.0,
+                padding_side="left",
+            )
+            logits_full_padded = pad_sequence(
+                logits_full_unpadded.unbind(0),
+                batch_first=True,
+                padding_value=0.0,
+                padding_side="left",
+            )
 
         # Build output TensorClass objects
         text_obj = Text._from_tensordict(
@@ -1519,11 +1685,11 @@ class TransformersWrapper(LLMWrapperBase):
         )
         if not self.pad_output:
             input_ids_full_unpadded = _unpad_tensors(
-                input_ids_full_padded, attention_mask_full_padded, as_nested=False
+                tokens_full_padded, attention_mask_full_padded, as_nested=False
             )
             tokens_obj.full = input_ids_full_unpadded
         else:
-            tokens_obj.full = input_ids_full_padded
+            tokens_obj.full = tokens_full_padded
         tokens_obj.response = None
         tokens_obj.padded = MetaData(self.pad_output)
         out.set(self.tokens_key, tokens_obj)
@@ -1846,3 +2012,249 @@ class TransformersWrapper(LLMWrapperBase):
         finally:
             self._in_get_dist_call = False
             self.out_keys.remove("logits")
+
+    def _pack_sequences(
+        self,
+        input_ids: torch.nested.NestedTensor,
+        attention_mask: torch.nested.NestedTensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, dict[str, Any]]:
+        """Pack sequences into a single tensor."""
+        packed_input_ids = input_ids.values()
+        lengths = input_ids.lengths()
+        if lengths is None:
+            offsets = input_ids.offsets()
+            lengths = offsets.diff()
+            offsets = offsets[1:]
+        else:
+            offsets = lengths.cumsum(0)
+        # Create block-diagonal attention mask to prevent cross-sequence attention
+        attention_mask = self._create_block_diagonal_attention_mask(lengths)
+        # Create position IDs that restart for each sequence
+        position_ids = self._create_packed_position_ids(
+            lengths, total_length=packed_input_ids.numel()
+        )
+
+        packing_metadata = {
+            "sequence_lengths": lengths,
+            "cumulative_lengths": offsets,
+            "attention_mask": attention_mask,
+            "position_ids": position_ids,
+        }
+
+        return (
+            packed_input_ids.unsqueeze(0),
+            attention_mask.unsqueeze(0),
+            packing_metadata,
+        )
+
+    def _model_forward_with_padded_sequences(
+        self,
+        tokens_full_padded: torch.Tensor,
+        attention_mask_full_padded: torch.Tensor,
+        *,
+        pad_val: float | int | torch.Tensor | None = None,
+        logits_only: bool = False,
+        **kwargs,
+    ):
+        """Forward pass with padded sequences."""
+        # Error handling for empty sequences
+        if tokens_full_padded.numel() == 0:
+            raise ValueError(
+                "Input contains empty sequences. Packing/padding requires at least one token per sequence."
+            )
+        # Error handling for overlong sequences
+        max_len = getattr(self.model.config, "max_position_embeddings", None)
+        if max_len is not None and tokens_full_padded.shape[-1] > max_len:
+            raise ValueError(
+                f"Input sequence length ({tokens_full_padded.shape[-1]}) exceeds model's max_position_embeddings ({max_len}). Consider truncating or splitting your input."
+            )
+        tokens_out_struct = self.model(
+            tokens_full_padded, attention_mask_full_padded, **kwargs
+        )
+        (
+            log_probs_full_padded,
+            logits_full_padded,
+        ) = self._compute_log_probs_from_model_output(
+            tokens_out_struct,
+            tokens_full_padded,
+            attention_mask_full_padded,
+            pad_val,
+            logits_only=logits_only,
+        )
+        return log_probs_full_padded, logits_full_padded
+
+    def _model_forward_with_packed_sequences(
+        self,
+        flat_input_ids: torch.Tensor,
+        block_diag_attention_mask: torch.Tensor,
+        *,
+        pad: bool = True,
+        logits_only: bool = False,
+        **kwargs,
+    ):
+        """Pack sequences into a single tensor and forward them through the model.
+
+        Args:
+            flat_input_ids (NestedTensor): NestedTensor of shape (batch_size, -1)
+            block_diag_attention_mask (NestedTensor): NestedTensor of shape (batch_size, -1)
+
+        Returns:
+            pad (bool): Whether to pad the output tensors.
+            logits_only (bool): Whether to return only logits.
+            kwargs (dict): Additional keyword arguments to pass to the model.
+
+        """
+        # Error handling for empty sequences
+        if flat_input_ids.numel() == 0:
+            raise ValueError(
+                "Input contains empty sequences. Packing requires at least one token per sequence."
+            )
+        # Error handling for overlong sequences
+        # Note: Skipping this check for nested tensors due to symbolic representation issues
+        # The model will handle sequence length limits internally
+        max_len = getattr(self.model.config, "max_position_embeddings", None)
+        if max_len is not None and not hasattr(flat_input_ids, "size"):
+            # Only check for regular tensors, not nested tensors
+            actual_size = flat_input_ids.shape[-1]
+            if actual_size > max_len:
+                raise ValueError(
+                    f"Input sequence length ({actual_size}) exceeds model's max_position_embeddings ({max_len}). Consider truncating or splitting your input."
+                )
+        (
+            flat_input_ids,
+            block_diag_attention_mask,
+            packing_metadata,
+        ) = self._pack_sequences(flat_input_ids, block_diag_attention_mask)
+
+        outputs = self.model(
+            input_ids=flat_input_ids,
+            attention_mask=block_diag_attention_mask.unsqueeze(0),
+            position_ids=packing_metadata["position_ids"],
+            use_cache=False,  # Disable KV cache for packing
+            **kwargs,
+        )
+        log_probs, logits = self._unpack_outputs(
+            outputs, packing_metadata, flat_input_ids, pad=pad, logits_only=logits_only
+        )
+        return log_probs, logits
+
+    def _unpack_outputs(
+        self,
+        outputs,
+        packing_metadata: dict[str, Any],
+        flat_input_ids: torch.Tensor,
+        pad: bool = True,
+        logits_only: bool = False,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Unpack outputs using nested tensors - zero syncs."""
+        # use cross_entropy to compute log_probs
+        log_probs, logits = self._compute_log_probs_from_model_output(
+            outputs,
+            flat_input_ids,
+            torch.ones_like(flat_input_ids, dtype=torch.bool),
+            -100,
+            logits_only=logits_only,
+        )
+        # check shapes: [1, L] for log_probs, [1, L, vocab_size] for logits
+        if logits_only:
+            log_probs = None
+        else:
+            if log_probs.shape != logits.shape[:2]:
+                raise ValueError(
+                    f"Log probs shape {log_probs.shape=} does not match logits shape {logits.shape[:2]=}"
+                )
+            if log_probs.ndim != 2:
+                raise ValueError(f"Log probs shape {log_probs.shape=} is not 2D")
+            if logits.ndim != 3:
+                raise ValueError(f"Logits shape {logits.shape=} is not 3D")
+            sequence_lengths = packing_metadata["sequence_lengths"]
+            if log_probs.shape[1] != sequence_lengths.sum():
+                raise ValueError(
+                    f"Log probs shape {log_probs.shape=} does not match sequence lengths {sequence_lengths.sum()=}"
+                )
+
+            log_probs = log_probs.squeeze(0)
+            nested_logprobs = torch.nested.nested_tensor_from_jagged(
+                log_probs,
+                lengths=sequence_lengths,
+            )
+
+        logits = logits.squeeze(0)
+        nested_logits = torch.nested.nested_tensor_from_jagged(
+            logits,  # Remove batch dim: (total_length, vocab_size)
+            lengths=sequence_lengths,
+        )
+
+        if pad:
+            return nested_logprobs.to_padded_tensor(
+                padding=0.0
+            ), nested_logits.to_padded_tensor(padding=0.0)
+        return nested_logprobs, nested_logits
+
+    def _create_block_diagonal_attention_mask(
+        self, sequence_lengths: torch.Tensor
+    ) -> torch.Tensor:
+        """Efficient creation of a block-diagonal attention mask.
+
+        Zero cuda syncs, no integer involved except len(tensor) - compilable.
+
+        Args:
+            sequence_lengths: Tensor of shape (batch_size,) containing the lengths of the sequences
+
+        Returns:
+            attention_mask: Tensor of shape (batch_size, total_length, total_length)
+                where each sequence can only attend to itself.
+        """
+        seq_ids = torch.arange(len(sequence_lengths), device=sequence_lengths.device)
+        position_to_seq_id = seq_ids.repeat_interleave(sequence_lengths)
+
+        attention_mask = position_to_seq_id.unsqueeze(
+            1
+        ) == position_to_seq_id.unsqueeze(0)
+        return attention_mask
+
+    def repeat_interleave_causal(self, sequence_lengths: torch.Tensor) -> torch.Tensor:
+        """Same as _create_block_diagonal_attention_mask, but with causal masking."""
+        total_length = sequence_lengths.sum()
+
+        seq_ids = torch.arange(len(sequence_lengths), device=sequence_lengths.device)
+        position_to_seq_id = seq_ids.repeat_interleave(sequence_lengths)
+
+        positions = torch.arange(int(total_length), device=sequence_lengths.device)
+
+        same_sequence = position_to_seq_id.unsqueeze(1) == position_to_seq_id.unsqueeze(
+            0
+        )
+        causal = positions.unsqueeze(0) <= positions.unsqueeze(1)
+
+        attention_mask = same_sequence & causal
+        return attention_mask
+
+    def _create_packed_position_ids(
+        self, sequence_lengths: torch.Tensor, total_length: int | None = None
+    ) -> torch.Tensor:
+        """Create position IDs that restart from 0 for each sequence.
+
+        For sequences of length [3, 2], creates: [0, 1, 2, 0, 1]
+
+        No cuda syncs.
+        """
+        if total_length is None:
+            total_length = int(sequence_lengths.sum().item())
+
+        # Create global position IDs: [0, 1, 2, 3, 4]
+        global_positions = torch.arange(total_length, device=sequence_lengths.device)
+
+        # Create sequence start offsets repeated for each position: [0, 0, 0, 3, 3]
+        offsets = torch.cat(
+            [
+                torch.zeros(1, device=sequence_lengths.device),
+                sequence_lengths.cumsum(0)[:-1],
+            ]
+        )
+        sequence_starts = offsets.repeat_interleave(sequence_lengths)
+
+        # Subtract to get local positions: [0, 1, 2, 0, 1]
+        position_ids = global_positions - sequence_starts
+
+        return position_ids.unsqueeze(0)  # (1, total_length)
