@@ -289,7 +289,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href="../../../versions.html"><span style="font-size:110%">main (0.10.0+499e707) &#x25BC</span></a>
+      <a href="../../../versions.html"><span style="font-size:110%">main (0.10.0+3f10cb1) &#x25BC</span></a>
     </div>
     
 
@@ -434,8 +434,31 @@
 <dt class="sig sig-object py" id="torchrl.modules.llm.TransformersWrapper">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.modules.llm.</span></span><span class="sig-name descname"><span class="pre">TransformersWrapper</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/llm/policies/transformers_wrapper.html#TransformersWrapper"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.llm.TransformersWrapper" title="Permalink to this definition">¶</a></dt>
 <dd><p>A wrapper class for Hugging Face Transformers models, providing a consistent interface for text generation and log probability computation.</p>
-<p>This class is a subclass of <code class="xref py py-class docutils literal notranslate"><span class="pre">LLMWrapperBase</span></code> and provides a unified API for handling different input modalities
-(history, text, tokens) with consistent output structure using <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code> objects.</p>
+<dl class="simple">
+<dt>Packing vs Padding:</dt><dd><ul class="simple">
+<li><dl class="simple">
+<dt>Packing (<cite>pad_model_input=False</cite>):</dt><dd><ul>
+<li><p>More memory efficient for variable-length sequences.</p></li>
+<li><p>Not all models support packed input (requires custom attention masks and position ids).</p></li>
+<li><p>May be less compatible with some HuggingFace models or custom architectures.</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt>Padding (<cite>pad_model_input=True</cite>):</dt><dd><ul>
+<li><p>Universally supported by all models.</p></li>
+<li><p>Wastes memory for short sequences in a batch.</p></li>
+<li><p>Simpler, but less efficient for highly variable-length data.</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><p>If unsure, use padding for maximum compatibility. Use packing for large batches of variable-length data and when your model supports it.</p></li>
+</ul>
+</dd>
+</dl>
+<p>Additional error handling is provided for empty and overlong sequences.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>model</strong> (<em>transformers.AutoModelForCausalLM</em><em> | </em><em>str</em>) – The Hugging Face Transformers model to wrap.
@@ -463,8 +486,16 @@ If <cite>False</cite>, only log probabilities will be computed. Defaults to <cit
 <li><p><strong>return_log_probs</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to return log probabilities. Defaults to <cite>False</cite>.</p></li>
 <li><p><strong>generate_kwargs</strong> (<em>dict</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – Additional arguments to pass to the model’s generate method. Defaults to <cite>None</cite>.</p></li>
 <li><p><strong>tokenizer_kwargs</strong> (<em>dict</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – Additional arguments to pass to the tokenizer. Defaults to <cite>None</cite>.</p></li>
-<li><p><strong>pad_output</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to pad the output sequences to a uniform length. Transformers require <cite>pad_output=True</cite>, and the output
-sequences will be padded and represented as tensors. Defaults to <cite>False</cite>.</p></li>
+<li><p><strong>pad_output</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to pad the output sequences to a uniform length. This does not impact the underlying padding
+during call to the model. To use padding or packing during the model <cite>forward</cite> call, see <cite>pad_model_input</cite>.
+Defaults to <cite>False</cite>.</p></li>
+<li><p><strong>pad_model_input</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to pad the model input sequences to a uniform length.
+If <cite>False</cite>, packing will be used instead. Packing is generally more memory efficient than padding,
+but this feature may not work with all models.
+<cite>pad_model_input</cite> can only be used when <cite>generate=False</cite>.
+This does not impact the padding of the model output - one may ask for padded output though <cite>pad_output=True</cite> while the model
+is called with <cite>pad_model_input=False</cite>.
+Defaults to <cite>True</cite>.</p></li>
 <li><p><strong>inplace</strong> (<em>Literal</em><em>[</em><em>True</em><em>, </em><em>False</em><em>, </em><em>&quot;empty&quot;</em><em>] </em><em>| </em><em>None</em><em>, </em><em>optional</em>) – Determines how the module should handle in-place operations. Defaults to <cite>True</cite>.</p></li>
 <li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em> | </em><em>None</em><em>, </em><em>optional</em>) – The device to use for computation. Defaults to <cite>None</cite>.</p></li>
 <li><p><strong>layout</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout" title="(in PyTorch v2.7)"><em>torch.layout</em></a><em> | </em><em>None</em><em>, </em><em>optional</em>) – The layout to use for the output tensors when <cite>pad_output=False</cite>. Defaults to <cite>torch.strided</cite>.</p></li>
@@ -1589,6 +1620,12 @@ module’s <a class="reference internal" href="#torchrl.modules.llm.Transformers
 </dl>
 <p>The registered hooks can be used to perform pre-processing before the <code class="docutils literal notranslate"><span class="pre">state_dict</span></code>
 call is made.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.modules.llm.TransformersWrapper.repeat_interleave_causal">
+<span class="sig-name descname"><span class="pre">repeat_interleave_causal</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sequence_lengths</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.7)"><span class="pre">Tensor</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/modules/llm/policies/transformers_wrapper.html#TransformersWrapper.repeat_interleave_causal"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.llm.TransformersWrapper.repeat_interleave_causal" title="Permalink to this definition">¶</a></dt>
+<dd><p>Same as _create_block_diagonal_attention_mask, but with causal masking.</p>
 </dd></dl>
 
 <dl class="py method">
