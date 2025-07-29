@@ -8,6 +8,7 @@ import pickle
 import pytest
 import torch
 
+
 try:
     from safetensors.torch import save
 except ImportError:

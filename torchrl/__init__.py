@@ -25,7 +25,7 @@ from ._extension import _init_extension
 try:
     from .version import __version__
 except ImportError:
-    __version__ = None
+    __version__ = "0.0.0+unknown"
 
 try:
     from torch.compiler import is_dynamo_compiling
