@@ -398,8 +398,7 @@ def make_continuous_loss(loss_cfg, model, device: torch.device | None = None):
 
 def make_discrete_loss(loss_cfg, model, device: torch.device | None = None):
 
-
-    if "action_space" in loss_cfg: # especify action space
+    if "action_space" in loss_cfg:  # especify action space
         loss_module = DiscreteCQLLoss(
             model,
             loss_function=loss_cfg.loss_function,
