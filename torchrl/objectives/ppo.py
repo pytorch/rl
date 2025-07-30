@@ -923,33 +923,14 @@ class PPOLoss(LossModule):
         for head_name, entropy_head in entropy.items(
             include_nested=True, leaves_only=True
         ):
-            if isinstance(head_name, str):
-                head_name = (head_name,)
-            for i, (head_name_from_map, _coeff) in enumerate(
-                self._entropy_coeff_map.items()
-            ):
-                # Check if distinct head name inisde tuple of nested dict
-                if head_name_from_map in head_name:
-                    coeff = _coeff
-                    break
-                # Check if path of head fully or partially in nested dict
-                if any(
-                    head_name_from_map == head_name[i : i + len(head_name_from_map)]
-                    for i in range(len(head_name) - len(head_name_from_map) + 1)
-                ):
-                    coeff = _coeff
-                    break
-                if i == len(self._entropy_coeff_map.items()):
-                    raise KeyError(
-                        f"Missing entropy coeff for head '{head_name}'"
-                    ) from exec
+            try:
+                coeff = self._entropy_coeff_map[head_name]
+            except KeyError as exc:
+                raise KeyError(f"Missing entropy coeff for head '{head_name}'") from exc
             coeff_t = torch.as_tensor(
                 coeff, dtype=entropy_head.dtype, device=entropy_head.device
             )
-            if isinstance(entropy_head, torch.Tensor):
-                head_loss_term = -coeff_t * entropy_head
-            else:
-                head_loss_term = -coeff_t * _sum_td_features(entropy_head)
+            head_loss_term = -coeff_t * entropy_head
             loss_term = (
                 head_loss_term if loss_term is None else loss_term + head_loss_term
             )  # accumulate
