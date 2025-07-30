@@ -16,7 +16,9 @@ from pathlib import Path
 from typing import Callable
 
 import torch
-from tensordict import PersistentTensorDict, TensorDict
+from tensordict import (PersistentTensorDict, TensorDict, set_list_to_stack,
+                        TensorDictBase, NonTensorData, NonTensorStack)
+
 from torchrl._utils import KeyDependentDefaultDict, logger as torchrl_logger
 from torchrl.data.datasets.common import BaseDatasetExperienceReplay
 from torchrl.data.datasets.utils import _get_root_dir
@@ -281,6 +283,7 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
                         f"loading dataset from local Minari cache at {h5_path}"
                     )
                     h5_data = PersistentTensorDict.from_h5(h5_path)
+                    h5_data = h5_data.to_tensordict()
 
                 else:
                     # temporarily change the minari cache path
@@ -304,9 +307,11 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
                     h5_data = PersistentTensorDict.from_h5(
                         parent_dir / "main_data.hdf5"
                     )
+                    h5_data = h5_data.to_tensordict()
 
                 # populate the tensordict
                 episode_dict = {}
+                dataset_has_mission = False
                 for i, (episode_key, episode) in enumerate(h5_data.items()):
                     episode_num = int(episode_key[len("episode_") :])
                     episode_len = episode["actions"].shape[0]
@@ -315,20 +320,26 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
                     total_steps += episode_len
                     if i == 0:
                         td_data.set("episode", 0)
+                        seen = set()
                         for key, val in episode.items():
                             match = _NAME_MATCH[key]
+                            if match in seen:
+                                continue
+                            seen.add(match)
                             if key in ("observations", "state", "infos"):
+                                if "mission" in val.keys():
+                                    dataset_has_mission = True
+                                    val = val.clone()
+                                    val.del_("mission")
                                 if (
                                     not val.shape
                                 ):  # no need for this, we don't need the proper length: or steps != val.shape[0] - 1:
                                     if val.is_empty():
                                         continue
                                     val = _patch_info(val)
-                                # TODO: This is bad. torch.zeros_like should assign zeros even for NonTensorData values.
-                                #       Instead, right now it only creates a copy of the original val[0]
                                 td_data.set(("next", match), torch.zeros_like(val[0]))
                                 td_data.set(match, torch.zeros_like(val[0]))
-                            if key not in ("terminations", "truncations", "rewards"):
+                            elif key not in ("terminations", "truncations", "rewards"):
                                 td_data.set(match, torch.zeros_like(val[0]))
                             else:
                                 td_data.set(
@@ -342,17 +353,17 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
                 )
                 if "terminated" in td_data.keys():
                     td_data["done"] = td_data["truncated"] | td_data["terminated"]
-                # TODO: THIS IS EXTREMELY WRONG! expand() takes the initial td_data["observation", "mission"]
-                #       and, instead of expanding the original 109 length numpy array to 56806 of total_steps,
-                #       it creates a td_data["observation", "mission"] of 56806 where each element is the first
-                #       episode of 109 steps, ie, each td_data["observation", "mission"][i] is the same 109 length
-                #       numpy array.
                 td_data = td_data.expand(total_steps)
                 # save to designated location
                 torchrl_logger.info(
                     f"creating tensordict data in {self.data_path_root}: "
                 )
                 td_data = td_data.memmap_like(self.data_path_root)
+                td_data = td_data.unlock_()
+                if dataset_has_mission:
+                    with set_list_to_stack(True):
+                        td_data["observation", "mission"] = TensorDict({"mission": b""}).expand(total_steps)["mission"]
+                        td_data["next", "observation", "mission"] = TensorDict({"mission": b""}).expand(total_steps)["mission"]
                 torchrl_logger.info(f"tensordict structure: {td_data}")
 
                 torchrl_logger.info(
@@ -363,7 +374,7 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
                     # iterate over episodes and populate the tensordict
                     for episode_num in sorted(episode_dict):
                         episode_key, steps = episode_dict[episode_num]
-                        episode = h5_data.get(episode_key)
+                        episode = patch_nontensor_data_to_stack(h5_data.get(episode_key))
                         idx = slice(index, (index + steps))
                         data_view = td_data[idx]
                         data_view.fill_("episode", episode_num)
@@ -382,12 +393,16 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
                                     raise RuntimeError(
                                         f"Mismatching number of steps for key {key}: was {steps} but got {val.shape[0] - 1}."
                                     )
-                                data_view["next", match].copy_(val[1:])
-                                # TODO: The copy_ of NonTensorData fails absolutely. Instead of copying the values in
-                                #       val, the previous 109 mission values stored in a numpy array get copied into a list
-                                #       of 82 elements, each of which was the initial 109 size numpy array. The correct val
-                                #       values get lost from here on.
-                                data_view[match].copy_(val[:-1])
+                                val_next = val[1:].clone()
+                                val_copy = val[:-1].clone()
+                                if dataset_has_mission and match == 'observation':
+                                    val_next.del_("mission")
+                                    val_copy.del_("mission")
+                                data_view["next", match].copy_(val_next)
+                                data_view[match].copy_(val_copy)
+                                if dataset_has_mission and match == 'observation':
+                                    data_view.set_(("next", match, "mission"), val["mission"][1:])
+                                    data_view.set_((match, "mission"), val["mission"][:-1])
                             elif key not in ("terminations", "truncations", "rewards"):
                                 if steps is None:
                                     steps = val.shape[0]
@@ -420,7 +435,6 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
                                 f"index={index} - episode num {episode_num}"
                             )
                         index += steps
-                h5_data.close()
                 # Add a "done" entry
                 if self.split_trajs:
                     with td_data.unlock_():
@@ -546,3 +560,16 @@ def _patch_info(info_td):
     if not source.is_empty():
         val_td_sel.update(source, update_batch_size=True)
     return val_td_sel
+
+
+def patch_nontensor_data_to_stack(tensordict: TensorDictBase):
+    """Recursively replaces all NonTensorData fields in the TensorDict with NonTensorStack."""
+    for key in list(tensordict.keys()):
+        val = tensordict.get(key)
+        if isinstance(val, TensorDictBase):
+            patch_nontensor_data_to_stack(val)  # in-place recursive
+        elif isinstance(val, NonTensorData):
+            data_list = list(val.data)
+            with set_list_to_stack(True):
+                tensordict[key] = data_list
+    return tensordict
