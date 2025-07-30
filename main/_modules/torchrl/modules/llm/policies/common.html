@@ -428,6 +428,8 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">weakref</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">wraps</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">overload</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
@@ -794,6 +796,12 @@
 <span class="sd">        text_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Text` object. Defaults to `&quot;text&quot;`.</span>
 <span class="sd">        tokens_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Tokens` object. Defaults to `&quot;tokens&quot;`.</span>
 <span class="sd">        masks_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Masks` object. Defaults to `&quot;masks&quot;`.</span>
+<span class="sd">        batch_size (int | None, optional): The batch size to use for batching. If None, no batching is done. If provided, the module will batch the inputs and process them in batches of this size.</span>
+<span class="sd">            This means that a single call to the module will wait until enough inputs are available to form a batch of this size, and then process the batch.</span>
+<span class="sd">            This functionality uses concurrent futures to process the batches in parallel and therefore is best used in a multi-threaded environment.</span>
+<span class="sd">            Defaults to `None`.</span>
+<span class="sd">        batching_timeout (float, optional): The timeout for batching. If the batch isn&#39;t completed after `batching_timeout` seconds, the batch is processed as is.</span>
+<span class="sd">            Defaults to `10` seconds.</span>
 
 <span class="sd">    Attributes:</span>
 <span class="sd">        collector: The collector associated with the module, if it exists.</span>
@@ -815,6 +823,7 @@
     <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span>
     <span class="n">layout</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">layout</span> <span class="o">|</span> <span class="kc">None</span>
     <span class="n">num_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">_batching_timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span>
 
     <span class="nd">@overload</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
@@ -841,6 +850,8 @@
         <span class="n">tokens_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;tokens&quot;</span><span class="p">,</span>
         <span class="n">masks_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;masks&quot;</span><span class="p">,</span>
         <span class="n">log_probs_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;log_probs&quot;</span><span class="p">,</span>
+        <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">batching_timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="o">...</span>
 
@@ -1327,7 +1338,36 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">generate</span><span class="p">:</span>
             <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">log_prob_key</span><span class="p">,</span> <span class="s2">&quot;response&quot;</span><span class="p">),</span> <span class="o">**</span><span class="n">get_kwargs</span><span class="p">)</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;log_prob not callable when generate=True.&quot;</span><span class="p">)</span></div>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;log_prob not callable when generate=True.&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="LLMWrapperBase.cleanup_batching"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.LLMWrapperBase.html#torchrl.modules.llm.LLMWrapperBase.cleanup_batching">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">cleanup_batching</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Clear batching queues to prevent memory leaks.</span>
+
+<span class="sd">        This method should be called when the wrapper is no longer needed</span>
+<span class="sd">        or when you want to reset the batching state.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_batch_queue&quot;</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_batch_queue</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_futures&quot;</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_futures</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="LLMWrapperBase.get_batching_state"><a class="viewcode-back" href="../../../../../reference/generated/torchrl.modules.llm.LLMWrapperBase.html#torchrl.modules.llm.LLMWrapperBase.get_batching_state">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">get_batching_state</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the current batching state for debugging and monitoring.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            dict: A dictionary containing the current batching state including</span>
+<span class="sd">                  queue size, number of pending futures, and batch size.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;batch_size&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;batching_enabled&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">}</span>
+
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;batching_enabled&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">&quot;batch_size&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="s2">&quot;queue_size&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_batch_queue&quot;</span><span class="p">,</span> <span class="p">[])),</span>
+            <span class="s2">&quot;pending_futures&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_futures&quot;</span><span class="p">,</span> <span class="p">[])),</span>
+            <span class="s2">&quot;timeout&quot;</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_batching_timeout&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+        <span class="p">}</span></div></div>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_extract_responses_from_full_histories</span><span class="p">(</span>
@@ -1395,6 +1435,71 @@
         <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">padded_responses</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">response_histories</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_batching</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">concurrent.futures</span><span class="w"> </span><span class="kn">import</span> <span class="n">Future</span><span class="p">,</span> <span class="n">wait</span>
+
+    <span class="nd">@wraps</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_batched_func</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">td_input</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;batch_size&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># put elements in a queue until the batch size is reached</span>
+            <span class="k">if</span> <span class="n">td_input</span><span class="o">.</span><span class="n">batch_dims</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">inputs</span> <span class="o">=</span> <span class="p">[</span><span class="n">td_input</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">td_input</span><span class="o">.</span><span class="n">batch_dims</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Batching not supported for batch_dims &gt; 1: </span><span class="si">{</span><span class="n">td_input</span><span class="o">.</span><span class="n">batch_dims</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+                <span class="n">inputs</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">td_input</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
+
+            <span class="c1"># Create as many futures as inputs</span>
+            <span class="n">futures</span> <span class="o">=</span> <span class="p">[</span><span class="n">Future</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">inputs</span><span class="p">]</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_batch_queue</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">inputs</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_futures</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">futures</span><span class="p">)</span>
+
+            <span class="c1"># Check if we have enough inputs to form a complete batch</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_batch_queue</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">:</span>
+                <span class="c1"># Process full batch immediately</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">batch</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_batch_queue</span><span class="p">[:</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">])</span>
+                    <span class="n">results</span> <span class="o">=</span> <span class="n">func</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+                    <span class="n">batch_results</span> <span class="o">=</span> <span class="n">results</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">future</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_futures</span><span class="p">[:</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">]):</span>
+                        <span class="n">future</span><span class="o">.</span><span class="n">set_result</span><span class="p">(</span><span class="n">batch_results</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_batch_queue</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_batch_queue</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="p">:]</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_futures</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_futures</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="p">:]</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="c1"># Set exception for all futures in this batch</span>
+                    <span class="k">for</span> <span class="n">future</span> <span class="ow">in</span> <span class="n">futures</span><span class="p">:</span>
+                        <span class="n">future</span><span class="o">.</span><span class="n">set_exception</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+                    <span class="k">raise</span>
+
+            <span class="c1"># Now wait for the current futures to complete (with timeout if needed)</span>
+            <span class="n">_</span><span class="p">,</span> <span class="n">not_done</span> <span class="o">=</span> <span class="n">wait</span><span class="p">(</span><span class="n">futures</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_batching_timeout</span><span class="p">)</span>
+
+            <span class="c1"># if there are still futures not done, process them as is</span>
+            <span class="k">if</span> <span class="n">not_done</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">inputs_not_done</span> <span class="o">=</span> <span class="p">[</span>
+                        <span class="n">inputs</span><span class="p">[</span><span class="n">futures</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">future</span><span class="p">)]</span> <span class="k">for</span> <span class="n">future</span> <span class="ow">in</span> <span class="n">not_done</span>
+                    <span class="p">]</span>
+                    <span class="n">results</span> <span class="o">=</span> <span class="n">func</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">inputs_not_done</span><span class="p">),</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span>
+                        <span class="mi">0</span>
+                    <span class="p">)</span>
+                    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">future</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">not_done</span><span class="p">):</span>
+                        <span class="n">future</span><span class="o">.</span><span class="n">set_result</span><span class="p">(</span><span class="n">results</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="c1"># Set exception for remaining futures</span>
+                    <span class="k">for</span> <span class="n">future</span> <span class="ow">in</span> <span class="n">not_done</span><span class="p">:</span>
+                        <span class="n">future</span><span class="o">.</span><span class="n">set_exception</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+                    <span class="k">raise</span>
+
+            <span class="k">return</span> <span class="n">lazy_stack</span><span class="p">([</span><span class="n">future</span><span class="o">.</span><span class="n">result</span><span class="p">()</span> <span class="k">for</span> <span class="n">future</span> <span class="ow">in</span> <span class="n">futures</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">func</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">td_input</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">_batched_func</span>
 </pre></div>
 
              </article>
