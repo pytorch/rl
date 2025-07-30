@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from torchrl import data
 from torchrl.trainers.algorithms.configs.common import ConfigBase
 
 
@@ -31,42 +32,6 @@ class SamplerConfig(ConfigBase):
 class RandomSamplerConfig(SamplerConfig):
     _target_: str = "torchrl.data.replay_buffers.RandomSampler"
 
-
-@dataclass
-class TensorStorageConfig(ConfigBase):
-    _target_: str = "torchrl.data.replay_buffers.TensorStorage"
-    max_size: int | None = None
-    storage: Any = None
-    device: Any = None
-    ndim: int | None = None
-    compilable: bool = False
-
-
-@dataclass
-class TensorDictReplayBufferConfig(ConfigBase):
-    _target_: str = "torchrl.data.replay_buffers.TensorDictReplayBuffer"
-    sampler: Any = field(default_factory=RandomSamplerConfig)
-    storage: Any = field(default_factory=TensorStorageConfig)
-    writer: Any = field(default_factory=RoundRobinWriterConfig)
-    transform: Any = None
-    batch_size: int | None = None
-
-
-@dataclass
-class ListStorageConfig(ConfigBase):
-    _target_: str = "torchrl.data.replay_buffers.ListStorage"
-    max_size: int | None = None
-    compilable: bool = False
-
-
-@dataclass
-class ReplayBufferConfig(ConfigBase):
-    _target_: str = "torchrl.data.replay_buffers.ReplayBuffer"
-    sampler: Any = field(default_factory=RandomSamplerConfig)
-    storage: Any = field(default_factory=ListStorageConfig)
-    writer: Any = field(default_factory=RoundRobinWriterConfig)
-    transform: Any = None
-    batch_size: int | None = None
 
 
 @dataclass
@@ -175,14 +140,37 @@ class SamplerWithoutReplacementConfig(SamplerConfig):
 
 
 @dataclass
-class StorageEnsembleWriterConfig(ConfigBase):
+class StorageConfig(ConfigBase):
+    _partial_: bool = False
+    _target_: str = "torchrl.data.replay_buffers.Storage"
+
+@dataclass
+class TensorStorageConfig(StorageConfig):
+    _target_: str = "torchrl.data.replay_buffers.TensorStorage"
+    max_size: int | None = None
+    storage: Any = None
+    device: Any = None
+    ndim: int | None = None
+    compilable: bool = False
+
+
+@dataclass
+class ListStorageConfig(StorageConfig):
+    _target_: str = "torchrl.data.replay_buffers.ListStorage"
+    max_size: int | None = None
+    compilable: bool = False
+
+
+
+@dataclass
+class StorageEnsembleWriterConfig(StorageConfig):
     _target_: str = "torchrl.data.replay_buffers.StorageEnsembleWriter"
     writers: list[Any] = field(default_factory=list)
     transforms: list[Any] = field(default_factory=list)
 
 
 @dataclass
-class LazyStackStorageConfig(ConfigBase):
+class LazyStackStorageConfig(StorageConfig):
     _target_: str = "torchrl.data.replay_buffers.LazyStackStorage"
     max_size: int | None = None
     compilable: bool = False
@@ -190,14 +178,14 @@ class LazyStackStorageConfig(ConfigBase):
 
 
 @dataclass
-class StorageEnsembleConfig(ConfigBase):
+class StorageEnsembleConfig(StorageConfig):
     _target_: str = "torchrl.data.replay_buffers.StorageEnsemble"
     storages: list[Any] = field(default_factory=list)
     transforms: list[Any] = field(default_factory=list)
 
 
 @dataclass
-class LazyMemmapStorageConfig(ConfigBase):
+class LazyMemmapStorageConfig(StorageConfig):
     _target_: str = "torchrl.data.replay_buffers.LazyMemmapStorage"
     max_size: int | None = None
     device: Any = None
@@ -206,14 +194,95 @@ class LazyMemmapStorageConfig(ConfigBase):
 
 
 @dataclass
-class LazyTensorStorageConfig(ConfigBase):
+class LazyTensorStorageConfig(StorageConfig):
     _target_: str = "torchrl.data.replay_buffers.LazyTensorStorage"
     max_size: int | None = None
     device: Any = None
     ndim: int = 1
     compilable: bool = False
 
+    @classmethod
+    def default_config(cls, **kwargs) -> "LazyTensorStorageConfig":
+        """Creates a default lazy tensor storage configuration.
+        
+        Args:
+            **kwargs: Override default values
+            
+        Returns:
+            LazyTensorStorageConfig with default values, overridden by kwargs
+        """
+        defaults = {
+            "max_size": 100_000,
+            "device": "cpu",
+            "ndim": 1,
+            "compilable": False,
+            "_partial_": True,
+        }
+        defaults.update(kwargs)
+        return cls(**defaults)
+
 
 @dataclass
 class StorageConfig(ConfigBase):
     pass
+
+@dataclass
+class ReplayBufferBaseConfig(ConfigBase):
+    _partial_: bool = False
+
+@dataclass
+class TensorDictReplayBufferConfig(ReplayBufferBaseConfig):
+    _target_: str = "torchrl.data.replay_buffers.TensorDictReplayBuffer"
+    sampler: Any = field(default_factory=RandomSamplerConfig)
+    storage: Any = field(default_factory=TensorStorageConfig)
+    writer: Any = field(default_factory=RoundRobinWriterConfig)
+    transform: Any = None
+    batch_size: int | None = None
+
+
+@dataclass
+class ReplayBufferConfig(ReplayBufferBaseConfig):
+    _target_: str = "torchrl.data.replay_buffers.ReplayBuffer"
+    sampler: Any = field(default_factory=RandomSamplerConfig)
+    storage: Any = field(default_factory=ListStorageConfig)
+    writer: Any = field(default_factory=RoundRobinWriterConfig)
+    transform: Any = None
+    batch_size: int | None = None
+
+    @classmethod
+    def default_config(cls, **kwargs) -> "ReplayBufferConfig":
+        """Creates a default replay buffer configuration.
+        
+        Args:
+            **kwargs: Override default values. Supports nested overrides using double underscore notation
+                     (e.g., "storage__max_size": 200_000)
+            
+        Returns:
+            ReplayBufferConfig with default values, overridden by kwargs
+        """
+        from tensordict import TensorDict
+        
+        # Unflatten the kwargs using TensorDict to understand what the user wants
+        kwargs_td = TensorDict(kwargs)
+        unflattened_kwargs = kwargs_td.unflatten_keys("__").to_dict()
+        
+        # Create configs with nested overrides applied
+        sampler_overrides = unflattened_kwargs.get("sampler", {})
+        storage_overrides = unflattened_kwargs.get("storage", {})
+        writer_overrides = unflattened_kwargs.get("writer", {})
+        
+        sampler_cfg = RandomSamplerConfig(**sampler_overrides) if sampler_overrides else RandomSamplerConfig()
+        storage_cfg = LazyTensorStorageConfig.default_config(**storage_overrides)
+        writer_cfg = RoundRobinWriterConfig(**writer_overrides) if writer_overrides else RoundRobinWriterConfig()
+        
+        defaults = {
+            "sampler": sampler_cfg,
+            "storage": storage_cfg,
+            "writer": writer_cfg,
+            "transform": unflattened_kwargs.get("transform", None),
+            "batch_size": unflattened_kwargs.get("batch_size", 256),
+            "_partial_": True,
+        }
+        
+        return cls(**defaults)
+

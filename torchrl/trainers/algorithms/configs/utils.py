@@ -28,3 +28,25 @@ class AdamConfig(ConfigBase):
 
     _target_: str = "torch.optim.Adam"
     _partial_: bool = True
+
+    @classmethod
+    def default_config(cls, **kwargs) -> "AdamConfig":
+        """Creates a default Adam optimizer configuration.
+        
+        Args:
+            **kwargs: Override default values
+            
+        Returns:
+            AdamConfig with default values, overridden by kwargs
+        """
+        defaults = {
+            "params": None,  # Will be set when instantiating
+            "lr": 3e-4,
+            "betas": (0.9, 0.999),
+            "eps": 1e-4,
+            "weight_decay": 0.0,
+            "amsgrad": False,
+            "_partial_": True,
+        }
+        defaults.update(kwargs)
+        return cls(**defaults)

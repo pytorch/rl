@@ -84,6 +84,40 @@ class MLPConfig(NetworkConfig):
         if self.layer_class is None and isinstance(self.layer_class, str):
             self.layer_class = LayerConfig(_target_=self.layer_class, _partial_=True)
 
+    @classmethod
+    def default_config(cls, **kwargs) -> "MLPConfig":
+        """Creates a default MLP configuration.
+        
+        Args:
+            **kwargs: Override default values. Supports nested overrides using double underscore notation
+                     (e.g., "activation_class___target_": "torch.nn.ReLU")
+            
+        Returns:
+            MLPConfig with default values, overridden by kwargs
+        """
+        from tensordict import TensorDict
+        
+        # Unflatten the kwargs using TensorDict to understand what the user wants
+        kwargs_td = TensorDict(kwargs)
+        unflattened_kwargs = kwargs_td.unflatten_keys("__").to_dict()
+        
+        # Create default configs with nested overrides applied
+        activation_overrides = unflattened_kwargs.get("activation_class", {})
+        layer_overrides = unflattened_kwargs.get("layer_class", {})
+        
+        defaults = {
+            "in_features": unflattened_kwargs.get("in_features", None),  # Will be inferred from input
+            "out_features": unflattened_kwargs.get("out_features", None),  # Will be set by the trainer based on environment
+            "depth": unflattened_kwargs.get("depth", 2),
+            "num_cells": unflattened_kwargs.get("num_cells", 128),
+            "activation_class": ActivationConfig(**activation_overrides) if activation_overrides else ActivationConfig(_target_="torch.nn.Tanh", _partial_=True),
+            "bias_last_layer": unflattened_kwargs.get("bias_last_layer", True),
+            "layer_class": LayerConfig(**layer_overrides) if layer_overrides else LayerConfig(_target_="torch.nn.Linear", _partial_=True),
+            "_partial_": True,
+        }
+        
+        return cls(**defaults)
+
 
 @dataclass
 class NormConfig(ConfigBase):
@@ -191,11 +225,41 @@ class TensorDictModuleConfig(ConfigBase):
     .. seealso:: :class:`tensordict.nn.TensorDictModule`
     """
 
-    module: Any = None
+    module: MLPConfig = field(default_factory=lambda: MLPConfig.default_config())
     in_keys: Any = None
     out_keys: Any = None
     _target_: str = "tensordict.nn.TensorDictModule"
     _partial_: bool = False
+
+    @classmethod
+    def default_config(cls, **kwargs) -> "TensorDictModuleConfig":
+        """Creates a default TensorDictModule configuration.
+        
+        Args:
+            **kwargs: Override default values. Supports nested overrides using double underscore notation
+                     (e.g., "module__num_cells": 256)
+            
+        Returns:
+            TensorDictModuleConfig with default values, overridden by kwargs
+        """
+        from tensordict import TensorDict
+        
+        # Unflatten the kwargs using TensorDict to understand what the user wants
+        kwargs_td = TensorDict(kwargs)
+        unflattened_kwargs = kwargs_td.unflatten_keys("__").to_dict()
+        
+        # Create module config with nested overrides applied
+        module_overrides = unflattened_kwargs.get("module", {})
+        module_cfg = MLPConfig.default_config(**module_overrides)
+        
+        defaults = {
+            "module": module_cfg,
+            "in_keys": unflattened_kwargs.get("in_keys", ["observation"]),
+            "out_keys": unflattened_kwargs.get("out_keys", ["state_value"]),
+            "_partial_": True,
+        }
+        
+        return cls(**defaults)
 
 
 @dataclass
@@ -211,7 +275,7 @@ class TanhNormalModelConfig(ModelConfig):
     .. seealso:: :class:`torchrl.modules.TanhNormal`
     """
 
-    network: NetworkConfig = field(default_factory=NetworkConfig)
+    network: MLPConfig = field(default_factory=lambda: MLPConfig.default_config())
     eval_mode: bool = False
 
     extract_normal_params: bool = True
@@ -235,6 +299,41 @@ class TanhNormalModelConfig(ModelConfig):
             self.param_keys = ["loc", "scale"]
         if self.out_keys is None:
             self.out_keys = ["action"]
+
+    @classmethod
+    def default_config(cls, **kwargs) -> "TanhNormalModelConfig":
+        """Creates a default TanhNormal model configuration.
+        
+        Args:
+            **kwargs: Override default values. Supports nested overrides using double underscore notation
+                     (e.g., "network__num_cells": 256)
+            
+        Returns:
+            TanhNormalModelConfig with default values, overridden by kwargs
+        """
+        from tensordict import TensorDict
+        
+        # Unflatten the kwargs using TensorDict to understand what the user wants
+        kwargs_td = TensorDict(kwargs)
+        unflattened_kwargs = kwargs_td.unflatten_keys("__").to_dict()
+        
+        # Create network config with nested overrides applied
+        network_overrides = unflattened_kwargs.get("network", {})
+        network_cfg = MLPConfig.default_config(**network_overrides)
+        
+        defaults = {
+            "network": network_cfg,
+            "eval_mode": unflattened_kwargs.get("eval_mode", False),
+            "extract_normal_params": unflattened_kwargs.get("extract_normal_params", True),
+            "in_keys": unflattened_kwargs.get("in_keys", ["observation"]),
+            "param_keys": unflattened_kwargs.get("param_keys", ["loc", "scale"]),
+            "out_keys": unflattened_kwargs.get("out_keys", ["action"]),
+            "exploration_type": unflattened_kwargs.get("exploration_type", "RANDOM"),
+            "return_log_prob": unflattened_kwargs.get("return_log_prob", True),
+            "_partial_": True,
+        }
+        
+        return cls(**defaults)
 
 
 @dataclass

@@ -57,6 +57,59 @@ class SyncDataCollectorConfig(DataCollectorConfig):
         if self.policy_factory is not None:
             self.policy_factory._partial_ = True
 
+    @classmethod
+    def default_config(cls, **kwargs) -> "SyncDataCollectorConfig":
+        """Creates a default synchronous data collector configuration.
+        
+        Args:
+            **kwargs: Override default values. Supports nested overrides using double underscore notation
+                     (e.g., "create_env_fn__env_name": "CartPole-v1")
+            
+        Returns:
+            SyncDataCollectorConfig with default values, overridden by kwargs
+        """
+        from torchrl.trainers.algorithms.configs.envs import GymEnvConfig
+        from tensordict import TensorDict
+
+        # Unflatten the kwargs using TensorDict to understand what the user wants
+        kwargs_td = TensorDict(kwargs)
+        unflattened_kwargs = kwargs_td.unflatten_keys("__").to_dict()
+
+        # Create configs with nested overrides applied
+        env_overrides = unflattened_kwargs.get("create_env_fn", {})
+        env_cfg = GymEnvConfig.default_config(**env_overrides)
+
+        defaults = {
+            "create_env_fn": env_cfg,
+            "policy": unflattened_kwargs.get("policy", None),  # Will be set when instantiating
+            "policy_factory": unflattened_kwargs.get("policy_factory", None),
+            "frames_per_batch": unflattened_kwargs.get("frames_per_batch", 1000),
+            "total_frames": unflattened_kwargs.get("total_frames", 1_000_000),
+            "device": unflattened_kwargs.get("device", None),
+            "storing_device": unflattened_kwargs.get("storing_device", None),
+            "policy_device": unflattened_kwargs.get("policy_device", None),
+            "env_device": unflattened_kwargs.get("env_device", None),
+            "create_env_kwargs": unflattened_kwargs.get("create_env_kwargs", None),
+            "max_frames_per_traj": unflattened_kwargs.get("max_frames_per_traj", None),
+            "reset_at_each_iter": unflattened_kwargs.get("reset_at_each_iter", False),
+            "postproc": unflattened_kwargs.get("postproc", None),
+            "split_trajs": unflattened_kwargs.get("split_trajs", False),
+            "exploration_type": unflattened_kwargs.get("exploration_type", "RANDOM"),
+            "return_same_td": unflattened_kwargs.get("return_same_td", False),
+            "interruptor": unflattened_kwargs.get("interruptor", None),
+            "set_truncated": unflattened_kwargs.get("set_truncated", False),
+            "use_buffers": unflattened_kwargs.get("use_buffers", False),
+            "replay_buffer": unflattened_kwargs.get("replay_buffer", None),
+            "extend_buffer": unflattened_kwargs.get("extend_buffer", False),
+            "trust_policy": unflattened_kwargs.get("trust_policy", True),
+            "compile_policy": unflattened_kwargs.get("compile_policy", None),
+            "cudagraph_policy": unflattened_kwargs.get("cudagraph_policy", None),
+            "no_cuda_sync": unflattened_kwargs.get("no_cuda_sync", False),
+            "_partial_": True,
+        }
+        
+        return cls(**defaults)
+
 
 @dataclass
 class AsyncDataCollectorConfig(DataCollectorConfig):

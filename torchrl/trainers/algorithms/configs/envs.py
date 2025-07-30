@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Any
 
@@ -17,8 +18,8 @@ from torchrl.trainers.algorithms.configs.common import ConfigBase
 class EnvConfig(ConfigBase):
     _partial_: bool = False
 
-    def __post_init__(self):
-        self._partial_ = False
+    # def __post_init__(self):
+    #     self._partial_ = False
 
 
 @dataclass
@@ -28,6 +29,26 @@ class GymEnvConfig(EnvConfig):
     from_pixels: bool = False
     double_to_float: bool = False
     _target_: str = "torchrl.trainers.algorithms.configs.envs.make_env"
+
+    @classmethod
+    def default_config(cls, **kwargs) -> "GymEnvConfig":
+        """Creates a default Gym environment configuration.
+        
+        Args:
+            **kwargs: Override default values
+            
+        Returns:
+            GymEnvConfig with default values, overridden by kwargs
+        """
+        defaults = {
+            "env_name": "Pendulum-v1",
+            "backend": "gymnasium",
+            "from_pixels": False,
+            "double_to_float": False,
+            "_partial_": True,
+        }
+        defaults.update(kwargs)
+        return cls(**defaults)
 
 
 @dataclass
@@ -39,7 +60,38 @@ class BatchedEnvConfig(EnvConfig):
     _target_: str = "torchrl.trainers.algorithms.configs.envs.make_batched_env"
 
     def __post_init__(self):
-        self.create_env_fn._partial_ = True
+        if self.create_env_fn is not None:
+            self.create_env_fn._partial_ = True
+
+    @classmethod
+    def default_config(cls, **kwargs) -> "BatchedEnvConfig":
+        """Creates a default batched environment configuration.
+        
+        Args:
+            **kwargs: Override default values. Supports nested overrides using double underscore notation
+                     (e.g., "create_env_fn__env_name": "CartPole-v1")
+            
+        Returns:
+            BatchedEnvConfig with default values, overridden by kwargs
+        """
+        from tensordict import TensorDict
+
+        # Unflatten the kwargs using TensorDict to understand what the user wants
+        kwargs_td = TensorDict(kwargs)
+        unflattened_kwargs = kwargs_td.unflatten_keys("__").to_dict()
+
+        # Create configs with nested overrides applied
+        env_overrides = unflattened_kwargs.get("create_env_fn", {})
+        env_cfg = GymEnvConfig.default_config(**env_overrides)
+
+        defaults = {
+            "create_env_fn": env_cfg,
+            "num_workers": unflattened_kwargs.get("num_workers", 4),
+            "batched_env_type": unflattened_kwargs.get("batched_env_type", "parallel"),
+            "_partial_": True,
+        }
+        
+        return cls(**defaults)
 
 
 def make_env(*args, **kwargs):
