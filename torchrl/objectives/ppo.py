@@ -351,7 +351,7 @@ class PPOLoss(LossModule):
         *,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
-        entropy_coeff: float | Mapping[str, float] | None = None,
+        entropy_coeff: float | Mapping[str | tuple | list, float] | None = None,
         log_explained_variance: bool = True,
         critic_coeff: float | None = None,
         loss_critic_type: str = "smooth_l1",
@@ -460,7 +460,8 @@ class PPOLoss(LossModule):
         if isinstance(entropy_coeff, Mapping):
             # Store the mapping for per-head coefficients
             self._entropy_coeff_map = {
-                str(k): float(v) for k, v in entropy_coeff.items()
+                (tuple(k) if isinstance(k, list) else k): float(v)
+                for k, v in entropy_coeff.items()
             }
             # Register an empty buffer for compatibility
             self.register_buffer("entropy_coeff", torch.tensor(0.0))
@@ -918,15 +919,37 @@ class PPOLoss(LossModule):
             return -self.entropy_coeff * entropy
 
         loss_term = None  # running sum over heads
-        for head_name, entropy_head in entropy.items():
-            try:
-                coeff = self._entropy_coeff_map[head_name]
-            except KeyError as exc:
-                raise KeyError(f"Missing entropy coeff for head '{head_name}'") from exc
+        coeff = 0
+        for head_name, entropy_head in entropy.items(
+            include_nested=True, leaves_only=True
+        ):
+            if isinstance(head_name, str):
+                head_name = (head_name,)
+            for i, (head_name_from_map, _coeff) in enumerate(
+                self._entropy_coeff_map.items()
+            ):
+                # Check if distinct head name inisde tuple of nested dict
+                if head_name_from_map in head_name:
+                    coeff = _coeff
+                    break
+                # Check if path of head fully or partially in nested dict
+                if any(
+                    head_name_from_map == head_name[i : i + len(head_name_from_map)]
+                    for i in range(len(head_name) - len(head_name_from_map) + 1)
+                ):
+                    coeff = _coeff
+                    break
+                if i == len(self._entropy_coeff_map.items()):
+                    raise KeyError(
+                        f"Missing entropy coeff for head '{head_name}'"
+                    ) from exec
             coeff_t = torch.as_tensor(
                 coeff, dtype=entropy_head.dtype, device=entropy_head.device
             )
-            head_loss_term = -coeff_t * _sum_td_features(entropy_head)
+            if isinstance(entropy_head, torch.Tensor):
+                head_loss_term = -coeff_t * entropy_head
+            else:
+                head_loss_term = -coeff_t * _sum_td_features(entropy_head)
             loss_term = (
                 head_loss_term if loss_term is None else loss_term + head_loss_term
             )  # accumulate
@@ -1075,7 +1098,7 @@ class ClipPPOLoss(PPOLoss):
         clip_epsilon: float = 0.2,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
-        entropy_coeff: float | Mapping[str, float] | None = None,
+        entropy_coeff: float | Mapping[str | tuple | list, float] | None = None,
         critic_coeff: float | None = None,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,
@@ -1369,7 +1392,7 @@ class KLPENPPOLoss(PPOLoss):
         samples_mc_kl: int = 1,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
-        entropy_coeff: float | Mapping[str, float] | None = None,
+        entropy_coeff: float | Mapping[str | tuple | list, float] | None = None,
         critic_coeff: float | None = None,
         loss_critic_type: str = "smooth_l1",
         normalize_advantage: bool = False,

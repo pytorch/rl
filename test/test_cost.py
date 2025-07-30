@@ -9661,6 +9661,10 @@ class TestPPO(LossModuleTestBase):
             lambda: (
                 torch.ones(4),
                 torch.ones(4),
+                torch.ones(4),
+                torch.ones(4),
+                torch.ones(4),
+                torch.ones(4),
                 torch.ones(4, 2),
                 torch.ones(4, 2),
                 torch.ones(4, 10) / 10,
@@ -9669,8 +9673,12 @@ class TestPPO(LossModuleTestBase):
             ),
             in_keys=[],
             out_keys=[
-                ("params", "gamma", "concentration"),
-                ("params", "gamma", "rate"),
+                ("params", "gamma1", "concentration"),
+                ("params", "gamma1", "rate"),
+                ("params", "gamma2", "concentration"),
+                ("params", "gamma2", "rate"),
+                ("params", "gamma3", "concentration"),
+                ("params", "gamma3", "rate"),
                 ("params", "Kumaraswamy", "concentration0"),
                 ("params", "Kumaraswamy", "concentration1"),
                 ("params", "mixture", "logits"),
@@ -9687,14 +9695,18 @@ class TestPPO(LossModuleTestBase):
         dist_constructor = functools.partial(
             CompositeDistribution,
             distribution_map={
-                "gamma": d.Gamma,
+                "gamma1": d.Gamma,
+                "gamma2": d.Gamma,
+                "gamma3": d.Gamma,
                 "Kumaraswamy": d.Kumaraswamy,
                 "mixture": mixture_constructor,
             },
             name_map={
-                "gamma": ("agent0", "action"),
+                "gamma1": ("agent0", "action", "action1", "sub_action1"),
+                "gamma2": ("agent0", "action", "action1", "sub_action2"),
+                "gamma3": ("agent0", "action", "action2"),
                 "Kumaraswamy": ("agent1", "action"),
-                "mixture": ("agent2", "action"),
+                "mixture": ("agent2"),
             },
         )
         policy = ProbSeq(
@@ -9702,9 +9714,11 @@ class TestPPO(LossModuleTestBase):
             ProbabilisticTensorDictModule(
                 in_keys=["params"],
                 out_keys=[
-                    ("agent0", "action"),
+                    ("agent0", "action", "action1", "sub_action1"),
+                    ("agent0", "action", "action1", "sub_action2"),
+                    ("agent0", "action", "action2"),
                     ("agent1", "action"),
-                    ("agent2", "action"),
+                    ("agent2"),
                 ],
                 distribution_class=dist_constructor,
                 return_log_prob=True,
@@ -9739,14 +9753,18 @@ class TestPPO(LossModuleTestBase):
             ppo = cls(policy, value_operator, entropy_coeff=scalar_entropy)
             ppo.set_keys(
                 action=[
-                    ("agent0", "action"),
+                    ("agent0", "action", "action1", "sub_action1"),
+                    ("agent0", "action", "action1", "sub_action2"),
+                    ("agent0", "action", "action2"),
                     ("agent1", "action"),
-                    ("agent2", "action"),
+                    ("agent2"),
                 ],
                 sample_log_prob=[
-                    ("agent0", "action_log_prob"),
+                    ("agent0", "action", "action1", "sub_action1_log_prob"),
+                    ("agent0", "action", "action1", "sub_action2_log_prob"),
+                    ("agent0", "action", "action2_log_prob"),
                     ("agent1", "action_log_prob"),
-                    ("agent2", "action_log_prob"),
+                    ("agent2_log_prob"),
                 ],
             )
             loss = ppo(data)
@@ -9761,21 +9779,27 @@ class TestPPO(LossModuleTestBase):
             # keep per-head entropies instead of the aggregated tensor
             set_composite_lp_aggregate(False).set()
             coef_map = {
-                "agent0": 0.10,
-                "agent1": 0.05,
-                "agent2": 0.02,
+                ("agent0", "action", "action1", "sub_action1_log_prob"): 0.10,
+                "sub_action2_log_prob": 0.10,
+                "action2": 0.10,
+                ("agent1", "action_log_prob"): 0.10,
+                "agent2_log_prob": 0.02,
             }
             ppo_weighted = cls(policy, value_operator, entropy_coeff=coef_map)
             ppo_weighted.set_keys(
                 action=[
-                    ("agent0", "action"),
+                    ("agent0", "action", "action1", "sub_action1"),
+                    ("agent0", "action", "action1", "sub_action2"),
+                    ("agent0", "action", "action2"),
                     ("agent1", "action"),
-                    ("agent2", "action"),
+                    ("agent2"),
                 ],
                 sample_log_prob=[
-                    ("agent0", "action_log_prob"),
+                    ("agent0", "action", "action1", "sub_action1_log_prob"),
+                    ("agent0", "action", "action1", "sub_action2_log_prob"),
+                    ("agent0", "action", "action2_log_prob"),
                     ("agent1", "action_log_prob"),
-                    ("agent2", "action_log_prob"),
+                    ("agent2_log_prob"),
                 ],
             )
             loss = ppo_weighted(data)
@@ -9786,9 +9810,11 @@ class TestPPO(LossModuleTestBase):
             assert torch.isfinite(loss["loss_entropy"])
             # Check individual loss is computed with the right weights
             expected_loss = 0.0
-            for name, head_entropy in composite_entropy.items():
+            for i, (_, head_entropy) in enumerate(
+                composite_entropy.items(include_nested=True, leaves_only=True)
+            ):
                 expected_loss -= (
-                    coef_map[name] * _sum_td_features(head_entropy)
+                    coef_map[list(coef_map.keys())[i]] * head_entropy
                 ).mean()
             torch.testing.assert_close(
                 loss["loss_entropy"], expected_loss, rtol=1e-5, atol=1e-7
