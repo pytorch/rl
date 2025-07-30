@@ -25,6 +25,7 @@ from torch.nn.utils.rnn import pad_sequence
 
 from torchrl.envs.utils import _classproperty
 from torchrl.modules.llm.policies.common import (
+    _batching,
     _extract_responses_from_full_histories,
     ChatHistory,
     LLMWrapperBase,
@@ -92,6 +93,12 @@ class vLLMWrapper(LLMWrapperBase):
         tokens_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Tokens` object. Defaults to `"tokens"`.
         masks_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Masks` object. Defaults to `"masks"`.
         history_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.ChatHistory` object. Defaults to `"history"`.
+        batch_size (int | None, optional): The batch size to use for batching. If None, no batching is done. If provided, the module will batch the inputs and process them in batches of this size.
+            This means that a single call to the module will wait until enough inputs are available to form a batch of this size, and then process the batch.
+            This functionality uses concurrent futures to process the batches in parallel and therefore is best used in a multi-threaded environment.
+            Defaults to `None`.
+        batching_timeout (float, optional): The timeout for batching. If the batch isn't completed after `batching_timeout` seconds, the batch is processed as is.
+            Defaults to `10` seconds.
 
     Input Keys:
         The input key depends on both `input_mode` and `generate`:
@@ -159,7 +166,7 @@ class vLLMWrapper(LLMWrapperBase):
 
     def __init__(
         self,
-        model: vllm.LLM | str,
+        model: vllm.LLM | str,  # type: ignore
         *,
         tokenizer: callable | str | None = None,  # type: ignore
         input_mode: str = "history",
@@ -182,8 +189,15 @@ class vLLMWrapper(LLMWrapperBase):
         tokens_key: NestedKey | None = "tokens",
         masks_key: NestedKey | None = "masks",
         log_probs_key: NestedKey | None = "log_probs",
+        batch_size: int | None = None,
+        batching_timeout: float = 10.0,
     ):
         super().__init__()
+
+        self.batch_size = batch_size
+        self._batching_timeout = batching_timeout
+        self._batch_queue = []
+        self._futures = []
 
         if vllm is None:
             raise ImportError("vllm is required for vLLMWrapper")
@@ -503,6 +517,7 @@ class vLLMWrapper(LLMWrapperBase):
         return type(self)(**constructor_kwargs)
 
     @set_list_to_stack(True)
+    @_batching
     def forward(
         self,
         tensordict: TensorDictBase,

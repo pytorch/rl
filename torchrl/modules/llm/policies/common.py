@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import warnings
 import weakref
+
+from functools import wraps
 from typing import Any, Literal, overload
 
 import torch
@@ -372,6 +374,12 @@ class LLMWrapperBase(TensorDictModuleBase):
         text_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Text` object. Defaults to `"text"`.
         tokens_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Tokens` object. Defaults to `"tokens"`.
         masks_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Masks` object. Defaults to `"masks"`.
+        batch_size (int | None, optional): The batch size to use for batching. If None, no batching is done. If provided, the module will batch the inputs and process them in batches of this size.
+            This means that a single call to the module will wait until enough inputs are available to form a batch of this size, and then process the batch.
+            This functionality uses concurrent futures to process the batches in parallel and therefore is best used in a multi-threaded environment.
+            Defaults to `None`.
+        batching_timeout (float, optional): The timeout for batching. If the batch isn't completed after `batching_timeout` seconds, the batch is processed as is.
+            Defaults to `10` seconds.
 
     Attributes:
         collector: The collector associated with the module, if it exists.
@@ -393,6 +401,7 @@ class LLMWrapperBase(TensorDictModuleBase):
     device: torch.device | None
     layout: torch.layout | None
     num_samples: int | None
+    _batching_timeout: float | None
 
     @overload
     def __init__(
@@ -419,6 +428,8 @@ class LLMWrapperBase(TensorDictModuleBase):
         tokens_key: NestedKey | None = "tokens",
         masks_key: NestedKey | None = "masks",
         log_probs_key: NestedKey | None = "log_probs",
+        batch_size: int | None = None,
+        batching_timeout: float = 10.0,
     ):
         ...
 
@@ -907,6 +918,35 @@ class LLMWrapperBase(TensorDictModuleBase):
             return data.get((self.log_prob_key, "response"), **get_kwargs)
         raise RuntimeError("log_prob not callable when generate=True.")
 
+    def cleanup_batching(self):
+        """Clear batching queues to prevent memory leaks.
+
+        This method should be called when the wrapper is no longer needed
+        or when you want to reset the batching state.
+        """
+        if hasattr(self, "_batch_queue"):
+            self._batch_queue.clear()
+        if hasattr(self, "_futures"):
+            self._futures.clear()
+
+    def get_batching_state(self):
+        """Get the current batching state for debugging and monitoring.
+
+        Returns:
+            dict: A dictionary containing the current batching state including
+                  queue size, number of pending futures, and batch size.
+        """
+        if not hasattr(self, "batch_size") or self.batch_size is None:
+            return {"batching_enabled": False}
+
+        return {
+            "batching_enabled": True,
+            "batch_size": self.batch_size,
+            "queue_size": len(getattr(self, "_batch_queue", [])),
+            "pending_futures": len(getattr(self, "_futures", [])),
+            "timeout": getattr(self, "_batching_timeout", None),
+        }
+
 
 def _extract_responses_from_full_histories(
     text_full: list[str],
@@ -973,3 +1013,68 @@ def _extract_responses_from_full_histories(
         return torch.stack(padded_responses)
 
     return torch.stack(response_histories)
+
+
+def _batching(func):
+    from concurrent.futures import Future, wait
+
+    @wraps(func)
+    def _batched_func(self, td_input: TensorDictBase, **kwargs):
+        if getattr(self, "batch_size", None) is not None:
+            # put elements in a queue until the batch size is reached
+            if td_input.batch_dims == 0:
+                inputs = [td_input]
+            else:
+                if td_input.batch_dims > 1:
+                    raise ValueError(
+                        f"Batching not supported for batch_dims > 1: {td_input.batch_dims}"
+                    )
+                inputs = list(td_input.unbind(0))
+
+            # Create as many futures as inputs
+            futures = [Future() for _ in inputs]
+
+            self._batch_queue.extend(inputs)
+            self._futures.extend(futures)
+
+            # Check if we have enough inputs to form a complete batch
+            if len(self._batch_queue) >= self.batch_size:
+                # Process full batch immediately
+                try:
+                    batch = lazy_stack(self._batch_queue[: self.batch_size])
+                    results = func(self, batch, **kwargs)
+                    batch_results = results.unbind(0)
+                    for i, future in enumerate(self._futures[: self.batch_size]):
+                        future.set_result(batch_results[i])
+                    self._batch_queue = self._batch_queue[self.batch_size :]
+                    self._futures = self._futures[self.batch_size :]
+                except Exception as e:
+                    # Set exception for all futures in this batch
+                    for future in futures:
+                        future.set_exception(e)
+                    raise
+
+            # Now wait for the current futures to complete (with timeout if needed)
+            _, not_done = wait(futures, timeout=self._batching_timeout)
+
+            # if there are still futures not done, process them as is
+            if not_done:
+                try:
+                    inputs_not_done = [
+                        inputs[futures.index(future)] for future in not_done
+                    ]
+                    results = func(self, torch.stack(inputs_not_done), **kwargs).unbind(
+                        0
+                    )
+                    for i, future in enumerate(not_done):
+                        future.set_result(results[i])
+                except Exception as e:
+                    # Set exception for remaining futures
+                    for future in not_done:
+                        future.set_exception(e)
+                    raise
+
+            return lazy_stack([future.result() for future in futures])
+        return func(self, td_input, **kwargs)
+
+    return _batched_func

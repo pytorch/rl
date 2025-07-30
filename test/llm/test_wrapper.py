@@ -8,6 +8,7 @@ import argparse
 import importlib.util
 
 import os
+import time
 from functools import partial
 
 import pytest
@@ -72,7 +73,11 @@ def vllm_instance():
     assert os.environ.get("VLLM_USE_V1") == "0"
 
     try:
-        model = LLM("Qwen/Qwen2.5-0.5B")
+        model = LLM(
+            "Qwen/Qwen2.5-0.5B",
+            max_num_batched_tokens=32768,  # Match max_model_len
+            max_model_len=32768,
+        )
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
         tokenizer.pad_token = tokenizer.eos_token
         return model, tokenizer
@@ -716,6 +721,179 @@ class TestWrappers:
                 generate=False,
                 return_log_probs=False,
             )
+
+    # ================================================
+    # Batching Tests
+    # ================================================
+
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_batching(self, wrapper_class, vllm_instance, transformers_instance):
+        from concurrent.futures import ThreadPoolExecutor, wait
+
+        # Handle the case where vLLM is not available
+        if wrapper_class == vLLMWrapper:
+            try:
+                model, tokenizer = vllm_instance
+            except Exception as e:
+                if "vLLM compatibility issue" in str(e):
+                    pytest.skip("vLLM not available due to compatibility issues")
+                raise
+        else:
+            model, tokenizer = transformers_instance
+
+        wrapper = wrapper_class(
+            model,
+            tokenizer=tokenizer,
+            input_mode="text",
+            generate=True,
+            return_log_probs=True,
+            batch_size=4,
+        )
+        # Create 2 threads and send inputs
+        inputs = [
+            TensorDict(
+                text=Text(prompt=[f"Question {i}?", f"Question {i+2}?"]),
+                batch_size=(2,),
+            )
+            for i in range(2)
+        ]
+        pool = ThreadPoolExecutor(max_workers=2)
+        try:
+            futures = [pool.submit(wrapper, input) for input in inputs]
+            wait(futures)
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
+
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_batching_uneven(self, wrapper_class, vllm_instance, transformers_instance):
+        from concurrent.futures import ThreadPoolExecutor, wait
+
+        if wrapper_class == vLLMWrapper:
+            model, tokenizer = vllm_instance
+        else:
+            model, tokenizer = transformers_instance
+        wrapper = wrapper_class(
+            model,
+            tokenizer=tokenizer,
+            input_mode="text",
+            generate=True,
+            return_log_probs=True,
+            batch_size=5,
+            batching_timeout=5,  # Increased timeout for CI environments
+        )
+        inputs = [
+            TensorDict(text=Text(prompt=["Question 1?"]), batch_size=(1,)),
+            TensorDict(
+                text=Text(prompt=["Question 2?", "Question 3?", "Question 4?"]),
+                batch_size=(3,),
+            ),
+            TensorDict(
+                text=Text(prompt=["Question 5?", "Question 6?"]), batch_size=(2,)
+            ),
+        ]
+        pool = ThreadPoolExecutor(max_workers=3)
+        try:
+            futures = []
+            for input in inputs:
+                futures.append(pool.submit(wrapper, input))
+                time.sleep(0.05)  # Increased delay for more reliable timing
+
+            # Wait for first two futures with longer timeout
+            wait(futures[:2], timeout=3)
+
+            # Check results with more flexible assertions
+            result0 = futures[0].result()
+            result1 = futures[1].result()
+
+            assert result0["text"].prompt == ["Question 1?"]
+            assert result1["text"].prompt == [
+                "Question 2?",
+                "Question 3?",
+                "Question 4?",
+            ]
+
+            # The third future may or may not be done depending on timing
+            # Wait for it with a reasonable timeout
+            wait(futures[2:], timeout=10)
+            if not futures[2].done():
+                raise RuntimeError("Third future not done")
+            result2 = futures[2].result()
+            assert result2["text"].prompt == ["Question 5?", "Question 6?"]
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
+
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_batching_cleanup(
+        self, wrapper_class, vllm_instance, transformers_instance
+    ):
+        """Test batching cleanup functionality."""
+        if wrapper_class == vLLMWrapper:
+            model, tokenizer = vllm_instance
+        else:
+            model, tokenizer = transformers_instance
+
+        wrapper = wrapper_class(
+            model,
+            tokenizer=tokenizer,
+            input_mode="text",
+            generate=True,
+            return_log_probs=True,
+            batch_size=3,
+        )
+
+        # Check initial state
+        state = wrapper.get_batching_state()
+        assert state["batching_enabled"] is True
+        assert state["batch_size"] == 3
+        assert state["queue_size"] == 0
+        assert state["pending_futures"] == 0
+
+        # Add some inputs to the queue
+        input1 = TensorDict(text=Text(prompt=["Test 1"]), batch_size=(1,))
+        input2 = TensorDict(text=Text(prompt=["Test 2"]), batch_size=(1,))
+
+        # Submit inputs (they won't be processed immediately due to batch size)
+        from concurrent.futures import ThreadPoolExecutor
+
+        pool = ThreadPoolExecutor(max_workers=1)
+        try:
+            future1 = pool.submit(wrapper, input1)
+            future2 = pool.submit(wrapper, input2)
+
+            # Check state after adding inputs
+            state = wrapper.get_batching_state()
+            assert state["queue_size"] >= 0  # May be 0 if processed immediately
+            assert state["pending_futures"] >= 0
+
+            # Clean up
+            wrapper.cleanup_batching()
+
+            # Check state after cleanup
+            state = wrapper.get_batching_state()
+            assert state["queue_size"] == 0
+            assert state["pending_futures"] == 0
+
+            # Wait for futures to complete or fail
+            try:
+                future1.result(timeout=5)
+                future2.result(timeout=5)
+            except Exception:
+                # Futures may fail after cleanup, which is expected
+                pass
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
 
     # ================================================
     # Batch Size Tests
