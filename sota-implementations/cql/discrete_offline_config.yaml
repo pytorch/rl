@@ -58,14 +58,7 @@ loss:
   loss_function: l2
   gamma: 0.99
   tau: 0.005
-  # CQL specific hyperparameters
-  temperature: 1.0
-  min_q_weight: 1.0
-  max_q_backup: False
-  deterministic_backup: False
-  num_random: 10
-  with_lagrange: True
-  lagrange_thresh: 5.0
+  action_space: categorical
 
 compile:
   compile: False

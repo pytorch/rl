@@ -398,12 +398,21 @@ def make_continuous_loss(loss_cfg, model, device: torch.device | None = None):
 
 def make_discrete_loss(loss_cfg, model, device: torch.device | None = None):
 
-    loss_module = DiscreteCQLLoss(
-        model,
-        loss_function=loss_cfg.loss_function,
-        action_space="categorical",
-        delay_value=True,
-    )
+
+    if "action_space" in loss_cfg: # especify action space
+        loss_module = DiscreteCQLLoss(
+            model,
+            loss_function=loss_cfg.loss_function,
+            action_space=loss_cfg.action_space,
+            delay_value=True,
+        )
+    else:
+        loss_module = DiscreteCQLLoss(
+            model,
+            loss_function=loss_cfg.loss_function,
+            delay_value=True,
+        )
+
     loss_module.make_value_estimator(gamma=loss_cfg.gamma, device=device)
     target_net_updater = SoftUpdate(loss_module, tau=loss_cfg.tau)
 
