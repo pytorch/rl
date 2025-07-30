@@ -912,6 +912,7 @@ class PPOLoss(LossModule):
 
         If `self._entropy_coeff_map` is provided, apply per-head entropy coefficients.
         Otherwise, use the scalar `self.entropy_coeff`.
+        The entries in self._entropy_coeff_map require the full nested key to the entropy head.
         """
         if self._entropy_coeff_map is None:
             if is_tensor_collection(entropy):

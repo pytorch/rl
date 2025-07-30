@@ -9779,11 +9779,11 @@ class TestPPO(LossModuleTestBase):
             # keep per-head entropies instead of the aggregated tensor
             set_composite_lp_aggregate(False).set()
             coef_map = {
-                ("agent0", "action", "action1", "sub_action1_log_prob"):0.02,
-                ("agent0", "action", "action1", "sub_action2_log_prob"):0.01,
-                ("agent0", "action", "action2_log_prob"):0.01,
-                ("agent1", "action_log_prob"):0.01,
-                "agent2_log_prob":0.01,
+                ("agent0", "action", "action1", "sub_action1_log_prob"): 0.02,
+                ("agent0", "action", "action1", "sub_action2_log_prob"): 0.01,
+                ("agent0", "action", "action2_log_prob"): 0.01,
+                ("agent1", "action_log_prob"): 0.01,
+                "agent2_log_prob": 0.01,
             }
             ppo_weighted = cls(policy, value_operator, entropy_coeff=coef_map)
             ppo_weighted.set_keys(
@@ -9872,7 +9872,7 @@ class TestPPO(LossModuleTestBase):
         torch.testing.assert_close(out, torch.tensor(-1.0))
 
     def test_weighted_entropy_mapping(self):
-        coef = {("head_0","action_log_prob"): 0.3, ("head_1","action_log_prob"): 0.7}
+        coef = {("head_0", "action_log_prob"): 0.3, ("head_1", "action_log_prob"): 0.7}
         loss = self._make_entropy_loss(entropy_coeff=coef)
         entropy = TensorDict(
             {
@@ -9882,7 +9882,10 @@ class TestPPO(LossModuleTestBase):
             [],
         )
         out = loss._weighted_loss_entropy(entropy)
-        expected = -(coef[("head_0","action_log_prob")] * 1.0 + coef[("head_1","action_log_prob")] * 2.0)
+        expected = -(
+            coef[("head_0", "action_log_prob")] * 1.0
+            + coef[("head_1", "action_log_prob")] * 2.0
+        )
         torch.testing.assert_close(out, torch.tensor(expected))
 
     def test_weighted_entropy_mapping_missing_key(self):
