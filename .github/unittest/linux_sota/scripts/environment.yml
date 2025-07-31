@@ -30,3 +30,4 @@ dependencies:
     - vmas
     - transformers
     - minari
+    - minari[create]
