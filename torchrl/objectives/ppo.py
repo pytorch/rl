@@ -351,7 +351,7 @@ class PPOLoss(LossModule):
         *,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
-        entropy_coeff: float | Mapping[str | tuple | list, float] | None = None,
+        entropy_coeff: float | NestedKey | None = None,
         log_explained_variance: bool = True,
         critic_coeff: float | None = None,
         loss_critic_type: str = "smooth_l1",
@@ -460,8 +460,7 @@ class PPOLoss(LossModule):
         if isinstance(entropy_coeff, Mapping):
             # Store the mapping for per-head coefficients
             self._entropy_coeff_map = {
-                (tuple(k) if isinstance(k, list) else k): float(v)
-                for k, v in entropy_coeff.items()
+                str(k): float(v) for k, v in entropy_coeff.items()
             }
             # Register an empty buffer for compatibility
             self.register_buffer("entropy_coeff", torch.tensor(0.0))
