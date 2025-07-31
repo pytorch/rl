@@ -311,7 +311,7 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
 
                 # populate the tensordict
                 episode_dict = {}
-                dataset_has_mission = False
+                dataset_has_nontensor = False
                 for i, (episode_key, episode) in enumerate(h5_data.items()):
                     episode_num = int(episode_key[len("episode_") :])
                     episode_len = episode["actions"].shape[0]
@@ -327,10 +327,11 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
                                 continue
                             seen.add(match)
                             if key in ("observations", "state", "infos"):
-                                if "mission" in val.keys():
-                                    dataset_has_mission = True
-                                    val = val.clone()
-                                    val.del_("mission")
+                                val = episode[key]
+                                if any(isinstance(val.get(k), (NonTensorData, NonTensorStack)) for k in val.keys()):
+                                    non_tensor_probe = val.clone()
+                                    extract_nontensor_fields(non_tensor_probe, recursive=True)
+                                    dataset_has_nontensor = True
                                 if (
                                     not val.shape
                                 ):  # no need for this, we don't need the proper length: or steps != val.shape[0] - 1:
@@ -360,10 +361,8 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
                 )
                 td_data = td_data.memmap_like(self.data_path_root)
                 td_data = td_data.unlock_()
-                if dataset_has_mission:
-                    with set_list_to_stack(True):
-                        td_data["observation", "mission"] = TensorDict({"mission": b""}).expand(total_steps)["mission"]
-                        td_data["next", "observation", "mission"] = TensorDict({"mission": b""}).expand(total_steps)["mission"]
+                if dataset_has_nontensor:
+                    preallocate_nontensor_fields(td_data, episode, total_steps, name_map=_NAME_MATCH)
                 torchrl_logger.info(f"tensordict structure: {td_data}")
 
                 torchrl_logger.info(
@@ -395,14 +394,16 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
                                     )
                                 val_next = val[1:].clone()
                                 val_copy = val[:-1].clone()
-                                if dataset_has_mission and match == 'observation':
-                                    val_next.del_("mission")
-                                    val_copy.del_("mission")
+
+                                non_tensors_next = extract_nontensor_fields(val_next)
+                                non_tensors_now = extract_nontensor_fields(val_copy)
+
                                 data_view["next", match].copy_(val_next)
                                 data_view[match].copy_(val_copy)
-                                if dataset_has_mission and match == 'observation':
-                                    data_view.set_(("next", match, "mission"), val["mission"][1:])
-                                    data_view.set_((match, "mission"), val["mission"][:-1])
+
+                                data_view["next", match].update_(non_tensors_next)
+                                data_view[match].update_(non_tensors_now)
+
                             elif key not in ("terminations", "truncations", "rewards"):
                                 if steps is None:
                                     steps = val.shape[0]
@@ -573,3 +574,38 @@ def patch_nontensor_data_to_stack(tensordict: TensorDictBase):
             with set_list_to_stack(True):
                 tensordict[key] = data_list
     return tensordict
+
+
+def extract_nontensor_fields(td: TensorDictBase, recursive: bool = False) -> TensorDict:
+    extracted = {}
+    for key in list(td.keys()):
+        val = td.get(key)
+        if isinstance(val, (NonTensorData, NonTensorStack)):
+            extracted[key] = val
+            td.del_(key)
+        elif recursive and isinstance(val, TensorDictBase):
+            nested = extract_nontensor_fields(val, recursive=True)
+            if len(nested) > 0:
+                extracted[key] = nested
+    return TensorDict(extracted, batch_size=td.batch_size)
+
+
+def preallocate_nontensor_fields(td_data: TensorDictBase, example: TensorDictBase, total_steps: int, name_map: dict):
+    """Preallocates NonTensorStack fields in td_data based on an example TensorDict, applying key remapping."""
+    with set_list_to_stack(True):
+        def _recurse(src_td: TensorDictBase, dst_td: TensorDictBase, prefix=()):
+            for key, val in src_td.items():
+                mapped_key = name_map.get(key, key)
+                full_dst_key = prefix + (mapped_key,)
+
+                if isinstance(val, NonTensorData):
+                    dummy_val = b"" if isinstance(val.data[0], bytes) else ""
+                    dummy_stack = TensorDict({mapped_key: dummy_val}).expand(total_steps)[mapped_key]
+                    dst_td.set(full_dst_key, dummy_stack)
+                    dst_td.set(("next",) + full_dst_key, dummy_stack)
+
+                elif isinstance(val, TensorDictBase):
+                    _recurse(val, dst_td, full_dst_key)
+
+        _recurse(example, td_data)
+
