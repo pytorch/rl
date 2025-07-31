@@ -427,6 +427,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">collections</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span>
 
@@ -515,12 +516,26 @@
 <span class="sd">        tokens_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Tokens` object. Defaults to `&quot;tokens&quot;`.</span>
 <span class="sd">        masks_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Masks` object. Defaults to `&quot;masks&quot;`.</span>
 <span class="sd">        history_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.ChatHistory` object. Defaults to `&quot;history&quot;`.</span>
-<span class="sd">        batch_size (int | None, optional): The batch size to use for batching. If None, no batching is done. If provided, the module will batch the inputs and process them in batches of this size.</span>
-<span class="sd">            This means that a single call to the module will wait until enough inputs are available to form a batch of this size, and then process the batch.</span>
-<span class="sd">            This functionality uses concurrent futures to process the batches in parallel and therefore is best used in a multi-threaded environment.</span>
-<span class="sd">            Defaults to `None`.</span>
-<span class="sd">        batching_timeout (float, optional): The timeout for batching. If the batch isn&#39;t completed after `batching_timeout` seconds, the batch is processed as is.</span>
-<span class="sd">            Defaults to `10` seconds.</span>
+<span class="sd">        batching (bool, optional): Whether to enable batching. Defaults to `False`. See :ref:`ref_batching` below for more details.</span>
+<span class="sd">        min_batch_size (int | None, optional): The minimum batch size to use for batching. See :ref:`ref_batching` below for more details.</span>
+<span class="sd">        max_batch_size (int | None, optional): The maximum batch size to use for batching. See :ref:`ref_batching` below for more details.</span>
+<span class="sd">        batching_timeout (float, optional): The timeout for batching. See :ref:`ref_batching` below for more details.</span>
+
+<span class="sd">    .. _ref_batching:</span>
+<span class="sd">        Batching is a feature that allows the module to process multiple inputs in a single call.</span>
+<span class="sd">        It is designed to work in a multi-threaded environment.</span>
+<span class="sd">        To enable batching, it suffices to set `batching=True` which will set `min_batch_size` to 1 if not provided.</span>
+<span class="sd">        If you want to set a different value for `min_batch_size` or `max_batch_size` for a fine-grained control,</span>
+<span class="sd">        you can to set `batching=True` and then set `min_batch_size` or `max_batch_size` to a value greater or equal to 1.</span>
+<span class="sd">        The way batching works is as follows:</span>
+<span class="sd">        - If `min_batch_size` is not provided but `max_batch_size` is, `min_batch_size` is set to 1.</span>
+<span class="sd">        - If `max_batch_size` is not provided but `min_batch_size` is, `max_batch_size` is set to the number of inputs in the queue.</span>
+<span class="sd">        - When the model is called, a check is performed to see if the number of inputs in the queue is greater or equal to `min_batch_size`.</span>
+<span class="sd">          If it is, the batch is processed immediately, while waiting for the previous batch to be processed if the model is busy.</span>
+<span class="sd">          Otherwise, the input is added to the queue and the function waits for the batch to be completed.</span>
+<span class="sd">          While waiting for the batch to be completed, a timeout is set to `batching_timeout` seconds such that if the batch is not</span>
+<span class="sd">          completed after `batching_timeout` seconds, the remaining items to process are processed as is and the function returns after</span>
+<span class="sd">          at most `batching_timeout` seconds (plus the time to finish processing the previous and current batch).</span>
 
 <span class="sd">    Input Keys:</span>
 <span class="sd">        The input key depends on both `input_mode` and `generate`:</span>
@@ -611,15 +626,38 @@
         <span class="n">tokens_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;tokens&quot;</span><span class="p">,</span>
         <span class="n">masks_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;masks&quot;</span><span class="p">,</span>
         <span class="n">log_probs_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;log_probs&quot;</span><span class="p">,</span>
-        <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">batching</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">min_batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">max_batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">batching_timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="n">batch_size</span>
+        <span class="k">if</span> <span class="n">batching</span> <span class="ow">and</span> <span class="n">min_batch_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">min_batch_size</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">elif</span> <span class="p">(</span><span class="n">min_batch_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">max_batch_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span>
+            <span class="n">batching</span> <span class="ow">is</span> <span class="kc">False</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;min_batch_size and max_batch_size must be None if batching is False.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Validate that min_batch_size &lt;= max_batch_size when both are specified</span>
+        <span class="k">if</span> <span class="n">min_batch_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">max_batch_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">min_batch_size</span> <span class="o">&gt;</span> <span class="n">max_batch_size</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;min_batch_size (</span><span class="si">{</span><span class="n">min_batch_size</span><span class="si">}</span><span class="s2">) must be &lt;= max_batch_size (</span><span class="si">{</span><span class="n">max_batch_size</span><span class="si">}</span><span class="s2">)&quot;</span>
+                <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_min_batch_size</span> <span class="o">=</span> <span class="n">min_batch_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_max_batch_size</span> <span class="o">=</span> <span class="n">max_batch_size</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_batching_timeout</span> <span class="o">=</span> <span class="n">batching_timeout</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_batch_queue</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_futures</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">batching</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_batching_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_batching_lock</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="k">if</span> <span class="n">vllm</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="s2">&quot;vllm is required for vLLMWrapper&quot;</span><span class="p">)</span>
