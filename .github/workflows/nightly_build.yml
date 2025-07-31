@@ -61,14 +61,14 @@ jobs:
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda_support[1] }}
       - name: Build TorchRL Nightly
+        env:
+          TORCHRL_NIGHTLY: 1
         run: |
           rm -r dist || true
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install wheel
-          python3 setup.py bdist_wheel \
-            --package_name torchrl-nightly \
-            --python-tag=${{ matrix.python-tag }}
-           find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
+          python3 -mpip install build wheel
+          ./build_nightly.sh
+          find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
       # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
       # pretend that they're manylinux1 compliant so we do the same.
       - name: Upload wheel for the test-wheel job
@@ -112,14 +112,8 @@ jobs:
           python3 -mpip install --upgrade pip
       - name: Install tensordict
         run: |
-          if [[ "$OSTYPE" == "darwin"* ]]; then
-            brew install cmake
-          else
-            sudo apt-get update
-            sudo apt-get install -y cmake
-          fi
-          python3 -mpip install "pybind11[global]"
-          python3 -mpip install git+https://github.com/pytorch/tensordict.git
+          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
+          python3 -mpip install tensordict-nightly
       - name: Install test dependencies
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
@@ -141,6 +135,11 @@ jobs:
           rm -rf torchrl/
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python3 -c "import torchrl; print(torchrl.__version__)"
+      - name: Verify nightly version format
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: |
+          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
+          python3 scripts/verify_nightly_version.py
       - name: Run tests
         run: |
           set -e
@@ -213,7 +212,7 @@ jobs:
         ]
     steps:
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python_version[1] }}
       - name: Checkout torchrl
@@ -223,13 +222,13 @@ jobs:
         run: |
           python3 -mpip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
       - name: Build TorchRL nightly
+        env:
+          TORCHRL_NIGHTLY: 1
         shell: bash
         run: |
           rm -r dist || true
-          python3 -mpip install wheel
-          python3 setup.py bdist_wheel \
-            --package_name torchrl-nightly \
-            --python-tag=${{ matrix.python-tag }}
+          python3 -mpip install build wheel
+          ./build_nightly.sh
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v4
         with:
@@ -273,15 +272,7 @@ jobs:
       - name: Install tensordict
         shell: bash
         run: |
-          if ! choco -v &> /dev/null; then
-            powershell -NoProfile -InputFormat None -ExecutionPolicy Bypass -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))"
-          fi
-          # Install cmake using Chocolatey
-          choco install cmake -y
-          # Install necessary Python packages
-          python -m pip install --upgrade pip
-          python -m pip install "pybind11[global]"
-          python3 -mpip install git+https://github.com/pytorch/tensordict.git
+          python3 -mpip install tensordict-nightly
       - name: Download built wheels
         uses: actions/download-artifact@v4
         with:
@@ -297,6 +288,11 @@ jobs:
           # Avoid ambiguity of "import torchrl" by deleting the source files.
           rm -rf torchrl/
           python3 -c "import torchrl; print(torchrl.__version__)"
+      - name: Verify nightly version format
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          python3 scripts/verify_nightly_version.py
       - name: Run tests
         shell: bash
         run: |

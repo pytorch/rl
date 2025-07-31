@@ -1,5 +1,125 @@
+[build-system]
+requires = ["setuptools", "wheel", "torch", "ninja", "numpy", "pybind11[global]", "cmake"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "torchrl"  # This will be overridden by setup.py for nightly builds
+dynamic = ["version"]
+description = "A modular, primitive-first, python-first PyTorch library for Reinforcement Learning"
+readme = "README.md"
+
+authors = [
+    {name = "torchrl contributors", email = "vmoens@fb.com"}
+]
+maintainers = [
+    {name = "torchrl contributors", email = "vmoens@fb.com"}
+]
+keywords = ["reinforcement-learning", "pytorch", "rl", "machine-learning"]
+classifiers = [
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+requires-python = ">=3.9"
+dependencies = [
+    "torch>=2.1.0",
+    "numpy",
+    "packaging",
+    "cloudpickle",
+    "tensordict>=0.10.0,<0.11.0",
+]
+
+[project.optional-dependencies]
+atari = ["gymnasium[atari]"]
+dm_control = ["dm_control"]
+replay_buffer = ["torch>=2.7.0"]
+gym_continuous = ["gymnasium<1.0", "mujoco"]
+rendering = ["moviepy<2.0.0"]
+tests = [
+    "pytest",
+    "pyyaml",
+    "pytest-instafail",
+    "scipy",
+    "pytest-mock",
+    "pytest-cov",
+    "pytest-asyncio",
+    "pytest-benchmark",
+    "pytest-rerunfailures",
+    "pytest-error-for-skips",
+]
+utils = [
+    "tensorboard",
+    "wandb",
+    "tqdm",
+    "hydra-core>=1.1",
+    "hydra-submitit-launcher",
+]
+checkpointing = ["torchsnapshot"]
+offline-data = [
+    "huggingface_hub",
+    "minari",
+    "requests",
+    "tqdm",
+    "torchvision",
+    "scikit-learn",
+    "pandas",
+    "h5py",
+    "pillow",
+]
+marl = ["vmas>=1.2.10", "pettingzoo>=1.24.1", "dm-meltingpot"]
+open_spiel = ["open_spiel>=1.5"]
+llm = [
+    "transformers",
+    "vllm",
+    "playwright",
+    "datasets",
+    "langdetect",
+    "nltk",
+    "immutabledict",
+    "accelerate",
+    "sentencepiece",
+    "protobuf",
+    "einops",
+    "safetensors",
+]
+dev = [
+    "pre-commit",
+    "autoflake",
+]
+
+[project.urls]
+Homepage = "https://github.com/pytorch/rl"
+Documentation = "https://pytorch.org/rl"
+Repository = "https://github.com/pytorch/rl"
+"Bug Tracker" = "https://github.com/pytorch/rl/issues"
+twitter = "https://x.com/torchrl1"
+linkedin = "https://www.linkedin.com/company/torchrl"
+discord = "https://discord.gg/cZs26Qq3Dd"
+benchmark = "https://docs.pytorch.org/rl/dev/bench/"
+
+[tool.setuptools.dynamic]
+version = {file = "version.txt"}
+
+[tool.setuptools.packages.find]
+exclude = [
+    "test*",
+    "tutorials*",
+    "docs*",
+    "examples*",
+    "knowledge_base*",
+    "packaging*",
+]
+
+[tool.setuptools.package-data]
+"*" = ["*.txt", "*.md"]
+"torchrl" = ["csrc/*.h"]
+
 [tool.usort]
 first_party_detection = false
-
-[build-system]
-requires = ["setuptools", "wheel", "torch", "ninja"]

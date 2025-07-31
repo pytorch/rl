@@ -519,8 +519,10 @@ class History(TensorClass["nocast"]):
         :class:`~torchrl.modules.llm.policies.Tokens`: Container for token data.
     """
 
-    role: str
-    content: str | ContentBase
+    role: str | list[str] | list[list[str]]
+    content: str | ContentBase | list[str] | list[ContentBase] | list[list[str]] | list[
+        list[ContentBase]
+    ]
     is_complete: bool = True
     tool_calls: list[dict] | None = None
     tool_responses: list[str] | None = None

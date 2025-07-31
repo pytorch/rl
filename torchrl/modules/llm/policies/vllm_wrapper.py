@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import collections
+import threading
 import warnings
 from typing import Any, Literal
 
@@ -25,6 +26,7 @@ from torch.nn.utils.rnn import pad_sequence
 
 from torchrl.envs.utils import _classproperty
 from torchrl.modules.llm.policies.common import (
+    _batching,
     _extract_responses_from_full_histories,
     ChatHistory,
     LLMWrapperBase,
@@ -76,6 +78,8 @@ class vLLMWrapper(LLMWrapperBase):
         generate_kwargs (dict | None, optional): Additional arguments to pass to the model's generate method. Defaults to `None`.
         tokenizer_kwargs (dict | None, optional): Additional arguments to pass to the tokenizer. Defaults to `None`.
         pad_output (bool, optional): Whether to pad the output sequences to a uniform length. Defaults to `False`.
+        pad_model_input (bool, optional): Whether to pad the model input sequences to a uniform length.
+            This is not supported by vLLM.
         inplace (Literal[True, False, "empty"] | None, optional): Determines how the module should handle in-place operations. Defaults to `True`.
         device (torch.device | None, optional): The device to use for computation. Defaults to `None`.
         layout (torch.layout | None, optional): The layout to use for the output tensors when `pad_output=False`. Defaults to `torch.strided`.
@@ -90,6 +94,26 @@ class vLLMWrapper(LLMWrapperBase):
         tokens_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Tokens` object. Defaults to `"tokens"`.
         masks_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Masks` object. Defaults to `"masks"`.
         history_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.ChatHistory` object. Defaults to `"history"`.
+        batching (bool, optional): Whether to enable batching. Defaults to `False`. See :ref:`ref_batching` below for more details.
+        min_batch_size (int | None, optional): The minimum batch size to use for batching. See :ref:`ref_batching` below for more details.
+        max_batch_size (int | None, optional): The maximum batch size to use for batching. See :ref:`ref_batching` below for more details.
+        batching_timeout (float, optional): The timeout for batching. See :ref:`ref_batching` below for more details.
+
+    .. _ref_batching:
+        Batching is a feature that allows the module to process multiple inputs in a single call.
+        It is designed to work in a multi-threaded environment.
+        To enable batching, it suffices to set `batching=True` which will set `min_batch_size` to 1 if not provided.
+        If you want to set a different value for `min_batch_size` or `max_batch_size` for a fine-grained control,
+        you can to set `batching=True` and then set `min_batch_size` or `max_batch_size` to a value greater or equal to 1.
+        The way batching works is as follows:
+        - If `min_batch_size` is not provided but `max_batch_size` is, `min_batch_size` is set to 1.
+        - If `max_batch_size` is not provided but `min_batch_size` is, `max_batch_size` is set to the number of inputs in the queue.
+        - When the model is called, a check is performed to see if the number of inputs in the queue is greater or equal to `min_batch_size`.
+          If it is, the batch is processed immediately, while waiting for the previous batch to be processed if the model is busy.
+          Otherwise, the input is added to the queue and the function waits for the batch to be completed.
+          While waiting for the batch to be completed, a timeout is set to `batching_timeout` seconds such that if the batch is not
+          completed after `batching_timeout` seconds, the remaining items to process are processed as is and the function returns after
+          at most `batching_timeout` seconds (plus the time to finish processing the previous and current batch).
 
     Input Keys:
         The input key depends on both `input_mode` and `generate`:
@@ -157,7 +181,7 @@ class vLLMWrapper(LLMWrapperBase):
 
     def __init__(
         self,
-        model: vllm.LLM | str,
+        model: vllm.LLM | str,  # type: ignore
         *,
         tokenizer: callable | str | None = None,  # type: ignore
         input_mode: str = "history",
@@ -167,6 +191,7 @@ class vLLMWrapper(LLMWrapperBase):
         generate_kwargs: dict | None = None,
         tokenizer_kwargs: dict | None = None,
         pad_output: bool = False,
+        pad_model_input: bool | None = None,
         inplace: Literal[True, False, "empty"] | None = None,
         device: torch.device | None = None,
         layout: torch.layout | None = None,
@@ -179,8 +204,38 @@ class vLLMWrapper(LLMWrapperBase):
         tokens_key: NestedKey | None = "tokens",
         masks_key: NestedKey | None = "masks",
         log_probs_key: NestedKey | None = "log_probs",
+        batching: bool | None = None,
+        min_batch_size: int | None = None,
+        max_batch_size: int | None = None,
+        batching_timeout: float = 10.0,
     ):
         super().__init__()
+
+        if batching and min_batch_size is None:
+            min_batch_size = 1
+        elif (min_batch_size is not None or max_batch_size is not None) and (
+            batching is False
+        ):
+            raise ValueError(
+                "min_batch_size and max_batch_size must be None if batching is False."
+            )
+
+        # Validate that min_batch_size <= max_batch_size when both are specified
+        if min_batch_size is not None and max_batch_size is not None:
+            if min_batch_size > max_batch_size:
+                raise ValueError(
+                    f"min_batch_size ({min_batch_size}) must be <= max_batch_size ({max_batch_size})"
+                )
+
+        self._min_batch_size = min_batch_size
+        self._max_batch_size = max_batch_size
+        self._batching_timeout = batching_timeout
+        self._batch_queue = []
+        self._futures = []
+        if self.batching:
+            self._batching_lock = threading.Lock()
+        else:
+            self._batching_lock = None
 
         if vllm is None:
             raise ImportError("vllm is required for vLLMWrapper")
@@ -208,6 +263,8 @@ class vLLMWrapper(LLMWrapperBase):
         self.input_mode = input_mode
         self.attention_mask_key = attention_mask_key
         self.generate = generate
+        if pad_model_input is not None:
+            raise ValueError("pad_model_input is not supported by vLLMWrapper.")
 
         # Auto-determine what to return based on input mode
         self.return_history = input_mode in ("history",)
@@ -498,6 +555,7 @@ class vLLMWrapper(LLMWrapperBase):
         return type(self)(**constructor_kwargs)
 
     @set_list_to_stack(True)
+    @_batching
     def forward(
         self,
         tensordict: TensorDictBase,

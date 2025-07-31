@@ -4,8 +4,11 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import threading
 import warnings
 import weakref
+
+from functools import wraps
 from typing import Any, Literal, overload
 
 import torch
@@ -362,6 +365,8 @@ class LLMWrapperBase(TensorDictModuleBase):
         generate_kwargs: Additional arguments to pass to the model's generate method.
         tokenizer_kwargs: Additional arguments to pass to the tokenizer.
         pad_output: Whether to pad the output sequences to a uniform length.
+        pad_model_input: Whether to pad the model input sequences to a uniform length.
+            May not be supported by all models.
         inplace: Determines how the module should handle in-place operations.
         device: The device to use for computation.
         layout: The layout to use for the output tensors when pad_output=False.
@@ -370,6 +375,26 @@ class LLMWrapperBase(TensorDictModuleBase):
         text_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Text` object. Defaults to `"text"`.
         tokens_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Tokens` object. Defaults to `"tokens"`.
         masks_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Masks` object. Defaults to `"masks"`.
+        batching (bool | None, optional): Whether to enable batching. See :ref:`ref_batching` below for more details.
+        min_batch_size (int | None, optional): The minimum batch size to use for batching. See :ref:`ref_batching` below for more details.
+        max_batch_size (int | None, optional): The maximum batch size to use for batching. See :ref:`ref_batching` below for more details.
+        batching_timeout (float, optional): The timeout for batching. See :ref:`ref_batching` below for more details.
+
+    .. _ref_batching:
+        Batching is a feature that allows the module to process multiple inputs in a single call.
+        It is designed to work in a multi-threaded environment.
+        To enable batching, it suffices to set `batching=True` which will set `min_batch_size` to 1 if not provided.
+        If you want to set a different value for `min_batch_size` or `max_batch_size` for a fine-grained control,
+        you can to set `batching=True` and then set `min_batch_size` or `max_batch_size` to a value greater or equal to 1.
+        The way batching works is as follows:
+        - If `min_batch_size` is not provided but `max_batch_size` is, `min_batch_size` is set to 1.
+        - If `max_batch_size` is not provided but `min_batch_size` is, `max_batch_size` is set to the number of inputs in the queue.
+        - When the model is called, a check is performed to see if the number of inputs in the queue is greater or equal to `min_batch_size`.
+          If it is, the batch is processed immediately, while waiting for the previous batch to be processed if the model is busy.
+          Otherwise, the input is added to the queue and the function waits for the batch to be completed.
+          While waiting for the batch to be completed, a timeout is set to `batching_timeout` seconds such that if the batch is not
+          completed after `batching_timeout` seconds, the remaining items to process are processed as is and the function returns after
+          at most `batching_timeout` seconds (plus the time to finish processing the previous and current batch).
 
     Attributes:
         collector: The collector associated with the module, if it exists.
@@ -391,6 +416,10 @@ class LLMWrapperBase(TensorDictModuleBase):
     device: torch.device | None
     layout: torch.layout | None
     num_samples: int | None
+    _min_batch_size: int | None
+    _max_batch_size: int | None
+    _batching_lock: threading.Lock | None
+    _batching_timeout: float | None
 
     @overload
     def __init__(
@@ -417,11 +446,20 @@ class LLMWrapperBase(TensorDictModuleBase):
         tokens_key: NestedKey | None = "tokens",
         masks_key: NestedKey | None = "masks",
         log_probs_key: NestedKey | None = "log_probs",
+        batching: bool | None = None,
+        min_batch_size: int | None = None,
+        max_batch_size: int | None = None,
+        batching_timeout: float = 10.0,
     ):
         ...
 
     def __init__(self, *args, **kwargs):
         super().__init__()
+
+    @property
+    def batching(self) -> bool:
+        """Whether batching is enabled."""
+        return self._min_batch_size is not None or self._max_batch_size is not None
 
     def get_new_version(self, **kwargs):
         """Returns a new version of the module with altered parameters.
@@ -905,6 +943,43 @@ class LLMWrapperBase(TensorDictModuleBase):
             return data.get((self.log_prob_key, "response"), **get_kwargs)
         raise RuntimeError("log_prob not callable when generate=True.")
 
+    def cleanup_batching(self):
+        """Clear batching queues to prevent memory leaks.
+
+        This method should be called when the wrapper is no longer needed
+        or when you want to reset the batching state.
+        """
+        if hasattr(self, "_batch_queue"):
+            self._batch_queue.clear()
+        if hasattr(self, "_futures"):
+            self._futures.clear()
+
+    def get_batching_state(self):
+        """Get the current batching state for debugging and monitoring.
+
+        Returns:
+            dict: A dictionary containing the current batching state including
+                  queue size, number of pending futures, and batch size.
+        """
+        if not self.batching:
+            return {"batching_enabled": False}
+
+        lock = getattr(self, "_batching_lock", None)
+        if lock is not None:
+            lock_state = "locked" if lock.locked() else "unlocked"
+        else:
+            lock_state = "not initialized"
+        return {
+            "batching_enabled": True,
+            "min_batch_size": getattr(self, "_min_batch_size", None),
+            "max_batch_size": getattr(self, "_max_batch_size", None),
+            "queue_size": len(getattr(self, "_batch_queue", [])),
+            "processing": lock_state == "locked",
+            "lock_state": lock_state,
+            "pending_futures": len(getattr(self, "_futures", [])),
+            "timeout": getattr(self, "_batching_timeout", None),
+        }
+
 
 def _extract_responses_from_full_histories(
     text_full: list[str],
@@ -971,3 +1046,99 @@ def _extract_responses_from_full_histories(
         return torch.stack(padded_responses)
 
     return torch.stack(response_histories)
+
+
+def _batching(func):
+    from concurrent.futures import Future, wait
+
+    @wraps(func)
+    def _batched_func(self, td_input: TensorDictBase, **kwargs):
+        min_batch_size = getattr(self, "_min_batch_size", None)
+        max_batch_size = getattr(self, "_max_batch_size", None)
+        if min_batch_size is not None or max_batch_size is not None:
+            # put elements in a queue until the batch size is reached
+            if td_input.batch_dims == 0:
+                inputs = [td_input]
+            else:
+                if td_input.batch_dims > 1:
+                    raise ValueError(
+                        f"Batching not supported for batch_dims > 1: {td_input.batch_dims}"
+                    )
+                inputs = list(td_input.unbind(0))
+
+            # Create as many futures as inputs
+            futures = [Future() for _ in inputs]
+
+            self._batch_queue.extend(inputs)
+            self._futures.extend(futures)
+
+            if min_batch_size is None:
+                min_batch_size = 1
+
+            # Acquire lock
+            # Note: Because of the lock, we may be waiting for the LLM to finish processing the previous batch
+            # for a little while. That means that the length of the batch queue may increase so even if
+            # min_batch_size is 1 and only one element is passed, we may be processing more than one element
+            # here.
+            with self._batching_lock:
+                # If we have more than min_batch_size, we can process the batch immediately
+                if len(self._batch_queue) >= min_batch_size:
+                    # if max_batch_size is not defined, process all elements
+                    if max_batch_size is None:
+                        max_batch_size = len(self._batch_queue)
+                    if len(self._batch_queue) != len(self._futures):
+                        raise RuntimeError(
+                            f"Batch queue and futures length mismatch: {len(self._batch_queue)} != {len(self._futures)}"
+                        )
+                    batch = self._batch_queue[:max_batch_size]
+                    batch_size = len(batch)
+                    try:
+                        batch = lazy_stack(batch)
+                        results = func(self, batch, **kwargs)
+                        batch_results = results.unbind(0)
+                        if len(batch_results) != batch_size:
+                            raise RuntimeError(
+                                f"Batch results and futures length mismatch: {len(batch_results)} != {batch_size}"
+                            )
+                        for i, future in enumerate(self._futures[:batch_size]):
+                            if future.done():
+                                raise RuntimeError(
+                                    f"Future {i} already done: {future.result()}"
+                                )
+                            future.set_result(batch_results[i])
+                    except Exception as e:
+                        # Set exception for all futures in this batch that haven't been completed yet
+                        for future in self._futures[:batch_size]:
+                            if not future.done():
+                                future.set_exception(e)
+                        raise
+
+                    self._batch_queue = self._batch_queue[batch_size:]
+                    self._futures = self._futures[batch_size:]
+
+            # Now wait for the current futures to complete (with timeout if needed)
+            _, not_done = wait(futures, timeout=self._batching_timeout)
+
+            # if there are still futures not done, process them as is
+            if not_done:
+                try:
+                    with self._batching_lock:
+                        inputs_not_done = [
+                            inputs[futures.index(future)] for future in not_done
+                        ]
+                        results = func(
+                            self, torch.stack(inputs_not_done), **kwargs
+                        ).unbind(0)
+                        for i, future in enumerate(not_done):
+                            future.set_result(results[i])
+                except Exception as e:
+                    # Set exception for remaining futures that haven't been completed yet
+                    for future in not_done:
+                        if not future.done():
+                            future.set_exception(e)
+                    raise
+
+            return lazy_stack([future.result() for future in futures])
+        return func(self, td_input, **kwargs)
+
+    return _batched_func
