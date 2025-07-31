@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import contextlib
-
+import threading
 from contextlib import nullcontext
 from copy import copy
 from typing import Any, Literal
@@ -100,12 +100,26 @@ class TransformersWrapper(LLMWrapperBase):
         tokens_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Tokens` object. Defaults to `"tokens"`.
         masks_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Masks` object. Defaults to `"masks"`.
         history_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.ChatHistory` object. Defaults to `"history"`.
-        batch_size (int | None, optional): The batch size to use for batching. If None, no batching is done. If provided, the module will batch the inputs and process them in batches of this size.
-            This means that a single call to the module will wait until enough inputs are available to form a batch of this size, and then process the batch.
-            This functionality uses concurrent futures to process the batches in parallel and therefore is best used in a multi-threaded environment.
-            Defaults to `None`.
-        batching_timeout (float, optional): The timeout for batching. If the batch isn't completed after `batching_timeout` seconds, the batch is processed as is.
-            Defaults to `10` seconds.
+        batching (bool | None, optional): Whether to enable batching. See :ref:`ref_batching` below for more details.
+        min_batch_size (int | None, optional): The minimum batch size to use for batching. See :ref:`ref_batching` below for more details.
+        max_batch_size (int | None, optional): The maximum batch size to use for batching. See :ref:`ref_batching` below for more details.
+        batching_timeout (float, optional): The timeout for batching. See :ref:`ref_batching` below for more details.
+
+    .. _ref_batching:
+        Batching is a feature that allows the module to process multiple inputs in a single call.
+        It is designed to work in a multi-threaded environment.
+        To enable batching, it suffices to set `batching=True` which will set `min_batch_size` to 1 if not provided.
+        If you want to set a different value for `min_batch_size` or `max_batch_size` for a fine-grained control,
+        you can to set `batching=True` and then set `min_batch_size` or `max_batch_size` to a value greater or equal to 1.
+        The way batching works is as follows:
+        - If `min_batch_size` is not provided but `max_batch_size` is, `min_batch_size` is set to 1.
+        - If `max_batch_size` is not provided but `min_batch_size` is, `max_batch_size` is set to the number of inputs in the queue.
+        - When the model is called, a check is performed to see if the number of inputs in the queue is greater or equal to `min_batch_size`.
+          If it is, the batch is processed immediately, while waiting for the previous batch to be processed if the model is busy.
+          Otherwise, the input is added to the queue and the function waits for the batch to be completed.
+          While waiting for the batch to be completed, a timeout is set to `batching_timeout` seconds such that if the batch is not
+          completed after `batching_timeout` seconds, the remaining items to process are processed as is and the function returns after
+          at most `batching_timeout` seconds (plus the time to finish processing the previous and current batch).
 
     Input Keys:
         The input key depends on both `input_mode` and `generate`:
@@ -195,15 +209,38 @@ class TransformersWrapper(LLMWrapperBase):
         tokens_key: NestedKey | None = "tokens",
         masks_key: NestedKey | None = "masks",
         log_probs_key: NestedKey | None = "log_probs",
-        batch_size: int | None = None,
+        batching: bool | None = None,
+        min_batch_size: int | None = None,
+        max_batch_size: int | None = None,
         batching_timeout: float = 10.0,
     ):
         super().__init__()
 
-        self.batch_size = batch_size
+        if batching and min_batch_size is None:
+            min_batch_size = 1
+        elif (min_batch_size is not None or max_batch_size is not None) and (
+            batching is False
+        ):
+            raise ValueError(
+                "min_batch_size and max_batch_size must be None if batching is False."
+            )
+
+        # Validate that min_batch_size <= max_batch_size when both are specified
+        if min_batch_size is not None and max_batch_size is not None:
+            if min_batch_size > max_batch_size:
+                raise ValueError(
+                    f"min_batch_size ({min_batch_size}) must be <= max_batch_size ({max_batch_size})"
+                )
+
+        self._min_batch_size = min_batch_size
+        self._max_batch_size = max_batch_size
         self._batching_timeout = batching_timeout
         self._batch_queue = []
         self._futures = []
+        if self.batching:
+            self._batching_lock = threading.Lock()
+        else:
+            self._batching_lock = None
 
         if isinstance(model, str):
             from transformers import AutoModelForCausalLM
