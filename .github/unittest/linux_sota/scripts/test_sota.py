@@ -106,6 +106,14 @@ commands = {
   replay_buffer.size=120 \
   logger.backend=
 """,
+    "discrete_cql_offline": """python sota-implementations/cql/discrete_cql_offline.py \
+  collector.total_frames=48 \
+  collector.init_random_frames=10 \
+  collector.frames_per_batch=16 \
+  collector.env_per_collector=2 \
+  replay_buffer.batch_size=10 \
+  logger.backend=
+""",
     "redq": """python sota-implementations/redq/redq.py \
   num_workers=4 \
   collector.total_frames=48 \
