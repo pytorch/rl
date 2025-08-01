@@ -569,7 +569,7 @@ more lightweight, the ONNX version should be faster than the TorchRL one.
 
 
 
-    def onnx_policy(screen_obs: np.ndarray) -> int:
+    def onnx_policy(screen_obs: np.ndarray) -> int:  # noqa: F811
         onnxruntime_input = {ort_session.get_inputs()[0].name: screen_obs}
         onnxruntime_outputs = ort_session.run(None, onnxruntime_input)
         action = int(onnxruntime_outputs[0])

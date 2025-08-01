@@ -668,7 +668,7 @@
 <span class="sd">          `name_or_path` attribute.</span>
 <span class="sd">        - Templates are stored globally and persist for the duration of the Python session.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">global</span> <span class="n">_CHAT_TEMPLATES</span><span class="p">,</span> <span class="n">_CUSTOM_INVERSE_PARSERS</span><span class="p">,</span> <span class="n">_CUSTOM_MODEL_FAMILY_KEYWORDS</span>
+    <span class="k">global</span> <span class="n">_CHAT_TEMPLATES</span><span class="p">,</span> <span class="n">_CUSTOM_INVERSE_PARSERS</span><span class="p">,</span> <span class="n">_CUSTOM_MODEL_FAMILY_KEYWORDS</span>  <span class="c1"># noqa: F824</span>
 
     <span class="c1"># Validate template contains generation blocks</span>
     <span class="k">if</span> <span class="s2">&quot;{</span><span class="si">% g</span><span class="s2">eneration %}&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">template</span><span class="p">:</span>

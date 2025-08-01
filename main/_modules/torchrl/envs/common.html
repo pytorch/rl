@@ -428,6 +428,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">abc</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">weakref</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">deepcopy</span>
@@ -1147,10 +1148,9 @@
 
         <span class="k">return</span> <span class="bp">self</span></div>
 
-    <span class="nd">@wraps</span><span class="p">(</span><span class="n">check_env_specs_func</span><span class="p">)</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">check_env_specs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<div class="viewcode-block" id="EnvBase.check_env_specs"><a class="viewcode-back" href="../../../reference/generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.check_env_specs">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">check_env_specs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;return_contiguous&quot;</span><span class="p">,</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_has_dynamic_specs</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">check_env_specs_func</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">check_env_specs_func</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
 
     <span class="n">check_env_specs</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">check_env_specs_func</span><span class="o">.</span><span class="vm">__doc__</span>
 
@@ -3349,7 +3349,7 @@
                     <span class="p">):</span>
                         <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
                             <span class="sa">f</span><span class="s2">&quot;A partial `&#39;_reset&#39;` key has been passed to `reset` (</span><span class="si">{</span><span class="n">reset_key</span><span class="si">}</span><span class="s2">), &quot;</span>
-                            <span class="sa">f</span><span class="s2">&quot;but the corresponding done_key (</span><span class="si">{</span><span class="n">done_key</span><span class="si">}</span><span class="s2">) was not present in the input &quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;but the corresponding done_key (</span><span class="si">{</span><span class="n">done_key</span><span class="si">}</span><span class="s2">) wasn&#39;t present in the input &quot;</span>
                             <span class="sa">f</span><span class="s2">&quot;tensordict. &quot;</span>
                             <span class="sa">f</span><span class="s2">&quot;This is discouraged, since the input tensordict should contain &quot;</span>
                             <span class="sa">f</span><span class="s2">&quot;all the data not being reset.&quot;</span>
@@ -3809,12 +3809,26 @@
                 <span class="n">out_td</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">tensordicts</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">batch_size</span><span class="p">),</span> <span class="n">out</span><span class="o">=</span><span class="n">out</span><span class="p">)</span>
             <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
                 <span class="k">if</span> <span class="p">(</span>
-                    <span class="s2">&quot;The shapes of the tensors to stack is incompatible&quot;</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
+                    <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span>
+                        <span class="s2">&quot;The shapes of the tensors to stack is incompatible&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
+                    <span class="p">)</span>
                     <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_has_dynamic_specs</span>
                 <span class="p">):</span>
                     <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                         <span class="s2">&quot;The environment specs are dynamic. Call rollout with return_contiguous=False.&quot;</span>
                     <span class="p">)</span>
+                <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span>
+                    <span class="s2">&quot;The sets of keys in the tensordicts to stack are exclusive&quot;</span><span class="p">,</span>
+                    <span class="nb">str</span><span class="p">(</span><span class="n">err</span><span class="p">),</span>
+                <span class="p">):</span>
+                    <span class="k">for</span> <span class="n">reward_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">reward_keys</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">reward_key</span> <span class="ow">in</span> <span class="n">td</span> <span class="k">for</span> <span class="n">td</span> <span class="ow">in</span> <span class="n">tensordicts</span><span class="p">):</span>
+                            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                                <span class="s2">&quot;The reward key was present in the root tensordict of at least one of the tensordicts to stack. &quot;</span>
+                                <span class="s2">&quot;The likely cause is that your environment returns a reward during a call to `reset`, which is not allowed. &quot;</span>
+                                <span class="s2">&quot;To fix this, you should return the reward in the `step` method but not in during `reset`. If you need a reward &quot;</span>
+                                <span class="s2">&quot;to be returned during `reset`, submit an issue on github.&quot;</span>
+                            <span class="p">)</span>
                 <span class="k">raise</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">out_td</span> <span class="o">=</span> <span class="n">LazyStackedTensorDict</span><span class="o">.</span><span class="n">maybe_dense_stack</span><span class="p">(</span>
@@ -4389,7 +4403,7 @@
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__getattr__</span><span class="p">(</span><span class="n">attr</span><span class="p">)</span>
 
         <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;env not set in </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">, cannot access </span><span class="si">{</span><span class="n">attr</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;The env wasn&#39;t set in </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">, cannot access </span><span class="si">{</span><span class="n">attr</span><span class="si">}</span><span class="s2">&quot;</span>
         <span class="p">)</span>
 
     <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>

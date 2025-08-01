@@ -2088,7 +2088,7 @@
                     <span class="sa">f</span><span class="s2">&quot;but received an object of type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">transform</span><span class="p">)</span><span class="si">}</span><span class="s2"> instead.&quot;</span>
                 <span class="p">)</span>
         <span class="n">transform</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
-        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">==</span> <span class="nb">type</span><span class="p">(</span><span class="n">transform</span><span class="p">)</span> <span class="o">==</span> <span class="n">Compose</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="ow">is</span> <span class="nb">type</span><span class="p">(</span><span class="n">transform</span><span class="p">)</span> <span class="ow">is</span> <span class="n">Compose</span><span class="p">:</span>
             <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">transform</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
@@ -8095,7 +8095,7 @@
             <span class="c1"># find a matching done key (there might be more than one)</span>
             <span class="k">for</span> <span class="n">done_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">done_keys</span><span class="p">:</span>
                 <span class="c1"># check root</span>
-                <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">done_key</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">type</span><span class="p">(</span><span class="n">step_count_key</span><span class="p">):</span>
+                <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">done_key</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="nb">type</span><span class="p">(</span><span class="n">step_count_key</span><span class="p">):</span>
                     <span class="k">continue</span>
                 <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">done_key</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
                     <span class="k">if</span> <span class="n">done_key</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">step_count_key</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
@@ -8126,7 +8126,7 @@
                 <span class="c1"># find a matching done key (there might be more than one)</span>
                 <span class="k">for</span> <span class="n">done_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">done_keys</span><span class="p">:</span>
                     <span class="c1"># check root</span>
-                    <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">done_key</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">type</span><span class="p">(</span><span class="n">truncated_key</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">done_key</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="nb">type</span><span class="p">(</span><span class="n">truncated_key</span><span class="p">):</span>
                         <span class="k">continue</span>
                     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">done_key</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
                         <span class="k">if</span> <span class="n">done_key</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">truncated_key</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
@@ -8149,7 +8149,7 @@
                     <span class="c1"># find a matching done key (there might be more than one)</span>
                     <span class="k">for</span> <span class="n">done_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">done_keys</span><span class="p">:</span>
                         <span class="c1"># check root</span>
-                        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">done_key</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">type</span><span class="p">(</span><span class="n">done_key</span><span class="p">):</span>
+                        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">done_key</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="nb">type</span><span class="p">(</span><span class="n">done_key</span><span class="p">):</span>
                             <span class="k">continue</span>
                         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">done_key</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
                             <span class="k">if</span> <span class="n">done_key</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">done_key</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
@@ -8185,7 +8185,7 @@
             <span class="c1"># find a matching done key (there might be more than one)</span>
             <span class="k">for</span> <span class="n">done_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">done_keys</span><span class="p">:</span>
                 <span class="c1"># check root</span>
-                <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">done_key</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">type</span><span class="p">(</span><span class="n">step_count_key</span><span class="p">):</span>
+                <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">done_key</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="nb">type</span><span class="p">(</span><span class="n">step_count_key</span><span class="p">):</span>
                     <span class="k">continue</span>
                 <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">done_key</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
                     <span class="k">if</span> <span class="n">done_key</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">step_count_key</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
@@ -8834,7 +8834,7 @@
         <span class="k">for</span> <span class="n">init_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_keys</span><span class="p">:</span>
             <span class="k">for</span> <span class="n">done_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">done_keys</span><span class="p">:</span>
                 <span class="c1"># check root</span>
-                <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">done_key</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">type</span><span class="p">(</span><span class="n">init_key</span><span class="p">):</span>
+                <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">done_key</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="nb">type</span><span class="p">(</span><span class="n">init_key</span><span class="p">):</span>
                     <span class="k">continue</span>
                 <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">done_key</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
                     <span class="k">if</span> <span class="n">done_key</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">init_key</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
@@ -11089,7 +11089,7 @@
         <span class="c1"># find a matching done key (there might be more than one)</span>
         <span class="k">for</span> <span class="n">done_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">done_keys</span><span class="p">:</span>
             <span class="c1"># check root</span>
-            <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">done_key</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">type</span><span class="p">(</span><span class="n">traj_count_key</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">done_key</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="nb">type</span><span class="p">(</span><span class="n">traj_count_key</span><span class="p">):</span>
                 <span class="k">continue</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">done_key</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
                 <span class="k">if</span> <span class="n">done_key</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">traj_count_key</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>

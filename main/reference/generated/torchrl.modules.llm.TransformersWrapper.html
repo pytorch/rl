@@ -462,7 +462,8 @@
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>model</strong> (<em>transformers.AutoModelForCausalLM</em><em> | </em><em>str</em>) – The Hugging Face Transformers model to wrap.
-If a string, it will be passed to <cite>transformers.AutoModelForCausalLM.from_pretrained</cite>.</p>
+If a string, it will be passed to <cite>transformers.AutoModelForCausalLM.from_pretrained</cite> (and <cite>AutoTokenizer.from_pretrained</cite>
+if <cite>tokenizer</cite> is not provided).</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
@@ -484,7 +485,58 @@ Defaults to <cite>“history”</cite>.</p></li>
 <li><p><strong>generate</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to enable text generation. If <cite>True</cite>, the model will generate text based on the input.
 If <cite>False</cite>, only log probabilities will be computed. Defaults to <cite>True</cite>.</p></li>
 <li><p><strong>return_log_probs</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to return log probabilities. Defaults to <cite>False</cite>.</p></li>
-<li><p><strong>generate_kwargs</strong> (<em>dict</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – Additional arguments to pass to the model’s generate method. Defaults to <cite>None</cite>.</p></li>
+<li><p><strong>generate_kwargs</strong> (<em>dict</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – <p>Additional arguments to pass to the model’s generate method. Defaults to <cite>None</cite>.</p>
+<p><strong>Standardized Parameters (cross-backend compatible):</strong></p>
+<ul>
+<li><p><strong>max_new_tokens</strong> (int): Maximum number of new tokens to generate</p></li>
+<li><p><strong>num_return_sequences</strong> (int): Number of sequences to return</p></li>
+<li><p><strong>temperature</strong> (float): Sampling temperature (0.0 = deterministic, higher = more random)</p></li>
+<li><p><strong>top_p</strong> (float): Nucleus sampling parameter (0.0-1.0)</p></li>
+<li><p><strong>top_k</strong> (int): Top-k sampling parameter</p></li>
+<li><p><strong>repetition_penalty</strong> (float): Penalty for repeating tokens</p></li>
+<li><p><strong>do_sample</strong> (bool): Whether to use sampling vs greedy decoding</p></li>
+<li><p><strong>num_beams</strong> (int): Number of beams for beam search</p></li>
+<li><p><strong>length_penalty</strong> (float): Penalty for sequence length</p></li>
+<li><p><strong>early_stopping</strong> (bool): Whether to stop early in beam search</p></li>
+<li><p><strong>stop_sequences</strong> (list): Sequences that stop generation (requires custom stopping criteria)</p></li>
+<li><p><strong>skip_special_tokens</strong> (bool): Whether to skip special tokens in output</p></li>
+<li><p><strong>logprobs</strong> (bool): Whether to return log probabilities (maps to output_scores)</p>
+<blockquote>
+<div><div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Usage of this parameter is discouraged as it may conflict with the <cite>generate</cite> parameter
+of the class.</p>
+</div>
+</div></blockquote>
+</li>
+</ul>
+<p><strong>Transformers-Specific Parameters:</strong></p>
+<ul>
+<li><p><strong>pad_token_id</strong> (int): Token ID for padding</p></li>
+<li><p><strong>eos_token_id</strong> (int): Token ID for end of sequence</p></li>
+<li><p><strong>bad_words_ids</strong> (list): List of token IDs to avoid</p></li>
+<li><p><strong>force_words_ids</strong> (list): List of token IDs to force</p></li>
+<li><p><strong>no_repeat_ngram_size</strong> (int): Size of n-grams to avoid repeating</p></li>
+<li><p><strong>encoder_repetition_penalty</strong> (float): Repetition penalty for encoder-decoder models</p></li>
+<li><p><strong>num_beam_groups</strong> (int): Number of beam groups for diverse beam search</p></li>
+<li><p><strong>diversity_penalty</strong> (float): Penalty for beam diversity</p></li>
+<li><p><strong>output_scores</strong> (bool): Whether to output scores</p></li>
+<li><p><strong>return_dict_in_generate</strong> (bool): Whether to return dict in generate</p></li>
+</ul>
+<p><strong>Legacy Parameter Support:</strong></p>
+<ul>
+<li><p><strong>max_tokens</strong> (int): Automatically converted to max_new_tokens</p></li>
+<li><p><strong>n</strong> (int): Automatically converted to num_return_sequences</p></li>
+</ul>
+<p><strong>Parameter Conflict Resolution:</strong></p>
+<p>When both legacy (Transformers-specific) and standardized parameter names are provided,
+a <code class="xref py py-exc docutils literal notranslate"><span class="pre">ValueError</span></code> is raised to prevent confusion. For example:</p>
+<ul>
+<li><p>If both <code class="docutils literal notranslate"><span class="pre">max_tokens</span></code> and <code class="docutils literal notranslate"><span class="pre">max_new_tokens</span></code> are passed, an error is raised</p></li>
+<li><p>If both <code class="docutils literal notranslate"><span class="pre">n</span></code> and <code class="docutils literal notranslate"><span class="pre">num_return_sequences</span></code> are passed, an error is raised</p></li>
+</ul>
+<p>This ensures clear parameter usage and prevents unexpected behavior.</p>
+</p></li>
 <li><p><strong>tokenizer_kwargs</strong> (<em>dict</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – Additional arguments to pass to the tokenizer. Defaults to <cite>None</cite>.</p></li>
 <li><p><strong>pad_output</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to pad the output sequences to a uniform length. This does not impact the underlying padding
 during call to the model. To use padding or packing during the model <cite>forward</cite> call, see <cite>pad_model_input</cite>.
@@ -558,7 +610,13 @@ history=ChatHistory(prompt=…, response=…, full=…)</p>
 <span class="gp">... </span>    <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">input_mode</span><span class="o">=</span><span class="s2">&quot;history&quot;</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">generate</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">return_log_probs</span><span class="o">=</span><span class="kc">True</span>
+<span class="gp">... </span>    <span class="n">return_log_probs</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">generate_kwargs</span><span class="o">=</span><span class="p">{</span>
+<span class="gp">... </span>        <span class="s2">&quot;max_new_tokens&quot;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span>  <span class="c1"># Standardized parameter</span>
+<span class="gp">... </span>        <span class="s2">&quot;temperature&quot;</span><span class="p">:</span> <span class="mf">0.7</span><span class="p">,</span>
+<span class="gp">... </span>        <span class="s2">&quot;top_p&quot;</span><span class="p">:</span> <span class="mf">0.9</span><span class="p">,</span>
+<span class="gp">... </span>        <span class="s2">&quot;do_sample&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="p">}</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">history</span> <span class="o">=</span> <span class="n">History</span><span class="o">.</span><span class="n">from_chats</span><span class="p">([[</span>

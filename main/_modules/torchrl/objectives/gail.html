@@ -543,7 +543,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_in_keys</span> <span class="o">=</span> <span class="n">values</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">out_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">out_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_out_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;loss&quot;</span><span class="p">]</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_grad_penalty</span><span class="p">:</span>

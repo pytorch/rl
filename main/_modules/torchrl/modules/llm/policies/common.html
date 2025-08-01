@@ -774,6 +774,7 @@
 <span class="sd">    - Support for different input modalities (history, text, tokens)</span>
 <span class="sd">    - Consistent output structure using TensorClass objects (Text, Tokens, Masks, LogProbs)</span>
 <span class="sd">    - Configurable generation and log-probability computation</span>
+<span class="sd">    - Standardized generation parameters across different backends</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        model: The underlying model to wrap.</span>
@@ -785,6 +786,43 @@
 <span class="sd">        attention_mask_key: The key for attention masks (used in &quot;tokens&quot; mode).</span>
 <span class="sd">        generate: Whether to enable text generation.</span>
 <span class="sd">        generate_kwargs: Additional arguments to pass to the model&#39;s generate method.</span>
+
+<span class="sd">            **Common Parameters (cross-backend compatible):**</span>
+
+<span class="sd">            * **max_new_tokens** (int): Maximum number of new tokens to generate</span>
+<span class="sd">            * **num_return_sequences** (int): Number of sequences to return</span>
+<span class="sd">            * **temperature** (float): Sampling temperature (0.0 = deterministic, higher = more random)</span>
+<span class="sd">            * **top_p** (float): Nucleus sampling parameter (0.0-1.0)</span>
+<span class="sd">            * **top_k** (int): Top-k sampling parameter</span>
+<span class="sd">            * **repetition_penalty** (float): Penalty for repeating tokens</span>
+<span class="sd">            * **do_sample** (bool): Whether to use sampling vs greedy decoding</span>
+<span class="sd">            * **num_beams** (int): Number of beams for beam search</span>
+<span class="sd">            * **length_penalty** (float): Penalty for sequence length</span>
+<span class="sd">            * **early_stopping** (bool): Whether to stop early in beam search</span>
+<span class="sd">            * **stop_sequences** (list): Sequences that stop generation</span>
+<span class="sd">            * **skip_special_tokens** (bool): Whether to skip special tokens in output</span>
+<span class="sd">            * **logprobs** (bool): Whether to return log probabilities</span>
+
+<span class="sd">            **Parameter Conflict Resolution:**</span>
+
+<span class="sd">            When both legacy (backend-specific) and standardized parameter names are provided,</span>
+<span class="sd">            a :exc:`ValueError` is raised to prevent confusion. For example:</span>
+
+<span class="sd">            * If both ``max_tokens`` and ``max_new_tokens`` are passed, an error is raised</span>
+<span class="sd">            * If both ``n`` and ``num_return_sequences`` are passed, an error is raised</span>
+
+<span class="sd">            This ensures clear parameter usage and prevents unexpected behavior.</span>
+
+<span class="sd">            **Parameter Validation:**</span>
+
+<span class="sd">            The following validations are performed:</span>
+
+<span class="sd">            * Temperature must be non-negative</span>
+<span class="sd">            * top_p must be between 0 and 1</span>
+<span class="sd">            * top_k must be positive</span>
+<span class="sd">            * repetition_penalty must be positive</span>
+<span class="sd">            * When do_sample=False, temperature must be 0 for greedy decoding</span>
+
 <span class="sd">        tokenizer_kwargs: Additional arguments to pass to the tokenizer.</span>
 <span class="sd">        pad_output: Whether to pad the output sequences to a uniform length.</span>
 <span class="sd">        pad_model_input: Whether to pad the model input sequences to a uniform length.</span>
@@ -843,6 +881,23 @@
     <span class="n">_batching_lock</span><span class="p">:</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span> <span class="o">|</span> <span class="kc">None</span>
     <span class="n">_batching_timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span>
 
+    <span class="c1"># Common generation parameters that work across both vLLM and Transformers</span>
+    <span class="n">COMMON_GENERATION_PARAMS</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;max_new_tokens&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;num_return_sequences&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;temperature&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;top_p&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;top_k&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;repetition_penalty&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;do_sample&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;num_beams&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;length_penalty&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;early_stopping&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;stop_sequences&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;skip_special_tokens&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;logprobs&quot;</span><span class="p">,</span>
+    <span class="p">}</span>
+
     <span class="nd">@overload</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -877,6 +932,153 @@
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_standardize_generate_kwargs</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">generate_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Standardize generation parameters to use common names across wrappers.</span>
+
+<span class="sd">        This method converts wrapper-specific parameter names to common names:</span>
+
+<span class="sd">        * vLLM&#39;s ``max_tokens`` -&gt; ``max_new_tokens``</span>
+<span class="sd">        * vLLM&#39;s ``n`` -&gt; ``num_return_sequences``</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            generate_kwargs: The generation parameters to standardize</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Standardized generation parameters</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If conflicting parameter names are provided</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">generate_kwargs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{}</span>
+
+        <span class="n">standardized</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">generate_kwargs</span><span class="p">)</span>
+
+        <span class="c1"># Convert vLLM parameter names to common names</span>
+        <span class="k">if</span> <span class="s2">&quot;max_tokens&quot;</span> <span class="ow">in</span> <span class="n">standardized</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s2">&quot;max_new_tokens&quot;</span> <span class="ow">in</span> <span class="n">standardized</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Cannot specify both &#39;max_tokens&#39; (legacy vLLM) and &#39;max_new_tokens&#39; (standardized). &quot;</span>
+                    <span class="s2">&quot;Use &#39;max_new_tokens&#39; for cross-backend compatibility.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">standardized</span><span class="p">[</span><span class="s2">&quot;max_new_tokens&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">standardized</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;max_tokens&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="s2">&quot;n&quot;</span> <span class="ow">in</span> <span class="n">standardized</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s2">&quot;num_return_sequences&quot;</span> <span class="ow">in</span> <span class="n">standardized</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Cannot specify both &#39;n&#39; (legacy vLLM) and &#39;num_return_sequences&#39; (standardized). &quot;</span>
+                    <span class="s2">&quot;Use &#39;num_return_sequences&#39; for cross-backend compatibility.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">standardized</span><span class="p">[</span><span class="s2">&quot;num_return_sequences&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">standardized</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;n&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Validate parameter combinations</span>
+        <span class="bp">cls</span><span class="o">.</span><span class="n">_validate_parameter_combinations</span><span class="p">(</span><span class="n">standardized</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">standardized</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_parameter_combinations</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">generate_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate that parameter combinations make sense.</span>
+
+<span class="sd">        This method performs the following validations:</span>
+
+<span class="sd">        * Temperature must be non-negative</span>
+<span class="sd">        * top_p must be between 0 and 1</span>
+<span class="sd">        * top_k must be positive</span>
+<span class="sd">        * repetition_penalty must be positive</span>
+<span class="sd">        * When do_sample=False, temperature must be 0 for greedy decoding</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            generate_kwargs: The generation parameters to validate</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If parameter combinations are invalid</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Check for conflicting sampling parameters</span>
+        <span class="k">if</span> <span class="n">generate_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;do_sample&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">:</span>
+            <span class="c1"># If do_sample=False, temperature should be 0 for greedy decoding</span>
+            <span class="k">if</span> <span class="n">generate_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;temperature&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;When do_sample=False (greedy decoding), temperature must be 0. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;Got temperature=</span><span class="si">{</span><span class="n">generate_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;temperature&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+
+        <span class="c1"># Check for valid temperature range</span>
+        <span class="n">temperature</span> <span class="o">=</span> <span class="n">generate_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;temperature&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">temperature</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">temperature</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Temperature must be non-negative, got </span><span class="si">{</span><span class="n">temperature</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Check for valid top_p range</span>
+        <span class="n">top_p</span> <span class="o">=</span> <span class="n">generate_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;top_p&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">top_p</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">top_p</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;top_p must be between 0 and 1, got </span><span class="si">{</span><span class="n">top_p</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Check for valid top_k</span>
+        <span class="n">top_k</span> <span class="o">=</span> <span class="n">generate_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;top_k&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">top_k</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">top_k</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;top_k must be positive, got </span><span class="si">{</span><span class="n">top_k</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Check for valid repetition_penalty</span>
+        <span class="n">repetition_penalty</span> <span class="o">=</span> <span class="n">generate_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;repetition_penalty&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">repetition_penalty</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">repetition_penalty</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;repetition_penalty must be positive, got </span><span class="si">{</span><span class="n">repetition_penalty</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_wrapper_specific_kwargs</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span> <span class="n">generate_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">wrapper_type</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extract wrapper-specific generation parameters.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            generate_kwargs: The generation parameters</span>
+<span class="sd">            wrapper_type: Either &#39;vllm&#39; or &#39;transformers&#39;</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Wrapper-specific parameters</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">generate_kwargs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{}</span>
+
+        <span class="k">if</span> <span class="n">wrapper_type</span> <span class="o">==</span> <span class="s2">&quot;vllm&quot;</span><span class="p">:</span>
+            <span class="c1"># vLLM-specific parameters</span>
+            <span class="n">vllm_specific</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s2">&quot;presence_penalty&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;frequency_penalty&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;ignore_eos&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;prompt_logprobs&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;detokenize&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;include_stop_str_in_output&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;spaces_between_special_tokens&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;sampling_type&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;temperature_last&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;top_p_last&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;top_k_last&quot;</span><span class="p">,</span>
+            <span class="p">}</span>
+            <span class="k">return</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">generate_kwargs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">vllm_specific</span><span class="p">}</span>
+
+        <span class="k">elif</span> <span class="n">wrapper_type</span> <span class="o">==</span> <span class="s2">&quot;transformers&quot;</span><span class="p">:</span>
+            <span class="c1"># Transformers-specific parameters</span>
+            <span class="n">transformers_specific</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s2">&quot;pad_token_id&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;eos_token_id&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;bad_words_ids&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;force_words_ids&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;no_repeat_ngram_size&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;encoder_repetition_penalty&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;num_beam_groups&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;diversity_penalty&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;output_scores&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;return_dict_in_generate&quot;</span><span class="p">,</span>
+            <span class="p">}</span>
+            <span class="k">return</span> <span class="p">{</span>
+                <span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">generate_kwargs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">transformers_specific</span>
+            <span class="p">}</span>
+
+        <span class="k">return</span> <span class="p">{}</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">batching</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>

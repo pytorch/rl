@@ -522,7 +522,7 @@
 <span class="sd">            ``samples_mc_entropy`` will control how many</span>
 <span class="sd">            samples will be used to compute this estimate.</span>
 <span class="sd">            Defaults to ``1``.</span>
-<span class="sd">        entropy_coeff: scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.</span>
+<span class="sd">        entropy_coeff: scalar | Mapping[NestedKey, scalar], optional): entropy multiplier when computing the total loss.</span>
 <span class="sd">            * **Scalar**: one value applied to the summed entropy of every action head.</span>
 <span class="sd">            * **Mapping** ``{head_name: coeff}`` gives an individual coefficient for each action-head&#39;s entropy.</span>
 <span class="sd">            Defaults to ``0.01``.</span>
@@ -773,7 +773,7 @@
         <span class="o">*</span><span class="p">,</span>
         <span class="n">entropy_bonus</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">samples_mc_entropy</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
-        <span class="n">entropy_coeff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">entropy_coeff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">log_explained_variance</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">critic_coeff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">loss_critic_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;smooth_l1&quot;</span><span class="p">,</span>
@@ -881,9 +881,7 @@
 
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entropy_coeff</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
             <span class="c1"># Store the mapping for per-head coefficients</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_entropy_coeff_map</span> <span class="o">=</span> <span class="p">{</span>
-                <span class="nb">str</span><span class="p">(</span><span class="n">k</span><span class="p">):</span> <span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">entropy_coeff</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
-            <span class="p">}</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_entropy_coeff_map</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">entropy_coeff</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
             <span class="c1"># Register an empty buffer for compatibility</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;entropy_coeff&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mf">0.0</span><span class="p">))</span>
         <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entropy_coeff</span><span class="p">,</span> <span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)):</span>
@@ -1333,6 +1331,7 @@
 
 <span class="sd">        If `self._entropy_coeff_map` is provided, apply per-head entropy coefficients.</span>
 <span class="sd">        Otherwise, use the scalar `self.entropy_coeff`.</span>
+<span class="sd">        The entries in self._entropy_coeff_map require the full nested key to the entropy head.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_entropy_coeff_map</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">entropy</span><span class="p">):</span>
@@ -1340,7 +1339,10 @@
             <span class="k">return</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">entropy_coeff</span> <span class="o">*</span> <span class="n">entropy</span>
 
         <span class="n">loss_term</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># running sum over heads</span>
-        <span class="k">for</span> <span class="n">head_name</span><span class="p">,</span> <span class="n">entropy_head</span> <span class="ow">in</span> <span class="n">entropy</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">coeff</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">head_name</span><span class="p">,</span> <span class="n">entropy_head</span> <span class="ow">in</span> <span class="n">entropy</span><span class="o">.</span><span class="n">items</span><span class="p">(</span>
+            <span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">leaves_only</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">):</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">coeff</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_entropy_coeff_map</span><span class="p">[</span><span class="n">head_name</span><span class="p">]</span>
             <span class="k">except</span> <span class="ne">KeyError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
@@ -1348,7 +1350,7 @@
             <span class="n">coeff_t</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span>
                 <span class="n">coeff</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">entropy_head</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">entropy_head</span><span class="o">.</span><span class="n">device</span>
             <span class="p">)</span>
-            <span class="n">head_loss_term</span> <span class="o">=</span> <span class="o">-</span><span class="n">coeff_t</span> <span class="o">*</span> <span class="n">_sum_td_features</span><span class="p">(</span><span class="n">entropy_head</span><span class="p">)</span>
+            <span class="n">head_loss_term</span> <span class="o">=</span> <span class="o">-</span><span class="n">coeff_t</span> <span class="o">*</span> <span class="n">entropy_head</span>
             <span class="n">loss_term</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="n">head_loss_term</span> <span class="k">if</span> <span class="n">loss_term</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">loss_term</span> <span class="o">+</span> <span class="n">head_loss_term</span>
             <span class="p">)</span>  <span class="c1"># accumulate</span>
@@ -1392,7 +1394,7 @@
 <span class="sd">            ``samples_mc_entropy`` will control how many</span>
 <span class="sd">            samples will be used to compute this estimate.</span>
 <span class="sd">            Defaults to ``1``.</span>
-<span class="sd">        entropy_coeff: (scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.</span>
+<span class="sd">        entropy_coeff: (scalar | Mapping[NesstedKey, scalar], optional): entropy multiplier when computing the total loss.</span>
 <span class="sd">            * **Scalar**: one value applied to the summed entropy of every action head.</span>
 <span class="sd">            * **Mapping** ``{head_name: coeff}`` gives an individual coefficient for each action-head&#39;s entropy.</span>
 <span class="sd">            Defaults to ``0.01``.</span>
@@ -1497,7 +1499,7 @@
         <span class="n">clip_epsilon</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.2</span><span class="p">,</span>
         <span class="n">entropy_bonus</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">samples_mc_entropy</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
-        <span class="n">entropy_coeff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">entropy_coeff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">critic_coeff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">loss_critic_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;smooth_l1&quot;</span><span class="p">,</span>
         <span class="n">normalize_advantage</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
@@ -1685,7 +1687,7 @@
 <span class="sd">            ``samples_mc_entropy`` will control how many</span>
 <span class="sd">            samples will be used to compute this estimate.</span>
 <span class="sd">            Defaults to ``1``.</span>
-<span class="sd">        entropy_coeff: scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.</span>
+<span class="sd">        entropy_coeff: scalar | Mapping[NestedKey, scalar], optional): entropy multiplier when computing the total loss.</span>
 <span class="sd">            * **Scalar**: one value applied to the summed entropy of every action head.</span>
 <span class="sd">            * **Mapping** ``{head_name: coeff}`` gives an individual coefficient for each action-head&#39;s entropy.</span>
 <span class="sd">            Defaults to ``0.01``.</span>
@@ -1791,7 +1793,7 @@
         <span class="n">samples_mc_kl</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">entropy_bonus</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">samples_mc_entropy</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
-        <span class="n">entropy_coeff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">entropy_coeff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">critic_coeff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">loss_critic_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;smooth_l1&quot;</span><span class="p">,</span>
         <span class="n">normalize_advantage</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>

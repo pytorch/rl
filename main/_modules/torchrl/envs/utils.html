@@ -613,7 +613,7 @@
                     <span class="s2">&quot;extra keys can be present in the input TensorDict). &quot;</span>
                     <span class="s2">&quot;As a result, step_mdp will need to run extra key checks at each iteration. &quot;</span>
                     <span class="sa">f</span><span class="s2">&quot;</span><span class="se">{{</span><span class="s2">Expected keys</span><span class="se">}}</span><span class="s2">-</span><span class="se">{{</span><span class="s2">Actual keys</span><span class="se">}}</span><span class="s2">=</span><span class="si">{</span><span class="nb">set</span><span class="p">(</span><span class="n">expected</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">actual</span><span class="si">}</span><span class="s2"> (&lt;= this set should be empty), </span><span class="se">\n</span><span class="s2">&quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;</span><span class="se">{{</span><span class="s2">Actual keys</span><span class="se">}}</span><span class="s2">-</span><span class="se">{{</span><span class="s2">Expected keys</span><span class="se">}}</span><span class="s2">=</span><span class="si">{</span><span class="n">actual</span><span class="o">-</span><span class="w"> </span><span class="nb">set</span><span class="p">(</span><span class="n">expected</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="se">{{</span><span class="s2">Actual keys</span><span class="se">}}</span><span class="s2">-</span><span class="se">{{</span><span class="s2">Expected keys</span><span class="se">}}</span><span class="s2">=</span><span class="si">{</span><span class="n">actual</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="nb">set</span><span class="p">(</span><span class="n">expected</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
                 <span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">validated</span>
 
@@ -1111,7 +1111,7 @@
     <span class="n">check_dtype</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
     <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">break_when_any_done</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;both&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">break_when_any_done</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;both&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Tests an environment specs against the results of short rollout.</span>
 
@@ -1208,10 +1208,12 @@
         <span class="n">real_tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="n">is_leaf</span><span class="o">=</span><span class="n">_is_leaf_nontensor</span><span class="p">)</span>
     <span class="p">)</span>
     <span class="k">if</span> <span class="n">fake_tensordict_keys</span> <span class="o">!=</span> <span class="n">real_tensordict_keys</span><span class="p">:</span>
+        <span class="n">keys_in_real_not_in_fake</span> <span class="o">=</span> <span class="n">real_tensordict_keys</span> <span class="o">-</span> <span class="n">fake_tensordict_keys</span>
+        <span class="n">keys_in_fake_not_in_real</span> <span class="o">=</span> <span class="n">fake_tensordict_keys</span> <span class="o">-</span> <span class="n">real_tensordict_keys</span>
         <span class="k">raise</span> <span class="ne">AssertionError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;&quot;&quot;The keys of the specs and data do not match:</span>
-<span class="s2">    - List of keys present in real but not in fake: </span><span class="si">{</span><span class="n">real_tensordict_keys</span><span class="o">-</span><span class="n">fake_tensordict_keys</span><span class="si">}</span><span class="s2">,</span>
-<span class="s2">    - List of keys present in fake but not in real: </span><span class="si">{</span><span class="n">fake_tensordict_keys</span><span class="o">-</span><span class="n">real_tensordict_keys</span><span class="si">}</span><span class="s2">.</span>
+<span class="s2">- List of keys present in real but not in fake: </span><span class="si">{</span><span class="n">keys_in_real_not_in_fake</span><span class="si">=}</span><span class="s2">,</span>
+<span class="s2">- List of keys present in fake but not in real: </span><span class="si">{</span><span class="n">keys_in_fake_not_in_real</span><span class="si">=}</span><span class="s2">.</span>
 <span class="s2">&quot;&quot;&quot;</span>
         <span class="p">)</span>
 
@@ -1527,14 +1529,14 @@
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Group </span><span class="si">{</span><span class="n">group_name</span><span class="si">}</span><span class="s2"> is empty&quot;</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">agent_name</span> <span class="ow">in</span> <span class="n">group</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">agent_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">found_agents</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Agent </span><span class="si">{</span><span class="n">agent_name</span><span class="si">}</span><span class="s2"> not present in environment&quot;</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Agent </span><span class="si">{</span><span class="n">agent_name</span><span class="si">}</span><span class="s2"> wasn&#39;t present in environment&quot;</span><span class="p">)</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">found_agents</span><span class="p">[</span><span class="n">agent_name</span><span class="p">]:</span>
                 <span class="n">found_agents</span><span class="p">[</span><span class="n">agent_name</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Agent </span><span class="si">{</span><span class="n">agent_name</span><span class="si">}</span><span class="s2"> present more than once&quot;</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">agent_name</span><span class="p">,</span> <span class="n">found</span> <span class="ow">in</span> <span class="n">found_agents</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">found</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Agent </span><span class="si">{</span><span class="n">agent_name</span><span class="si">}</span><span class="s2"> not found in any group&quot;</span><span class="p">)</span></div>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Agent </span><span class="si">{</span><span class="n">agent_name</span><span class="si">}</span><span class="s2"> wasn&#39;t found in any group&quot;</span><span class="p">)</span></div>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_terminated_or_truncated</span><span class="p">(</span>
@@ -2029,19 +2031,19 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;&quot;&quot;This error is raised because TorchRL tried to automatically wrap your policy in</span>
-<span class="s2">    a TensorDictModule. If you&#39;re confident the policy can directly process environment outputs, set</span>
-<span class="s2">    the `trust_policy` argument to `True` in the constructor.</span>
+<span class="s2">a TensorDictModule. If you&#39;re confident the policy can directly process environment outputs, set</span>
+<span class="s2">the `trust_policy` argument to `True` in the constructor.</span>
 
-<span class="s2">    Arguments to policy.forward are incompatible with entries in</span>
-<span class="s2">    env.observation_spec (got incongruent signatures:</span>
-<span class="s2">    the function signature is </span><span class="si">{</span><span class="nb">set</span><span class="p">(</span><span class="n">sig</span><span class="o">.</span><span class="n">parameters</span><span class="p">)</span><span class="si">}</span><span class="s2"> but the specs have keys </span><span class="si">{</span><span class="nb">set</span><span class="p">(</span><span class="n">next_observation</span><span class="p">)</span><span class="si">}</span><span class="s2">).</span>
-<span class="s2">    If you want TorchRL to automatically wrap your policy with a TensorDictModule</span>
-<span class="s2">    then the arguments to policy.forward must correspond one-to-one with entries</span>
-<span class="s2">    in env.observation_spec.</span>
-<span class="s2">    For more complex behavior and more control you can consider writing your</span>
-<span class="s2">    own TensorDictModule.</span>
-<span class="s2">    Check the collector documentation to know more about accepted policies.</span>
-<span class="s2">    &quot;&quot;&quot;</span>
+<span class="s2">Arguments to policy.forward are incompatible with entries in</span>
+<span class="s2">env.observation_spec (got incongruent signatures:</span>
+<span class="s2">the function signature is </span><span class="si">{</span><span class="nb">set</span><span class="p">(</span><span class="n">sig</span><span class="o">.</span><span class="n">parameters</span><span class="p">)</span><span class="si">}</span><span class="s2"> but the specs have keys </span><span class="si">{</span><span class="nb">set</span><span class="p">(</span><span class="n">next_observation</span><span class="p">)</span><span class="si">}</span><span class="s2">).</span>
+<span class="s2">If you want TorchRL to automatically wrap your policy with a TensorDictModule</span>
+<span class="s2">then the arguments to policy.forward must correspond one-to-one with entries</span>
+<span class="s2">in env.observation_spec.</span>
+<span class="s2">For more complex behavior and more control you can consider writing your</span>
+<span class="s2">own TensorDictModule.</span>
+<span class="s2">Check the collector documentation to know more about accepted policies.</span>
+<span class="s2">&quot;&quot;&quot;</span>
             <span class="p">)</span>
     <span class="k">return</span> <span class="n">policy</span>
 
@@ -2158,7 +2160,7 @@
             <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__getattr__</span><span class="p">(</span><span class="n">attr</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;policy not set in </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">, cannot access </span><span class="si">{</span><span class="n">attr</span><span class="si">}</span><span class="s2">.&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;The policy wasn&#39;t set in </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">, cannot access </span><span class="si">{</span><span class="n">attr</span><span class="si">}</span><span class="s2">.&quot;</span>
             <span class="p">)</span>
 </pre></div>
 

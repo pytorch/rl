@@ -494,8 +494,8 @@ under the <cite>module_name</cite> attribute.</p></li>
 <li><p><strong>module_name</strong> (<em>str</em>) – name where the module will be found.
 The parameters of the module will be found under <code class="docutils literal notranslate"><span class="pre">loss_module.&lt;module_name&gt;_params</span></code>
 whereas the module will be found under <code class="docutils literal notranslate"><span class="pre">loss_module.&lt;module_name&gt;</span></code>.</p></li>
-<li><p><strong>expand_dim</strong> (<em>int</em><em>, </em><em>optional</em>) – <dl>
-<dt>if provided, the parameters of the module</dt><dd><p>will be expanded <code class="docutils literal notranslate"><span class="pre">N</span></code> times, where <code class="docutils literal notranslate"><span class="pre">N</span> <span class="pre">=</span> <span class="pre">expand_dim</span></code> along the
+<li><p><strong>expand_dim</strong> (<em>int</em><em>, </em><em>optional</em>) – <p>if provided, the parameters of the module
+will be expanded <code class="docutils literal notranslate"><span class="pre">N</span></code> times, where <code class="docutils literal notranslate"><span class="pre">N</span> <span class="pre">=</span> <span class="pre">expand_dim</span></code> along the
 first dimension. This option is to be used whenever a target
 network with more than one configuration is to be used.</p>
 <div class="admonition note">
@@ -506,16 +506,14 @@ of the original parameters. If <code class="docutils literal notranslate"><span 
 provided, the value of the parameters will be resampled uniformly
 between the minimum and maximum value of the parameter content.</p>
 </div>
-</dd>
-<dt>create_target_params (bool, optional): if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a detached</dt><dd><p>copy of the parameter will be available to feed a target network
+</p></li>
+<li><p><strong>create_target_params</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a detached
+copy of the parameter will be available to feed a target network
 under the name <code class="docutils literal notranslate"><span class="pre">loss_module.&lt;module_name&gt;_target_params</span></code>.
 If <code class="docutils literal notranslate"><span class="pre">False</span></code> (default), this attribute will still be available
 but it will be a detached instance of the parameters, not a copy.
 In other words, any modification of the parameter value
-will directly be reflected in the target parameters.</p>
-</dd>
-</dl>
-</p></li>
+will directly be reflected in the target parameters.</p></li>
 <li><p><strong>compare_against</strong> (<em>iterable of parameters</em><em>, </em><em>optional</em>) – if provided,
 this list of parameters will be used as a comparison set for
 the parameters of the module. If the parameters are expanded

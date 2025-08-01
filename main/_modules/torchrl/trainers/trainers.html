@@ -618,7 +618,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">save_trainer_interval</span> <span class="o">=</span> <span class="n">save_trainer_interval</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">save_trainer_file</span> <span class="o">=</span> <span class="n">save_trainer_file</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_log_dict</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="p">[])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_log_dict</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_batch_process_ops</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_post_steps_ops</span> <span class="o">=</span> <span class="p">[]</span>

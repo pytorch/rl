@@ -437,7 +437,8 @@
 <p>This class provides a consistent interface for LLM wrappers with the following features:
 - Support for different input modalities (history, text, tokens)
 - Consistent output structure using TensorClass objects (Text, Tokens, Masks, LogProbs)
-- Configurable generation and log-probability computation</p>
+- Configurable generation and log-probability computation
+- Standardized generation parameters across different backends</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>model</strong> – The underlying model to wrap.</p>
@@ -449,7 +450,41 @@
 <li><p><strong>input_key</strong> – The key for the input data. If None, defaults to the input_mode name.</p></li>
 <li><p><strong>attention_mask_key</strong> – The key for attention masks (used in “tokens” mode).</p></li>
 <li><p><strong>generate</strong> – Whether to enable text generation.</p></li>
-<li><p><strong>generate_kwargs</strong> – Additional arguments to pass to the model’s generate method.</p></li>
+<li><p><strong>generate_kwargs</strong> – <p>Additional arguments to pass to the model’s generate method.</p>
+<p><strong>Common Parameters (cross-backend compatible):</strong></p>
+<ul>
+<li><p><strong>max_new_tokens</strong> (int): Maximum number of new tokens to generate</p></li>
+<li><p><strong>num_return_sequences</strong> (int): Number of sequences to return</p></li>
+<li><p><strong>temperature</strong> (float): Sampling temperature (0.0 = deterministic, higher = more random)</p></li>
+<li><p><strong>top_p</strong> (float): Nucleus sampling parameter (0.0-1.0)</p></li>
+<li><p><strong>top_k</strong> (int): Top-k sampling parameter</p></li>
+<li><p><strong>repetition_penalty</strong> (float): Penalty for repeating tokens</p></li>
+<li><p><strong>do_sample</strong> (bool): Whether to use sampling vs greedy decoding</p></li>
+<li><p><strong>num_beams</strong> (int): Number of beams for beam search</p></li>
+<li><p><strong>length_penalty</strong> (float): Penalty for sequence length</p></li>
+<li><p><strong>early_stopping</strong> (bool): Whether to stop early in beam search</p></li>
+<li><p><strong>stop_sequences</strong> (list): Sequences that stop generation</p></li>
+<li><p><strong>skip_special_tokens</strong> (bool): Whether to skip special tokens in output</p></li>
+<li><p><strong>logprobs</strong> (bool): Whether to return log probabilities</p></li>
+</ul>
+<p><strong>Parameter Conflict Resolution:</strong></p>
+<p>When both legacy (backend-specific) and standardized parameter names are provided,
+a <code class="xref py py-exc docutils literal notranslate"><span class="pre">ValueError</span></code> is raised to prevent confusion. For example:</p>
+<ul>
+<li><p>If both <code class="docutils literal notranslate"><span class="pre">max_tokens</span></code> and <code class="docutils literal notranslate"><span class="pre">max_new_tokens</span></code> are passed, an error is raised</p></li>
+<li><p>If both <code class="docutils literal notranslate"><span class="pre">n</span></code> and <code class="docutils literal notranslate"><span class="pre">num_return_sequences</span></code> are passed, an error is raised</p></li>
+</ul>
+<p>This ensures clear parameter usage and prevents unexpected behavior.</p>
+<p><strong>Parameter Validation:</strong></p>
+<p>The following validations are performed:</p>
+<ul>
+<li><p>Temperature must be non-negative</p></li>
+<li><p>top_p must be between 0 and 1</p></li>
+<li><p>top_k must be positive</p></li>
+<li><p>repetition_penalty must be positive</p></li>
+<li><p>When do_sample=False, temperature must be 0 for greedy decoding</p></li>
+</ul>
+</p></li>
 <li><p><strong>tokenizer_kwargs</strong> – Additional arguments to pass to the tokenizer.</p></li>
 <li><p><strong>pad_output</strong> – Whether to pad the output sequences to a uniform length.</p></li>
 <li><p><strong>pad_model_input</strong> – Whether to pad the model input sequences to a uniform length.

@@ -498,6 +498,55 @@
 <span class="sd">            If `False`, only log probabilities will be computed. Defaults to `True`.</span>
 <span class="sd">        return_log_probs (bool, optional): Whether to return log probabilities. Defaults to `True`.</span>
 <span class="sd">        generate_kwargs (dict | None, optional): Additional arguments to pass to the model&#39;s generate method. Defaults to `None`.</span>
+
+<span class="sd">            **Standardized Parameters (cross-backend compatible):**</span>
+
+<span class="sd">            * **max_new_tokens** (int): Maximum number of new tokens to generate (maps to vLLM&#39;s max_tokens)</span>
+<span class="sd">            * **num_return_sequences** (int): Number of sequences to return (maps to vLLM&#39;s n)</span>
+<span class="sd">            * **temperature** (float): Sampling temperature (0.0 = deterministic, higher = more random)</span>
+<span class="sd">            * **top_p** (float): Nucleus sampling parameter (0.0-1.0)</span>
+<span class="sd">            * **top_k** (int): Top-k sampling parameter</span>
+<span class="sd">            * **repetition_penalty** (float): Penalty for repeating tokens</span>
+<span class="sd">            * **do_sample** (bool): Whether to use sampling vs greedy decoding</span>
+<span class="sd">            * **num_beams** (int): Number of beams for beam search</span>
+<span class="sd">            * **length_penalty** (float): Penalty for sequence length</span>
+<span class="sd">            * **early_stopping** (bool): Whether to stop early in beam search</span>
+<span class="sd">            * **stop_sequences** (list): Sequences that stop generation (maps to vLLM&#39;s stop)</span>
+<span class="sd">            * **skip_special_tokens** (bool): Whether to skip special tokens in output</span>
+<span class="sd">            * **logprobs** (bool): Whether to return log probabilities</span>
+
+<span class="sd">                .. warning:: Usage of this parameter is discouraged as it may conflict with the `generate` parameter</span>
+<span class="sd">                    of the class.</span>
+
+<span class="sd">            **vLLM-Specific Parameters:**</span>
+
+<span class="sd">            * **presence_penalty** (float): Penalty for token presence</span>
+<span class="sd">            * **frequency_penalty** (float): Penalty for token frequency</span>
+<span class="sd">            * **ignore_eos** (bool): Whether to ignore EOS token</span>
+<span class="sd">            * **prompt_logprobs** (bool): Whether to return prompt log probabilities</span>
+<span class="sd">            * **detokenize** (bool): Whether to detokenize output</span>
+<span class="sd">            * **include_stop_str_in_output** (bool): Whether to include stop strings in output</span>
+<span class="sd">            * **spaces_between_special_tokens** (bool): Whether to add spaces between special tokens</span>
+<span class="sd">            * **sampling_type** (str): Type of sampling to use</span>
+<span class="sd">            * **temperature_last** (bool): Whether to apply temperature only to last token</span>
+<span class="sd">            * **top_p_last** (bool): Whether to apply top_p only to last token</span>
+<span class="sd">            * **top_k_last** (bool): Whether to apply top_k only to last token</span>
+
+<span class="sd">            **Legacy Parameter Support:**</span>
+
+<span class="sd">            * **max_tokens** (int): Automatically converted to max_new_tokens</span>
+<span class="sd">            * **n** (int): Automatically converted to num_return_sequences</span>
+
+<span class="sd">            **Parameter Conflict Resolution:**</span>
+
+<span class="sd">            When both legacy (vLLM-specific) and standardized parameter names are provided,</span>
+<span class="sd">            a :exc:`ValueError` is raised to prevent confusion. For example:</span>
+
+<span class="sd">            * If both ``max_tokens`` and ``max_new_tokens`` are passed, an error is raised</span>
+<span class="sd">            * If both ``n`` and ``num_return_sequences`` are passed, an error is raised</span>
+
+<span class="sd">            This ensures clear parameter usage and prevents unexpected behavior.</span>
+
 <span class="sd">        tokenizer_kwargs (dict | None, optional): Additional arguments to pass to the tokenizer. Defaults to `None`.</span>
 <span class="sd">        pad_output (bool, optional): Whether to pad the output sequences to a uniform length. Defaults to `False`.</span>
 <span class="sd">        pad_model_input (bool, optional): Whether to pad the model input sequences to a uniform length.</span>
@@ -580,7 +629,13 @@
 <span class="sd">        ...     tokenizer=tokenizer,</span>
 <span class="sd">        ...     input_mode=&quot;history&quot;,</span>
 <span class="sd">        ...     generate=True,</span>
-<span class="sd">        ...     return_log_probs=True</span>
+<span class="sd">        ...     return_log_probs=True,</span>
+<span class="sd">        ...     generate_kwargs={</span>
+<span class="sd">        ...         &quot;max_new_tokens&quot;: 50,  # Standardized parameter</span>
+<span class="sd">        ...         &quot;temperature&quot;: 0.7,</span>
+<span class="sd">        ...         &quot;top_p&quot;: 0.9,</span>
+<span class="sd">        ...         &quot;do_sample&quot;: True,</span>
+<span class="sd">        ...     }</span>
 <span class="sd">        ... )</span>
 <span class="sd">        &gt;&gt;&gt;</span>
 <span class="sd">        &gt;&gt;&gt; history = History.from_chats([[</span>
@@ -799,8 +854,49 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="n">generate_kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">generate_kwargs</span><span class="p">)</span>
 
+        <span class="c1"># Standardize common parameters</span>
+        <span class="n">generate_kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_standardize_generate_kwargs</span><span class="p">(</span><span class="n">generate_kwargs</span><span class="p">)</span>
+
+        <span class="c1"># Extract wrapper-specific parameters</span>
+        <span class="n">vllm_specific_kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_wrapper_specific_kwargs</span><span class="p">(</span>
+            <span class="n">generate_kwargs</span><span class="p">,</span> <span class="s2">&quot;vllm&quot;</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Convert common parameters back to vLLM format</span>
+        <span class="n">vllm_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">generate_kwargs</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">COMMON_GENERATION_PARAMS</span><span class="p">:</span>
+                <span class="c1"># Convert common names to vLLM names</span>
+                <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;max_new_tokens&quot;</span><span class="p">:</span>
+                    <span class="n">vllm_kwargs</span><span class="p">[</span><span class="s2">&quot;max_tokens&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+                <span class="k">elif</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;num_return_sequences&quot;</span><span class="p">:</span>
+                    <span class="n">vllm_kwargs</span><span class="p">[</span><span class="s2">&quot;n&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+                <span class="k">elif</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;stop_sequences&quot;</span><span class="p">:</span>
+                    <span class="n">vllm_kwargs</span><span class="p">[</span><span class="s2">&quot;stop&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+                <span class="k">elif</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;logprobs&quot;</span><span class="p">:</span>
+                    <span class="n">vllm_kwargs</span><span class="p">[</span><span class="s2">&quot;logprobs&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+                <span class="k">elif</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;do_sample&quot;</span><span class="p">:</span>
+                    <span class="c1"># do_sample is handled through the sampling parameters</span>
+                    <span class="c1"># If do_sample=False, we use greedy decoding (temperature=0)</span>
+                    <span class="c1"># If do_sample=True, we use the provided sampling parameters</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">value</span><span class="p">:</span>
+                        <span class="n">vllm_kwargs</span><span class="p">[</span><span class="s2">&quot;temperature&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span>
+                    <span class="c1"># If do_sample=True, we keep the existing temperature/top_p/top_k values</span>
+                <span class="k">elif</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;num_beams&quot;</span><span class="p">:</span>
+                    <span class="c1"># vLLM uses best_of instead of num_beams</span>
+                    <span class="n">vllm_kwargs</span><span class="p">[</span><span class="s2">&quot;best_of&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+                <span class="k">elif</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;length_penalty&quot;</span><span class="p">,</span> <span class="s2">&quot;early_stopping&quot;</span><span class="p">]:</span>
+                    <span class="c1"># These parameters are not supported by vLLM, skip them</span>
+                    <span class="k">pass</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># Direct mapping for other common parameters</span>
+                    <span class="n">vllm_kwargs</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+
+        <span class="c1"># Add vLLM-specific parameters</span>
+        <span class="n">vllm_kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">vllm_specific_kwargs</span><span class="p">)</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span> <span class="o">=</span> <span class="n">num_samples</span>
-        <span class="k">if</span> <span class="n">generate_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;n&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">or</span> <span class="n">num_samples</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">vllm_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;n&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">or</span> <span class="n">num_samples</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">inplace</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="s2">&quot;empty&quot;</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="s2">&quot;inplace must be False (or None) when generating more than one sample.&quot;</span>
@@ -808,14 +904,14 @@
             <span class="k">if</span> <span class="n">inplace</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">inplace</span> <span class="o">=</span> <span class="kc">False</span>
             <span class="k">if</span> <span class="p">(</span>
-                <span class="n">generate_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;n&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span>
+                <span class="n">vllm_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;n&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span>
                 <span class="ow">and</span> <span class="n">num_samples</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-                <span class="ow">and</span> <span class="n">generate_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;n&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">!=</span> <span class="n">num_samples</span>
+                <span class="ow">and</span> <span class="n">vllm_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;n&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">!=</span> <span class="n">num_samples</span>
             <span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;num_samples differs from generate_kwargs[&#39;n&#39;].&quot;</span><span class="p">)</span>
             <span class="k">elif</span> <span class="n">num_samples</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span> <span class="o">=</span> <span class="n">generate_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;n&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
-            <span class="n">generate_kwargs</span><span class="p">[</span><span class="s2">&quot;n&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span> <span class="o">=</span> <span class="n">vllm_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;n&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">vllm_kwargs</span><span class="p">[</span><span class="s2">&quot;n&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span>
         <span class="k">elif</span> <span class="n">inplace</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">inplace</span> <span class="o">=</span> <span class="kc">True</span>
 
@@ -826,17 +922,17 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="n">generate</span><span class="p">:</span>
             <span class="c1"># We want only the log-probs, we generate a single token (that we then discard)</span>
             <span class="c1"># and retrieve the prompt log-probs</span>
-            <span class="n">generate_kwargs</span><span class="p">[</span><span class="s2">&quot;max_tokens&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+            <span class="n">vllm_kwargs</span><span class="p">[</span><span class="s2">&quot;max_tokens&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">return_log_probs</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;return_log_probs must be True when generate=False.&quot;</span><span class="p">)</span>
 
-        <span class="n">generate_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;detokenize&quot;</span><span class="p">,</span> <span class="ow">not</span> <span class="n">pad_output</span><span class="p">)</span>
-        <span class="n">generate_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;prompt_logprobs&quot;</span><span class="p">,</span> <span class="n">prompt_logprobs</span><span class="p">)</span>
-        <span class="n">generate_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;logprobs&quot;</span><span class="p">,</span> <span class="n">return_log_probs</span><span class="p">)</span>
-        <span class="n">generate_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;include_stop_str_in_output&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
-        <span class="n">generate_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;skip_special_tokens&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="n">vllm_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;detokenize&quot;</span><span class="p">,</span> <span class="ow">not</span> <span class="n">pad_output</span><span class="p">)</span>
+        <span class="n">vllm_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;prompt_logprobs&quot;</span><span class="p">,</span> <span class="n">prompt_logprobs</span><span class="p">)</span>
+        <span class="n">vllm_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;logprobs&quot;</span><span class="p">,</span> <span class="n">return_log_probs</span><span class="p">)</span>
+        <span class="n">vllm_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;include_stop_str_in_output&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="n">vllm_kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;skip_special_tokens&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
 
-        <span class="n">sampling_params</span> <span class="o">=</span> <span class="n">SamplingParams</span><span class="p">(</span><span class="o">**</span><span class="n">generate_kwargs</span><span class="p">)</span>
+        <span class="n">sampling_params</span> <span class="o">=</span> <span class="n">SamplingParams</span><span class="p">(</span><span class="o">**</span><span class="n">vllm_kwargs</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">sampling_params</span> <span class="o">=</span> <span class="n">sampling_params</span>
 
         <span class="c1"># Additional transformers-specific settings</span>

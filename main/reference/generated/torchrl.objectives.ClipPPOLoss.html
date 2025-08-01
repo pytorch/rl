@@ -477,7 +477,7 @@ formula for the entropy, a Monte-Carlo estimate will be used.
 <code class="docutils literal notranslate"><span class="pre">samples_mc_entropy</span></code> will control how many
 samples will be used to compute this estimate.
 Defaults to <code class="docutils literal notranslate"><span class="pre">1</span></code>.</p></li>
-<li><p><strong>entropy_coeff</strong> – (scalar | Mapping[str, scalar], optional): entropy multiplier when computing the total loss.
+<li><p><strong>entropy_coeff</strong> – (scalar | Mapping[NesstedKey, scalar], optional): entropy multiplier when computing the total loss.
 * <strong>Scalar</strong>: one value applied to the summed entropy of every action head.
 * <strong>Mapping</strong> <code class="docutils literal notranslate"><span class="pre">{head_name:</span> <span class="pre">coeff}</span></code> gives an individual coefficient for each action-head’s entropy.
 Defaults to <code class="docutils literal notranslate"><span class="pre">0.01</span></code>.</p></li>
