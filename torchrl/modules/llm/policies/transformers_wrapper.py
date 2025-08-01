@@ -55,7 +55,8 @@ class TransformersWrapper(LLMWrapperBase):
 
     Args:
         model (transformers.AutoModelForCausalLM | str): The Hugging Face Transformers model to wrap.
-            If a string, it will be passed to `transformers.AutoModelForCausalLM.from_pretrained`.
+            If a string, it will be passed to `transformers.AutoModelForCausalLM.from_pretrained` (and `AutoTokenizer.from_pretrained`
+            if `tokenizer` is not provided).
 
     Keyword Args:
         tokenizer (transformers.tokenization_utils.PreTrainedTokenizer | str | None, optional): The tokenizer to use for
@@ -75,6 +76,44 @@ class TransformersWrapper(LLMWrapperBase):
             If `False`, only log probabilities will be computed. Defaults to `True`.
         return_log_probs (bool, optional): Whether to return log probabilities. Defaults to `False`.
         generate_kwargs (dict | None, optional): Additional arguments to pass to the model's generate method. Defaults to `None`.
+
+            **Standardized Parameters (work across both vLLM and Transformers wrappers):**
+            - max_new_tokens (int): Maximum number of new tokens to generate
+            - num_return_sequences (int): Number of sequences to return
+            - temperature (float): Sampling temperature (0.0 = deterministic, higher = more random)
+            - top_p (float): Nucleus sampling parameter (0.0-1.0)
+            - top_k (int): Top-k sampling parameter
+            - repetition_penalty (float): Penalty for repeating tokens
+            - do_sample (bool): Whether to use sampling vs greedy decoding
+            - num_beams (int): Number of beams for beam search
+            - length_penalty (float): Penalty for sequence length
+            - early_stopping (bool): Whether to stop early in beam search
+            - stop_sequences (list): Sequences that stop generation (requires custom stopping criteria)
+            - skip_special_tokens (bool): Whether to skip special tokens in output
+            - logprobs (bool): Whether to return log probabilities (maps to output_scores)
+
+            **Transformers-Specific Parameters:**
+            - pad_token_id (int): Token ID for padding
+            - eos_token_id (int): Token ID for end of sequence
+            - bad_words_ids (list): List of token IDs to avoid
+            - force_words_ids (list): List of token IDs to force
+            - no_repeat_ngram_size (int): Size of n-grams to avoid repeating
+            - encoder_repetition_penalty (float): Repetition penalty for encoder-decoder models
+            - num_beam_groups (int): Number of beam groups for diverse beam search
+            - diversity_penalty (float): Penalty for beam diversity
+            - output_scores (bool): Whether to output scores
+            - return_dict_in_generate (bool): Whether to return dict in generate
+
+            **Legacy Parameter Support:**
+            - max_tokens (int): Automatically converted to max_new_tokens
+            - n (int): Automatically converted to num_return_sequences
+
+            **Parameter Conflict Resolution:**
+            When both legacy (Transformers-specific) and standardized parameter names are provided,
+            a ValueError is raised to prevent confusion. For example:
+            - If both `max_tokens` and `max_new_tokens` are passed, an error is raised
+            - If both `n` and `num_return_sequences` are passed, an error is raised
+            This ensures clear parameter usage and prevents unexpected behavior.
         tokenizer_kwargs (dict | None, optional): Additional arguments to pass to the tokenizer. Defaults to `None`.
         pad_output (bool, optional): Whether to pad the output sequences to a uniform length. This does not impact the underlying padding
             during call to the model. To use padding or packing during the model `forward` call, see `pad_model_input`.
@@ -163,7 +202,13 @@ class TransformersWrapper(LLMWrapperBase):
         ...     tokenizer=tokenizer,
         ...     input_mode="history",
         ...     generate=True,
-        ...     return_log_probs=True
+        ...     return_log_probs=True,
+        ...     generate_kwargs={
+        ...         "max_new_tokens": 50,  # Standardized parameter
+        ...         "temperature": 0.7,
+        ...         "top_p": 0.9,
+        ...         "do_sample": True,
+        ...     }
         ... )
         >>>
         >>> history = History.from_chats([[
@@ -243,6 +288,11 @@ class TransformersWrapper(LLMWrapperBase):
             self._batching_lock = None
 
         if isinstance(model, str):
+            if tokenizer is None:
+                from transformers import AutoTokenizer
+
+                tokenizer = AutoTokenizer.from_pretrained(model)
+
             from transformers import AutoModelForCausalLM
 
             model = AutoModelForCausalLM.from_pretrained(model)
@@ -377,9 +427,44 @@ class TransformersWrapper(LLMWrapperBase):
         else:
             generate_kwargs = dict(generate_kwargs)
 
+        # Standardize common parameters
+        generate_kwargs = self._standardize_generate_kwargs(generate_kwargs)
+
+        # Extract wrapper-specific parameters
+        transformers_specific_kwargs = self._get_wrapper_specific_kwargs(
+            generate_kwargs, "transformers"
+        )
+
+        # Convert common parameters to Transformers format
+        transformers_kwargs = {}
+        for key, value in generate_kwargs.items():
+            if key in self.COMMON_GENERATION_PARAMS:
+                # Convert common names to Transformers names
+                if key == "stop_sequences":
+                    # Transformers uses stopping_criteria for stop sequences
+                    # This requires custom stopping criteria implementation
+                    # For now, we'll warn and skip this parameter
+                    import warnings
+
+                    warnings.warn(
+                        "stop_sequences parameter is not yet fully supported in TransformersWrapper. "
+                        "Use eos_token_id or implement custom stopping criteria for full support.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    continue
+                elif key == "logprobs":
+                    transformers_kwargs["output_scores"] = value
+                else:
+                    # Direct mapping for other common parameters
+                    transformers_kwargs[key] = value
+
+        # Add Transformers-specific parameters
+        transformers_kwargs.update(transformers_specific_kwargs)
+
         self.num_samples = num_samples
         if (
-            generate_kwargs.get("num_return_sequences", 1) > 1
+            transformers_kwargs.get("num_return_sequences", 1) > 1
             or num_samples is not None
         ):
             if inplace in (True, "empty"):
@@ -389,14 +474,14 @@ class TransformersWrapper(LLMWrapperBase):
             if inplace is None:
                 inplace = False
             if (
-                generate_kwargs.get("num_return_sequences", 1) > 1
+                transformers_kwargs.get("num_return_sequences", 1) > 1
                 and num_samples is not None
-                and generate_kwargs.get("num_return_sequences", 1) != num_samples
+                and transformers_kwargs.get("num_return_sequences", 1) != num_samples
             ):
                 raise ValueError("num_samples differs from generate_kwargs['n'].")
             elif num_samples is None:
-                self.num_samples = generate_kwargs.get("num_return_sequences", 1)
-            generate_kwargs["num_return_sequences"] = self.num_samples
+                self.num_samples = transformers_kwargs.get("num_return_sequences", 1)
+            transformers_kwargs["num_return_sequences"] = self.num_samples
         elif inplace is None:
             inplace = True
 
@@ -405,13 +490,13 @@ class TransformersWrapper(LLMWrapperBase):
         if not generate:
             # We want only the log-probs, we generate a single token (that we then discard)
             # and retrieve the prompt log-probs
-            generate_kwargs["max_tokens"] = 1
+            transformers_kwargs["max_new_tokens"] = 1
 
-        generate_kwargs.setdefault("tokenizer", self.tokenizer)
-        generate_kwargs.setdefault("output_logits", self.return_log_probs)
-        generate_kwargs.setdefault("return_dict_in_generate", True)
+        transformers_kwargs.setdefault("tokenizer", self.tokenizer)
+        transformers_kwargs.setdefault("output_logits", self.return_log_probs)
+        transformers_kwargs.setdefault("return_dict_in_generate", True)
 
-        self.generate_kwargs = generate_kwargs
+        self.generate_kwargs = transformers_kwargs
 
         # Additional transformers-specific settings
         self.chat_template_name = chat_template_name

@@ -352,6 +352,7 @@ class LLMWrapperBase(TensorDictModuleBase):
     - Support for different input modalities (history, text, tokens)
     - Consistent output structure using TensorClass objects (Text, Tokens, Masks, LogProbs)
     - Configurable generation and log-probability computation
+    - Standardized generation parameters across different backends
 
     Args:
         model: The underlying model to wrap.
@@ -363,6 +364,35 @@ class LLMWrapperBase(TensorDictModuleBase):
         attention_mask_key: The key for attention masks (used in "tokens" mode).
         generate: Whether to enable text generation.
         generate_kwargs: Additional arguments to pass to the model's generate method.
+            Common parameters that work across both vLLM and Transformers wrappers:
+            - max_new_tokens (int): Maximum number of new tokens to generate
+            - num_return_sequences (int): Number of sequences to return
+            - temperature (float): Sampling temperature (0.0 = deterministic, higher = more random)
+            - top_p (float): Nucleus sampling parameter (0.0-1.0)
+            - top_k (int): Top-k sampling parameter
+            - repetition_penalty (float): Penalty for repeating tokens
+            - do_sample (bool): Whether to use sampling vs greedy decoding
+            - num_beams (int): Number of beams for beam search
+            - length_penalty (float): Penalty for sequence length
+            - early_stopping (bool): Whether to stop early in beam search
+            - stop_sequences (list): Sequences that stop generation
+            - skip_special_tokens (bool): Whether to skip special tokens in output
+            - logprobs (bool): Whether to return log probabilities
+
+            **Parameter Conflict Resolution:**
+            When both legacy (backend-specific) and standardized parameter names are provided,
+            a ValueError is raised to prevent confusion. For example:
+            - If both `max_tokens` and `max_new_tokens` are passed, an error is raised
+            - If both `n` and `num_return_sequences` are passed, an error is raised
+            This ensures clear parameter usage and prevents unexpected behavior.
+
+            **Parameter Validation:**
+            The following validations are performed:
+            - Temperature must be non-negative
+            - top_p must be between 0 and 1
+            - top_k must be positive
+            - repetition_penalty must be positive
+            - When do_sample=False, temperature must be 0 for greedy decoding
         tokenizer_kwargs: Additional arguments to pass to the tokenizer.
         pad_output: Whether to pad the output sequences to a uniform length.
         pad_model_input: Whether to pad the model input sequences to a uniform length.
@@ -421,6 +451,23 @@ class LLMWrapperBase(TensorDictModuleBase):
     _batching_lock: threading.Lock | None
     _batching_timeout: float | None
 
+    # Common generation parameters that work across both vLLM and Transformers
+    COMMON_GENERATION_PARAMS = {
+        "max_new_tokens",
+        "num_return_sequences",
+        "temperature",
+        "top_p",
+        "top_k",
+        "repetition_penalty",
+        "do_sample",
+        "num_beams",
+        "length_penalty",
+        "early_stopping",
+        "stop_sequences",
+        "skip_special_tokens",
+        "logprobs",
+    }
+
     @overload
     def __init__(
         self,
@@ -455,6 +502,141 @@ class LLMWrapperBase(TensorDictModuleBase):
 
     def __init__(self, *args, **kwargs):
         super().__init__()
+
+    @classmethod
+    def _standardize_generate_kwargs(cls, generate_kwargs: dict | None) -> dict:
+        """Standardize generation parameters to use common names across wrappers.
+
+        This method converts wrapper-specific parameter names to common names:
+        - vLLM's 'max_tokens' -> 'max_new_tokens'
+        - vLLM's 'n' -> 'num_return_sequences'
+
+        Args:
+            generate_kwargs: The generation parameters to standardize
+
+        Returns:
+            Standardized generation parameters
+        """
+        if generate_kwargs is None:
+            return {}
+
+        standardized = dict(generate_kwargs)
+
+        # Convert vLLM parameter names to common names
+        if "max_tokens" in standardized:
+            if "max_new_tokens" in standardized:
+                raise ValueError(
+                    "Cannot specify both 'max_tokens' (legacy vLLM) and 'max_new_tokens' (standardized). "
+                    "Use 'max_new_tokens' for cross-backend compatibility."
+                )
+            standardized["max_new_tokens"] = standardized.pop("max_tokens")
+
+        if "n" in standardized:
+            if "num_return_sequences" in standardized:
+                raise ValueError(
+                    "Cannot specify both 'n' (legacy vLLM) and 'num_return_sequences' (standardized). "
+                    "Use 'num_return_sequences' for cross-backend compatibility."
+                )
+            standardized["num_return_sequences"] = standardized.pop("n")
+
+        # Validate parameter combinations
+        cls._validate_parameter_combinations(standardized)
+
+        return standardized
+
+    @classmethod
+    def _validate_parameter_combinations(cls, generate_kwargs: dict) -> None:
+        """Validate that parameter combinations make sense.
+
+        Args:
+            generate_kwargs: The generation parameters to validate
+
+        Raises:
+            ValueError: If parameter combinations are invalid
+        """
+        # Check for conflicting sampling parameters
+        if generate_kwargs.get("do_sample") is False:
+            # If do_sample=False, temperature should be 0 for greedy decoding
+            if generate_kwargs.get("temperature", 0) != 0:
+                raise ValueError(
+                    "When do_sample=False (greedy decoding), temperature must be 0. "
+                    f"Got temperature={generate_kwargs.get('temperature')}"
+                )
+
+        # Check for valid temperature range
+        temperature = generate_kwargs.get("temperature")
+        if temperature is not None and temperature < 0:
+            raise ValueError(f"Temperature must be non-negative, got {temperature}")
+
+        # Check for valid top_p range
+        top_p = generate_kwargs.get("top_p")
+        if top_p is not None and not (0 <= top_p <= 1):
+            raise ValueError(f"top_p must be between 0 and 1, got {top_p}")
+
+        # Check for valid top_k
+        top_k = generate_kwargs.get("top_k")
+        if top_k is not None and top_k <= 0:
+            raise ValueError(f"top_k must be positive, got {top_k}")
+
+        # Check for valid repetition_penalty
+        repetition_penalty = generate_kwargs.get("repetition_penalty")
+        if repetition_penalty is not None and repetition_penalty <= 0:
+            raise ValueError(
+                f"repetition_penalty must be positive, got {repetition_penalty}"
+            )
+
+    @classmethod
+    def _get_wrapper_specific_kwargs(
+        cls, generate_kwargs: dict, wrapper_type: str
+    ) -> dict:
+        """Extract wrapper-specific generation parameters.
+
+        Args:
+            generate_kwargs: The generation parameters
+            wrapper_type: Either 'vllm' or 'transformers'
+
+        Returns:
+            Wrapper-specific parameters
+        """
+        if generate_kwargs is None:
+            return {}
+
+        if wrapper_type == "vllm":
+            # vLLM-specific parameters
+            vllm_specific = {
+                "presence_penalty",
+                "frequency_penalty",
+                "ignore_eos",
+                "prompt_logprobs",
+                "detokenize",
+                "include_stop_str_in_output",
+                "spaces_between_special_tokens",
+                "sampling_type",
+                "temperature_last",
+                "top_p_last",
+                "top_k_last",
+            }
+            return {k: v for k, v in generate_kwargs.items() if k in vllm_specific}
+
+        elif wrapper_type == "transformers":
+            # Transformers-specific parameters
+            transformers_specific = {
+                "pad_token_id",
+                "eos_token_id",
+                "bad_words_ids",
+                "force_words_ids",
+                "no_repeat_ngram_size",
+                "encoder_repetition_penalty",
+                "num_beam_groups",
+                "diversity_penalty",
+                "output_scores",
+                "return_dict_in_generate",
+            }
+            return {
+                k: v for k, v in generate_kwargs.items() if k in transformers_specific
+            }
+
+        return {}
 
     @property
     def batching(self) -> bool:
