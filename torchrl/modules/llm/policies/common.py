@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import threading
 import warnings
 import weakref
 
@@ -351,6 +352,7 @@ class LLMWrapperBase(TensorDictModuleBase):
     - Support for different input modalities (history, text, tokens)
     - Consistent output structure using TensorClass objects (Text, Tokens, Masks, LogProbs)
     - Configurable generation and log-probability computation
+    - Standardized generation parameters across different backends
 
     Args:
         model: The underlying model to wrap.
@@ -362,6 +364,43 @@ class LLMWrapperBase(TensorDictModuleBase):
         attention_mask_key: The key for attention masks (used in "tokens" mode).
         generate: Whether to enable text generation.
         generate_kwargs: Additional arguments to pass to the model's generate method.
+
+            **Common Parameters (cross-backend compatible):**
+
+            * **max_new_tokens** (int): Maximum number of new tokens to generate
+            * **num_return_sequences** (int): Number of sequences to return
+            * **temperature** (float): Sampling temperature (0.0 = deterministic, higher = more random)
+            * **top_p** (float): Nucleus sampling parameter (0.0-1.0)
+            * **top_k** (int): Top-k sampling parameter
+            * **repetition_penalty** (float): Penalty for repeating tokens
+            * **do_sample** (bool): Whether to use sampling vs greedy decoding
+            * **num_beams** (int): Number of beams for beam search
+            * **length_penalty** (float): Penalty for sequence length
+            * **early_stopping** (bool): Whether to stop early in beam search
+            * **stop_sequences** (list): Sequences that stop generation
+            * **skip_special_tokens** (bool): Whether to skip special tokens in output
+            * **logprobs** (bool): Whether to return log probabilities
+
+            **Parameter Conflict Resolution:**
+
+            When both legacy (backend-specific) and standardized parameter names are provided,
+            a :exc:`ValueError` is raised to prevent confusion. For example:
+
+            * If both ``max_tokens`` and ``max_new_tokens`` are passed, an error is raised
+            * If both ``n`` and ``num_return_sequences`` are passed, an error is raised
+
+            This ensures clear parameter usage and prevents unexpected behavior.
+
+            **Parameter Validation:**
+
+            The following validations are performed:
+
+            * Temperature must be non-negative
+            * top_p must be between 0 and 1
+            * top_k must be positive
+            * repetition_penalty must be positive
+            * When do_sample=False, temperature must be 0 for greedy decoding
+
         tokenizer_kwargs: Additional arguments to pass to the tokenizer.
         pad_output: Whether to pad the output sequences to a uniform length.
         pad_model_input: Whether to pad the model input sequences to a uniform length.
@@ -374,12 +413,26 @@ class LLMWrapperBase(TensorDictModuleBase):
         text_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Text` object. Defaults to `"text"`.
         tokens_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Tokens` object. Defaults to `"tokens"`.
         masks_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Masks` object. Defaults to `"masks"`.
-        batch_size (int | None, optional): The batch size to use for batching. If None, no batching is done. If provided, the module will batch the inputs and process them in batches of this size.
-            This means that a single call to the module will wait until enough inputs are available to form a batch of this size, and then process the batch.
-            This functionality uses concurrent futures to process the batches in parallel and therefore is best used in a multi-threaded environment.
-            Defaults to `None`.
-        batching_timeout (float, optional): The timeout for batching. If the batch isn't completed after `batching_timeout` seconds, the batch is processed as is.
-            Defaults to `10` seconds.
+        batching (bool | None, optional): Whether to enable batching. See :ref:`ref_batching` below for more details.
+        min_batch_size (int | None, optional): The minimum batch size to use for batching. See :ref:`ref_batching` below for more details.
+        max_batch_size (int | None, optional): The maximum batch size to use for batching. See :ref:`ref_batching` below for more details.
+        batching_timeout (float, optional): The timeout for batching. See :ref:`ref_batching` below for more details.
+
+    .. _ref_batching:
+        Batching is a feature that allows the module to process multiple inputs in a single call.
+        It is designed to work in a multi-threaded environment.
+        To enable batching, it suffices to set `batching=True` which will set `min_batch_size` to 1 if not provided.
+        If you want to set a different value for `min_batch_size` or `max_batch_size` for a fine-grained control,
+        you can to set `batching=True` and then set `min_batch_size` or `max_batch_size` to a value greater or equal to 1.
+        The way batching works is as follows:
+        - If `min_batch_size` is not provided but `max_batch_size` is, `min_batch_size` is set to 1.
+        - If `max_batch_size` is not provided but `min_batch_size` is, `max_batch_size` is set to the number of inputs in the queue.
+        - When the model is called, a check is performed to see if the number of inputs in the queue is greater or equal to `min_batch_size`.
+          If it is, the batch is processed immediately, while waiting for the previous batch to be processed if the model is busy.
+          Otherwise, the input is added to the queue and the function waits for the batch to be completed.
+          While waiting for the batch to be completed, a timeout is set to `batching_timeout` seconds such that if the batch is not
+          completed after `batching_timeout` seconds, the remaining items to process are processed as is and the function returns after
+          at most `batching_timeout` seconds (plus the time to finish processing the previous and current batch).
 
     Attributes:
         collector: The collector associated with the module, if it exists.
@@ -401,7 +454,27 @@ class LLMWrapperBase(TensorDictModuleBase):
     device: torch.device | None
     layout: torch.layout | None
     num_samples: int | None
+    _min_batch_size: int | None
+    _max_batch_size: int | None
+    _batching_lock: threading.Lock | None
     _batching_timeout: float | None
+
+    # Common generation parameters that work across both vLLM and Transformers
+    COMMON_GENERATION_PARAMS = {
+        "max_new_tokens",
+        "num_return_sequences",
+        "temperature",
+        "top_p",
+        "top_k",
+        "repetition_penalty",
+        "do_sample",
+        "num_beams",
+        "length_penalty",
+        "early_stopping",
+        "stop_sequences",
+        "skip_special_tokens",
+        "logprobs",
+    }
 
     @overload
     def __init__(
@@ -428,13 +501,167 @@ class LLMWrapperBase(TensorDictModuleBase):
         tokens_key: NestedKey | None = "tokens",
         masks_key: NestedKey | None = "masks",
         log_probs_key: NestedKey | None = "log_probs",
-        batch_size: int | None = None,
+        batching: bool | None = None,
+        min_batch_size: int | None = None,
+        max_batch_size: int | None = None,
         batching_timeout: float = 10.0,
     ):
         ...
 
     def __init__(self, *args, **kwargs):
         super().__init__()
+
+    @classmethod
+    def _standardize_generate_kwargs(cls, generate_kwargs: dict | None) -> dict:
+        """Standardize generation parameters to use common names across wrappers.
+
+        This method converts wrapper-specific parameter names to common names:
+
+        * vLLM's ``max_tokens`` -> ``max_new_tokens``
+        * vLLM's ``n`` -> ``num_return_sequences``
+
+        Args:
+            generate_kwargs: The generation parameters to standardize
+
+        Returns:
+            Standardized generation parameters
+
+        Raises:
+            ValueError: If conflicting parameter names are provided
+        """
+        if generate_kwargs is None:
+            return {}
+
+        standardized = dict(generate_kwargs)
+
+        # Convert vLLM parameter names to common names
+        if "max_tokens" in standardized:
+            if "max_new_tokens" in standardized:
+                raise ValueError(
+                    "Cannot specify both 'max_tokens' (legacy vLLM) and 'max_new_tokens' (standardized). "
+                    "Use 'max_new_tokens' for cross-backend compatibility."
+                )
+            standardized["max_new_tokens"] = standardized.pop("max_tokens")
+
+        if "n" in standardized:
+            if "num_return_sequences" in standardized:
+                raise ValueError(
+                    "Cannot specify both 'n' (legacy vLLM) and 'num_return_sequences' (standardized). "
+                    "Use 'num_return_sequences' for cross-backend compatibility."
+                )
+            standardized["num_return_sequences"] = standardized.pop("n")
+
+        # Validate parameter combinations
+        cls._validate_parameter_combinations(standardized)
+
+        return standardized
+
+    @classmethod
+    def _validate_parameter_combinations(cls, generate_kwargs: dict) -> None:
+        """Validate that parameter combinations make sense.
+
+        This method performs the following validations:
+
+        * Temperature must be non-negative
+        * top_p must be between 0 and 1
+        * top_k must be positive
+        * repetition_penalty must be positive
+        * When do_sample=False, temperature must be 0 for greedy decoding
+
+        Args:
+            generate_kwargs: The generation parameters to validate
+
+        Raises:
+            ValueError: If parameter combinations are invalid
+        """
+        # Check for conflicting sampling parameters
+        if generate_kwargs.get("do_sample") is False:
+            # If do_sample=False, temperature should be 0 for greedy decoding
+            if generate_kwargs.get("temperature", 0) != 0:
+                raise ValueError(
+                    "When do_sample=False (greedy decoding), temperature must be 0. "
+                    f"Got temperature={generate_kwargs.get('temperature')}"
+                )
+
+        # Check for valid temperature range
+        temperature = generate_kwargs.get("temperature")
+        if temperature is not None and temperature < 0:
+            raise ValueError(f"Temperature must be non-negative, got {temperature}")
+
+        # Check for valid top_p range
+        top_p = generate_kwargs.get("top_p")
+        if top_p is not None and not (0 <= top_p <= 1):
+            raise ValueError(f"top_p must be between 0 and 1, got {top_p}")
+
+        # Check for valid top_k
+        top_k = generate_kwargs.get("top_k")
+        if top_k is not None and top_k <= 0:
+            raise ValueError(f"top_k must be positive, got {top_k}")
+
+        # Check for valid repetition_penalty
+        repetition_penalty = generate_kwargs.get("repetition_penalty")
+        if repetition_penalty is not None and repetition_penalty <= 0:
+            raise ValueError(
+                f"repetition_penalty must be positive, got {repetition_penalty}"
+            )
+
+    @classmethod
+    def _get_wrapper_specific_kwargs(
+        cls, generate_kwargs: dict, wrapper_type: str
+    ) -> dict:
+        """Extract wrapper-specific generation parameters.
+
+        Args:
+            generate_kwargs: The generation parameters
+            wrapper_type: Either 'vllm' or 'transformers'
+
+        Returns:
+            Wrapper-specific parameters
+        """
+        if generate_kwargs is None:
+            return {}
+
+        if wrapper_type == "vllm":
+            # vLLM-specific parameters
+            vllm_specific = {
+                "presence_penalty",
+                "frequency_penalty",
+                "ignore_eos",
+                "prompt_logprobs",
+                "detokenize",
+                "include_stop_str_in_output",
+                "spaces_between_special_tokens",
+                "sampling_type",
+                "temperature_last",
+                "top_p_last",
+                "top_k_last",
+            }
+            return {k: v for k, v in generate_kwargs.items() if k in vllm_specific}
+
+        elif wrapper_type == "transformers":
+            # Transformers-specific parameters
+            transformers_specific = {
+                "pad_token_id",
+                "eos_token_id",
+                "bad_words_ids",
+                "force_words_ids",
+                "no_repeat_ngram_size",
+                "encoder_repetition_penalty",
+                "num_beam_groups",
+                "diversity_penalty",
+                "output_scores",
+                "return_dict_in_generate",
+            }
+            return {
+                k: v for k, v in generate_kwargs.items() if k in transformers_specific
+            }
+
+        return {}
+
+    @property
+    def batching(self) -> bool:
+        """Whether batching is enabled."""
+        return self._min_batch_size is not None or self._max_batch_size is not None
 
     def get_new_version(self, **kwargs):
         """Returns a new version of the module with altered parameters.
@@ -936,13 +1163,21 @@ class LLMWrapperBase(TensorDictModuleBase):
             dict: A dictionary containing the current batching state including
                   queue size, number of pending futures, and batch size.
         """
-        if not hasattr(self, "batch_size") or self.batch_size is None:
+        if not self.batching:
             return {"batching_enabled": False}
 
+        lock = getattr(self, "_batching_lock", None)
+        if lock is not None:
+            lock_state = "locked" if lock.locked() else "unlocked"
+        else:
+            lock_state = "not initialized"
         return {
             "batching_enabled": True,
-            "batch_size": self.batch_size,
+            "min_batch_size": getattr(self, "_min_batch_size", None),
+            "max_batch_size": getattr(self, "_max_batch_size", None),
             "queue_size": len(getattr(self, "_batch_queue", [])),
+            "processing": lock_state == "locked",
+            "lock_state": lock_state,
             "pending_futures": len(getattr(self, "_futures", [])),
             "timeout": getattr(self, "_batching_timeout", None),
         }
@@ -1020,7 +1255,9 @@ def _batching(func):
 
     @wraps(func)
     def _batched_func(self, td_input: TensorDictBase, **kwargs):
-        if getattr(self, "batch_size", None) is not None:
+        min_batch_size = getattr(self, "_min_batch_size", None)
+        max_batch_size = getattr(self, "_max_batch_size", None)
+        if min_batch_size is not None or max_batch_size is not None:
             # put elements in a queue until the batch size is reached
             if td_input.batch_dims == 0:
                 inputs = [td_input]
@@ -1037,22 +1274,49 @@ def _batching(func):
             self._batch_queue.extend(inputs)
             self._futures.extend(futures)
 
-            # Check if we have enough inputs to form a complete batch
-            if len(self._batch_queue) >= self.batch_size:
-                # Process full batch immediately
-                try:
-                    batch = lazy_stack(self._batch_queue[: self.batch_size])
-                    results = func(self, batch, **kwargs)
-                    batch_results = results.unbind(0)
-                    for i, future in enumerate(self._futures[: self.batch_size]):
-                        future.set_result(batch_results[i])
-                    self._batch_queue = self._batch_queue[self.batch_size :]
-                    self._futures = self._futures[self.batch_size :]
-                except Exception as e:
-                    # Set exception for all futures in this batch
-                    for future in futures:
-                        future.set_exception(e)
-                    raise
+            if min_batch_size is None:
+                min_batch_size = 1
+
+            # Acquire lock
+            # Note: Because of the lock, we may be waiting for the LLM to finish processing the previous batch
+            # for a little while. That means that the length of the batch queue may increase so even if
+            # min_batch_size is 1 and only one element is passed, we may be processing more than one element
+            # here.
+            with self._batching_lock:
+                # If we have more than min_batch_size, we can process the batch immediately
+                if len(self._batch_queue) >= min_batch_size:
+                    # if max_batch_size is not defined, process all elements
+                    if max_batch_size is None:
+                        max_batch_size = len(self._batch_queue)
+                    if len(self._batch_queue) != len(self._futures):
+                        raise RuntimeError(
+                            f"Batch queue and futures length mismatch: {len(self._batch_queue)} != {len(self._futures)}"
+                        )
+                    batch = self._batch_queue[:max_batch_size]
+                    batch_size = len(batch)
+                    try:
+                        batch = lazy_stack(batch)
+                        results = func(self, batch, **kwargs)
+                        batch_results = results.unbind(0)
+                        if len(batch_results) != batch_size:
+                            raise RuntimeError(
+                                f"Batch results and futures length mismatch: {len(batch_results)} != {batch_size}"
+                            )
+                        for i, future in enumerate(self._futures[:batch_size]):
+                            if future.done():
+                                raise RuntimeError(
+                                    f"Future {i} already done: {future.result()}"
+                                )
+                            future.set_result(batch_results[i])
+                    except Exception as e:
+                        # Set exception for all futures in this batch that haven't been completed yet
+                        for future in self._futures[:batch_size]:
+                            if not future.done():
+                                future.set_exception(e)
+                        raise
+
+                    self._batch_queue = self._batch_queue[batch_size:]
+                    self._futures = self._futures[batch_size:]
 
             # Now wait for the current futures to complete (with timeout if needed)
             _, not_done = wait(futures, timeout=self._batching_timeout)
@@ -1060,18 +1324,20 @@ def _batching(func):
             # if there are still futures not done, process them as is
             if not_done:
                 try:
-                    inputs_not_done = [
-                        inputs[futures.index(future)] for future in not_done
-                    ]
-                    results = func(self, torch.stack(inputs_not_done), **kwargs).unbind(
-                        0
-                    )
-                    for i, future in enumerate(not_done):
-                        future.set_result(results[i])
+                    with self._batching_lock:
+                        inputs_not_done = [
+                            inputs[futures.index(future)] for future in not_done
+                        ]
+                        results = func(
+                            self, torch.stack(inputs_not_done), **kwargs
+                        ).unbind(0)
+                        for i, future in enumerate(not_done):
+                            future.set_result(results[i])
                 except Exception as e:
-                    # Set exception for remaining futures
+                    # Set exception for remaining futures that haven't been completed yet
                     for future in not_done:
-                        future.set_exception(e)
+                        if not future.done():
+                            future.set_exception(e)
                     raise
 
             return lazy_stack([future.result() for future in futures])

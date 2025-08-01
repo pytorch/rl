@@ -3410,7 +3410,7 @@ D4RL_ENVIRONMENTS = [
 
 def _minari_init() -> tuple[bool, Exception | None]:
     """Initialize Minari datasets list. Returns True if already initialized."""
-    global _MINARI_DATASETS
+    global _MINARI_DATASETS  # noqa: F824
     if _MINARI_DATASETS and not all(
         isinstance(x, str) and x.isdigit() for x in _MINARI_DATASETS
     ):

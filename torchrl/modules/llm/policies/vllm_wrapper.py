@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import collections
+import threading
 import warnings
 from typing import Any, Literal
 
@@ -75,6 +76,55 @@ class vLLMWrapper(LLMWrapperBase):
             If `False`, only log probabilities will be computed. Defaults to `True`.
         return_log_probs (bool, optional): Whether to return log probabilities. Defaults to `True`.
         generate_kwargs (dict | None, optional): Additional arguments to pass to the model's generate method. Defaults to `None`.
+
+            **Standardized Parameters (cross-backend compatible):**
+
+            * **max_new_tokens** (int): Maximum number of new tokens to generate (maps to vLLM's max_tokens)
+            * **num_return_sequences** (int): Number of sequences to return (maps to vLLM's n)
+            * **temperature** (float): Sampling temperature (0.0 = deterministic, higher = more random)
+            * **top_p** (float): Nucleus sampling parameter (0.0-1.0)
+            * **top_k** (int): Top-k sampling parameter
+            * **repetition_penalty** (float): Penalty for repeating tokens
+            * **do_sample** (bool): Whether to use sampling vs greedy decoding
+            * **num_beams** (int): Number of beams for beam search
+            * **length_penalty** (float): Penalty for sequence length
+            * **early_stopping** (bool): Whether to stop early in beam search
+            * **stop_sequences** (list): Sequences that stop generation (maps to vLLM's stop)
+            * **skip_special_tokens** (bool): Whether to skip special tokens in output
+            * **logprobs** (bool): Whether to return log probabilities
+
+                .. warning:: Usage of this parameter is discouraged as it may conflict with the `generate` parameter
+                    of the class.
+
+            **vLLM-Specific Parameters:**
+
+            * **presence_penalty** (float): Penalty for token presence
+            * **frequency_penalty** (float): Penalty for token frequency
+            * **ignore_eos** (bool): Whether to ignore EOS token
+            * **prompt_logprobs** (bool): Whether to return prompt log probabilities
+            * **detokenize** (bool): Whether to detokenize output
+            * **include_stop_str_in_output** (bool): Whether to include stop strings in output
+            * **spaces_between_special_tokens** (bool): Whether to add spaces between special tokens
+            * **sampling_type** (str): Type of sampling to use
+            * **temperature_last** (bool): Whether to apply temperature only to last token
+            * **top_p_last** (bool): Whether to apply top_p only to last token
+            * **top_k_last** (bool): Whether to apply top_k only to last token
+
+            **Legacy Parameter Support:**
+
+            * **max_tokens** (int): Automatically converted to max_new_tokens
+            * **n** (int): Automatically converted to num_return_sequences
+
+            **Parameter Conflict Resolution:**
+
+            When both legacy (vLLM-specific) and standardized parameter names are provided,
+            a :exc:`ValueError` is raised to prevent confusion. For example:
+
+            * If both ``max_tokens`` and ``max_new_tokens`` are passed, an error is raised
+            * If both ``n`` and ``num_return_sequences`` are passed, an error is raised
+
+            This ensures clear parameter usage and prevents unexpected behavior.
+
         tokenizer_kwargs (dict | None, optional): Additional arguments to pass to the tokenizer. Defaults to `None`.
         pad_output (bool, optional): Whether to pad the output sequences to a uniform length. Defaults to `False`.
         pad_model_input (bool, optional): Whether to pad the model input sequences to a uniform length.
@@ -93,12 +143,26 @@ class vLLMWrapper(LLMWrapperBase):
         tokens_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Tokens` object. Defaults to `"tokens"`.
         masks_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Masks` object. Defaults to `"masks"`.
         history_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.ChatHistory` object. Defaults to `"history"`.
-        batch_size (int | None, optional): The batch size to use for batching. If None, no batching is done. If provided, the module will batch the inputs and process them in batches of this size.
-            This means that a single call to the module will wait until enough inputs are available to form a batch of this size, and then process the batch.
-            This functionality uses concurrent futures to process the batches in parallel and therefore is best used in a multi-threaded environment.
-            Defaults to `None`.
-        batching_timeout (float, optional): The timeout for batching. If the batch isn't completed after `batching_timeout` seconds, the batch is processed as is.
-            Defaults to `10` seconds.
+        batching (bool, optional): Whether to enable batching. Defaults to `False`. See :ref:`ref_batching` below for more details.
+        min_batch_size (int | None, optional): The minimum batch size to use for batching. See :ref:`ref_batching` below for more details.
+        max_batch_size (int | None, optional): The maximum batch size to use for batching. See :ref:`ref_batching` below for more details.
+        batching_timeout (float, optional): The timeout for batching. See :ref:`ref_batching` below for more details.
+
+    .. _ref_batching:
+        Batching is a feature that allows the module to process multiple inputs in a single call.
+        It is designed to work in a multi-threaded environment.
+        To enable batching, it suffices to set `batching=True` which will set `min_batch_size` to 1 if not provided.
+        If you want to set a different value for `min_batch_size` or `max_batch_size` for a fine-grained control,
+        you can to set `batching=True` and then set `min_batch_size` or `max_batch_size` to a value greater or equal to 1.
+        The way batching works is as follows:
+        - If `min_batch_size` is not provided but `max_batch_size` is, `min_batch_size` is set to 1.
+        - If `max_batch_size` is not provided but `min_batch_size` is, `max_batch_size` is set to the number of inputs in the queue.
+        - When the model is called, a check is performed to see if the number of inputs in the queue is greater or equal to `min_batch_size`.
+          If it is, the batch is processed immediately, while waiting for the previous batch to be processed if the model is busy.
+          Otherwise, the input is added to the queue and the function waits for the batch to be completed.
+          While waiting for the batch to be completed, a timeout is set to `batching_timeout` seconds such that if the batch is not
+          completed after `batching_timeout` seconds, the remaining items to process are processed as is and the function returns after
+          at most `batching_timeout` seconds (plus the time to finish processing the previous and current batch).
 
     Input Keys:
         The input key depends on both `input_mode` and `generate`:
@@ -143,7 +207,13 @@ class vLLMWrapper(LLMWrapperBase):
         ...     tokenizer=tokenizer,
         ...     input_mode="history",
         ...     generate=True,
-        ...     return_log_probs=True
+        ...     return_log_probs=True,
+        ...     generate_kwargs={
+        ...         "max_new_tokens": 50,  # Standardized parameter
+        ...         "temperature": 0.7,
+        ...         "top_p": 0.9,
+        ...         "do_sample": True,
+        ...     }
         ... )
         >>>
         >>> history = History.from_chats([[
@@ -189,15 +259,38 @@ class vLLMWrapper(LLMWrapperBase):
         tokens_key: NestedKey | None = "tokens",
         masks_key: NestedKey | None = "masks",
         log_probs_key: NestedKey | None = "log_probs",
-        batch_size: int | None = None,
+        batching: bool | None = None,
+        min_batch_size: int | None = None,
+        max_batch_size: int | None = None,
         batching_timeout: float = 10.0,
     ):
         super().__init__()
 
-        self.batch_size = batch_size
+        if batching and min_batch_size is None:
+            min_batch_size = 1
+        elif (min_batch_size is not None or max_batch_size is not None) and (
+            batching is False
+        ):
+            raise ValueError(
+                "min_batch_size and max_batch_size must be None if batching is False."
+            )
+
+        # Validate that min_batch_size <= max_batch_size when both are specified
+        if min_batch_size is not None and max_batch_size is not None:
+            if min_batch_size > max_batch_size:
+                raise ValueError(
+                    f"min_batch_size ({min_batch_size}) must be <= max_batch_size ({max_batch_size})"
+                )
+
+        self._min_batch_size = min_batch_size
+        self._max_batch_size = max_batch_size
         self._batching_timeout = batching_timeout
         self._batch_queue = []
         self._futures = []
+        if self.batching:
+            self._batching_lock = threading.Lock()
+        else:
+            self._batching_lock = None
 
         if vllm is None:
             raise ImportError("vllm is required for vLLMWrapper")
@@ -339,8 +432,49 @@ class vLLMWrapper(LLMWrapperBase):
         else:
             generate_kwargs = dict(generate_kwargs)
 
+        # Standardize common parameters
+        generate_kwargs = self._standardize_generate_kwargs(generate_kwargs)
+
+        # Extract wrapper-specific parameters
+        vllm_specific_kwargs = self._get_wrapper_specific_kwargs(
+            generate_kwargs, "vllm"
+        )
+
+        # Convert common parameters back to vLLM format
+        vllm_kwargs = {}
+        for key, value in generate_kwargs.items():
+            if key in self.COMMON_GENERATION_PARAMS:
+                # Convert common names to vLLM names
+                if key == "max_new_tokens":
+                    vllm_kwargs["max_tokens"] = value
+                elif key == "num_return_sequences":
+                    vllm_kwargs["n"] = value
+                elif key == "stop_sequences":
+                    vllm_kwargs["stop"] = value
+                elif key == "logprobs":
+                    vllm_kwargs["logprobs"] = value
+                elif key == "do_sample":
+                    # do_sample is handled through the sampling parameters
+                    # If do_sample=False, we use greedy decoding (temperature=0)
+                    # If do_sample=True, we use the provided sampling parameters
+                    if not value:
+                        vllm_kwargs["temperature"] = 0.0
+                    # If do_sample=True, we keep the existing temperature/top_p/top_k values
+                elif key == "num_beams":
+                    # vLLM uses best_of instead of num_beams
+                    vllm_kwargs["best_of"] = value
+                elif key in ["length_penalty", "early_stopping"]:
+                    # These parameters are not supported by vLLM, skip them
+                    pass
+                else:
+                    # Direct mapping for other common parameters
+                    vllm_kwargs[key] = value
+
+        # Add vLLM-specific parameters
+        vllm_kwargs.update(vllm_specific_kwargs)
+
         self.num_samples = num_samples
-        if generate_kwargs.get("n", 1) > 1 or num_samples is not None:
+        if vllm_kwargs.get("n", 1) > 1 or num_samples is not None:
             if inplace in (True, "empty"):
                 raise ValueError(
                     "inplace must be False (or None) when generating more than one sample."
@@ -348,14 +482,14 @@ class vLLMWrapper(LLMWrapperBase):
             if inplace is None:
                 inplace = False
             if (
-                generate_kwargs.get("n", 1) > 1
+                vllm_kwargs.get("n", 1) > 1
                 and num_samples is not None
-                and generate_kwargs.get("n", 1) != num_samples
+                and vllm_kwargs.get("n", 1) != num_samples
             ):
                 raise ValueError("num_samples differs from generate_kwargs['n'].")
             elif num_samples is None:
-                self.num_samples = generate_kwargs.get("n", 1)
-            generate_kwargs["n"] = self.num_samples
+                self.num_samples = vllm_kwargs.get("n", 1)
+            vllm_kwargs["n"] = self.num_samples
         elif inplace is None:
             inplace = True
 
@@ -366,17 +500,17 @@ class vLLMWrapper(LLMWrapperBase):
         if not generate:
             # We want only the log-probs, we generate a single token (that we then discard)
             # and retrieve the prompt log-probs
-            generate_kwargs["max_tokens"] = 1
+            vllm_kwargs["max_tokens"] = 1
             if not return_log_probs:
                 raise ValueError("return_log_probs must be True when generate=False.")
 
-        generate_kwargs.setdefault("detokenize", not pad_output)
-        generate_kwargs.setdefault("prompt_logprobs", prompt_logprobs)
-        generate_kwargs.setdefault("logprobs", return_log_probs)
-        generate_kwargs.setdefault("include_stop_str_in_output", True)
-        generate_kwargs.setdefault("skip_special_tokens", False)
+        vllm_kwargs.setdefault("detokenize", not pad_output)
+        vllm_kwargs.setdefault("prompt_logprobs", prompt_logprobs)
+        vllm_kwargs.setdefault("logprobs", return_log_probs)
+        vllm_kwargs.setdefault("include_stop_str_in_output", True)
+        vllm_kwargs.setdefault("skip_special_tokens", False)
 
-        sampling_params = SamplingParams(**generate_kwargs)
+        sampling_params = SamplingParams(**vllm_kwargs)
         self.sampling_params = sampling_params
 
         # Additional transformers-specific settings

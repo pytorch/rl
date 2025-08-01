@@ -14,7 +14,7 @@ from collections import defaultdict
 import pytest
 import torch
 
-CALL_TIMES = defaultdict(lambda: 0.0)
+CALL_TIMES = defaultdict(float)
 IS_OSX = sys.platform == "darwin"
 
 

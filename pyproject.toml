@@ -89,6 +89,10 @@ llm = [
     "einops",
     "safetensors",
 ]
+dev = [
+    "pre-commit",
+    "autoflake",
+]
 
 [project.urls]
 Homepage = "https://github.com/pytorch/rl"
