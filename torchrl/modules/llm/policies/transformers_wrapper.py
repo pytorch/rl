@@ -77,43 +77,53 @@ class TransformersWrapper(LLMWrapperBase):
         return_log_probs (bool, optional): Whether to return log probabilities. Defaults to `False`.
         generate_kwargs (dict | None, optional): Additional arguments to pass to the model's generate method. Defaults to `None`.
 
-            **Standardized Parameters (work across both vLLM and Transformers wrappers):**
-            - max_new_tokens (int): Maximum number of new tokens to generate
-            - num_return_sequences (int): Number of sequences to return
-            - temperature (float): Sampling temperature (0.0 = deterministic, higher = more random)
-            - top_p (float): Nucleus sampling parameter (0.0-1.0)
-            - top_k (int): Top-k sampling parameter
-            - repetition_penalty (float): Penalty for repeating tokens
-            - do_sample (bool): Whether to use sampling vs greedy decoding
-            - num_beams (int): Number of beams for beam search
-            - length_penalty (float): Penalty for sequence length
-            - early_stopping (bool): Whether to stop early in beam search
-            - stop_sequences (list): Sequences that stop generation (requires custom stopping criteria)
-            - skip_special_tokens (bool): Whether to skip special tokens in output
-            - logprobs (bool): Whether to return log probabilities (maps to output_scores)
+            **Standardized Parameters (cross-backend compatible):**
+
+            * **max_new_tokens** (int): Maximum number of new tokens to generate
+            * **num_return_sequences** (int): Number of sequences to return
+            * **temperature** (float): Sampling temperature (0.0 = deterministic, higher = more random)
+            * **top_p** (float): Nucleus sampling parameter (0.0-1.0)
+            * **top_k** (int): Top-k sampling parameter
+            * **repetition_penalty** (float): Penalty for repeating tokens
+            * **do_sample** (bool): Whether to use sampling vs greedy decoding
+            * **num_beams** (int): Number of beams for beam search
+            * **length_penalty** (float): Penalty for sequence length
+            * **early_stopping** (bool): Whether to stop early in beam search
+            * **stop_sequences** (list): Sequences that stop generation (requires custom stopping criteria)
+            * **skip_special_tokens** (bool): Whether to skip special tokens in output
+            * **logprobs** (bool): Whether to return log probabilities (maps to output_scores)
+
+                .. warning:: Usage of this parameter is discouraged as it may conflict with the `generate` parameter
+                    of the class.
 
             **Transformers-Specific Parameters:**
-            - pad_token_id (int): Token ID for padding
-            - eos_token_id (int): Token ID for end of sequence
-            - bad_words_ids (list): List of token IDs to avoid
-            - force_words_ids (list): List of token IDs to force
-            - no_repeat_ngram_size (int): Size of n-grams to avoid repeating
-            - encoder_repetition_penalty (float): Repetition penalty for encoder-decoder models
-            - num_beam_groups (int): Number of beam groups for diverse beam search
-            - diversity_penalty (float): Penalty for beam diversity
-            - output_scores (bool): Whether to output scores
-            - return_dict_in_generate (bool): Whether to return dict in generate
+
+            * **pad_token_id** (int): Token ID for padding
+            * **eos_token_id** (int): Token ID for end of sequence
+            * **bad_words_ids** (list): List of token IDs to avoid
+            * **force_words_ids** (list): List of token IDs to force
+            * **no_repeat_ngram_size** (int): Size of n-grams to avoid repeating
+            * **encoder_repetition_penalty** (float): Repetition penalty for encoder-decoder models
+            * **num_beam_groups** (int): Number of beam groups for diverse beam search
+            * **diversity_penalty** (float): Penalty for beam diversity
+            * **output_scores** (bool): Whether to output scores
+            * **return_dict_in_generate** (bool): Whether to return dict in generate
 
             **Legacy Parameter Support:**
-            - max_tokens (int): Automatically converted to max_new_tokens
-            - n (int): Automatically converted to num_return_sequences
+
+            * **max_tokens** (int): Automatically converted to max_new_tokens
+            * **n** (int): Automatically converted to num_return_sequences
 
             **Parameter Conflict Resolution:**
+
             When both legacy (Transformers-specific) and standardized parameter names are provided,
-            a ValueError is raised to prevent confusion. For example:
-            - If both `max_tokens` and `max_new_tokens` are passed, an error is raised
-            - If both `n` and `num_return_sequences` are passed, an error is raised
+            a :exc:`ValueError` is raised to prevent confusion. For example:
+
+            * If both ``max_tokens`` and ``max_new_tokens`` are passed, an error is raised
+            * If both ``n`` and ``num_return_sequences`` are passed, an error is raised
+
             This ensures clear parameter usage and prevents unexpected behavior.
+
         tokenizer_kwargs (dict | None, optional): Additional arguments to pass to the tokenizer. Defaults to `None`.
         pad_output (bool, optional): Whether to pad the output sequences to a uniform length. This does not impact the underlying padding
             during call to the model. To use padding or packing during the model `forward` call, see `pad_model_input`.

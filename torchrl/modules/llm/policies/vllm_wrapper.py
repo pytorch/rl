@@ -77,44 +77,54 @@ class vLLMWrapper(LLMWrapperBase):
         return_log_probs (bool, optional): Whether to return log probabilities. Defaults to `True`.
         generate_kwargs (dict | None, optional): Additional arguments to pass to the model's generate method. Defaults to `None`.
 
-            **Standardized Parameters (work across both vLLM and Transformers wrappers):**
-            - max_new_tokens (int): Maximum number of new tokens to generate (maps to vLLM's max_tokens)
-            - num_return_sequences (int): Number of sequences to return (maps to vLLM's n)
-            - temperature (float): Sampling temperature (0.0 = deterministic, higher = more random)
-            - top_p (float): Nucleus sampling parameter (0.0-1.0)
-            - top_k (int): Top-k sampling parameter
-            - repetition_penalty (float): Penalty for repeating tokens
-            - do_sample (bool): Whether to use sampling vs greedy decoding
-            - num_beams (int): Number of beams for beam search
-            - length_penalty (float): Penalty for sequence length
-            - early_stopping (bool): Whether to stop early in beam search
-            - stop_sequences (list): Sequences that stop generation (maps to vLLM's stop)
-            - skip_special_tokens (bool): Whether to skip special tokens in output
-            - logprobs (bool): Whether to return log probabilities
+            **Standardized Parameters (cross-backend compatible):**
+
+            * **max_new_tokens** (int): Maximum number of new tokens to generate (maps to vLLM's max_tokens)
+            * **num_return_sequences** (int): Number of sequences to return (maps to vLLM's n)
+            * **temperature** (float): Sampling temperature (0.0 = deterministic, higher = more random)
+            * **top_p** (float): Nucleus sampling parameter (0.0-1.0)
+            * **top_k** (int): Top-k sampling parameter
+            * **repetition_penalty** (float): Penalty for repeating tokens
+            * **do_sample** (bool): Whether to use sampling vs greedy decoding
+            * **num_beams** (int): Number of beams for beam search
+            * **length_penalty** (float): Penalty for sequence length
+            * **early_stopping** (bool): Whether to stop early in beam search
+            * **stop_sequences** (list): Sequences that stop generation (maps to vLLM's stop)
+            * **skip_special_tokens** (bool): Whether to skip special tokens in output
+            * **logprobs** (bool): Whether to return log probabilities
+
+                .. warning:: Usage of this parameter is discouraged as it may conflict with the `generate` parameter
+                    of the class.
 
             **vLLM-Specific Parameters:**
-            - presence_penalty (float): Penalty for token presence
-            - frequency_penalty (float): Penalty for token frequency
-            - ignore_eos (bool): Whether to ignore EOS token
-            - prompt_logprobs (bool): Whether to return prompt log probabilities
-            - detokenize (bool): Whether to detokenize output
-            - include_stop_str_in_output (bool): Whether to include stop strings in output
-            - spaces_between_special_tokens (bool): Whether to add spaces between special tokens
-            - sampling_type (str): Type of sampling to use
-            - temperature_last (bool): Whether to apply temperature only to last token
-            - top_p_last (bool): Whether to apply top_p only to last token
-            - top_k_last (bool): Whether to apply top_k only to last token
+
+            * **presence_penalty** (float): Penalty for token presence
+            * **frequency_penalty** (float): Penalty for token frequency
+            * **ignore_eos** (bool): Whether to ignore EOS token
+            * **prompt_logprobs** (bool): Whether to return prompt log probabilities
+            * **detokenize** (bool): Whether to detokenize output
+            * **include_stop_str_in_output** (bool): Whether to include stop strings in output
+            * **spaces_between_special_tokens** (bool): Whether to add spaces between special tokens
+            * **sampling_type** (str): Type of sampling to use
+            * **temperature_last** (bool): Whether to apply temperature only to last token
+            * **top_p_last** (bool): Whether to apply top_p only to last token
+            * **top_k_last** (bool): Whether to apply top_k only to last token
 
             **Legacy Parameter Support:**
-            - max_tokens (int): Automatically converted to max_new_tokens
-            - n (int): Automatically converted to num_return_sequences
+
+            * **max_tokens** (int): Automatically converted to max_new_tokens
+            * **n** (int): Automatically converted to num_return_sequences
 
             **Parameter Conflict Resolution:**
+
             When both legacy (vLLM-specific) and standardized parameter names are provided,
-            a ValueError is raised to prevent confusion. For example:
-            - If both `max_tokens` and `max_new_tokens` are passed, an error is raised
-            - If both `n` and `num_return_sequences` are passed, an error is raised
+            a :exc:`ValueError` is raised to prevent confusion. For example:
+
+            * If both ``max_tokens`` and ``max_new_tokens`` are passed, an error is raised
+            * If both ``n`` and ``num_return_sequences`` are passed, an error is raised
+
             This ensures clear parameter usage and prevents unexpected behavior.
+
         tokenizer_kwargs (dict | None, optional): Additional arguments to pass to the tokenizer. Defaults to `None`.
         pad_output (bool, optional): Whether to pad the output sequences to a uniform length. Defaults to `False`.
         pad_model_input (bool, optional): Whether to pad the model input sequences to a uniform length.

@@ -364,35 +364,43 @@ class LLMWrapperBase(TensorDictModuleBase):
         attention_mask_key: The key for attention masks (used in "tokens" mode).
         generate: Whether to enable text generation.
         generate_kwargs: Additional arguments to pass to the model's generate method.
-            Common parameters that work across both vLLM and Transformers wrappers:
-            - max_new_tokens (int): Maximum number of new tokens to generate
-            - num_return_sequences (int): Number of sequences to return
-            - temperature (float): Sampling temperature (0.0 = deterministic, higher = more random)
-            - top_p (float): Nucleus sampling parameter (0.0-1.0)
-            - top_k (int): Top-k sampling parameter
-            - repetition_penalty (float): Penalty for repeating tokens
-            - do_sample (bool): Whether to use sampling vs greedy decoding
-            - num_beams (int): Number of beams for beam search
-            - length_penalty (float): Penalty for sequence length
-            - early_stopping (bool): Whether to stop early in beam search
-            - stop_sequences (list): Sequences that stop generation
-            - skip_special_tokens (bool): Whether to skip special tokens in output
-            - logprobs (bool): Whether to return log probabilities
+
+            **Common Parameters (cross-backend compatible):**
+
+            * **max_new_tokens** (int): Maximum number of new tokens to generate
+            * **num_return_sequences** (int): Number of sequences to return
+            * **temperature** (float): Sampling temperature (0.0 = deterministic, higher = more random)
+            * **top_p** (float): Nucleus sampling parameter (0.0-1.0)
+            * **top_k** (int): Top-k sampling parameter
+            * **repetition_penalty** (float): Penalty for repeating tokens
+            * **do_sample** (bool): Whether to use sampling vs greedy decoding
+            * **num_beams** (int): Number of beams for beam search
+            * **length_penalty** (float): Penalty for sequence length
+            * **early_stopping** (bool): Whether to stop early in beam search
+            * **stop_sequences** (list): Sequences that stop generation
+            * **skip_special_tokens** (bool): Whether to skip special tokens in output
+            * **logprobs** (bool): Whether to return log probabilities
 
             **Parameter Conflict Resolution:**
+
             When both legacy (backend-specific) and standardized parameter names are provided,
-            a ValueError is raised to prevent confusion. For example:
-            - If both `max_tokens` and `max_new_tokens` are passed, an error is raised
-            - If both `n` and `num_return_sequences` are passed, an error is raised
+            a :exc:`ValueError` is raised to prevent confusion. For example:
+
+            * If both ``max_tokens`` and ``max_new_tokens`` are passed, an error is raised
+            * If both ``n`` and ``num_return_sequences`` are passed, an error is raised
+
             This ensures clear parameter usage and prevents unexpected behavior.
 
             **Parameter Validation:**
+
             The following validations are performed:
-            - Temperature must be non-negative
-            - top_p must be between 0 and 1
-            - top_k must be positive
-            - repetition_penalty must be positive
-            - When do_sample=False, temperature must be 0 for greedy decoding
+
+            * Temperature must be non-negative
+            * top_p must be between 0 and 1
+            * top_k must be positive
+            * repetition_penalty must be positive
+            * When do_sample=False, temperature must be 0 for greedy decoding
+
         tokenizer_kwargs: Additional arguments to pass to the tokenizer.
         pad_output: Whether to pad the output sequences to a uniform length.
         pad_model_input: Whether to pad the model input sequences to a uniform length.
@@ -508,14 +516,18 @@ class LLMWrapperBase(TensorDictModuleBase):
         """Standardize generation parameters to use common names across wrappers.
 
         This method converts wrapper-specific parameter names to common names:
-        - vLLM's 'max_tokens' -> 'max_new_tokens'
-        - vLLM's 'n' -> 'num_return_sequences'
+
+        * vLLM's ``max_tokens`` -> ``max_new_tokens``
+        * vLLM's ``n`` -> ``num_return_sequences``
 
         Args:
             generate_kwargs: The generation parameters to standardize
 
         Returns:
             Standardized generation parameters
+
+        Raises:
+            ValueError: If conflicting parameter names are provided
         """
         if generate_kwargs is None:
             return {}
@@ -547,6 +559,14 @@ class LLMWrapperBase(TensorDictModuleBase):
     @classmethod
     def _validate_parameter_combinations(cls, generate_kwargs: dict) -> None:
         """Validate that parameter combinations make sense.
+
+        This method performs the following validations:
+
+        * Temperature must be non-negative
+        * top_p must be between 0 and 1
+        * top_k must be positive
+        * repetition_penalty must be positive
+        * When do_sample=False, temperature must be 0 for greedy decoding
 
         Args:
             generate_kwargs: The generation parameters to validate
