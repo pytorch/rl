@@ -196,7 +196,7 @@ class Trainer:
         self.save_trainer_interval = save_trainer_interval
         self.save_trainer_file = save_trainer_file
 
-        self._log_dict = defaultdict(lambda: [])
+        self._log_dict = defaultdict(list)
 
         self._batch_process_ops = []
         self._post_steps_ops = []
