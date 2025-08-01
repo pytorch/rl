@@ -121,7 +121,7 @@ class GAILLoss(LossModule):
         self._in_keys = values
 
     @property
-    def out_keys(self):
+    def out_keys(self):  # noqa: F811
         if self._out_keys is None:
             keys = ["loss"]
             if self.use_grad_penalty:

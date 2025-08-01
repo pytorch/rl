@@ -1176,7 +1176,7 @@ def auto_unwrap_transformed_env(allow_none=False):
         bool or None: The current setting for automatically unwrapping TransformedEnv
             instances.
     """
-    global _AUTO_UNWRAP
+    global _AUTO_UNWRAP  # noqa: F824
     if _AUTO_UNWRAP is None and allow_none:
         return None
     elif _AUTO_UNWRAP is None:

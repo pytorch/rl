@@ -246,7 +246,7 @@ def add_chat_template(
           `name_or_path` attribute.
         - Templates are stored globally and persist for the duration of the Python session.
     """
-    global _CHAT_TEMPLATES, _CUSTOM_INVERSE_PARSERS, _CUSTOM_MODEL_FAMILY_KEYWORDS
+    global _CHAT_TEMPLATES, _CUSTOM_INVERSE_PARSERS, _CUSTOM_MODEL_FAMILY_KEYWORDS  # noqa: F824
 
     # Validate template contains generation blocks
     if "{% generation %}" not in template:
