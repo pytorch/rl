@@ -1369,8 +1369,8 @@ class TestTrainerConfigs:
         assert cfg.loss_module.normalize_advantage == False
         
         # Verify optimizer overrides
-        assert cfg.optimizer.lr == 1e-4
-        assert cfg.optimizer.weight_decay == 1e-5
+        torch.testing.assert_close(torch.tensor(cfg.optimizer.lr), torch.tensor(1e-4))
+        torch.testing.assert_close(torch.tensor(cfg.optimizer.weight_decay), torch.tensor(1e-5))
         
         # Verify replay buffer overrides
         assert cfg.replay_buffer.batch_size == 512

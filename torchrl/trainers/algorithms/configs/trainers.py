@@ -47,6 +47,7 @@ class PPOTrainerConfig(TrainerConfig):
 def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
     from torchrl.trainers.algorithms.ppo import PPOTrainer
     from torchrl.trainers.trainers import Logger
+    from hydra.utils import instantiate
 
     collector = kwargs.pop("collector")
     total_frames = kwargs.pop("total_frames")
@@ -68,6 +69,12 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
     actor_network = kwargs.pop("actor_network")
     critic_network = kwargs.pop("critic_network")
     create_env_fn = kwargs.pop("create_env_fn")
+
+    # Instantiate networks first
+    if actor_network is not None:
+        actor_network = actor_network()
+    if critic_network is not None:
+        critic_network = critic_network()
 
     if not isinstance(collector, DataCollectorBase):
         # then it's a partial config

@@ -133,6 +133,22 @@ class PPOTrainer(Trainer):
         from tensordict import TensorDict
         kwargs_td = TensorDict(kwargs)
         unflattened_kwargs = kwargs_td.unflatten_keys("__").to_dict()
+        
+        # Convert any torch tensors back to Python scalars for config compatibility
+        def convert_tensors_to_scalars(obj):
+            if isinstance(obj, dict):
+                return {k: convert_tensors_to_scalars(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_tensors_to_scalars(v) for v in obj]
+            elif hasattr(obj, 'item') and hasattr(obj, 'dim'):  # torch tensor
+                if obj.dim() == 0:  # scalar tensor
+                    return obj.item()
+                else:
+                    return obj.tolist()  # convert multi-dimensional tensors to lists
+            else:
+                return obj
+        
+        unflattened_kwargs = convert_tensors_to_scalars(unflattened_kwargs)
 
         # 2. Create configs by passing the appropriate nested configs to each Config object
         # Environment config
@@ -157,10 +173,20 @@ class PPOTrainer(Trainer):
 
         # Actor network config with proper out_features for Pendulum-v1 (action_dim=1)
         actor_overrides = unflattened_kwargs.get("actor_network", {})
+        # For Pendulum-v1, action_dim=1, but TanhNormal needs 2 outputs (loc and scale)
+        if "network" not in actor_overrides:
+            actor_overrides["network"] = {}
+        if "out_features" not in actor_overrides["network"]:
+            actor_overrides["network"]["out_features"] = int(2)  # 2 for loc and scale
         actor_network = TanhNormalModelConfig.default_config(**actor_overrides)
         
         # Critic network config with proper out_features for value function (always 1)
         critic_overrides = unflattened_kwargs.get("critic_network", {})
+        # For value function, out_features should be 1
+        if "module" not in critic_overrides:
+            critic_overrides["module"] = {}
+        if "out_features" not in critic_overrides["module"]:
+            critic_overrides["module"]["out_features"] = int(1)  # 1 for value function
         critic_network = TensorDictModuleConfig.default_config(**critic_overrides)
 
         # 3. Build the final config dict with the resulting config objects

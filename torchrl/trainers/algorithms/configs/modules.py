@@ -116,6 +116,11 @@ class MLPConfig(NetworkConfig):
             "_partial_": True,
         }
         
+        # Convert any tensors to scalars
+        for key, value in defaults.items():
+            if hasattr(value, 'item') and hasattr(value, 'dim') and value.dim() == 0:  # scalar tensor
+                defaults[key] = value.item()
+        
         return cls(**defaults)
 
 
@@ -361,6 +366,7 @@ def _make_tanh_normal_model(*args, **kwargs):
         TensorDictModule,
     )
     from torchrl.modules import NormalParamExtractor, TanhNormal
+    from hydra.utils import instantiate
 
     # Extract parameters
     network = kwargs.pop("network")
@@ -371,6 +377,19 @@ def _make_tanh_normal_model(*args, **kwargs):
     return_log_prob = kwargs.pop("return_log_prob", False)
     eval_mode = kwargs.pop("eval_mode", False)
     exploration_type = kwargs.pop("exploration_type", "RANDOM")
+
+    # Instantiate the network if it's a config
+    if hasattr(network, '_target_'):
+        network = instantiate(network)
+    elif hasattr(network, '__call__') and hasattr(network, 'func'):  # partial function
+        network = network()
+    
+    # If network is an MLPConfig, we need to instantiate it and handle layer_class properly
+    if hasattr(network, 'layer_class') and hasattr(network.layer_class, '_target_'):
+        # Instantiate the layer_class to get the actual class
+        network.layer_class = instantiate(network.layer_class)
+        # Then instantiate the network
+        network = instantiate(network)
 
     # Create the sequential
     if extract_normal_params:
