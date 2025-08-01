@@ -2386,7 +2386,7 @@ class TestBatching:
             assert len(processing_events) > 0, "No processing occurred"
 
             # Check that processing happened across multiple threads (indicating concurrent processing)
-            thread_ids = set(event["thread_id"] for event in processing_events)
+            thread_ids = {event["thread_id"] for event in processing_events}  # noqa
             assert (
                 len(thread_ids) > 1
             ), f"All processing happened in single thread: {thread_ids}"
@@ -2502,6 +2502,259 @@ class TestBatching:
         )
         assert wrapper._min_batch_size == 1
         assert wrapper._max_batch_size == 2
+
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_standardized_generation_parameters(
+        self, wrapper_class, vllm_instance, transformers_instance
+    ):
+        """Test that standardized generation parameters work across both wrappers."""
+        model = vllm_instance if wrapper_class == vLLMWrapper else transformers_instance
+        tokenizer = model.get_tokenizer() if hasattr(model, "get_tokenizer") else None
+
+        # Test with standardized parameters
+        wrapper = wrapper_class(
+            model,
+            tokenizer=tokenizer,
+            input_mode="text",
+            generate=True,
+            generate_kwargs={
+                "max_new_tokens": 10,  # Standardized name
+                "num_return_sequences": 1,  # Standardized name
+                "temperature": 0.7,
+                "top_p": 0.9,
+                "top_k": 50,
+                "repetition_penalty": 1.1,
+                "do_sample": True,
+                "num_beams": 1,
+                "length_penalty": 1.0,
+                "early_stopping": False,
+                "skip_special_tokens": True,
+                "logprobs": True,
+            },
+        )
+
+        # Test that the wrapper was created successfully
+        assert wrapper is not None
+
+        # Test that the parameters were properly converted
+        if wrapper_class == vLLMWrapper:
+            # Check that vLLM-specific parameters were set
+            assert (
+                wrapper.sampling_params.max_tokens == 10
+            )  # max_new_tokens -> max_tokens
+            assert wrapper.sampling_params.n == 1  # num_return_sequences -> n
+            assert wrapper.sampling_params.temperature == 0.7
+            assert wrapper.sampling_params.top_p == 0.9
+            assert wrapper.sampling_params.top_k == 50
+            assert wrapper.sampling_params.repetition_penalty == 1.1
+            assert wrapper.sampling_params.best_of == 1  # num_beams -> best_of
+            # do_sample=True means we use sampling (temperature > 0), not greedy decoding
+            assert wrapper.sampling_params.temperature > 0
+        else:
+            # Check that Transformers parameters were set
+            assert wrapper.generate_kwargs["max_new_tokens"] == 10
+            assert wrapper.generate_kwargs["num_return_sequences"] == 1
+            assert wrapper.generate_kwargs["temperature"] == 0.7
+            assert wrapper.generate_kwargs["top_p"] == 0.9
+            assert wrapper.generate_kwargs["top_k"] == 50
+            assert wrapper.generate_kwargs["repetition_penalty"] == 1.1
+            assert wrapper.generate_kwargs["do_sample"] is True
+
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_legacy_parameter_names(
+        self, wrapper_class, vllm_instance, transformers_instance
+    ):
+        """Test that legacy parameter names are automatically converted to standardized names."""
+        model = vllm_instance if wrapper_class == vLLMWrapper else transformers_instance
+        tokenizer = model.get_tokenizer() if hasattr(model, "get_tokenizer") else None
+
+        # Test with legacy parameter names
+        wrapper = wrapper_class(
+            model,
+            tokenizer=tokenizer,
+            input_mode="text",
+            generate=True,
+            generate_kwargs={
+                "max_tokens": 10,  # Legacy vLLM name
+                "n": 1,  # Legacy vLLM name
+                "temperature": 0.7,
+            },
+        )
+
+        # Test that the wrapper was created successfully
+        assert wrapper is not None
+
+        # Test that the parameters were properly converted
+        if wrapper_class == vLLMWrapper:
+            # Check that legacy names were converted to vLLM format
+            assert (
+                wrapper.sampling_params.max_tokens == 10
+            )  # max_tokens -> max_tokens (no change)
+            assert wrapper.sampling_params.n == 1  # n -> n (no change)
+            assert wrapper.sampling_params.temperature == 0.7
+        else:
+            # Check that legacy names were converted to Transformers format
+            assert (
+                wrapper.generate_kwargs["max_new_tokens"] == 10
+            )  # max_tokens -> max_new_tokens
+            assert (
+                wrapper.generate_kwargs["num_return_sequences"] == 1
+            )  # n -> num_return_sequences
+            assert wrapper.generate_kwargs["temperature"] == 0.7
+
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_parameter_conflict_resolution(
+        self, wrapper_class, vllm_instance, transformers_instance
+    ):
+        """Test that parameter conflicts are resolved correctly when both legacy and standardized names are used."""
+        model = vllm_instance if wrapper_class == vLLMWrapper else transformers_instance
+        tokenizer = model.get_tokenizer() if hasattr(model, "get_tokenizer") else None
+
+        # Test with conflicting parameters - legacy name should win
+        wrapper = wrapper_class(
+            model,
+            tokenizer=tokenizer,
+            input_mode="text",
+            generate=True,
+            generate_kwargs={
+                "max_tokens": 20,  # Legacy name
+                "max_new_tokens": 10,  # Standardized name
+                "n": 2,  # Legacy name
+                "num_return_sequences": 1,  # Standardized name
+                "temperature": 0.7,
+            },
+        )
+
+        # Test that the wrapper was created successfully
+        assert wrapper is not None
+
+        # Test that the parameters were properly resolved
+        if wrapper_class == vLLMWrapper:
+            # Legacy names should win
+            assert wrapper.sampling_params.max_tokens == 20  # max_tokens wins
+            assert wrapper.sampling_params.n == 2  # n wins
+            assert wrapper.sampling_params.temperature == 0.7
+        else:
+            # Legacy names should be converted to standardized names
+            assert (
+                wrapper.generate_kwargs["max_new_tokens"] == 20
+            )  # max_tokens -> max_new_tokens
+            assert (
+                wrapper.generate_kwargs["num_return_sequences"] == 2
+            )  # n -> num_return_sequences
+            assert wrapper.generate_kwargs["temperature"] == 0.7
+
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_parameter_validation(
+        self, wrapper_class, vllm_instance, transformers_instance
+    ):
+        """Test that parameter validation works correctly."""
+        model = vllm_instance if wrapper_class == vLLMWrapper else transformers_instance
+        tokenizer = model.get_tokenizer() if hasattr(model, "get_tokenizer") else None
+
+        # Test invalid temperature
+        with pytest.raises(ValueError, match="Temperature must be non-negative"):
+            wrapper_class(
+                model,
+                tokenizer=tokenizer,
+                input_mode="text",
+                generate=True,
+                generate_kwargs={"temperature": -0.1},
+            )
+
+        # Test invalid top_p
+        with pytest.raises(ValueError, match="top_p must be between 0 and 1"):
+            wrapper_class(
+                model,
+                tokenizer=tokenizer,
+                input_mode="text",
+                generate=True,
+                generate_kwargs={"top_p": 1.5},
+            )
+
+        # Test invalid top_k
+        with pytest.raises(ValueError, match="top_k must be positive"):
+            wrapper_class(
+                model,
+                tokenizer=tokenizer,
+                input_mode="text",
+                generate=True,
+                generate_kwargs={"top_k": 0},
+            )
+
+        # Test invalid repetition_penalty
+        with pytest.raises(ValueError, match="repetition_penalty must be positive"):
+            wrapper_class(
+                model,
+                tokenizer=tokenizer,
+                input_mode="text",
+                generate=True,
+                generate_kwargs={"repetition_penalty": 0.5},
+            )
+
+        # Test conflicting do_sample and temperature
+        with pytest.raises(
+            ValueError, match="When do_sample=False.*temperature must be 0"
+        ):
+            wrapper_class(
+                model,
+                tokenizer=tokenizer,
+                input_mode="text",
+                generate=True,
+                generate_kwargs={"do_sample": False, "temperature": 0.7},
+            )
+
+    @pytest.mark.parametrize(
+        "wrapper_class",
+        [vLLMWrapper, TransformersWrapperMaxTokens],
+        ids=["vllm", "transformers"],
+    )
+    def test_parameter_conflict_errors(
+        self, wrapper_class, vllm_instance, transformers_instance
+    ):
+        """Test that parameter conflicts are properly detected."""
+        model = vllm_instance if wrapper_class == vLLMWrapper else transformers_instance
+        tokenizer = model.get_tokenizer() if hasattr(model, "get_tokenizer") else None
+
+        # Test conflicting max_tokens and max_new_tokens
+        with pytest.raises(
+            ValueError, match="Cannot specify both 'max_tokens'.*'max_new_tokens'"
+        ):
+            wrapper_class(
+                model,
+                tokenizer=tokenizer,
+                input_mode="text",
+                generate=True,
+                generate_kwargs={"max_tokens": 10, "max_new_tokens": 20},
+            )
+
+        # Test conflicting n and num_return_sequences
+        with pytest.raises(
+            ValueError, match="Cannot specify both 'n'.*'num_return_sequences'"
+        ):
+            wrapper_class(
+                model,
+                tokenizer=tokenizer,
+                input_mode="text",
+                generate=True,
+                generate_kwargs={"n": 1, "num_return_sequences": 2},
+            )
 
 
 if __name__ == "__main__":
