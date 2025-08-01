@@ -10,7 +10,7 @@ from collections import defaultdict
 import pytest
 from torchrl._utils import logger as torchrl_logger
 
-CALL_TIMES = defaultdict(lambda: 0.0)
+CALL_TIMES = defaultdict(float)
 
 
 def pytest_sessionfinish(maxprint=50):

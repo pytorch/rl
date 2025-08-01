@@ -107,7 +107,7 @@ try:
     _atari_found = True
 except FileNotFoundError:
     _atari_found = False
-    atari_confs = defaultdict(lambda: "")
+    atari_confs = defaultdict(str)
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.rl.test._utils_internal import (

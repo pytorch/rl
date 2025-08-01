@@ -2386,7 +2386,7 @@ class TestBatching:
             assert len(processing_events) > 0, "No processing occurred"
 
             # Check that processing happened across multiple threads (indicating concurrent processing)
-            thread_ids = {event["thread_id"] for event in processing_events}  # noqa
+            thread_ids = set(event["thread_id"] for event in processing_events)
             assert (
                 len(thread_ids) > 1
             ), f"All processing happened in single thread: {thread_ids}"
