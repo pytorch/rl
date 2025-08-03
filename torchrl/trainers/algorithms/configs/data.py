@@ -8,6 +8,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from fastapi.middleware import Middleware
+from omegaconf import MISSING
+
 from torchrl import data
 from torchrl.trainers.algorithms.configs.common import ConfigBase
 
@@ -165,8 +168,8 @@ class ListStorageConfig(StorageConfig):
 @dataclass
 class StorageEnsembleWriterConfig(StorageConfig):
     _target_: str = "torchrl.data.replay_buffers.StorageEnsembleWriter"
-    writers: list[Any] = field(default_factory=list)
-    transforms: list[Any] = field(default_factory=list)
+    writers: list[Any] = MISSING
+    transforms: list[Any] = MISSING
 
 
 @dataclass
@@ -180,8 +183,8 @@ class LazyStackStorageConfig(StorageConfig):
 @dataclass
 class StorageEnsembleConfig(StorageConfig):
     _target_: str = "torchrl.data.replay_buffers.StorageEnsemble"
-    storages: list[Any] = field(default_factory=list)
-    transforms: list[Any] = field(default_factory=list)
+    storages: list[Any] = MISSING
+    transforms: list[Any] = MISSING
 
 
 @dataclass
@@ -209,9 +212,9 @@ class ReplayBufferBaseConfig(ConfigBase):
 @dataclass
 class TensorDictReplayBufferConfig(ReplayBufferBaseConfig):
     _target_: str = "torchrl.data.replay_buffers.TensorDictReplayBuffer"
-    sampler: Any = field(default_factory=RandomSamplerConfig)
-    storage: Any = field(default_factory=TensorStorageConfig)
-    writer: Any = field(default_factory=RoundRobinWriterConfig)
+    sampler: Any = MISSING
+    storage: Any = MISSING
+    writer: Any = MISSING
     transform: Any = None
     batch_size: int | None = None
 
@@ -219,9 +222,9 @@ class TensorDictReplayBufferConfig(ReplayBufferBaseConfig):
 @dataclass
 class ReplayBufferConfig(ReplayBufferBaseConfig):
     _target_: str = "torchrl.data.replay_buffers.ReplayBuffer"
-    sampler: Any = field(default_factory=RandomSamplerConfig)
-    storage: Any = field(default_factory=ListStorageConfig)
-    writer: Any = field(default_factory=RoundRobinWriterConfig)
+    sampler: Any = MISSING
+    storage: Any = MISSING
+    writer: Any = MISSING
     transform: Any = None
     batch_size: int | None = None
 

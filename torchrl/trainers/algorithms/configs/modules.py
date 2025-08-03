@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import Any
 
+from omegaconf import MISSING
 import torch
 
 from torchrl.trainers.algorithms.configs.common import ConfigBase
@@ -174,6 +175,8 @@ class ModelConfig(ConfigBase):
     """
 
     _partial_: bool = False
+    in_keys: Any = None
+    out_keys: Any = None
 
 
 @dataclass
@@ -190,8 +193,6 @@ class TensorDictModuleConfig(ConfigBase):
     """
 
     module: MLPConfig = field(default_factory=lambda: MLPConfig())
-    in_keys: Any = None
-    out_keys: Any = None
     _target_: str = "tensordict.nn.TensorDictModule"
     _partial_: bool = False
 
@@ -209,14 +210,12 @@ class TanhNormalModelConfig(ModelConfig):
     .. seealso:: :class:`torchrl.modules.TanhNormal`
     """
 
-    network: MLPConfig = field(default_factory=lambda: MLPConfig())
+    network: MLPConfig = MISSING
     eval_mode: bool = False
 
     extract_normal_params: bool = True
 
-    in_keys: Any = None
     param_keys: Any = None
-    out_keys: Any = None
 
     exploration_type: Any = "RANDOM"
 
@@ -249,7 +248,7 @@ class ValueModelConfig(ModelConfig):
     """
 
     _target_: str = "torchrl.trainers.algorithms.configs.modules._make_value_model"
-    network: NetworkConfig = field(default_factory=partial(NetworkConfig))
+    network: NetworkConfig = MISSING
 
 
 def _make_tanh_normal_model(*args, **kwargs):

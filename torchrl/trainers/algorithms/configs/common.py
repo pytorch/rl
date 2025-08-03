@@ -33,3 +33,6 @@ class Config:
     collector: Any = None
     optimizer: Any = None
     logger: Any = None
+    networks: Any = None
+    models: Any = None
+

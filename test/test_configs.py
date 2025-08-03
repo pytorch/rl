@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import argparse
+from re import L
 
 from omegaconf import OmegaConf, SCMode
 import pytest
@@ -15,12 +16,15 @@ from hydra import initialize_config_dir
 from hydra.utils import instantiate
 from torchrl.collectors.collectors import SyncDataCollector
 from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv
+from torchrl.envs.libs.gym import GymEnv
 from torchrl.modules.models.models import MLP
 from torchrl.trainers.algorithms.configs.modules import (
     ActivationConfig,
     LayerConfig,
 )
 import importlib.util
+
+from torchrl.trainers.algorithms.ppo import PPOTrainer
 _has_gym = (importlib.util.find_spec("gym") is not None) or (importlib.util.find_spec("gymnasium") is not None)
 _has_hydra = importlib.util.find_spec("hydra") is not None
 
@@ -1061,7 +1065,6 @@ env:
         )
 
         # Now we can instantiate the environment
-        print(cfg_from_file)
         env_from_file = instantiate(cfg_from_file.env)
         print(f"Instantiated env (from file): {env_from_file}")
         assert isinstance(env_from_file, GymEnv)
@@ -1071,6 +1074,8 @@ env:
         from hydra import compose, initialize
         from hydra.utils import instantiate
         from hydra.core.config_store import ConfigStore
+        from tensordict.nn import TensorDictModule
+        from tensordict import TensorDict
 
         initialize_config_dir(config_dir=str(tmpdir), version_base=None)
         yaml_config = r"""
@@ -1098,20 +1103,12 @@ env:
   env_name: CartPole-v1
 
 collector:
+  create_env_fn: ${env}
+  policy: ${model}
   total_frames: 1000
   frames_per_batch: 100
 
 """
-        # from hydra.core.global_hydra import GlobalHydra
-        # GlobalHydra.instance().clear()
-        # cs = ConfigStore.instance()
-        # cfg = OmegaConf.create(yaml_config)
-        # cs.store(name="custom_collector", node=cfg)
-        # print('cfg 1', cfg)
-        # print('cfg 2', OmegaConf.to_container(cfg, resolve=True, structured_config_mode=SCMode.INSTANTIATE))
-        # with initialize(config_path="conf"):
-        #     cfg = compose(config_name="config")
-        # print("cfg 2", cfg)
 
         file = tmpdir / "config.yaml"
         with open(file, "w") as f:
@@ -1119,16 +1116,111 @@ collector:
 
         # Use Hydra's compose to resolve config groups
         cfg_from_file = compose(
-            config_name="config",
+            config_name="config"
         )
 
-        # Now we can instantiate the collector with automatic cross-references
-        print(cfg_from_file)
-        from torchrl.trainers.algorithms.configs.collectors import instantiate_collector_with_cross_references
-        collector_from_file = instantiate_collector_with_cross_references(cfg_from_file)
-        print(f"Instantiated collector (from file): {collector_from_file}")
-        assert isinstance(collector_from_file, SyncDataCollector)
+        collector = instantiate(cfg_from_file.collector)
+        print(f"Instantiated collector (from file): {collector}")
+        assert isinstance(collector, SyncDataCollector)
+        for d in collector:
+            assert isinstance(d, TensorDict)
+            assert "action_log_prob" in d
+            break
 
+    def test_trainer_parsing_with_file(self, tmpdir):
+        from hydra import compose, initialize
+        from hydra.utils import instantiate
+        from hydra.core.config_store import ConfigStore
+        from tensordict.nn import TensorDictModule
+        from tensordict import TensorDict
+
+        initialize_config_dir(config_dir=str(tmpdir), version_base=None)
+        yaml_config = r"""
+defaults:
+  - env: gym
+  - model: tanh_normal
+  - model@models.policy_model: tanh_normal
+  - model@models.value_model: value
+  - network: mlp
+  - network@networks.policy_network: mlp
+  - network@networks.value_network: mlp
+  - collector: sync
+  - replay_buffer: base
+  - storage: tensor
+  - trainer: ppo
+  - optimizer: adam
+  - loss: ppo
+  - _self_
+
+networks:
+  policy_network:
+    out_features: 2
+    in_features: 4  # CartPole observation space is 4-dimensional
+
+  value_network:
+    out_features: 1
+    in_features: 4
+
+models:
+  policy_model:
+    return_log_prob: True
+    in_keys: ["observation"]
+    param_keys: ["loc", "scale"]
+    out_keys: ["action"]
+    network: ${networks.policy_network}
+
+  value_model:
+    in_keys: ["observation"]
+    out_keys: ["state_value"]
+    network: ${networks.value_network}
+
+env:
+  env_name: CartPole-v1
+
+storage:
+  max_size: 1000
+
+replay_buffer:
+  storage: storage
+
+loss:
+  actor_network: ${models.policy_model}
+  critic_network: ${models.value_model}
+  
+collector:
+  create_env_fn: ${env}
+  policy: ${models.policy_model}
+  total_frames: 1000
+  frames_per_batch: 100
+
+trainer:
+  optimizer: adam
+  collector: collector
+  total_frames: 1000
+  frame_skip: 1
+  optim_steps_per_batch: 1
+  loss_module: loss_module
+"""
+
+        file = tmpdir / "config.yaml"
+        with open(file, "w") as f:
+            f.write(yaml_config)
+
+        # Use Hydra's compose to resolve config groups
+        cfg_from_file = compose(
+            config_name="config"
+        )
+
+        networks = instantiate(cfg_from_file.networks)
+        print(f"Instantiated networks (from file): {networks}")
+
+        models = instantiate(cfg_from_file.models)
+        print(f"Instantiated models (from file): {models}")
+
+        trainer = instantiate(cfg_from_file.trainer)
+        print(f"Instantiated trainer (from file): {trainer}")
+        assert isinstance(trainer, PPOTrainer)
+        trainer.train()
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
